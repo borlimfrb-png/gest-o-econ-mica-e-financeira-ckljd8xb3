@@ -1,0 +1,359 @@
+{
+  "generatedAt": "2026-08-15T22:59:46.856Z",
+  "collections": [
+    {
+      "name": "users",
+      "type": "auth",
+      "apiRules": {
+        "list": "id = @request.auth.id",
+        "view": "id = @request.auth.id",
+        "create": "",
+        "update": "id = @request.auth.id",
+        "delete": "id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "avatar",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+      ]
+    },
+    {
+      "name": "empresas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cnpj",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "segmento",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Indústria",
+            "Comércio",
+            "Serviços",
+            "Agronegócio",
+            "Tecnologia",
+            "Saúde",
+            "Construção",
+            "Outros"
+          ]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_empresas_cnpj ON empresas (cnpj)",
+        "CREATE INDEX idx_empresas_segmento ON empresas (segmento)"
+      ]
+    },
+    {
+      "name": "balancos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "caixa_equivalentes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aplicacoes_financeiras",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contas_receber",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estoques",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "impostos_recuperar",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outros_ativo_circulante",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "realizavel_longo_prazo",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "investimentos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "imobilizado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "intangivel",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fornecedores",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "emprestimos_curto_prazo",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "obrigacoes_trabalhistas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "obrigacoes_tributarias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outros_passivo_circulante",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "emprestimos_longo_prazo",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outras_obrigacoes_longo_prazo",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "capital_social",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "reservas_lucros",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "lucros_acumulados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_balancos_empresa_ano ON balancos (empresa, ano)",
+        "CREATE INDEX idx_balancos_empresa ON balancos (empresa)",
+        "CREATE INDEX idx_balancos_ano ON balancos (ano)"
+      ]
+    },
+    {
+      "name": "dre",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "receita_bruta",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "deducoes_receita",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "custo_mercadorias",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "despesas_operacionais",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "despesas_financeiras",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outras_receitas_despesas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "imposto_renda",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_dre_empresa_ano ON dre (empresa, ano)",
+        "CREATE INDEX idx_dre_empresa ON dre (empresa)",
+        "CREATE INDEX idx_dre_ano ON dre (ano)"
+      ]
+    }
+  ]
+}
