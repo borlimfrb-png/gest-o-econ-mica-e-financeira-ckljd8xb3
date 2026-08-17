@@ -3,14 +3,16 @@ import {
   centrosService,
   lancamentosCentroService,
   tiposDespesaService,
+  contasService,
 } from '@/services/financeService'
 import type {
   CentroRecord,
+  ContaRecord,
   LancamentoCentroRecord,
   TipoCentro,
   TipoDespesaRecord,
 } from '@/types/finance'
-import { Tag, CheckCircle2, Circle } from 'lucide-react'
+import { Tag, CheckCircle2, Circle, BookOpen } from 'lucide-react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -109,10 +111,16 @@ type CentroErrors = Partial<Record<keyof CentroFormData | 'general', string>>
 interface LancamentoFormData {
   descricao: string
   tipo_despesa: string
+  conta: string
   concluido: boolean
 }
 
-const EMPTY_LANC: LancamentoFormData = { descricao: '', tipo_despesa: '', concluido: false }
+const EMPTY_LANC: LancamentoFormData = {
+  descricao: '',
+  tipo_despesa: '',
+  conta: '',
+  concluido: false,
+}
 
 type LancErrors = Partial<Record<'general', string>>
 
@@ -130,6 +138,7 @@ export default function Centros() {
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoCentroRecord[]>([])
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
+  const [contas, setContas] = useState<ContaRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCentroId, setSelectedCentroId] = useState<string | null>(null)
 
@@ -170,14 +179,16 @@ export default function Centros() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [cList, lList, tdList] = await Promise.all([
+      const [cList, lList, tdList, contasList] = await Promise.all([
         centrosService.getAll(),
         lancamentosCentroService.getAll(),
         tiposDespesaService.getAll(),
+        contasService.getAll(),
       ])
       setCentros(cList)
       setLancamentos(lList)
       setTiposDespesa(tdList)
+      setContas(contasList)
     } catch (err) {
       console.error('Erro ao carregar centros:', err)
       toast({
@@ -196,11 +207,32 @@ export default function Centros() {
   useRealtime<CentroRecord>('centros', () => loadData())
   useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => loadData())
   useRealtime<TipoDespesaRecord>('tipos_despesa', () => loadData())
+  useRealtime<ContaRecord>('contas', () => loadData())
 
   const selectedCentro = useMemo(
     () => centros.find((c) => c.id === selectedCentroId) || null,
     [centros, selectedCentroId],
   )
+
+  // Mapa de contas por id (para exibição de badges)
+  const contasMap = useMemo(() => {
+    const map = new Map<string, ContaRecord>()
+    for (const c of contas) map.set(c.id, c)
+    return map
+  }, [contas])
+
+  // Contas ordenadas: quando o centro é Despesa, contas do tipo Despesa aparecem
+  // primeiro; quando Receita, contas do tipo Receita primeiro. Todas as contas
+  // permanecem selecionáveis.
+  const contasOrdenadas = useMemo(() => {
+    const tipoPreferido = selectedCentro?.tipo === 'Receita' ? 'Receita' : 'Despesa'
+    return [...contas].sort((a, b) => {
+      const aPref = a.tipo === tipoPreferido ? 0 : 1
+      const bPref = b.tipo === tipoPreferido ? 0 : 1
+      if (aPref !== bPref) return aPref - bPref
+      return (a.codigo || '').localeCompare(b.codigo || '')
+    })
+  }, [contas, selectedCentro])
 
   const lancamentosDoCentro = useMemo(
     () => (selectedCentroId ? lancamentos.filter((l) => l.centro === selectedCentroId) : []),
@@ -483,6 +515,7 @@ export default function Centros() {
         valor: 0,
         descricao: lancForm.descricao,
         tipo_despesa: lancForm.tipo_despesa || undefined,
+        conta: lancForm.conta || undefined,
         concluido: lancForm.concluido,
       })
       toast({ title: 'Lançamento adicionado', description: 'O lançamento foi registrado.' })
@@ -503,6 +536,7 @@ export default function Centros() {
     setLancForm({
       descricao: l.descricao || '',
       tipo_despesa: l.tipo_despesa || '',
+      conta: l.conta || '',
       concluido: !!l.concluido,
     })
     setLancErrors({})
@@ -537,6 +571,7 @@ export default function Centros() {
       await lancamentosCentroService.update(editingLanc.id, {
         descricao: lancForm.descricao,
         tipo_despesa: lancForm.tipo_despesa || '',
+        conta: lancForm.conta || '',
         concluido: lancForm.concluido,
       })
       toast({ title: 'Lançamento atualizado', description: 'As alterações foram salvas.' })
@@ -656,6 +691,13 @@ export default function Centros() {
       lancPorCentro.set(l.centro, arr)
     }
 
+    // Mapa id -> código/nome da conta para o CSV
+    const contaInfo = (id?: string) => {
+      if (!id) return ''
+      const c = contasMap.get(id)
+      return c ? `${c.codigo || ''} - ${c.nome}` : ''
+    }
+
     const escapeCsv = (val: string | number | undefined | null): string => {
       if (val === null || val === undefined) return ''
       const s = String(val)
@@ -672,6 +714,7 @@ export default function Centros() {
       [
         'Centro',
         'Tipo',
+        'Conta',
         'Meta Mensal',
         'Realizado Mês',
         '% Mês',
@@ -707,10 +750,17 @@ export default function Centros() {
       const pctAno = metaAnual > 0 ? (realizadoAno / metaAnual) * 100 : 0
       const projecao = mesesPassados > 0 ? (realizadoAno / mesesPassados) * 12 : 0
 
+      // Conta vinculada do primeiro lançamento do centro (representativo)
+      const contaCsv = lancs
+        .map((l) => contaInfo(l.conta))
+        .filter(Boolean)
+        .join(' | ')
+
       linhas.push(
         [
           c.nome,
           c.tipo,
+          contaCsv,
           metaMensal > 0 ? fmtNum(metaMensal) : '',
           fmtNum(realizadoMes),
           metaMensal > 0 ? fmtPct(pctMes) : '',
@@ -1384,6 +1434,47 @@ export default function Centros() {
 
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label
+                          htmlFor="lanc-conta"
+                          className="text-xs font-semibold text-slate-700"
+                        >
+                          Conta
+                        </Label>
+                        <Select
+                          value={lancForm.conta || 'nenhuma'}
+                          onValueChange={(val) =>
+                            setLancField('conta', val === 'nenhuma' ? '' : val)
+                          }
+                        >
+                          <SelectTrigger id="lanc-conta" className="h-9 text-xs bg-white">
+                            <SelectValue placeholder="Selecione (opcional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nenhuma" className="text-xs">
+                              Nenhuma conta
+                            </SelectItem>
+                            {contasOrdenadas.map((c) => (
+                              <SelectItem key={c.id} value={c.id} className="text-xs">
+                                {c.codigo || '—'} - {c.nome}
+                                <span className="text-slate-400"> ({c.tipo})</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {contas.length === 0 ? (
+                          <p className="text-[11px] text-slate-400">
+                            Nenhuma conta cadastrada. Crie em "Contas".
+                          </p>
+                        ) : (
+                          <p className="text-[11px] text-slate-400">
+                            {selectedCentro?.tipo === 'Receita'
+                              ? 'Contas do tipo Receita aparecem primeiro.'
+                              : 'Contas do tipo Despesa aparecem primeiro.'}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label
                           htmlFor="lanc-descricao"
                           className="text-xs font-semibold text-slate-700"
                         >
@@ -1511,6 +1602,7 @@ export default function Centros() {
                           <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
                             <th className="py-3 px-4 text-center">Status</th>
                             <th className="py-3 px-4">Tipo de Despesa</th>
+                            <th className="py-3 px-4">Conta</th>
                             <th className="py-3 px-4">Descrição</th>
                             <th className="py-3 px-4 text-right">Ações</th>
                           </tr>
@@ -1548,6 +1640,19 @@ export default function Centros() {
                                   ) : (
                                     <span className="text-slate-400 italic">—</span>
                                   )}
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">
+                                  {(() => {
+                                    const cnt = l.conta ? contasMap.get(l.conta) : null
+                                    return cnt ? (
+                                      <Badge className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-50 px-2 py-0.5">
+                                        <BookOpen className="w-3 h-3 mr-1" />
+                                        {cnt.codigo || '—'}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-slate-400 italic">—</span>
+                                    )
+                                  })()}
                                 </td>
                                 <td className="py-3 px-4 text-slate-700">
                                   {l.descricao || (
@@ -1823,6 +1928,30 @@ export default function Centros() {
                     Remover tipo de despesa
                   </button>
                 ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-lanc-conta" className="text-xs font-semibold text-slate-700">
+                  Conta
+                </Label>
+                <Select
+                  value={lancForm.conta || 'nenhuma'}
+                  onValueChange={(val) => setLancField('conta', val === 'nenhuma' ? '' : val)}
+                >
+                  <SelectTrigger id="edit-lanc-conta" className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nenhuma" className="text-xs">
+                      Nenhuma conta
+                    </SelectItem>
+                    {contasOrdenadas.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.codigo || '—'} - {c.nome}
+                        <span className="text-slate-400"> ({c.tipo})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <Checkbox

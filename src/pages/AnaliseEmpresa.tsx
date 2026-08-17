@@ -1,7 +1,20 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { empresasService, balancosService, dreService } from '@/services/financeService'
-import type { EmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
+import {
+  empresasService,
+  balancosService,
+  dreService,
+  contasService,
+} from '@/services/financeService'
+import type {
+  EmpresaRecord,
+  BalancoRecord,
+  ContaRecord,
+  DreRecord,
+  TipoConta,
+  VinculosContasBalanco,
+} from '@/types/finance'
+import { BookOpen } from 'lucide-react'
 import {
   calcularBalanco,
   calcularDre,
@@ -32,7 +45,9 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -113,18 +128,23 @@ export default function AnaliseEmpresa() {
   // Formulário Novo Lançamento (Ano + Balanço + DRE)
   const [novoAno, setNovoAno] = useState<number>(2025)
 
+  // Contas cadastradas pelo usuário (para vínculo com campos do balanço)
+  const [contas, setContas] = useState<ContaRecord[]>([])
+
   const loadData = async () => {
     if (!id) return
     try {
       setLoading(true)
-      const [emp, bList, dList] = await Promise.all([
+      const [emp, bList, dList, contasList] = await Promise.all([
         empresasService.getById(id),
         balancosService.getByEmpresa(id),
         dreService.getByEmpresa(id),
+        contasService.getAll(),
       ])
       setEmpresa(emp)
       setBalancos(bList)
       setDres(dList)
+      setContas(contasList)
       setSelectedEmpresaId(emp.id)
 
       const anos = Array.from(new Set(bList.map((b) => b.ano))).sort((a, b) => b - a)
@@ -154,8 +174,30 @@ export default function AnaliseEmpresa() {
   useRealtime<DreRecord>('dre', () => {
     if (id) loadData()
   })
+  useRealtime<ContaRecord>('contas', () => {
+    if (id) loadData()
+  })
 
   const anosDisponiveis = Array.from(new Set(balancos.map((b) => b.ano))).sort((a, b) => b - a)
+
+  // Mapa de contas por id e agrupadas por tipo (para vínculo no balanço)
+  const contasMap = React.useMemo(() => {
+    const map = new Map<string, ContaRecord>()
+    for (const c of contas) map.set(c.id, c)
+    return map
+  }, [contas])
+  const contasPorTipo = React.useMemo(() => {
+    const map = new Map<TipoConta, ContaRecord[]>()
+    for (const c of contas) {
+      const arr = map.get(c.tipo) || []
+      arr.push(c)
+      map.set(c.tipo, arr)
+    }
+    for (const [, arr] of map) {
+      arr.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+    }
+    return map
+  }, [contas])
 
   // Balanço e DRE Atual e Anterior
   const balancoAtual = balancos.find((b) => b.ano === selectedAno) || null
@@ -164,6 +206,77 @@ export default function AnaliseEmpresa() {
   const anoAnterior = selectedAno - 1
   const balancoAnterior = balancos.find((b) => b.ano === anoAnterior) || null
   const dreAnterior = dres.find((d) => d.ano === anoAnterior) || null
+
+  // Vínculos do balanço atual (campo -> contaId)
+  const vinculosAtual: VinculosContasBalanco = balancoAtual?.vinculos_contas || {}
+  const vinculosForm: VinculosContasBalanco = formBalanco.vinculos_contas || {}
+
+  // Helper: código de conta vinculada a um campo do balanço (visualização)
+  const codigoVinculado = (campo: string): string | null => {
+    const contaId = vinculosAtual[campo]
+    if (!contaId) return null
+    const c = contasMap.get(contaId)
+    return c?.codigo || null
+  }
+
+  // Renderiza o nome do campo com badge do código da conta vinculada (tabela)
+  const campoBalanco = (campo: string, label: string) => (
+    <div className="flex items-center gap-1.5">
+      {label}
+      {codigoVinculado(campo) && (
+        <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+          <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+          {codigoVinculado(campo)}
+        </Badge>
+      )}
+    </div>
+  )
+
+  // Helper para renderizar o select de vínculo no modal (agrupado por tipo)
+  const renderSelectVinculo = (campo: string) => {
+    const valorAtual = vinculosForm[campo] || 'nenhuma'
+    return (
+      <Select
+        value={valorAtual}
+        onValueChange={(val) =>
+          setFormBalanco((p) => ({
+            ...p,
+            vinculos_contas: {
+              ...(p.vinculos_contas || {}),
+              [campo]: val === 'nenhuma' ? undefined : val,
+            },
+          }))
+        }
+      >
+        <SelectTrigger className="h-8 text-[11px] bg-white">
+          <SelectValue placeholder="Sem vínculo" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="nenhuma" className="text-[11px]">
+            Sem vínculo
+          </SelectItem>
+          {(['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa'] as TipoConta[]).map(
+            (tipo) => {
+              const lista = contasPorTipo.get(tipo) || []
+              if (lista.length === 0) return null
+              return (
+                <SelectGroup key={tipo}>
+                  <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase">
+                    {tipo}
+                  </SelectLabel>
+                  {lista.map((c) => (
+                    <SelectItem key={c.id} value={c.id} className="text-[11px]">
+                      {c.codigo || '—'} - {c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )
+            },
+          )}
+        </SelectContent>
+      </Select>
+    )
+  }
 
   // Cálculos
   const calcBAtual = calcularBalanco(balancoAtual)
@@ -199,7 +312,10 @@ export default function AnaliseEmpresa() {
   // Abertura de Modal de Edição Balanço
   const openEditBalancoModal = () => {
     if (balancoAtual) {
-      setFormBalanco({ ...balancoAtual })
+      setFormBalanco({
+        ...balancoAtual,
+        vinculos_contas: { ...(balancoAtual.vinculos_contas || {}) },
+      })
     } else {
       setFormBalanco({
         empresa: id,
@@ -224,6 +340,7 @@ export default function AnaliseEmpresa() {
         capital_social: 0,
         reservas_lucros: 0,
         lucros_acumulados: 0,
+        vinculos_contas: {},
       })
     }
     setModalBalancoOpen(true)
@@ -325,6 +442,7 @@ export default function AnaliseEmpresa() {
       capital_social: 0,
       reservas_lucros: 0,
       lucros_acumulados: 0,
+      vinculos_contas: {},
     })
     setFormDre({
       empresa: id,
@@ -939,7 +1057,17 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Caixa e Equivalentes de Caixa</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        Caixa e Equivalentes de Caixa
+                        {codigoVinculado('caixa_equivalentes') && (
+                          <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                            {codigoVinculado('caixa_equivalentes')}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.caixa_equivalentes)}
                     </td>
@@ -957,7 +1085,17 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Aplicações Financeiras</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        Aplicações Financeiras
+                        {codigoVinculado('aplicacoes_financeiras') && (
+                          <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                            {codigoVinculado('aplicacoes_financeiras')}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.aplicacoes_financeiras)}
                     </td>
@@ -975,7 +1113,17 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Contas a Receber (Clientes)</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        Contas a Receber (Clientes)
+                        {codigoVinculado('contas_receber') && (
+                          <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                            {codigoVinculado('contas_receber')}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.contas_receber)}
                     </td>
@@ -990,7 +1138,17 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Estoques</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        Estoques
+                        {codigoVinculado('estoques') && (
+                          <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                            {codigoVinculado('estoques')}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-1 px-4 text-right">{formatBrlMil(balancoAtual?.estoques)}</td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAnterior?.estoques)}
@@ -1003,7 +1161,17 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Impostos a Recuperar</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        Impostos a Recuperar
+                        {codigoVinculado('impostos_recuperar') && (
+                          <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                            {codigoVinculado('impostos_recuperar')}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.impostos_recuperar)}
                     </td>
@@ -1021,7 +1189,17 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Outros Ativos Circulantes</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      <div className="flex items-center gap-1.5">
+                        Outros Ativos Circulantes
+                        {codigoVinculado('outros_ativo_circulante') && (
+                          <Badge className="text-[9px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0">
+                            <BookOpen className="w-2.5 h-2.5 mr-0.5" />
+                            {codigoVinculado('outros_ativo_circulante')}
+                          </Badge>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.outros_ativo_circulante)}
                     </td>
@@ -1056,7 +1234,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Realizável a Longo Prazo</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('realizavel_longo_prazo', 'Realizável a Longo Prazo')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.realizavel_longo_prazo)}
                     </td>
@@ -1074,7 +1254,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Investimentos</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('investimentos', 'Investimentos')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.investimentos)}
                     </td>
@@ -1089,7 +1271,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Imobilizado</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('imobilizado', 'Imobilizado')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.imobilizado)}
                     </td>
@@ -1104,7 +1288,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Intangível</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('intangivel', 'Intangível')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.intangivel)}
                     </td>
@@ -1149,7 +1335,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Fornecedores</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('fornecedores', 'Fornecedores')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.fornecedores)}
                     </td>
@@ -1165,7 +1353,12 @@ export default function AnaliseEmpresa() {
                   </tr>
                   <tr>
                     <td className="py-1 px-8 text-slate-600">
-                      Empréstimos e Financiamentos de Curto Prazo
+                      <div className="flex items-center gap-1.5">
+                        {campoBalanco(
+                          'emprestimos_curto_prazo',
+                          'Empréstimos e Financiamentos de Curto Prazo',
+                        )}
+                      </div>
                     </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.emprestimos_curto_prazo)}
@@ -1185,7 +1378,10 @@ export default function AnaliseEmpresa() {
                   </tr>
                   <tr>
                     <td className="py-1 px-8 text-slate-600">
-                      Obrigações Trabalhistas e Previdenciárias
+                      {campoBalanco(
+                        'obrigacoes_trabalhistas',
+                        'Obrigações Trabalhistas e Previdenciárias',
+                      )}
                     </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.obrigacoes_trabalhistas)}
@@ -1204,7 +1400,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Obrigações Tributárias</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('obrigacoes_tributarias', 'Obrigações Tributárias')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.obrigacoes_tributarias)}
                     </td>
@@ -1222,7 +1420,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Outros Passivos Circulantes</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('outros_passivo_circulante', 'Outros Passivos Circulantes')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.outros_passivo_circulante)}
                     </td>
@@ -1258,7 +1458,10 @@ export default function AnaliseEmpresa() {
                   </tr>
                   <tr>
                     <td className="py-1 px-8 text-slate-600">
-                      Empréstimos e Financiamentos de Longo Prazo
+                      {campoBalanco(
+                        'emprestimos_longo_prazo',
+                        'Empréstimos e Financiamentos de Longo Prazo',
+                      )}
                     </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.emprestimos_longo_prazo)}
@@ -1277,7 +1480,12 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Outras Obrigações de Longo Prazo</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco(
+                        'outras_obrigacoes_longo_prazo',
+                        'Outras Obrigações de Longo Prazo',
+                      )}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.outras_obrigacoes_longo_prazo)}
                     </td>
@@ -1312,7 +1520,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Capital Social Integralizado</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('capital_social', 'Capital Social Integralizado')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.capital_social)}
                     </td>
@@ -1327,7 +1537,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Reservas de Lucros</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('reservas_lucros', 'Reservas de Lucros')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.reservas_lucros)}
                     </td>
@@ -1342,7 +1554,9 @@ export default function AnaliseEmpresa() {
                     </td>
                   </tr>
                   <tr>
-                    <td className="py-1 px-8 text-slate-600">Lucros ou Prejuízos Acumulados</td>
+                    <td className="py-1 px-8 text-slate-600">
+                      {campoBalanco('lucros_acumulados', 'Lucros ou Prejuízos Acumulados')}
+                    </td>
                     <td className="py-1 px-4 text-right">
                       {formatBrlMil(balancoAtual?.lucros_acumulados)}
                     </td>
@@ -2510,6 +2724,51 @@ export default function AnaliseEmpresa() {
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Vínculos de contas por campo do balanço */}
+              <div className="space-y-3 bg-indigo-50/40 p-3.5 rounded-xl border border-indigo-200/70">
+                <div className="flex items-center gap-2 font-bold text-slate-800">
+                  <BookOpen className="w-3.5 h-3.5 text-indigo-600" />
+                  Vínculo de Contas (opcional)
+                  <span className="font-normal text-[11px] text-slate-500">
+                    — associe cada campo a uma conta cadastrada
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                  {[
+                    ['caixa_equivalentes', 'Caixa e Equivalentes'],
+                    ['aplicacoes_financeiras', 'Aplicações Financeiras'],
+                    ['contas_receber', 'Contas a Receber'],
+                    ['estoques', 'Estoques'],
+                    ['impostos_recuperar', 'Impostos a Recuperar'],
+                    ['outros_ativo_circulante', 'Outros Ativos Circulantes'],
+                    ['realizavel_longo_prazo', 'Realizável a Longo Prazo'],
+                    ['investimentos', 'Investimentos'],
+                    ['imobilizado', 'Imobilizado'],
+                    ['intangivel', 'Intangível'],
+                    ['fornecedores', 'Fornecedores'],
+                    ['emprestimos_curto_prazo', 'Empréstimos Curto Prazo'],
+                    ['obrigacoes_trabalhistas', 'Obrigações Trabalhistas'],
+                    ['obrigacoes_tributarias', 'Obrigações Tributárias'],
+                    ['outros_passivo_circulante', 'Outros Passivos Circulantes'],
+                    ['emprestimos_longo_prazo', 'Empréstimos Longo Prazo'],
+                    ['outras_obrigacoes_longo_prazo', 'Outras Obrigações LP'],
+                    ['capital_social', 'Capital Social'],
+                    ['reservas_lucros', 'Reservas de Lucros'],
+                    ['lucros_acumulados', 'Lucros Acumulados'],
+                  ].map(([campo, label]) => (
+                    <div key={campo} className="space-y-1">
+                      <Label className="text-[11px] text-slate-600">{label}</Label>
+                      {renderSelectVinculo(campo)}
+                    </div>
+                  ))}
+                </div>
+                {contas.length === 0 && (
+                  <p className="text-[11px] text-slate-500">
+                    Nenhuma conta cadastrada. Crie contas em "Contas" para habilitar os vínculos.
+                  </p>
+                )}
               </div>
 
               {/* Totais comparativos ao vivo */}

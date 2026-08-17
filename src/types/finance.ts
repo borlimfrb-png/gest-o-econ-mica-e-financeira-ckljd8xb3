@@ -64,9 +64,15 @@ export interface EmpresaRecord extends RecordModel {
   observacoes?: string
 }
 
+// Mapeia cada campo do balanço patrimonial (chave = nome do campo) ao id da
+// conta cadastrada vinculada. Armazenado como JSON na collection `balancos`.
+export type VinculosContasBalanco = Record<string, string>
+
 export interface BalancoRecord extends RecordModel {
   empresa: string
   ano: number
+  // Mapeamento de campo -> id da conta vinculada (opcional).
+  vinculos_contas?: VinculosContasBalanco | null
   // Ativo Circulante
   caixa_equivalentes: number
   aplicacoes_financeiras: number
@@ -123,6 +129,7 @@ export interface LancamentoCentroRecord extends RecordModel {
   valor: number
   descricao?: string
   tipo_despesa?: string
+  conta?: string
   concluido?: boolean
   user: string
 }

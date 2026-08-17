@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T18:07:11.310Z",
+  "generatedAt": "2026-08-17T18:19:06.940Z",
   "collections": [
     {
       "name": "users",
@@ -382,6 +382,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "vinculos_contas",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -621,12 +627,20 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "conta",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_lancamentos_centro_centro ON lancamentos_centro (centro)",
         "CREATE INDEX idx_lancamentos_centro_data ON lancamentos_centro (data)",
-        "CREATE INDEX idx_lancamentos_centro_user ON lancamentos_centro (user)"
+        "CREATE INDEX idx_lancamentos_centro_user ON lancamentos_centro (user)",
+        "CREATE INDEX `idx_lancamentos_centro_conta` ON `lancamentos_centro` (conta)"
       ]
     },
     {

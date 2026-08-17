@@ -198,6 +198,7 @@ export const lancamentosCentroService = {
     valor?: number
     descricao?: string
     tipo_despesa?: string
+    conta?: string
     concluido?: boolean
   }): Promise<LancamentoCentroRecord> {
     return await pb.collection('lancamentos_centro').create<LancamentoCentroRecord>({
@@ -206,6 +207,7 @@ export const lancamentosCentroService = {
       valor: data.valor ?? 0,
       descricao: data.descricao?.trim() || undefined,
       tipo_despesa: data.tipo_despesa || undefined,
+      conta: data.conta || null,
       concluido: data.concluido ?? false,
       user: currentUserId(),
     } as any)
@@ -214,11 +216,15 @@ export const lancamentosCentroService = {
   async update(
     id: string,
     data: Partial<
-      Pick<LancamentoCentroRecord, 'data' | 'valor' | 'descricao' | 'tipo_despesa' | 'concluido'>
+      Pick<
+        LancamentoCentroRecord,
+        'data' | 'valor' | 'descricao' | 'tipo_despesa' | 'conta' | 'concluido'
+      >
     >,
   ): Promise<LancamentoCentroRecord> {
     const payload: Record<string, unknown> = { ...data }
     if (data.tipo_despesa === '') payload.tipo_despesa = null
+    if (data.conta === '') payload.conta = null
     return await pb.collection('lancamentos_centro').update<LancamentoCentroRecord>(id, payload)
   },
 
