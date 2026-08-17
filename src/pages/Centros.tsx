@@ -935,6 +935,7 @@ export default function Centros() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                        <th className="py-3 px-4">Código</th>
                         <th className="py-3 px-4">Nome</th>
                         <th className="py-3 px-4">Tipo</th>
                         <th className="py-3 px-4 text-center">Qtd. Lanç.</th>
@@ -1616,6 +1617,20 @@ export default function Centros() {
             )}
 
             <div className="space-y-3 py-4">
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-centro-codigo"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Código
+                </Label>
+                <Input
+                  id="edit-centro-codigo"
+                  readOnly
+                  value={editingCentro?.codigo || ''}
+                  className="h-9 text-xs font-mono font-semibold text-slate-600 bg-slate-50 border-slate-200 cursor-not-allowed"
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-centro-nome" className="text-xs font-semibold text-slate-700">
                   Nome *

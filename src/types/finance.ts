@@ -128,6 +128,7 @@ export interface LancamentoCentroRecord extends RecordModel {
 }
 
 export interface TipoDespesaRecord extends RecordModel {
+  codigo?: string
   nome: string
   descricao?: string
   user: string

@@ -291,6 +291,7 @@ export default function TiposDespesas() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                      <th className="py-3 px-4">Código</th>
                       <th className="py-3 px-4">Nome</th>
                       <th className="py-3 px-4">Descrição</th>
                       <th className="py-3 px-4 text-center">Qtd. Lançamentos</th>
@@ -302,6 +303,11 @@ export default function TiposDespesas() {
                       const count = contagemLancamentos[t.id] || 0
                       return (
                         <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-3 px-4">
+                            <span className="font-mono font-semibold text-blue-700 text-[11px]">
+                              {t.codigo || '—'}
+                            </span>
+                          </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-2.5">
                               <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">

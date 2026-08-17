@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T16:29:35.323Z",
+  "generatedAt": "2026-08-17T17:54:02.517Z",
   "collections": [
     {
       "name": "users",
@@ -539,6 +539,12 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -666,6 +672,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": ["CREATE INDEX idx_tipos_despesa_user ON tipos_despesa (user)"]

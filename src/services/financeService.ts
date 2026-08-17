@@ -233,6 +233,18 @@ export const tiposDespesaService = {
     })
   },
 
+  // Calcula o próximo código (TD-NNN) com base nos códigos já existentes do usuário.
+  proximoCodigo(codigos: string[]): string {
+    let maxN = 0
+    for (const c of codigos) {
+      if (c && c.startsWith('TD-')) {
+        const num = parseInt(c.slice(3), 10)
+        if (!isNaN(num) && num > maxN) maxN = num
+      }
+    }
+    return 'TD-' + String(maxN + 1).padStart(3, '0')
+  },
+
   async create(data: { nome: string; descricao?: string }): Promise<TipoDespesaRecord> {
     return await pb.collection('tipos_despesa').create<TipoDespesaRecord>({
       nome: data.nome.trim(),
