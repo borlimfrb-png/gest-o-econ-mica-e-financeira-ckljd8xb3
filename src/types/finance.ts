@@ -2,11 +2,44 @@ export type SegmentoEmpresa =
   | 'Indústria'
   | 'Comércio'
   | 'Serviços'
-  | 'Agronegócio'
   | 'Tecnologia'
-  | 'Saúde'
+  | 'Agronegócio'
   | 'Construção'
+  | 'Saúde'
+  | 'Educação'
+  | 'Financeiro'
   | 'Outros'
+
+export type PorteEmpresa = 'MEI' | 'Microempresa' | 'Pequena' | 'Média' | 'Grande'
+
+export type UfEmpresa =
+  | 'AC'
+  | 'AL'
+  | 'AP'
+  | 'AM'
+  | 'BA'
+  | 'CE'
+  | 'DF'
+  | 'ES'
+  | 'GO'
+  | 'MA'
+  | 'MT'
+  | 'MS'
+  | 'MG'
+  | 'PA'
+  | 'PB'
+  | 'PR'
+  | 'PE'
+  | 'PI'
+  | 'RJ'
+  | 'RN'
+  | 'RS'
+  | 'RO'
+  | 'RR'
+  | 'SC'
+  | 'SP'
+  | 'SE'
+  | 'TO'
 
 import type { RecordModel } from 'pocketbase'
 
@@ -14,6 +47,21 @@ export interface EmpresaRecord extends RecordModel {
   nome: string
   cnpj: string
   segmento: SegmentoEmpresa
+  nome_fantasia?: string
+  porte?: PorteEmpresa
+  data_fundacao?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  estado?: UfEmpresa
+  cep?: string
+  telefone?: string
+  email?: string
+  site?: string
+  contato_principal?: string
+  observacoes?: string
 }
 
 export interface BalancoRecord extends RecordModel {

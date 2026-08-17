@@ -12,7 +12,13 @@ export const empresasService = {
     return await pb.collection('empresas').getOne<EmpresaRecord>(id)
   },
 
-  async create(data: { nome: string; cnpj: string; segmento: string }): Promise<EmpresaRecord> {
+  async create(
+    data: Partial<Omit<EmpresaRecord, 'id' | 'created' | 'updated'>> & {
+      nome: string
+      cnpj: string
+      segmento: string
+    },
+  ): Promise<EmpresaRecord> {
     return await pb.collection('empresas').create<EmpresaRecord>(data)
   },
 
