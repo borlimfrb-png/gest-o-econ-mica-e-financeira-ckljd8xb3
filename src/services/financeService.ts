@@ -185,6 +185,7 @@ export const lancamentosCentroService = {
     valor?: number
     descricao?: string
     tipo_despesa?: string
+    concluido?: boolean
   }): Promise<LancamentoCentroRecord> {
     return await pb.collection('lancamentos_centro').create<LancamentoCentroRecord>({
       centro: data.centro,
@@ -192,13 +193,16 @@ export const lancamentosCentroService = {
       valor: data.valor ?? 0,
       descricao: data.descricao?.trim() || undefined,
       tipo_despesa: data.tipo_despesa || undefined,
+      concluido: data.concluido ?? false,
       user: currentUserId(),
     } as any)
   },
 
   async update(
     id: string,
-    data: Partial<Pick<LancamentoCentroRecord, 'data' | 'valor' | 'descricao' | 'tipo_despesa'>>,
+    data: Partial<
+      Pick<LancamentoCentroRecord, 'data' | 'valor' | 'descricao' | 'tipo_despesa' | 'concluido'>
+    >,
   ): Promise<LancamentoCentroRecord> {
     const payload: Record<string, unknown> = { ...data }
     if (data.tipo_despesa === '') payload.tipo_despesa = null

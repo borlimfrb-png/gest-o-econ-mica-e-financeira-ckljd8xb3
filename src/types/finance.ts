@@ -121,6 +121,7 @@ export interface LancamentoCentroRecord extends RecordModel {
   valor: number
   descricao?: string
   tipo_despesa?: string
+  concluido?: boolean
   user: string
 }
 

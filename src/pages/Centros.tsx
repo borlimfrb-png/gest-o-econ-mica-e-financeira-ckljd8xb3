@@ -10,14 +10,16 @@ import type {
   TipoCentro,
   TipoDespesaRecord,
 } from '@/types/finance'
-import { Tag } from 'lucide-react'
+import { Tag, CheckCircle2, Circle } from 'lucide-react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -86,9 +88,10 @@ type CentroErrors = Partial<Record<keyof CentroFormData | 'general', string>>
 interface LancamentoFormData {
   descricao: string
   tipo_despesa: string
+  concluido: boolean
 }
 
-const EMPTY_LANC: LancamentoFormData = { descricao: '', tipo_despesa: '' }
+const EMPTY_LANC: LancamentoFormData = { descricao: '', tipo_despesa: '', concluido: false }
 
 type LancErrors = Partial<Record<'general', string>>
 
@@ -123,6 +126,9 @@ export default function Centros() {
   // Modal edição lançamento
   const [editLancOpen, setEditLancOpen] = useState(false)
   const [editingLanc, setEditingLanc] = useState<LancamentoCentroRecord | null>(null)
+
+  // Filtro por tipo de despesa (persiste ao trocar de centro)
+  const [filtroTipoDespesa, setFiltroTipoDespesa] = useState<string>('todos')
 
   // Delete lançamento
   const [deleteLancOpen, setDeleteLancOpen] = useState(false)
@@ -168,6 +174,12 @@ export default function Centros() {
     () => (selectedCentroId ? lancamentos.filter((l) => l.centro === selectedCentroId) : []),
     [lancamentos, selectedCentroId],
   )
+
+  // Lançamentos do centro após aplicar o filtro por tipo de despesa
+  const lancamentosFiltrados = useMemo(() => {
+    if (filtroTipoDespesa === 'todos') return lancamentosDoCentro
+    return lancamentosDoCentro.filter((l) => l.tipo_despesa === filtroTipoDespesa)
+  }, [lancamentosDoCentro, filtroTipoDespesa])
 
   const tiposDespesaMap = useMemo(() => {
     const map = new Map<string, TipoDespesaRecord>()
@@ -309,6 +321,7 @@ export default function Centros() {
         valor: 0,
         descricao: lancForm.descricao,
         tipo_despesa: lancForm.tipo_despesa || undefined,
+        concluido: lancForm.concluido,
       })
       toast({ title: 'Lançamento adicionado', description: 'O lançamento foi registrado.' })
       setLancForm(EMPTY_LANC)
@@ -328,9 +341,30 @@ export default function Centros() {
     setLancForm({
       descricao: l.descricao || '',
       tipo_despesa: l.tipo_despesa || '',
+      concluido: !!l.concluido,
     })
     setLancErrors({})
     setEditLancOpen(true)
+  }
+
+  // Toggle inline do campo concluído direto na tabela (bônus)
+  const handleToggleConcluido = async (l: LancamentoCentroRecord) => {
+    const novoValor = !l.concluido
+    // Atualização otimista local
+    setLancamentos((prev) => prev.map((x) => (x.id === l.id ? { ...x, concluido: novoValor } : x)))
+    try {
+      await lancamentosCentroService.update(l.id, { concluido: novoValor })
+    } catch (err: any) {
+      // Reverte em caso de erro
+      setLancamentos((prev) =>
+        prev.map((x) => (x.id === l.id ? { ...x, concluido: !novoValor } : x)),
+      )
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar',
+        description: err?.message || 'Não foi possível atualizar o lançamento.',
+      })
+    }
   }
 
   const handleUpdateLanc = async (e: React.FormEvent) => {
@@ -341,6 +375,7 @@ export default function Centros() {
       await lancamentosCentroService.update(editingLanc.id, {
         descricao: lancForm.descricao,
         tipo_despesa: lancForm.tipo_despesa || '',
+        concluido: lancForm.concluido,
       })
       toast({ title: 'Lançamento atualizado', description: 'As alterações foram salvas.' })
       setEditLancOpen(false)
@@ -729,13 +764,27 @@ export default function Centros() {
                         >
                           Descrição
                         </Label>
-                        <Input
+                        <Textarea
                           id="lanc-descricao"
                           placeholder="Ex: Campanha Google Ads, Salários Janeiro"
                           value={lancForm.descricao}
                           onChange={(e) => setLancField('descricao', e.target.value)}
-                          className="h-9 text-xs"
+                          className="min-h-[80px] text-xs resize-y"
                         />
+                      </div>
+
+                      <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                        <Checkbox
+                          id="lanc-concluido"
+                          checked={lancForm.concluido}
+                          onCheckedChange={(val) => setLancField('concluido', val === true)}
+                        />
+                        <Label
+                          htmlFor="lanc-concluido"
+                          className="text-xs font-semibold text-slate-700 cursor-pointer"
+                        >
+                          Concluído
+                        </Label>
                       </div>
                     </div>
 
@@ -755,10 +804,46 @@ export default function Centros() {
 
               {/* Tabela de Lançamentos */}
               <Card className="bg-white border-slate-200 shadow-xs">
-                <CardHeader className="pb-3 border-b border-slate-100">
-                  <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                    Lançamentos ({lancamentosDoCentro.length})
-                  </CardTitle>
+                <CardHeader className="pb-3 border-b border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                      Lançamentos ({lancamentosFiltrados.length}
+                      {filtroTipoDespesa !== 'todos' &&
+                      lancamentosFiltrados.length !== lancamentosDoCentro.length
+                        ? ` de ${lancamentosDoCentro.length}`
+                        : ''}
+                      )
+                    </CardTitle>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3">
+                    <Label
+                      htmlFor="filtro-tipo"
+                      className="text-xs font-semibold text-slate-700 shrink-0"
+                    >
+                      Filtrar por tipo:
+                    </Label>
+                    <Select
+                      value={filtroTipoDespesa}
+                      onValueChange={(val) => setFiltroTipoDespesa(val)}
+                    >
+                      <SelectTrigger
+                        id="filtro-tipo"
+                        className="h-8 text-xs bg-white w-full sm:w-60"
+                      >
+                        <SelectValue placeholder="Todos os tipos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos" className="text-xs">
+                          Todos os tipos
+                        </SelectItem>
+                        {tiposDespesa.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-xs">
+                            {t.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <CardDescription className="text-xs">
                     Lançamentos registrados para este centro.
                   </CardDescription>
@@ -768,21 +853,45 @@ export default function Centros() {
                     <div className="py-12 text-center text-xs text-slate-500">
                       Nenhum lançamento neste centro. Adicione o primeiro acima.
                     </div>
+                  ) : lancamentosFiltrados.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-slate-500">
+                      Nenhum lançamento encontrado para o filtro selecionado.
+                    </div>
                   ) : (
                     <div className="overflow-x-auto">
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                            <th className="py-3 px-4 text-center">Status</th>
                             <th className="py-3 px-4">Tipo de Despesa</th>
                             <th className="py-3 px-4">Descrição</th>
                             <th className="py-3 px-4 text-right">Ações</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {lancamentosDoCentro.map((l) => {
+                          {lancamentosFiltrados.map((l) => {
                             const tipo = l.tipo_despesa ? tiposDespesaMap.get(l.tipo_despesa) : null
+                            const concluido = !!l.concluido
                             return (
                               <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="py-3 px-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleConcluido(l)}
+                                    title={
+                                      concluido
+                                        ? 'Concluído (clique para marcar pendente)'
+                                        : 'Pendente (clique para concluir)'
+                                    }
+                                    className="inline-flex items-center justify-center"
+                                  >
+                                    {concluido ? (
+                                      <CheckCircle2 className="w-4 h-4 text-emerald-600 hover:text-emerald-700" />
+                                    ) : (
+                                      <Circle className="w-4 h-4 text-slate-300 hover:text-slate-400" />
+                                    )}
+                                  </button>
+                                </td>
                                 <td className="py-3 px-4 text-slate-700">
                                   {tipo ? (
                                     <Badge className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50 px-2 py-0.5">
@@ -967,11 +1076,11 @@ export default function Centros() {
                 >
                   Descrição
                 </Label>
-                <Input
+                <Textarea
                   id="edit-lanc-descricao"
                   value={lancForm.descricao}
                   onChange={(e) => setLancField('descricao', e.target.value)}
-                  className="h-9 text-xs"
+                  className="min-h-[80px] text-xs resize-y"
                 />
               </div>
               <div className="space-y-1.5">
@@ -1005,6 +1114,19 @@ export default function Centros() {
                     Remover tipo de despesa
                   </button>
                 ) : null}
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox
+                  id="edit-lanc-concluido"
+                  checked={lancForm.concluido}
+                  onCheckedChange={(val) => setLancField('concluido', val === true)}
+                />
+                <Label
+                  htmlFor="edit-lanc-concluido"
+                  className="text-xs font-semibold text-slate-700 cursor-pointer"
+                >
+                  Concluído
+                </Label>
               </div>
             </div>
 

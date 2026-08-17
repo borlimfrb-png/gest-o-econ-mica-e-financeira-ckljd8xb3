@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T15:43:17.520Z",
+  "generatedAt": "2026-08-17T16:05:56.245Z",
   "collections": [
     {
       "name": "users",
@@ -597,6 +597,12 @@
           "required": false,
           "system": false,
           "collectionRef": "tipos_despesa"
+        },
+        {
+          "name": "concluido",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
