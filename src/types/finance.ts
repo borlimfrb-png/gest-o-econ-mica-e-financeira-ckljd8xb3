@@ -134,6 +134,17 @@ export interface TipoDespesaRecord extends RecordModel {
   user: string
 }
 
+export type TipoConta = 'Ativo' | 'Passivo' | 'Patrimônio Líquido' | 'Receita' | 'Despesa'
+
+export interface ContaRecord extends RecordModel {
+  codigo?: string
+  nome: string
+  descricao?: string
+  tipo: TipoConta
+  grupo?: string
+  user: string
+}
+
 export interface BalancoCalculado {
   // Grupos
   ativoCirculante: number

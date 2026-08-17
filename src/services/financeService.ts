@@ -7,6 +7,7 @@ import type {
   LancamentoCentroRecord,
   TipoDespesaRecord,
   TipoCentro,
+  ContaRecord,
 } from '@/types/finance'
 
 export const empresasService = {
@@ -262,5 +263,55 @@ export const tiposDespesaService = {
 
   async delete(id: string): Promise<boolean> {
     return await pb.collection('tipos_despesa').delete(id)
+  },
+}
+
+export const contasService = {
+  async getAll(): Promise<ContaRecord[]> {
+    return await pb.collection('contas').getFullList<ContaRecord>({
+      sort: 'codigo',
+    })
+  },
+
+  // Calcula o próximo código (CO-NNN) com base nos códigos já existentes do usuário.
+  proximoCodigo(codigos: string[]): string {
+    let maxN = 0
+    for (const c of codigos) {
+      if (c && c.startsWith('CO-')) {
+        const num = parseInt(c.slice(3), 10)
+        if (!isNaN(num) && num > maxN) maxN = num
+      }
+    }
+    return 'CO-' + String(maxN + 1).padStart(3, '0')
+  },
+
+  async create(data: {
+    nome: string
+    tipo: ContaRecord['tipo']
+    descricao?: string
+    grupo?: string
+  }): Promise<ContaRecord> {
+    return await pb.collection('contas').create<ContaRecord>({
+      nome: data.nome.trim(),
+      tipo: data.tipo,
+      descricao: data.descricao?.trim() || undefined,
+      grupo: data.grupo?.trim() || undefined,
+      user: currentUserId(),
+    } as any)
+  },
+
+  async update(
+    id: string,
+    data: Partial<Pick<ContaRecord, 'nome' | 'tipo' | 'descricao' | 'grupo'>>,
+  ): Promise<ContaRecord> {
+    const payload: Record<string, unknown> = { ...data }
+    if (data.nome !== undefined) payload.nome = data.nome.trim()
+    if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
+    if (data.grupo !== undefined) payload.grupo = data.grupo.trim() || undefined
+    return await pb.collection('contas').update<ContaRecord>(id, payload)
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('contas').delete(id)
   },
 }

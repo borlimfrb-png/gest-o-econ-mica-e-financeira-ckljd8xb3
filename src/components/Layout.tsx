@@ -8,6 +8,7 @@ import {
   Building2,
   PieChart,
   Tags,
+  BookOpen,
   FileText,
   Upload,
   LogOut,

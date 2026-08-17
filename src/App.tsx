@@ -12,6 +12,7 @@ import Empresas from './pages/Empresas'
 import Centros from './pages/Centros'
 import AnaliseEmpresa from './pages/AnaliseEmpresa'
 import TiposDespesas from './pages/TiposDespesas'
+import Contas from './pages/Contas'
 import Relatorios from './pages/Relatorios'
 import Importacao from './pages/Importacao'
 import NotFound from './pages/NotFound'
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
               <Route path="/centros" element={<Centros />} />
               <Route path="/tipos-despesas" element={<TiposDespesas />} />
+              <Route path="/contas" element={<Contas />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/importacao" element={<Importacao />} />
             </Route>
