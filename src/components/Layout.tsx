@@ -9,6 +9,7 @@ import {
   PieChart,
   Tags,
   FileText,
+  Upload,
   LogOut,
   Menu,
   X,

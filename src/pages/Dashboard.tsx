@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
 import {
   balancosService,
+  centrosService,
   dreService,
   lancamentosCentroService,
   tiposDespesaService,
 } from '@/services/financeService'
 import type {
   BalancoRecord,
+  CentroRecord,
   DreRecord,
   LancamentoCentroRecord,
   TipoDespesaRecord,
@@ -52,6 +54,10 @@ import {
   BarChart3,
   Scale,
   ShieldAlert,
+  CheckCircle2,
+  AlertTriangle,
+  CalendarClock,
+  Target,
 } from 'lucide-react'
 
 const CHART_COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
@@ -65,21 +71,24 @@ export default function Dashboard() {
   const [allBalancos, setAllBalancos] = useState<BalancoRecord[]>([])
   const [lancamentosCentro, setLancamentosCentro] = useState<LancamentoCentroRecord[]>([])
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
+  const [centros, setCentros] = useState<CentroRecord[]>([])
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
   const loadData = async () => {
     try {
       setLoadingData(true)
-      const [allB, allD, allL, allTd] = await Promise.all([
+      const [allB, allD, allL, allTd, allC] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
         lancamentosCentroService.getAll(),
         tiposDespesaService.getAll(),
+        centrosService.getAll(),
       ])
       setAllBalancos(allB)
       setDres(allD)
       setLancamentosCentro(allL)
       setTiposDespesa(allTd)
+      setCentros(allC)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -105,6 +114,9 @@ export default function Dashboard() {
     loadData()
   })
   useRealtime<TipoDespesaRecord>('tipos_despesa', () => {
+    loadData()
+  })
+  useRealtime<CentroRecord>('centros', () => {
     loadData()
   })
 
@@ -175,6 +187,114 @@ export default function Dashboard() {
     }
   })
 
+  // ---------- ALERTAS INTELIGENTES ----------
+  interface AlertaItem {
+    id: string
+    titulo: string
+    descricao: string
+    to: string
+    severidade: 'amber' | 'red'
+    icone: 'target' | 'calendar' | 'building' | 'liquidez'
+  }
+
+  const alertas = useMemo<AlertaItem[]>(() => {
+    const lista: AlertaItem[] = []
+    const agora = new Date()
+    const anoCorrente = agora.getFullYear()
+    const mesCorrente = agora.getMonth() // 0-11
+    const diaDoMes = agora.getDate()
+    const diasNoMes = new Date(anoCorrente, mesCorrente + 1, 0).getDate()
+    const diasRestantesMes = diasNoMes - diaDoMes
+
+    // 1. Centros de custo com menos de 50% da meta mensal atingida e faltando < 7 dias para o fim do mês
+    if (diasRestantesMes < 7) {
+      for (const c of centros) {
+        const meta = c.meta_mensal ? Number(c.meta_mensal) || 0 : 0
+        if (meta <= 0) continue
+        const realizado = lancamentosCentro
+          .filter((l) => {
+            if (l.centro !== c.id || !l.data) return false
+            const d = new Date(l.data + 'T00:00:00')
+            return d.getMonth() === mesCorrente && d.getFullYear() === anoCorrente
+          })
+          .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+        const pct = meta > 0 ? (realizado / meta) * 100 : 0
+        if (pct < 50) {
+          lista.push({
+            id: `meta-mensal-${c.id}`,
+            titulo: `Meta mensal baixa: ${c.nome}`,
+            descricao: `Atingiu ${pct.toFixed(0)}% da meta mensal e faltam apenas ${diasRestantesMes} dia(s) para o fim do mês.`,
+            to: '/centros',
+            severidade: 'amber',
+            icone: 'target',
+          })
+        }
+      }
+    }
+
+    // 2. Centros de custo com menos de 60% da meta anual e já passados 9+ meses do ano
+    if (mesCorrente + 1 >= 9) {
+      for (const c of centros) {
+        const metaAnual = c.meta_anual ? Number(c.meta_anual) || 0 : 0
+        if (metaAnual <= 0) continue
+        const realizado = lancamentosCentro
+          .filter((l) => {
+            if (l.centro !== c.id || !l.data) return false
+            const d = new Date(l.data + 'T00:00:00')
+            return d.getFullYear() === anoCorrente
+          })
+          .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+        const pct = metaAnual > 0 ? (realizado / metaAnual) * 100 : 0
+        if (pct < 60) {
+          lista.push({
+            id: `meta-anual-${c.id}`,
+            titulo: `Meta anual em risco: ${c.nome}`,
+            descricao: `Atingiu ${pct.toFixed(0)}% da meta anual com ${mesCorrente + 1} meses decorridos.`,
+            to: '/centros',
+            severidade: 'amber',
+            icone: 'calendar',
+          })
+        }
+      }
+    }
+
+    // 3. Empresas sem balanço lançado no ano corrente
+    for (const emp of empresas) {
+      const temBalancoAnoCorrente = allBalancos.some(
+        (b) => b.empresa === emp.id && b.ano === anoCorrente,
+      )
+      if (!temBalancoAnoCorrente) {
+        lista.push({
+          id: `sem-balanco-${emp.id}`,
+          titulo: `Sem balanço em ${anoCorrente}: ${emp.nome}`,
+          descricao: `A empresa não possui balanço lançado para o exercício de ${anoCorrente}.`,
+          to: `/empresas/${emp.id}`,
+          severidade: 'amber',
+          icone: 'building',
+        })
+      }
+    }
+
+    // 4. Liquidez Corrente < 0.8 (empresa/ano selecionados)
+    if (calcInd.liquidezCorrente !== null && calcInd.liquidezCorrente < 0.8) {
+      lista.push({
+        id: 'liquidez-baixa',
+        titulo: 'Liquidez Corrente crítica',
+        descricao: `Índice de liquidez corrente de ${formatNumber(
+          calcInd.liquidezCorrente,
+          2,
+        )} está abaixo de 0,8 — atenção à capacidade de pagamento de curto prazo.`,
+        to: `/empresas/${selectedEmpresaId}`,
+        severidade: 'red',
+        icone: 'liquidez',
+      })
+    }
+
+    return lista
+  }, [lancamentosCentro, empresas, allBalancos, calcInd, selectedEmpresaId])
+
+  const alertasVisiveis = alertas.slice(0, 4)
+
   // Lista de Últimos Balanços (todas as empresas ou empresa selecionada)
   const ultimosBalancosList = allBalancos.slice(0, 5).map((b) => {
     const emp = empresas.find((e) => e.id === b.empresa)
@@ -223,8 +343,87 @@ export default function Dashboard() {
     )
   }
 
+  const renderAlertIcon = (icone: AlertaItem['icone']) => {
+    if (icone === 'target') return <Target className="w-4 h-4" />
+    if (icone === 'calendar') return <CalendarClock className="w-4 h-4" />
+    if (icone === 'building') return <Building2 className="w-4 h-4" />
+    return <Scale className="w-4 h-4" />
+  }
+
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Seção de Alertas Inteligentes */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-500" />
+            Alertas
+            {alertas.length > 0 && (
+              <Badge className="bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-50 text-[10px] font-semibold">
+                {alertas.length}
+              </Badge>
+            )}
+          </h2>
+        </div>
+        {alertas.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3 shadow-2xs">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#0B1F3A]">Nenhum alerta no momento</p>
+              <p className="text-[11px] text-slate-500">
+                Todos os indicadores estão dentro dos parâmetros esperados.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`grid gap-3 ${
+              alertasVisiveis.length >= 4
+                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+                : `grid-cols-1 sm:grid-cols-2 lg:grid-cols-${alertasVisiveis.length}`
+            }`}
+          >
+            {alertasVisiveis.map((a) => (
+              <Link
+                key={a.id}
+                to={a.to}
+                className={`bg-white border rounded-xl p-3.5 flex flex-col gap-2 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all ${
+                  a.severidade === 'red' ? 'border-red-200' : 'border-amber-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      a.severidade === 'red'
+                        ? 'bg-red-50 text-red-600'
+                        : 'bg-amber-50 text-amber-600'
+                    }`}
+                  >
+                    {renderAlertIcon(a.icone)}
+                  </div>
+                  <AlertTriangle
+                    className={`w-3.5 h-3.5 ml-auto ${
+                      a.severidade === 'red' ? 'text-red-500' : 'text-amber-500'
+                    }`}
+                  />
+                </div>
+                <p className="text-xs font-bold text-[#0B1F3A] leading-tight line-clamp-2">
+                  {a.titulo}
+                </p>
+                <p className="text-[11px] text-slate-500 line-clamp-3">{a.descricao}</p>
+              </Link>
+            ))}
+          </div>
+        )}
+        {alertas.length > 4 && (
+          <p className="text-[11px] text-slate-400 mt-2 text-right">
+            Mostrando 4 de {alertas.length} alertas.
+          </p>
+        )}
+      </div>
+
       {/* Banner Empresa Selecionada */}
       {selectedEmpresa && (
         <div className="bg-white border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">

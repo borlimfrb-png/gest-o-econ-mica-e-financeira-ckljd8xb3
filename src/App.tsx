@@ -13,6 +13,7 @@ import Centros from './pages/Centros'
 import AnaliseEmpresa from './pages/AnaliseEmpresa'
 import TiposDespesas from './pages/TiposDespesas'
 import Relatorios from './pages/Relatorios'
+import Importacao from './pages/Importacao'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/centros" element={<Centros />} />
               <Route path="/tipos-despesas" element={<TiposDespesas />} />
               <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/importacao" element={<Importacao />} />
             </Route>
 
             {/* Rota 404 */}

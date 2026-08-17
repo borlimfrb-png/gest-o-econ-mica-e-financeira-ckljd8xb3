@@ -58,6 +58,17 @@ import {
   CalendarDays,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RTooltip,
+  ResponsiveContainer,
+  ReferenceLine,
+  ComposedChart,
+} from 'recharts'
 
 const TIPOS: TipoCentro[] = ['Receita', 'Despesa']
 
@@ -276,6 +287,44 @@ export default function Centros() {
     for (const t of tiposDespesa) map.set(t.id, t)
     return map
   }, [tiposDespesa])
+
+  // Evolução mensal de gastos (últimos 12 meses) do centro selecionado
+  const evolucaoMensal = useMemo(() => {
+    const meses = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ]
+    const hoje = new Date()
+    const pontos: { mes: string; valor: number; ano: number; numMes: number }[] = []
+    // Últimos 12 meses (incluindo o atual) do mais antigo para o mais recente
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+      const ano = d.getFullYear()
+      const numMes = d.getMonth()
+      const total = lancamentosDoCentro
+        .filter((l) => {
+          if (!l.data) return false
+          const ld = new Date(l.data + 'T00:00:00')
+          return ld.getMonth() === numMes && ld.getFullYear() === ano
+        })
+        .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+      pontos.push({ mes: meses[numMes], valor: total, ano, numMes })
+    }
+    return pontos
+  }, [lancamentosDoCentro])
+
+  const evolucaoTemDados = evolucaoMensal.some((p) => p.valor > 0)
+  const metaMensalCentro = selectedCentro?.meta_mensal ? Number(selectedCentro.meta_mensal) || 0 : 0
 
   // Mapa de totais por centro (id -> { count, total })
   const statsPorCentro = useMemo(() => {
@@ -1204,6 +1253,68 @@ export default function Centros() {
                       </p>
                     </div>
                   ) : null}
+                </CardContent>
+              </Card>
+
+              {/* Gráfico de Evolução Mensal de Gastos (últimos 12 meses) */}
+              <Card className="bg-white border-slate-200 shadow-xs">
+                <CardHeader className="pb-2 border-b border-slate-100">
+                  <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-blue-600" />
+                    Evolução Mensal de Gastos
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Soma dos lançamentos nos últimos 12 meses
+                    {metaMensalCentro > 0 ? ' · linha tracejada = meta mensal' : ''}.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {evolucaoTemDados ? (
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart
+                          data={evolucaoMensal}
+                          margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                          <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#64748B' }} />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: '#64748B' }}
+                            tickFormatter={(v) => `R$ ${Math.round(Number(v) / 1000)}k`}
+                          />
+                          <RTooltip
+                            formatter={(val: number) => [formatBrl(Number(val)), 'Gastos no mês']}
+                            labelFormatter={(_label, payload) => {
+                              const p = payload?.[0]?.payload as
+                                | { mes: string; ano: number; numMes: number }
+                                | undefined
+                              if (!p) return ''
+                              return `${p.mes}/${p.ano}`
+                            }}
+                          />
+                          {metaMensalCentro > 0 && (
+                            <ReferenceLine
+                              y={metaMensalCentro}
+                              stroke="#F59E0B"
+                              strokeDasharray="6 4"
+                              strokeWidth={1.5}
+                              label={{
+                                value: 'Meta',
+                                position: 'insideTopRight',
+                                fill: '#D97706',
+                                fontSize: 10,
+                              }}
+                            />
+                          )}
+                          <Bar dataKey="valor" name="Gastos" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-xs text-slate-400">
+                      Sem dados para o período
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
