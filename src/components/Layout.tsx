@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Building2,
   PieChart,
+  Tags,
   FileText,
   LogOut,
   Menu,
@@ -66,6 +67,7 @@ export default function Layout() {
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Empresas', path: '/empresas', icon: Building2 },
     { name: 'Centros de Custo', path: '/centros', icon: PieChart },
+    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
     { name: 'Relatórios', path: '/relatorios', icon: FileText },
   ]
 

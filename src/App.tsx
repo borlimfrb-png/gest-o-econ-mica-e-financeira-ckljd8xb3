@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard'
 import Empresas from './pages/Empresas'
 import Centros from './pages/Centros'
 import AnaliseEmpresa from './pages/AnaliseEmpresa'
+import TiposDespesas from './pages/TiposDespesas'
 import Relatorios from './pages/Relatorios'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/empresas" element={<Empresas />} />
               <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
               <Route path="/centros" element={<Centros />} />
+              <Route path="/tipos-despesas" element={<TiposDespesas />} />
               <Route path="/relatorios" element={<Relatorios />} />
             </Route>
 

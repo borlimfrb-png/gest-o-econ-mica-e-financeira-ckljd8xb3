@@ -5,6 +5,7 @@ import type {
   DreRecord,
   CentroRecord,
   LancamentoCentroRecord,
+  TipoDespesaRecord,
   TipoCentro,
 } from '@/types/finance'
 
@@ -183,11 +184,42 @@ export const lancamentosCentroService = {
     data: string
     valor: number
     descricao?: string
+    tipo_despesa?: string
   }): Promise<LancamentoCentroRecord> {
     return await pb.collection('lancamentos_centro').create<LancamentoCentroRecord>({
       centro: data.centro,
       data: data.data,
       valor: data.valor,
+      descricao: data.descricao?.trim() || undefined,
+      tipo_despesa: data.tipo_despesa || undefined,
+      user: currentUserId(),
+    } as any)
+  },
+
+  async update(
+    id: string,
+    data: Partial<Pick<LancamentoCentroRecord, 'data' | 'valor' | 'descricao' | 'tipo_despesa'>>,
+  ): Promise<LancamentoCentroRecord> {
+    const payload: Record<string, unknown> = { ...data }
+    if (data.tipo_despesa === '') payload.tipo_despesa = null
+    return await pb.collection('lancamentos_centro').update<LancamentoCentroRecord>(id, payload)
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('lancamentos_centro').delete(id)
+  },
+}
+
+export const tiposDespesaService = {
+  async getAll(): Promise<TipoDespesaRecord[]> {
+    return await pb.collection('tipos_despesa').getFullList<TipoDespesaRecord>({
+      sort: 'nome',
+    })
+  },
+
+  async create(data: { nome: string; descricao?: string }): Promise<TipoDespesaRecord> {
+    return await pb.collection('tipos_despesa').create<TipoDespesaRecord>({
+      nome: data.nome.trim(),
       descricao: data.descricao?.trim() || undefined,
       user: currentUserId(),
     } as any)
@@ -195,12 +227,12 @@ export const lancamentosCentroService = {
 
   async update(
     id: string,
-    data: Partial<Pick<LancamentoCentroRecord, 'data' | 'valor' | 'descricao'>>,
-  ): Promise<LancamentoCentroRecord> {
-    return await pb.collection('lancamentos_centro').update<LancamentoCentroRecord>(id, data)
+    data: Partial<Pick<TipoDespesaRecord, 'nome' | 'descricao'>>,
+  ): Promise<TipoDespesaRecord> {
+    return await pb.collection('tipos_despesa').update<TipoDespesaRecord>(id, data)
   },
 
   async delete(id: string): Promise<boolean> {
-    return await pb.collection('lancamentos_centro').delete(id)
+    return await pb.collection('tipos_despesa').delete(id)
   },
 }

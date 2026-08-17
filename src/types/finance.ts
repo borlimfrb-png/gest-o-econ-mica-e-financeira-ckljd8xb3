@@ -120,6 +120,13 @@ export interface LancamentoCentroRecord extends RecordModel {
   data: string
   valor: number
   descricao?: string
+  tipo_despesa?: string
+  user: string
+}
+
+export interface TipoDespesaRecord extends RecordModel {
+  nome: string
+  descricao?: string
   user: string
 }
 

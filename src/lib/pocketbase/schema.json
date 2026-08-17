@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T15:15:50.784Z",
+  "generatedAt": "2026-08-17T15:27:41.017Z",
   "collections": [
     {
       "name": "users",
@@ -590,109 +590,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
-        }
-      ],
-      "indexes": [
-        "CREATE UNIQUE INDEX idx_dre_empresa_ano ON dre (empresa, ano)",
-        "CREATE INDEX idx_dre_empresa ON dre (empresa)",
-        "CREATE INDEX idx_dre_ano ON dre (ano)"
-      ]
-    },
-    {
-      "name": "centros",
-      "type": "base",
-      "apiRules": {
-        "list": "@request.auth.id != '' && user = @request.auth.id",
-        "view": "@request.auth.id != '' && user = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user = @request.auth.id",
-        "delete": "@request.auth.id != '' && user = @request.auth.id"
-      },
-      "fields": [
-        { "name": "nome", "type": "text", "required": true, "system": false },
-        { "name": "descricao", "type": "text", "required": false, "system": false },
-        {
-          "name": "tipo",
-          "type": "select",
-          "required": true,
-          "system": false,
-          "selectValues": ["Receita", "Despesa"],
-          "maxSelect": 1
         },
         {
-          "name": "user",
+          "name": "tipo_despesa",
           "type": "relation",
-          "required": true,
-          "system": false,
-          "collectionRef": "users",
-          "cascadeDelete": false,
-          "maxSelect": 1
-        },
-        {
-          "name": "created",
-          "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
-        },
-        {
-          "name": "updated",
-          "type": "autodate",
-          "required": false,
-          "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
-        }
-      ],
-      "indexes": [
-        "CREATE INDEX idx_centros_user ON centros (user)",
-        "CREATE INDEX idx_centros_tipo ON centros (tipo)"
-      ]
-    },
-    {
-      "name": "lancamentos_centro",
-      "type": "base",
-      "apiRules": {
-        "list": "@request.auth.id != '' && user = @request.auth.id",
-        "view": "@request.auth.id != '' && user = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user = @request.auth.id",
-        "delete": "@request.auth.id != '' && user = @request.auth.id"
-      },
-      "fields": [
-        {
-          "name": "centro",
-          "type": "relation",
-          "required": true,
-          "system": false,
-          "collectionRef": "centros",
-          "cascadeDelete": true,
-          "maxSelect": 1
-        },
-        { "name": "data", "type": "date", "required": true, "system": false },
-        { "name": "valor", "type": "number", "required": true, "system": false, "min": 0 },
-        { "name": "descricao", "type": "text", "required": false, "system": false },
-        {
-          "name": "user",
-          "type": "relation",
-          "required": true,
-          "system": false,
-          "collectionRef": "users",
-          "cascadeDelete": false,
-          "maxSelect": 1
-        },
-        {
-          "name": "created",
-          "type": "autodate",
-          "required": false,
-          "system": false,
-          "autodateTriggers": ["onCreate"]
-        },
-        {
-          "name": "updated",
-          "type": "autodate",
-          "required": false,
-          "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "collectionRef": "tipos_despesa"
         }
       ],
       "indexes": [
@@ -700,6 +604,53 @@
         "CREATE INDEX idx_lancamentos_centro_data ON lancamentos_centro (data)",
         "CREATE INDEX idx_lancamentos_centro_user ON lancamentos_centro (user)"
       ]
+    },
+    {
+      "name": "tipos_despesa",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && user = @request.auth.id",
+        "view": "@request.auth.id != \"\" && user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\" && user = @request.auth.id",
+        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_tipos_despesa_user ON tipos_despesa (user)"]
     }
   ]
 }

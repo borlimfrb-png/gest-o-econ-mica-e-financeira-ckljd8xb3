@@ -1,6 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { centrosService, lancamentosCentroService } from '@/services/financeService'
-import type { CentroRecord, LancamentoCentroRecord, TipoCentro } from '@/types/finance'
+import {
+  centrosService,
+  lancamentosCentroService,
+  tiposDespesaService,
+} from '@/services/financeService'
+import type {
+  CentroRecord,
+  LancamentoCentroRecord,
+  TipoCentro,
+  TipoDespesaRecord,
+} from '@/types/finance'
+import { Tag } from 'lucide-react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -89,9 +99,10 @@ interface LancamentoFormData {
   data: string
   valor: string
   descricao: string
+  tipo_despesa: string
 }
 
-const EMPTY_LANC: LancamentoFormData = { data: '', valor: '', descricao: '' }
+const EMPTY_LANC: LancamentoFormData = { data: '', valor: '', descricao: '', tipo_despesa: '' }
 
 type LancErrors = Partial<Record<keyof LancamentoFormData | 'general', string>>
 
@@ -100,6 +111,7 @@ export default function Centros() {
 
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoCentroRecord[]>([])
+  const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCentroId, setSelectedCentroId] = useState<string | null>(null)
 
@@ -134,12 +146,14 @@ export default function Centros() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [cList, lList] = await Promise.all([
+      const [cList, lList, tdList] = await Promise.all([
         centrosService.getAll(),
         lancamentosCentroService.getAll(),
+        tiposDespesaService.getAll(),
       ])
       setCentros(cList)
       setLancamentos(lList)
+      setTiposDespesa(tdList)
     } catch (err) {
       console.error('Erro ao carregar centros:', err)
       toast({
@@ -151,13 +165,13 @@ export default function Centros() {
       setLoading(false)
     }
   }
-
   useEffect(() => {
     loadData()
   }, [])
 
   useRealtime<CentroRecord>('centros', () => loadData())
   useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => loadData())
+  useRealtime<TipoDespesaRecord>('tipos_despesa', () => loadData())
 
   const selectedCentro = useMemo(
     () => centros.find((c) => c.id === selectedCentroId) || null,
@@ -168,6 +182,12 @@ export default function Centros() {
     () => (selectedCentroId ? lancamentos.filter((l) => l.centro === selectedCentroId) : []),
     [lancamentos, selectedCentroId],
   )
+
+  const tiposDespesaMap = useMemo(() => {
+    const map = new Map<string, TipoDespesaRecord>()
+    for (const t of tiposDespesa) map.set(t.id, t)
+    return map
+  }, [tiposDespesa])
 
   // Mapa de totais por centro (id -> { count, total })
   const statsPorCentro = useMemo(() => {
@@ -321,6 +341,7 @@ export default function Centros() {
         data: lancForm.data,
         valor: parseValor(lancForm.valor),
         descricao: lancForm.descricao,
+        tipo_despesa: lancForm.tipo_despesa || undefined,
       })
       toast({ title: 'Lançamento adicionado', description: 'O lançamento foi registrado.' })
       setLancForm(EMPTY_LANC)
@@ -341,6 +362,7 @@ export default function Centros() {
       data: l.data ? l.data.slice(0, 10) : '',
       valor: String(l.valor).replace('.', ','),
       descricao: l.descricao || '',
+      tipo_despesa: l.tipo_despesa || '',
     })
     setLancErrors({})
     setEditLancOpen(true)
@@ -355,6 +377,7 @@ export default function Centros() {
         data: lancForm.data,
         valor: parseValor(lancForm.valor),
         descricao: lancForm.descricao,
+        tipo_despesa: lancForm.tipo_despesa || '',
       })
       toast({ title: 'Lançamento atualizado', description: 'As alterações foram salvas.' })
       setEditLancOpen(false)
@@ -752,6 +775,44 @@ export default function Centros() {
 
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label
+                          htmlFor="lanc-tipo-despesa"
+                          className="text-xs font-semibold text-slate-700"
+                        >
+                          Tipo de Despesa
+                        </Label>
+                        <Select
+                          value={lancForm.tipo_despesa}
+                          onValueChange={(val) => setLancField('tipo_despesa', val)}
+                        >
+                          <SelectTrigger id="lanc-tipo-despesa" className="h-9 text-xs bg-white">
+                            <SelectValue placeholder="Selecione (opcional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {tiposDespesa.map((t) => (
+                              <SelectItem key={t.id} value={t.id} className="text-xs">
+                                {t.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {tiposDespesa.length === 0 && (
+                          <p className="text-[11px] text-slate-400">
+                            Nenhum tipo cadastrado. Crie em "Tipos de Despesas".
+                          </p>
+                        )}
+                        {lancForm.tipo_despesa ? (
+                          <button
+                            type="button"
+                            onClick={() => setLancField('tipo_despesa', '')}
+                            className="text-[11px] text-slate-500 hover:text-red-600 font-medium self-start"
+                          >
+                            Remover tipo de despesa
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label
                           htmlFor="lanc-descricao"
                           className="text-xs font-semibold text-slate-700"
                         >
@@ -802,59 +863,73 @@ export default function Centros() {
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
                             <th className="py-3 px-4">Data</th>
-                            <th className="py-3 px-4">Descrição</th>
                             <th className="py-3 px-4 text-right">Valor</th>
+                            <th className="py-3 px-4">Tipo de Despesa</th>
+                            <th className="py-3 px-4">Descrição</th>
                             <th className="py-3 px-4 text-right">Ações</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {lancamentosDoCentro.map((l) => (
-                            <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-3 px-4 whitespace-nowrap text-slate-700 font-medium">
-                                {formatData(l.data)}
-                              </td>
-                              <td className="py-3 px-4 text-slate-700">
-                                {l.descricao || (
-                                  <span className="text-slate-400 italic">Sem descrição</span>
-                                )}
-                              </td>
-                              <td
-                                className={`py-3 px-4 text-right font-semibold whitespace-nowrap ${
-                                  selectedCentro.tipo === 'Receita'
-                                    ? 'text-emerald-600'
-                                    : 'text-rose-600'
-                                }`}
-                              >
-                                {formatBrl(Number(l.valor))}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <Button
-                                    onClick={() => openEditLanc(l)}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                    title="Editar lançamento"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    onClick={() => confirmDeleteLanc(l)}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                    title="Excluir lançamento"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
+                          {lancamentosDoCentro.map((l) => {
+                            const tipo = l.tipo_despesa ? tiposDespesaMap.get(l.tipo_despesa) : null
+                            return (
+                              <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
+                                <td className="py-3 px-4 whitespace-nowrap text-slate-700 font-medium">
+                                  {formatData(l.data)}
+                                </td>
+                                <td
+                                  className={`py-3 px-4 text-right font-semibold whitespace-nowrap ${
+                                    selectedCentro.tipo === 'Receita'
+                                      ? 'text-emerald-600'
+                                      : 'text-rose-600'
+                                  }`}
+                                >
+                                  {formatBrl(Number(l.valor))}
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">
+                                  {tipo ? (
+                                    <Badge className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50 px-2 py-0.5">
+                                      <Tag className="w-3 h-3 mr-1" />
+                                      {tipo.nome}
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-slate-400 italic">—</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">
+                                  {l.descricao || (
+                                    <span className="text-slate-400 italic">Sem descrição</span>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <Button
+                                      onClick={() => openEditLanc(l)}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Editar lançamento"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      onClick={() => confirmDeleteLanc(l)}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                      title="Excluir lançamento"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 border-slate-200 bg-slate-50/70 font-semibold">
-                            <td className="py-3 px-4 text-slate-700" colSpan={2}>
+                            <td className="py-3 px-4 text-slate-700" colSpan={3}>
                               Total
                             </td>
                             <td
@@ -1050,6 +1125,38 @@ export default function Centros() {
                   onChange={(e) => setLancField('descricao', e.target.value)}
                   className="h-9 text-xs"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-lanc-tipo-despesa"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Tipo de Despesa
+                </Label>
+                <Select
+                  value={lancForm.tipo_despesa}
+                  onValueChange={(val) => setLancField('tipo_despesa', val)}
+                >
+                  <SelectTrigger id="edit-lanc-tipo-despesa" className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposDespesa.map((t) => (
+                      <SelectItem key={t.id} value={t.id} className="text-xs">
+                        {t.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {lancForm.tipo_despesa ? (
+                  <button
+                    type="button"
+                    onClick={() => setLancField('tipo_despesa', '')}
+                    className="text-[11px] text-slate-500 hover:text-red-600 font-medium self-start"
+                  >
+                    Remover tipo de despesa
+                  </button>
+                ) : null}
               </div>
             </div>
 
