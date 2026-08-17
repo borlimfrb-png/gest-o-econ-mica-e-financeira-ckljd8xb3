@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T19:01:48.740Z",
+  "generatedAt": "2026-08-17T19:57:06.152Z",
   "collections": [
     {
       "name": "users",
@@ -761,6 +761,74 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_contas_user ON contas (user)"]
+    },
+    {
+      "name": "plano_contas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && user = @request.auth.id",
+        "view": "@request.auth.id != \"\" && user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\" && user = @request.auth.id",
+        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "codigo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "contas"
+        },
+        {
+          "name": "centro",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "centros"
+        },
+        {
+          "name": "tipo_despesa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "tipos_despesa"
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_plano_contas_user ON plano_contas (user)"]
     }
   ]
 }

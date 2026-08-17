@@ -152,6 +152,17 @@ export interface ContaRecord extends RecordModel {
   user: string
 }
 
+// Relaciona uma conta do plano de contas a um centro de custo (e opcionalmente
+// a um tipo de despesa). Código sequencial automático (PC-001, ...) por usuário.
+export interface PlanoContaRecord extends RecordModel {
+  codigo?: string
+  conta: string
+  centro: string
+  tipo_despesa?: string
+  descricao?: string
+  user: string
+}
+
 export interface BalancoCalculado {
   // Grupos
   ativoCirculante: number

@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Calendar,
   Building,
+  FolderTree,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -71,6 +72,7 @@ export default function Layout() {
     { name: 'Centros de Custo', path: '/centros', icon: PieChart },
     { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
     { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
+    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
     { name: 'Relatórios', path: '/relatorios', icon: FileText },
     { name: 'Importação', path: '/importacao', icon: Upload },
   ]
