@@ -1,5 +1,12 @@
 import pb from '@/lib/pocketbase/client'
-import type { EmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
+import type {
+  EmpresaRecord,
+  BalancoRecord,
+  DreRecord,
+  CentroRecord,
+  LancamentoCentroRecord,
+  TipoCentro,
+} from '@/types/finance'
 
 export const empresasService = {
   async getAll(): Promise<EmpresaRecord[]> {
@@ -116,5 +123,84 @@ export const dreService = {
         ano,
       } as any)
     }
+  },
+}
+
+function currentUserId(): string {
+  const id = pb.authStore.record?.id
+  if (!id) throw new Error('Usuário não autenticado')
+  return id
+}
+
+export const centrosService = {
+  async getAll(): Promise<CentroRecord[]> {
+    return await pb.collection('centros').getFullList<CentroRecord>({
+      sort: 'nome',
+    })
+  },
+
+  async create(data: {
+    nome: string
+    tipo: TipoCentro
+    descricao?: string
+  }): Promise<CentroRecord> {
+    return await pb.collection('centros').create<CentroRecord>({
+      nome: data.nome.trim(),
+      tipo: data.tipo,
+      descricao: data.descricao?.trim() || undefined,
+      user: currentUserId(),
+    } as any)
+  },
+
+  async update(
+    id: string,
+    data: Partial<Pick<CentroRecord, 'nome' | 'tipo' | 'descricao'>>,
+  ): Promise<CentroRecord> {
+    return await pb.collection('centros').update<CentroRecord>(id, data)
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('centros').delete(id)
+  },
+}
+
+export const lancamentosCentroService = {
+  async getByCentro(centroId: string): Promise<LancamentoCentroRecord[]> {
+    return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>({
+      filter: `centro = '${centroId}'`,
+      sort: '-data',
+    })
+  },
+
+  async getAll(): Promise<LancamentoCentroRecord[]> {
+    return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>({
+      sort: '-data',
+    })
+  },
+
+  async create(data: {
+    centro: string
+    data: string
+    valor: number
+    descricao?: string
+  }): Promise<LancamentoCentroRecord> {
+    return await pb.collection('lancamentos_centro').create<LancamentoCentroRecord>({
+      centro: data.centro,
+      data: data.data,
+      valor: data.valor,
+      descricao: data.descricao?.trim() || undefined,
+      user: currentUserId(),
+    } as any)
+  },
+
+  async update(
+    id: string,
+    data: Partial<Pick<LancamentoCentroRecord, 'data' | 'valor' | 'descricao'>>,
+  ): Promise<LancamentoCentroRecord> {
+    return await pb.collection('lancamentos_centro').update<LancamentoCentroRecord>(id, data)
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('lancamentos_centro').delete(id)
   },
 }

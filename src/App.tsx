@@ -9,6 +9,7 @@ import { FilterProvider } from '@/contexts/FilterContext'
 import Index from './pages/Index'
 import Dashboard from './pages/Dashboard'
 import Empresas from './pages/Empresas'
+import Centros from './pages/Centros'
 import AnaliseEmpresa from './pages/AnaliseEmpresa'
 import Relatorios from './pages/Relatorios'
 import NotFound from './pages/NotFound'
@@ -55,6 +56,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/empresas" element={<Empresas />} />
               <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
+              <Route path="/centros" element={<Centros />} />
               <Route path="/relatorios" element={<Relatorios />} />
             </Route>
 

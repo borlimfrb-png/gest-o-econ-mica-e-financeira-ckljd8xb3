@@ -106,6 +106,23 @@ export interface DreRecord extends RecordModel {
   imposto_renda: number
 }
 
+export type TipoCentro = 'Receita' | 'Despesa'
+
+export interface CentroRecord extends RecordModel {
+  nome: string
+  descricao?: string
+  tipo: TipoCentro
+  user: string
+}
+
+export interface LancamentoCentroRecord extends RecordModel {
+  centro: string
+  data: string
+  valor: number
+  descricao?: string
+  user: string
+}
+
 export interface BalancoCalculado {
   // Grupos
   ativoCirculante: number

@@ -6,6 +6,7 @@ import {
   Scale,
   LayoutDashboard,
   Building2,
+  PieChart,
   FileText,
   LogOut,
   Menu,
@@ -64,6 +65,7 @@ export default function Layout() {
   const navItems = [
     { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Empresas', path: '/empresas', icon: Building2 },
+    { name: 'Centros de Custo', path: '/centros', icon: PieChart },
     { name: 'Relatórios', path: '/relatorios', icon: FileText },
   ]
 
