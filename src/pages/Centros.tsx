@@ -54,6 +54,8 @@ import {
   TrendingUp,
   TrendingDown,
   Receipt,
+  Download,
+  CalendarDays,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -80,6 +82,7 @@ interface CentroFormData {
   tipo: TipoCentro
   descricao: string
   meta_mensal: string
+  meta_anual: string
 }
 
 const EMPTY_CENTRO: CentroFormData = {
@@ -87,6 +90,7 @@ const EMPTY_CENTRO: CentroFormData = {
   tipo: 'Despesa',
   descricao: '',
   meta_mensal: '',
+  meta_anual: '',
 }
 
 type CentroErrors = Partial<Record<keyof CentroFormData | 'general', string>>
@@ -249,6 +253,24 @@ export default function Centros() {
     return { meta, realizado, diferenca, percentual }
   }, [selectedCentro, lancamentosDoCentro])
 
+  // Orçado vs realizado ANUAL (meta anual + projeção)
+  const orcadoRealizadoAnual = useMemo(() => {
+    const meta = selectedCentro?.meta_anual ? Number(selectedCentro.meta_anual) || 0 : 0
+    const ano = new Date().getFullYear()
+    const realizado = lancamentosDoCentro
+      .filter((l) => {
+        if (!l.data) return false
+        const d = new Date(l.data + 'T00:00:00')
+        return d.getFullYear() === ano
+      })
+      .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+    const mesesPassados = new Date().getMonth() + 1 // 1..12
+    const projecao = mesesPassados > 0 ? (realizado / mesesPassados) * 12 : 0
+    const diferenca = realizado - meta
+    const percentual = meta > 0 ? (realizado / meta) * 100 : 0
+    return { meta, realizado, diferenca, percentual, projecao, mesesPassados }
+  }, [selectedCentro, lancamentosDoCentro])
+
   const tiposDespesaMap = useMemo(() => {
     const map = new Map<string, TipoDespesaRecord>()
     for (const t of tiposDespesa) map.set(t.id, t)
@@ -285,6 +307,12 @@ export default function Centros() {
         errors.meta_mensal = 'Informe um valor válido'
       }
     }
+    if (form.meta_anual.trim() !== '') {
+      const n = Number(form.meta_anual.replace(',', '.'))
+      if (isNaN(n) || n < 0) {
+        errors.meta_anual = 'Informe um valor válido'
+      }
+    }
     setCentroErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -299,6 +327,7 @@ export default function Centros() {
         tipo: centroForm.tipo,
         descricao: centroForm.descricao,
         meta_mensal: parseMeta(centroForm.meta_mensal),
+        meta_anual: parseMeta(centroForm.meta_anual),
       })
       toast({
         title: 'Centro de custo criado',
@@ -325,6 +354,7 @@ export default function Centros() {
       descricao: c.descricao || '',
       meta_mensal:
         c.meta_mensal !== undefined && c.meta_mensal !== null ? String(c.meta_mensal) : '',
+      meta_anual: c.meta_anual !== undefined && c.meta_anual !== null ? String(c.meta_anual) : '',
     })
     setCentroErrors({})
     setEditCentroOpen(true)
@@ -340,6 +370,7 @@ export default function Centros() {
         tipo: centroForm.tipo,
         descricao: centroForm.descricao,
         meta_mensal: parseMeta(centroForm.meta_mensal),
+        meta_anual: parseMeta(centroForm.meta_anual),
       })
       toast({ title: 'Centro atualizado', description: 'As alterações foram salvas.' })
       setEditCentroOpen(false)
@@ -535,6 +566,131 @@ export default function Centros() {
         ? 'border-amber-200'
         : 'border-red-200'
 
+  // Classes de cor para o indicador anual
+  const temMetaAnual = orcadoRealizadoAnual.meta > 0
+  const pctAnual = orcadoRealizadoAnual.percentual
+  const corTextoAnual = !temMetaAnual
+    ? 'text-slate-500'
+    : pctAnual >= 100
+      ? 'text-emerald-600'
+      : pctAnual >= 70
+        ? 'text-amber-600'
+        : 'text-red-600'
+  const corBarraAnual = !temMetaAnual
+    ? 'bg-slate-300'
+    : pctAnual >= 100
+      ? 'bg-emerald-500'
+      : pctAnual >= 70
+        ? 'bg-amber-500'
+        : 'bg-red-500'
+  const barraWidthAnual = temMetaAnual ? Math.min(pctAnual, 100) : 0
+
+  // Exportar resumo Orçado vs Realizado em CSV (todos os centros)
+  const handleExportResumo = () => {
+    if (centros.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nada para exportar',
+        description: 'Não há centros de custo cadastrados.',
+      })
+      return
+    }
+    const agora = new Date()
+    const ano = agora.getFullYear()
+    const mes = agora.getMonth()
+    const mesesPassados = mes + 1
+
+    const lancPorCentro = new Map<string, LancamentoCentroRecord[]>()
+    for (const l of lancamentos) {
+      const arr = lancPorCentro.get(l.centro) || []
+      arr.push(l)
+      lancPorCentro.set(l.centro, arr)
+    }
+
+    const escapeCsv = (val: string | number | undefined | null): string => {
+      if (val === null || val === undefined) return ''
+      const s = String(val)
+      if (/[;"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }
+    const fmtNum = (n: number) =>
+      n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const fmtPct = (n: number) =>
+      n.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%'
+
+    const linhas: string[] = []
+    linhas.push(
+      [
+        'Centro',
+        'Tipo',
+        'Meta Mensal',
+        'Realizado Mês',
+        '% Mês',
+        'Meta Anual',
+        'Realizado Ano',
+        '% Ano',
+        'Projeção',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    for (const c of centros) {
+      const lancs = lancPorCentro.get(c.id) || []
+      const metaMensal = c.meta_mensal ? Number(c.meta_mensal) || 0 : 0
+      const realizadoMes = lancs
+        .filter((l) => {
+          if (!l.data) return false
+          const d = new Date(l.data + 'T00:00:00')
+          return d.getMonth() === mes && d.getFullYear() === ano
+        })
+        .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+      const pctMes = metaMensal > 0 ? (realizadoMes / metaMensal) * 100 : 0
+
+      const metaAnual = c.meta_anual ? Number(c.meta_anual) || 0 : 0
+      const realizadoAno = lancs
+        .filter((l) => {
+          if (!l.data) return false
+          const d = new Date(l.data + 'T00:00:00')
+          return d.getFullYear() === ano
+        })
+        .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+      const pctAno = metaAnual > 0 ? (realizadoAno / metaAnual) * 100 : 0
+      const projecao = mesesPassados > 0 ? (realizadoAno / mesesPassados) * 12 : 0
+
+      linhas.push(
+        [
+          c.nome,
+          c.tipo,
+          metaMensal > 0 ? fmtNum(metaMensal) : '',
+          fmtNum(realizadoMes),
+          metaMensal > 0 ? fmtPct(pctMes) : '',
+          metaAnual > 0 ? fmtNum(metaAnual) : '',
+          fmtNum(realizadoAno),
+          metaAnual > 0 ? fmtPct(pctAno) : '',
+          fmtNum(projecao),
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+
+    const csvContent = '\uFEFF' + linhas.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    const dataStr = new Date().toISOString().slice(0, 10)
+    link.setAttribute('download', `orcado-vs-realizado-${dataStr}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast({
+      title: 'Resumo exportado',
+      description: 'O arquivo CSV com o comparativo Orçado vs Realizado foi baixado.',
+    })
+  }
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Cabeçalho */}
@@ -656,6 +812,37 @@ export default function Centros() {
                     ) : (
                       <p className="text-[11px] text-slate-400">
                         Usada no comparativo de orçado vs realizado do mês.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label
+                      htmlFor="centro-meta-anual"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      Meta anual (R$)
+                    </Label>
+                    <Input
+                      id="centro-meta-anual"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      placeholder="Opcional — ex: 60000.00"
+                      value={centroForm.meta_anual}
+                      onChange={(e) => setCentroField('meta_anual', e.target.value)}
+                      className={`h-9 text-xs ${
+                        centroErrors.meta_anual ? 'border-red-500 focus-visible:ring-red-500' : ''
+                      }`}
+                    />
+                    {centroErrors.meta_anual ? (
+                      <p className="text-[11px] text-red-600 font-medium">
+                        {centroErrors.meta_anual}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        Usada no comparativo anual com projeção de atingimento.
                       </p>
                     )}
                   </div>
@@ -879,60 +1066,144 @@ export default function Centros() {
               {/* Card Orçado vs Realizado */}
               <Card className={`bg-white border ${bordaCard} shadow-xs`}>
                 <CardHeader className="pb-2 border-b border-slate-100">
-                  <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
-                    <TrendingUp className="w-4 h-4 text-blue-600" />
-                    Orçado vs Realizado
-                  </CardTitle>
+                  <div className="flex items-center justify-between gap-2">
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-blue-600" />
+                      Orçado vs Realizado
+                    </CardTitle>
+                    <Button
+                      type="button"
+                      onClick={handleExportResumo}
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[11px] font-semibold border-slate-200 hover:bg-slate-50 text-slate-700"
+                      title="Exportar resumo de todos os centros em CSV"
+                    >
+                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                      Exportar Resumo
+                    </Button>
+                  </div>
                   <CardDescription className="text-xs">
-                    Comparativo da meta mensal com o realizado no mês atual.
+                    Comparativo da meta mensal com o realizado no mês atual e projeção anual.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-4 space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-[11px] text-slate-500 font-medium">Meta mensal</p>
-                      <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
-                        {temMeta ? formatBrl(orcadoRealizado.meta) : 'Não definida'}
-                      </p>
+                <CardContent className="pt-4 space-y-4">
+                  {/* --- Seção mensal --- */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      Mensal
                     </div>
-                    <div className="rounded-lg bg-slate-50 p-3">
-                      <p className="text-[11px] text-slate-500 font-medium">Realizado este mês</p>
-                      <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
-                        {formatBrl(orcadoRealizado.realizado)}
-                      </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-[11px] text-slate-500 font-medium">Meta mensal</p>
+                        <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
+                          {temMeta ? formatBrl(orcadoRealizado.meta) : 'Não definida'}
+                        </p>
+                      </div>
+                      <div className="rounded-lg bg-slate-50 p-3">
+                        <p className="text-[11px] text-slate-500 font-medium">Realizado este mês</p>
+                        <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
+                          {formatBrl(orcadoRealizado.realizado)}
+                        </p>
+                      </div>
                     </div>
+
+                    {temMeta ? (
+                      <>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">Atingimento da meta</span>
+                          <span className={`font-bold ${corTexto}`}>{pct.toFixed(1)}%</span>
+                        </div>
+                        <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                          <div
+                            className={`h-full transition-all ${corBarra}`}
+                            style={{ width: `${barraWidth}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">Diferença</span>
+                          <span
+                            className={`font-bold ${
+                              orcadoRealizado.diferenca >= 0 ? 'text-emerald-600' : 'text-red-600'
+                            }`}
+                          >
+                            {orcadoRealizado.diferenca >= 0 ? '+' : ''}
+                            {formatBrl(orcadoRealizado.diferenca)}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        Defina uma meta mensal para este centro no formulário de edição para
+                        acompanhar o atingimento.
+                      </p>
+                    )}
                   </div>
 
-                  {temMeta ? (
-                    <>
+                  {/* --- Seção anual (só se houver meta anual definida) --- */}
+                  {temMetaAnual ? (
+                    <div className="space-y-3 border-t border-slate-100 pt-3">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          <CalendarDays className="w-3.5 h-3.5 text-blue-500" />
+                          Anual ({new Date().getFullYear()})
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-lg bg-slate-50 p-3">
+                          <p className="text-[11px] text-slate-500 font-medium">Meta anual</p>
+                          <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
+                            {formatBrl(orcadoRealizadoAnual.meta)}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-slate-50 p-3">
+                          <p className="text-[11px] text-slate-500 font-medium">Realizado no ano</p>
+                          <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
+                            {formatBrl(orcadoRealizadoAnual.realizado)}
+                          </p>
+                        </div>
+                      </div>
+
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500">Atingimento da meta</span>
-                        <span className={`font-bold ${corTexto}`}>{pct.toFixed(1)}%</span>
+                        <span className="text-slate-500">Atingimento da meta anual</span>
+                        <span className={`font-bold ${corTextoAnual}`}>
+                          {orcadoRealizadoAnual.percentual.toFixed(1)}%
+                        </span>
                       </div>
                       <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
                         <div
-                          className={`h-full transition-all ${corBarra}`}
-                          style={{ width: `${barraWidth}%` }}
+                          className={`h-full transition-all ${corBarraAnual}`}
+                          style={{ width: `${barraWidthAnual}%` }}
                         />
                       </div>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-500">Diferença</span>
-                        <span
-                          className={`font-bold ${
-                            orcadoRealizado.diferenca >= 0 ? 'text-emerald-600' : 'text-red-600'
-                          }`}
-                        >
-                          {orcadoRealizado.diferenca >= 0 ? '+' : ''}
-                          {formatBrl(orcadoRealizado.diferenca)}
-                        </span>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Diferença</span>
+                          <span
+                            className={`font-bold ${
+                              orcadoRealizadoAnual.diferenca >= 0
+                                ? 'text-emerald-600'
+                                : 'text-red-600'
+                            }`}
+                          >
+                            {orcadoRealizadoAnual.diferenca >= 0 ? '+' : ''}
+                            {formatBrl(orcadoRealizadoAnual.diferenca)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Projeção</span>
+                          <span className="font-bold text-blue-700">
+                            {formatBrl(orcadoRealizadoAnual.projecao)}
+                          </span>
+                        </div>
                       </div>
-                    </>
-                  ) : (
-                    <p className="text-[11px] text-slate-400">
-                      Defina uma meta mensal para este centro no formulário de edição para
-                      acompanhar o atingimento.
-                    </p>
-                  )}
+                      <p className="text-[11px] text-slate-400">
+                        Projeção = realizado em {orcadoRealizadoAnual.mesesPassados}{' '}
+                        {orcadoRealizadoAnual.mesesPassados === 1 ? 'mês' : 'meses'} × 12.
+                      </p>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
 
@@ -1304,6 +1575,30 @@ export default function Centros() {
                 />
                 {centroErrors.meta_mensal ? (
                   <p className="text-[11px] text-red-600 font-medium">{centroErrors.meta_mensal}</p>
+                ) : null}
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-centro-meta-anual"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Meta anual (R$)
+                </Label>
+                <Input
+                  id="edit-centro-meta-anual"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder="Opcional — ex: 60000.00"
+                  value={centroForm.meta_anual}
+                  onChange={(e) => setCentroField('meta_anual', e.target.value)}
+                  className={`h-9 text-xs ${
+                    centroErrors.meta_anual ? 'border-red-500 focus-visible:ring-red-500' : ''
+                  }`}
+                />
+                {centroErrors.meta_anual ? (
+                  <p className="text-[11px] text-red-600 font-medium">{centroErrors.meta_anual}</p>
                 ) : null}
               </div>
             </div>

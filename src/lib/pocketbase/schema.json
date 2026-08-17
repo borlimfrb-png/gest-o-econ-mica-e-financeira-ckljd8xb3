@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T16:12:14.604Z",
+  "generatedAt": "2026-08-17T16:21:12.783Z",
   "collections": [
     {
       "name": "users",
@@ -530,6 +530,12 @@
         },
         {
           "name": "meta_mensal",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "meta_anual",
           "type": "number",
           "required": false,
           "system": false

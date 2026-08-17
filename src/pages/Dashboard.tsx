@@ -1,8 +1,18 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
-import { balancosService, dreService } from '@/services/financeService'
-import type { BalancoRecord, DreRecord } from '@/types/finance'
+import {
+  balancosService,
+  dreService,
+  lancamentosCentroService,
+  tiposDespesaService,
+} from '@/services/financeService'
+import type {
+  BalancoRecord,
+  DreRecord,
+  LancamentoCentroRecord,
+  TipoDespesaRecord,
+} from '@/types/finance'
 import {
   calcularBalanco,
   calcularDre,
@@ -53,14 +63,23 @@ export default function Dashboard() {
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [allBalancos, setAllBalancos] = useState<BalancoRecord[]>([])
+  const [lancamentosCentro, setLancamentosCentro] = useState<LancamentoCentroRecord[]>([])
+  const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
   const loadData = async () => {
     try {
       setLoadingData(true)
-      const [allB, allD] = await Promise.all([balancosService.getAll(), dreService.getAll()])
+      const [allB, allD, allL, allTd] = await Promise.all([
+        balancosService.getAll(),
+        dreService.getAll(),
+        lancamentosCentroService.getAll(),
+        tiposDespesaService.getAll(),
+      ])
       setAllBalancos(allB)
       setDres(allD)
+      setLancamentosCentro(allL)
+      setTiposDespesa(allTd)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -82,6 +101,34 @@ export default function Dashboard() {
   useRealtime<DreRecord>('dre', () => {
     loadData()
   })
+  useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => {
+    loadData()
+  })
+  useRealtime<TipoDespesaRecord>('tipos_despesa', () => {
+    loadData()
+  })
+
+  // Distribuição de gastos por tipo de despesa (todos os lançamentos do usuário)
+  const dataGastosPorTipo = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const l of lancamentosCentro) {
+      if (!l.tipo_despesa) continue
+      const cur = map.get(l.tipo_despesa) || 0
+      map.set(l.tipo_despesa, cur + (Number(l.valor) || 0))
+    }
+    const total = Array.from(map.values()).reduce((acc, v) => acc + v, 0)
+    return {
+      data: Array.from(map.entries())
+        .map(([tipoId, value], idx) => ({
+          name: tiposDespesa.find((t) => t.id === tipoId)?.nome || 'Sem tipo',
+          value,
+          color: CHART_COLORS[idx % CHART_COLORS.length],
+        }))
+        .filter((d) => d.value > 0)
+        .sort((a, b) => b.value - a.value),
+      total,
+    }
+  }, [lancamentosCentro, tiposDespesa])
 
   // Balanço e DRE do ano selecionado
   const balancoAtual = balancos.find((b) => b.ano === selectedAno)
@@ -612,6 +659,67 @@ export default function Dashboard() {
             ) : (
               <div className="h-64 flex items-center justify-center text-xs text-slate-400">
                 Sem histórico de DRE
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Distribuição de Gastos por Tipo de Despesa (Donut) */}
+        <Card className="bg-white border-slate-200 shadow-2xs">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <PieIcon className="w-4 h-4 text-blue-600" />
+                Gastos por Tipo de Despesa
+              </span>
+              <span className="text-xs font-normal text-slate-500">
+                Total: {formatBrlMil(dataGastosPorTipo.total)}
+              </span>
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Distribuição dos lançamentos de centros de custo agrupados por tipo de despesa.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-2">
+            {dataGastosPorTipo.data.length > 0 ? (
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={dataGastosPorTipo.data}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      paddingAngle={4}
+                      dataKey="value"
+                    >
+                      {dataGastosPorTipo.data.map((entry, index) => (
+                        <Cell key={`cell-g-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip
+                      formatter={(val: any) => [formatBrlMil(Number(val)), 'Valor']}
+                    />
+                    <Legend
+                      verticalAlign="bottom"
+                      height={36}
+                      formatter={(val, entry: any) => {
+                        const total = dataGastosPorTipo.total || 1
+                        const pct = ((entry.payload.value / total) * 100).toFixed(1)
+                        return (
+                          <span className="text-xs font-medium text-slate-700">
+                            {val}: {formatBrlMil(entry.payload.value)} ({pct}%)
+                          </span>
+                        )
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-64 flex items-center justify-center text-xs text-slate-400">
+                Nenhum lançamento registrado
               </div>
             )}
           </CardContent>
