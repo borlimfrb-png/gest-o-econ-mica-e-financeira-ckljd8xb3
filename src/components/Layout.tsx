@@ -70,7 +70,9 @@ export default function Layout() {
     { name: 'Empresas', path: '/empresas', icon: Building2 },
     { name: 'Centros de Custo', path: '/centros', icon: PieChart },
     { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
+    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
     { name: 'Relatórios', path: '/relatorios', icon: FileText },
+    { name: 'Importação', path: '/importacao', icon: Upload },
   ]
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
