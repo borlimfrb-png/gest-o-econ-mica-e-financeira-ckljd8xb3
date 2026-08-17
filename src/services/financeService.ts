@@ -181,15 +181,15 @@ export const lancamentosCentroService = {
 
   async create(data: {
     centro: string
-    data: string
-    valor: number
+    data?: string
+    valor?: number
     descricao?: string
     tipo_despesa?: string
   }): Promise<LancamentoCentroRecord> {
     return await pb.collection('lancamentos_centro').create<LancamentoCentroRecord>({
       centro: data.centro,
-      data: data.data,
-      valor: data.valor,
+      data: data.data ?? new Date().toISOString().slice(0, 10),
+      valor: data.valor ?? 0,
       descricao: data.descricao?.trim() || undefined,
       tipo_despesa: data.tipo_despesa || undefined,
       user: currentUserId(),

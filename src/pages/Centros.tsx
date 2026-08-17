@@ -52,7 +52,6 @@ import {
   TrendingUp,
   TrendingDown,
   Receipt,
-  CheckCircle2,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -69,20 +68,9 @@ function formatBrl(val: number | null | undefined): string {
   }).format(val)
 }
 
-// Formata data ISO (YYYY-MM-DD) para dd/mm/yyyy
-function formatData(iso: string): string {
-  if (!iso) return '—'
-  const part = iso.slice(0, 10)
-  const [y, m, d] = part.split('-')
-  if (!y || !m || !d) return part
-  return `${d}/${m}/${y}`
-}
-
-// Converte valor digitado (com vírgula) em número
-function parseValor(v: string): number {
-  const norm = v.replace(/\s/g, '').replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.')
-  const n = Number(norm)
-  return isNaN(n) ? 0 : n
+// Retorna a data atual no formato ISO (YYYY-MM-DD)
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
 interface CentroFormData {
@@ -96,15 +84,13 @@ const EMPTY_CENTRO: CentroFormData = { nome: '', tipo: 'Despesa', descricao: '' 
 type CentroErrors = Partial<Record<keyof CentroFormData | 'general', string>>
 
 interface LancamentoFormData {
-  data: string
-  valor: string
   descricao: string
   tipo_despesa: string
 }
 
-const EMPTY_LANC: LancamentoFormData = { data: '', valor: '', descricao: '', tipo_despesa: '' }
+const EMPTY_LANC: LancamentoFormData = { descricao: '', tipo_despesa: '' }
 
-type LancErrors = Partial<Record<keyof LancamentoFormData | 'general', string>>
+type LancErrors = Partial<Record<'general', string>>
 
 export default function Centros() {
   const { toast } = useToast()
@@ -200,11 +186,6 @@ export default function Centros() {
     }
     return map
   }, [lancamentos])
-
-  const totalCentroSelecionado = useMemo(
-    () => lancamentosDoCentro.reduce((acc, l) => acc + (Number(l.valor) || 0), 0),
-    [lancamentosDoCentro],
-  )
 
   // ---------- Centro handlers ----------
   const setCentroField = <K extends keyof CentroFormData>(key: K, value: CentroFormData[K]) => {
@@ -315,31 +296,17 @@ export default function Centros() {
     value: LancamentoFormData[K],
   ) => {
     setLancForm((prev) => ({ ...prev, [key]: value }))
-    if (lancErrors[key]) setLancErrors((prev) => ({ ...prev, [key]: undefined }))
-  }
-
-  const validateLanc = (form: LancamentoFormData): boolean => {
-    const errors: LancErrors = {}
-    if (!form.data) errors.data = 'Informe a data'
-    const val = parseValor(form.valor)
-    if (!form.valor.trim()) {
-      errors.valor = 'Informe o valor'
-    } else if (val <= 0) {
-      errors.valor = 'O valor deve ser maior que zero'
-    }
-    setLancErrors(errors)
-    return Object.keys(errors).length === 0
   }
 
   const handleCreateLanc = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedCentroId || !validateLanc(lancForm)) return
+    if (!selectedCentroId) return
     setSavingLanc(true)
     try {
       await lancamentosCentroService.create({
         centro: selectedCentroId,
-        data: lancForm.data,
-        valor: parseValor(lancForm.valor),
+        data: todayIso(),
+        valor: 0,
         descricao: lancForm.descricao,
         tipo_despesa: lancForm.tipo_despesa || undefined,
       })
@@ -359,8 +326,6 @@ export default function Centros() {
   const openEditLanc = (l: LancamentoCentroRecord) => {
     setEditingLanc(l)
     setLancForm({
-      data: l.data ? l.data.slice(0, 10) : '',
-      valor: String(l.valor).replace('.', ','),
       descricao: l.descricao || '',
       tipo_despesa: l.tipo_despesa || '',
     })
@@ -370,12 +335,10 @@ export default function Centros() {
 
   const handleUpdateLanc = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingLanc || !validateLanc(lancForm)) return
+    if (!editingLanc) return
     setSavingLanc(true)
     try {
       await lancamentosCentroService.update(editingLanc.id, {
-        data: lancForm.data,
-        valor: parseValor(lancForm.valor),
         descricao: lancForm.descricao,
         tipo_despesa: lancForm.tipo_despesa || '',
       })
@@ -435,8 +398,7 @@ export default function Centros() {
       <div>
         <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">Centros de Custo</h1>
         <p className="text-xs text-[#5B6B7F]">
-          Cadastre centros de receita e despesa e registre lançamentos com data e valor para cada
-          centro.
+          Cadastre centros de receita e despesa e registre lançamentos para cada centro.
         </p>
       </div>
 
@@ -663,8 +625,7 @@ export default function Centros() {
                 </div>
                 <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhum centro selecionado</h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-xs">
-                  Selecione um centro na tabela ao lado para visualizar e registrar lançamentos com
-                  data e valor.
+                  Selecione um centro na tabela ao lado para visualizar e registrar lançamentos.
                 </p>
               </CardContent>
             </Card>
@@ -673,40 +634,26 @@ export default function Centros() {
               {/* Cabeçalho do centro selecionado */}
               <Card className="bg-white border-slate-200 shadow-xs">
                 <CardContent className="pt-5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
-                          selectedCentro.tipo === 'Receita'
-                            ? 'bg-emerald-50 text-emerald-600'
-                            : 'bg-rose-50 text-rose-600'
-                        }`}
-                      >
-                        <Receipt className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h2 className="text-base font-bold text-[#0B1F3A] leading-tight">
-                          {selectedCentro.nome}
-                        </h2>
-                        <div className="flex items-center gap-2 mt-1">
-                          <TipoBadge tipo={selectedCentro.tipo} />
-                          <span className="text-[11px] text-slate-500">
-                            {lancamentosDoCentro.length} lançamento(s)
-                          </span>
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                        selectedCentro.tipo === 'Receita'
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-rose-50 text-rose-600'
+                      }`}
+                    >
+                      <Receipt className="w-5 h-5" />
                     </div>
-                    <div className="text-right">
-                      <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wide">
-                        Total acumulado
-                      </p>
-                      <p
-                        className={`text-lg font-bold ${
-                          selectedCentro.tipo === 'Receita' ? 'text-emerald-600' : 'text-rose-600'
-                        }`}
-                      >
-                        {formatBrl(totalCentroSelecionado)}
-                      </p>
+                    <div>
+                      <h2 className="text-base font-bold text-[#0B1F3A] leading-tight">
+                        {selectedCentro.nome}
+                      </h2>
+                      <div className="flex items-center gap-2 mt-1">
+                        <TipoBadge tipo={selectedCentro.tipo} />
+                        <span className="text-[11px] text-slate-500">
+                          {lancamentosDoCentro.length} lançamento(s)
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -720,7 +667,7 @@ export default function Centros() {
                     Novo Lançamento
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Registre uma movimentação com data e valor para este centro.
+                    Registre uma movimentação para este centro.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-4">
@@ -737,42 +684,6 @@ export default function Centros() {
                       </Alert>
                     )}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label htmlFor="lanc-data" className="text-xs font-semibold text-slate-700">
-                          Data *
-                        </Label>
-                        <Input
-                          id="lanc-data"
-                          type="date"
-                          value={lancForm.data}
-                          onChange={(e) => setLancField('data', e.target.value)}
-                          className={`h-9 text-xs ${lancErrors.data ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                        />
-                        {lancErrors.data && (
-                          <p className="text-[11px] text-red-600 font-medium">{lancErrors.data}</p>
-                        )}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="lanc-valor"
-                          className="text-xs font-semibold text-slate-700"
-                        >
-                          Valor (R$) *
-                        </Label>
-                        <Input
-                          id="lanc-valor"
-                          inputMode="decimal"
-                          placeholder="0,00"
-                          value={lancForm.valor}
-                          onChange={(e) => setLancField('valor', e.target.value)}
-                          className={`h-9 text-xs font-mono ${lancErrors.valor ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                        />
-                        {lancErrors.valor && (
-                          <p className="text-[11px] text-red-600 font-medium">{lancErrors.valor}</p>
-                        )}
-                      </div>
-
                       <div className="space-y-1.5 sm:col-span-2">
                         <Label
                           htmlFor="lanc-tipo-despesa"
@@ -849,7 +760,7 @@ export default function Centros() {
                     Lançamentos ({lancamentosDoCentro.length})
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Ordenados por data decrescente.
+                    Lançamentos registrados para este centro.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -862,8 +773,6 @@ export default function Centros() {
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
-                            <th className="py-3 px-4">Data</th>
-                            <th className="py-3 px-4 text-right">Valor</th>
                             <th className="py-3 px-4">Tipo de Despesa</th>
                             <th className="py-3 px-4">Descrição</th>
                             <th className="py-3 px-4 text-right">Ações</th>
@@ -874,18 +783,6 @@ export default function Centros() {
                             const tipo = l.tipo_despesa ? tiposDespesaMap.get(l.tipo_despesa) : null
                             return (
                               <tr key={l.id} className="hover:bg-slate-50/80 transition-colors">
-                                <td className="py-3 px-4 whitespace-nowrap text-slate-700 font-medium">
-                                  {formatData(l.data)}
-                                </td>
-                                <td
-                                  className={`py-3 px-4 text-right font-semibold whitespace-nowrap ${
-                                    selectedCentro.tipo === 'Receita'
-                                      ? 'text-emerald-600'
-                                      : 'text-rose-600'
-                                  }`}
-                                >
-                                  {formatBrl(Number(l.valor))}
-                                </td>
                                 <td className="py-3 px-4 text-slate-700">
                                   {tipo ? (
                                     <Badge className="text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-50 px-2 py-0.5">
@@ -927,23 +824,6 @@ export default function Centros() {
                             )
                           })}
                         </tbody>
-                        <tfoot>
-                          <tr className="border-t-2 border-slate-200 bg-slate-50/70 font-semibold">
-                            <td className="py-3 px-4 text-slate-700" colSpan={3}>
-                              Total
-                            </td>
-                            <td
-                              className={`py-3 px-4 text-right whitespace-nowrap ${
-                                selectedCentro.tipo === 'Receita'
-                                  ? 'text-emerald-600'
-                                  : 'text-rose-600'
-                              }`}
-                            >
-                              {formatBrl(totalCentroSelecionado)}
-                            </td>
-                            <td className="py-3 px-4" />
-                          </tr>
-                        </tfoot>
                       </table>
                     </div>
                   )}
@@ -1063,7 +943,7 @@ export default function Centros() {
                 Editar Lançamento
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Atualize os dados do lançamento. Campos com * são obrigatórios.
+                Atualize os dados do lançamento.
               </DialogDescription>
             </DialogHeader>
 
@@ -1080,38 +960,6 @@ export default function Centros() {
             )}
 
             <div className="space-y-3 py-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-lanc-data" className="text-xs font-semibold text-slate-700">
-                    Data *
-                  </Label>
-                  <Input
-                    id="edit-lanc-data"
-                    type="date"
-                    value={lancForm.data}
-                    onChange={(e) => setLancField('data', e.target.value)}
-                    className={`h-9 text-xs ${lancErrors.data ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                  />
-                  {lancErrors.data && (
-                    <p className="text-[11px] text-red-600 font-medium">{lancErrors.data}</p>
-                  )}
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-lanc-valor" className="text-xs font-semibold text-slate-700">
-                    Valor (R$) *
-                  </Label>
-                  <Input
-                    id="edit-lanc-valor"
-                    inputMode="decimal"
-                    value={lancForm.valor}
-                    onChange={(e) => setLancField('valor', e.target.value)}
-                    className={`h-9 text-xs font-mono ${lancErrors.valor ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                  />
-                  {lancErrors.valor && (
-                    <p className="text-[11px] text-red-600 font-medium">{lancErrors.valor}</p>
-                  )}
-                </div>
-              </div>
               <div className="space-y-1.5">
                 <Label
                   htmlFor="edit-lanc-descricao"
@@ -1219,11 +1067,14 @@ export default function Centros() {
               <AlertCircle className="w-5 h-5" /> Excluir Lançamento?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-slate-600">
-              Tem certeza que deseja excluir este lançamento de{' '}
-              <strong className="text-slate-900 font-semibold">
-                {formatBrl(Number(lancToDelete?.valor))}
-              </strong>{' '}
-              ({formatData(lancToDelete?.data || '')})? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir este lançamento
+              {lancToDelete?.descricao ? (
+                <>
+                  {' '}
+                  <strong className="text-slate-900 font-semibold">{lancToDelete.descricao}</strong>
+                </>
+              ) : null}
+              ? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
