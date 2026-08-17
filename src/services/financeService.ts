@@ -144,18 +144,24 @@ export const centrosService = {
     nome: string
     tipo: TipoCentro
     descricao?: string
+    meta_mensal?: number
   }): Promise<CentroRecord> {
+    const metaMensal =
+      data.meta_mensal !== undefined && !isNaN(Number(data.meta_mensal))
+        ? Number(data.meta_mensal)
+        : undefined
     return await pb.collection('centros').create<CentroRecord>({
       nome: data.nome.trim(),
       tipo: data.tipo,
       descricao: data.descricao?.trim() || undefined,
+      meta_mensal: metaMensal,
       user: currentUserId(),
     } as any)
   },
 
   async update(
     id: string,
-    data: Partial<Pick<CentroRecord, 'nome' | 'tipo' | 'descricao'>>,
+    data: Partial<Pick<CentroRecord, 'nome' | 'tipo' | 'descricao' | 'meta_mensal'>>,
   ): Promise<CentroRecord> {
     return await pb.collection('centros').update<CentroRecord>(id, data)
   },

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T16:05:56.245Z",
+  "generatedAt": "2026-08-17T16:12:14.604Z",
   "collections": [
     {
       "name": "users",
@@ -527,6 +527,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "meta_mensal",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

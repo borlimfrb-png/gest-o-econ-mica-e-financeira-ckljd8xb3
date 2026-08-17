@@ -79,9 +79,15 @@ interface CentroFormData {
   nome: string
   tipo: TipoCentro
   descricao: string
+  meta_mensal: string
 }
 
-const EMPTY_CENTRO: CentroFormData = { nome: '', tipo: 'Despesa', descricao: '' }
+const EMPTY_CENTRO: CentroFormData = {
+  nome: '',
+  tipo: 'Despesa',
+  descricao: '',
+  meta_mensal: '',
+}
 
 type CentroErrors = Partial<Record<keyof CentroFormData | 'general', string>>
 
@@ -94,6 +100,14 @@ interface LancamentoFormData {
 const EMPTY_LANC: LancamentoFormData = { descricao: '', tipo_despesa: '', concluido: false }
 
 type LancErrors = Partial<Record<'general', string>>
+
+// Converte o valor digitado no campo de meta mensal (aceita vírgula decimal)
+function parseMeta(value: string): number | undefined {
+  const trimmed = value.trim()
+  if (trimmed === '') return undefined
+  const n = Number(trimmed.replace(',', '.'))
+  return isNaN(n) ? undefined : n
+}
 
 export default function Centros() {
   const { toast } = useToast()
@@ -129,6 +143,9 @@ export default function Centros() {
 
   // Filtro por tipo de despesa (persiste ao trocar de centro)
   const [filtroTipoDespesa, setFiltroTipoDespesa] = useState<string>('todos')
+
+  // Ordenação dos lançamentos (persiste ao trocar de centro)
+  const [ordenacao, setOrdenacao] = useState<string>('padrao')
 
   // Delete lançamento
   const [deleteLancOpen, setDeleteLancOpen] = useState(false)
@@ -181,6 +198,57 @@ export default function Centros() {
     return lancamentosDoCentro.filter((l) => l.tipo_despesa === filtroTipoDespesa)
   }, [lancamentosDoCentro, filtroTipoDespesa])
 
+  // Lançamentos filtrados + ordenados (primeiro filtra, depois ordena)
+  const lancamentosOrdenados = useMemo(() => {
+    const base = [...lancamentosFiltrados]
+    if (ordenacao === 'pendentes') {
+      base.sort((a, b) => {
+        const ca = a.concluido ? 1 : 0
+        const cb = b.concluido ? 1 : 0
+        if (ca !== cb) return ca - cb // pendentes (0) primeiro
+        return (b.created || '').localeCompare(a.created || '')
+      })
+    } else if (ordenacao === 'concluidos') {
+      base.sort((a, b) => {
+        const ca = a.concluido ? 1 : 0
+        const cb = b.concluido ? 1 : 0
+        if (ca !== cb) return cb - ca // concluídos (1) primeiro
+        return (b.created || '').localeCompare(a.created || '')
+      })
+    } else {
+      // padrão: mais recentes primeiro
+      base.sort((a, b) => (b.created || '').localeCompare(a.created || ''))
+    }
+    return base
+  }, [lancamentosFiltrados, ordenacao])
+
+  // Contagem de concluídos vs pendentes
+  const conclusaoLancamentos = useMemo(() => {
+    const total = lancamentosDoCentro.length
+    const concluidos = lancamentosDoCentro.filter((l) => !!l.concluido).length
+    const pendentes = total - concluidos
+    const percentual = total > 0 ? Math.round((concluidos / total) * 100) : 0
+    return { total, concluidos, pendentes, percentual }
+  }, [lancamentosDoCentro])
+
+  // Orçado vs realizado (meta mensal)
+  const orcadoRealizado = useMemo(() => {
+    const meta = selectedCentro?.meta_mensal ? Number(selectedCentro.meta_mensal) || 0 : 0
+    const agora = new Date()
+    const mes = agora.getMonth()
+    const ano = agora.getFullYear()
+    const realizado = lancamentosDoCentro
+      .filter((l) => {
+        if (!l.data) return false
+        const d = new Date(l.data + 'T00:00:00')
+        return d.getMonth() === mes && d.getFullYear() === ano
+      })
+      .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+    const diferenca = realizado - meta
+    const percentual = meta > 0 ? (realizado / meta) * 100 : 0
+    return { meta, realizado, diferenca, percentual }
+  }, [selectedCentro, lancamentosDoCentro])
+
   const tiposDespesaMap = useMemo(() => {
     const map = new Map<string, TipoDespesaRecord>()
     for (const t of tiposDespesa) map.set(t.id, t)
@@ -211,6 +279,12 @@ export default function Centros() {
       errors.nome = 'Informe um nome com pelo menos 2 caracteres'
     }
     if (!form.tipo) errors.tipo = 'Selecione o tipo'
+    if (form.meta_mensal.trim() !== '') {
+      const n = Number(form.meta_mensal.replace(',', '.'))
+      if (isNaN(n) || n < 0) {
+        errors.meta_mensal = 'Informe um valor válido'
+      }
+    }
     setCentroErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -224,6 +298,7 @@ export default function Centros() {
         nome: centroForm.nome,
         tipo: centroForm.tipo,
         descricao: centroForm.descricao,
+        meta_mensal: parseMeta(centroForm.meta_mensal),
       })
       toast({
         title: 'Centro de custo criado',
@@ -244,7 +319,13 @@ export default function Centros() {
 
   const openEditCentro = (c: CentroRecord) => {
     setEditingCentro(c)
-    setCentroForm({ nome: c.nome, tipo: c.tipo, descricao: c.descricao || '' })
+    setCentroForm({
+      nome: c.nome,
+      tipo: c.tipo,
+      descricao: c.descricao || '',
+      meta_mensal:
+        c.meta_mensal !== undefined && c.meta_mensal !== null ? String(c.meta_mensal) : '',
+    })
     setCentroErrors({})
     setEditCentroOpen(true)
   }
@@ -258,6 +339,7 @@ export default function Centros() {
         nome: centroForm.nome,
         tipo: centroForm.tipo,
         descricao: centroForm.descricao,
+        meta_mensal: parseMeta(centroForm.meta_mensal),
       })
       toast({ title: 'Centro atualizado', description: 'As alterações foram salvas.' })
       setEditCentroOpen(false)
@@ -427,6 +509,32 @@ export default function Centros() {
       </Badge>
     )
 
+  // Classes de cor para o card de orçado vs realizado
+  const temMeta = orcadoRealizado.meta > 0
+  const pct = orcadoRealizado.percentual
+  const corTexto = !temMeta
+    ? 'text-slate-500'
+    : pct >= 100
+      ? 'text-emerald-600'
+      : pct >= 70
+        ? 'text-amber-600'
+        : 'text-red-600'
+  const corBarra = !temMeta
+    ? 'bg-slate-300'
+    : pct >= 100
+      ? 'bg-emerald-500'
+      : pct >= 70
+        ? 'bg-amber-500'
+        : 'bg-red-500'
+  const barraWidth = temMeta ? Math.min(pct, 100) : 0
+  const bordaCard = !temMeta
+    ? 'border-slate-200'
+    : pct >= 100
+      ? 'border-emerald-200'
+      : pct >= 70
+        ? 'border-amber-200'
+        : 'border-red-200'
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Cabeçalho */}
@@ -519,6 +627,37 @@ export default function Centros() {
                       onChange={(e) => setCentroField('descricao', e.target.value)}
                       className="h-9 text-xs"
                     />
+                  </div>
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label
+                      htmlFor="centro-meta-mensal"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      Meta mensal (R$)
+                    </Label>
+                    <Input
+                      id="centro-meta-mensal"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      placeholder="Opcional — ex: 5000.00"
+                      value={centroForm.meta_mensal}
+                      onChange={(e) => setCentroField('meta_mensal', e.target.value)}
+                      className={`h-9 text-xs ${
+                        centroErrors.meta_mensal ? 'border-red-500 focus-visible:ring-red-500' : ''
+                      }`}
+                    />
+                    {centroErrors.meta_mensal ? (
+                      <p className="text-[11px] text-red-600 font-medium">
+                        {centroErrors.meta_mensal}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        Usada no comparativo de orçado vs realizado do mês.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -694,6 +833,109 @@ export default function Centros() {
                 </CardContent>
               </Card>
 
+              {/* Gráfico de conclusão (concluídos vs pendentes) */}
+              {lancamentosDoCentro.length === 0 ? (
+                <Card className="bg-white border-slate-200 shadow-xs">
+                  <CardContent className="py-4">
+                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                      <PieChart className="w-4 h-4 text-slate-400" />
+                      <span>Nenhum lançamento</span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card className="bg-white border-slate-200 shadow-xs">
+                  <CardContent className="py-4 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Conclusão dos lançamentos
+                      </span>
+                      <span className="text-xs font-bold text-[#0B1F3A]">
+                        {conclusaoLancamentos.concluidos} de {conclusaoLancamentos.total} concluídos
+                        ({conclusaoLancamentos.percentual}%)
+                      </span>
+                    </div>
+                    <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden flex">
+                      <div
+                        className="h-full bg-emerald-500 transition-all"
+                        style={{ width: `${conclusaoLancamentos.percentual}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-4 text-[11px] text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500" />
+                        {conclusaoLancamentos.concluidos} concluído(s)
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-200" />
+                        {conclusaoLancamentos.pendentes} pendente(s)
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Card Orçado vs Realizado */}
+              <Card className={`bg-white border ${bordaCard} shadow-xs`}>
+                <CardHeader className="pb-2 border-b border-slate-100">
+                  <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-blue-600" />
+                    Orçado vs Realizado
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Comparativo da meta mensal com o realizado no mês atual.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-[11px] text-slate-500 font-medium">Meta mensal</p>
+                      <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
+                        {temMeta ? formatBrl(orcadoRealizado.meta) : 'Não definida'}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-slate-50 p-3">
+                      <p className="text-[11px] text-slate-500 font-medium">Realizado este mês</p>
+                      <p className="text-sm font-bold text-[#0B1F3A] mt-0.5">
+                        {formatBrl(orcadoRealizado.realizado)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {temMeta ? (
+                    <>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">Atingimento da meta</span>
+                        <span className={`font-bold ${corTexto}`}>{pct.toFixed(1)}%</span>
+                      </div>
+                      <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${corBarra}`}
+                          style={{ width: `${barraWidth}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">Diferença</span>
+                        <span
+                          className={`font-bold ${
+                            orcadoRealizado.diferenca >= 0 ? 'text-emerald-600' : 'text-red-600'
+                          }`}
+                        >
+                          {orcadoRealizado.diferenca >= 0 ? '+' : ''}
+                          {formatBrl(orcadoRealizado.diferenca)}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">
+                      Defina uma meta mensal para este centro no formulário de edição para
+                      acompanhar o atingimento.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
               {/* Card Novo Lançamento */}
               <Card className="bg-white border-slate-200 shadow-xs">
                 <CardHeader className="pb-3 border-b border-slate-100">
@@ -807,9 +1049,9 @@ export default function Centros() {
                 <CardHeader className="pb-3 border-b border-slate-100 space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                      Lançamentos ({lancamentosFiltrados.length}
+                      Lançamentos ({lancamentosOrdenados.length}
                       {filtroTipoDespesa !== 'todos' &&
-                      lancamentosFiltrados.length !== lancamentosDoCentro.length
+                      lancamentosOrdenados.length !== lancamentosDoCentro.length
                         ? ` de ${lancamentosDoCentro.length}`
                         : ''}
                       )
@@ -843,6 +1085,28 @@ export default function Centros() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <Label
+                      htmlFor="ordenacao"
+                      className="text-xs font-semibold text-slate-700 shrink-0 sm:ml-2"
+                    >
+                      Ordenar:
+                    </Label>
+                    <Select value={ordenacao} onValueChange={(val) => setOrdenacao(val)}>
+                      <SelectTrigger id="ordenacao" className="h-8 text-xs bg-white w-full sm:w-56">
+                        <SelectValue placeholder="Padrão" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="padrao" className="text-xs">
+                          Padrão (mais recentes primeiro)
+                        </SelectItem>
+                        <SelectItem value="pendentes" className="text-xs">
+                          Pendentes primeiro
+                        </SelectItem>
+                        <SelectItem value="concluidos" className="text-xs">
+                          Concluídos primeiro
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <CardDescription className="text-xs">
                     Lançamentos registrados para este centro.
@@ -853,7 +1117,7 @@ export default function Centros() {
                     <div className="py-12 text-center text-xs text-slate-500">
                       Nenhum lançamento neste centro. Adicione o primeiro acima.
                     </div>
-                  ) : lancamentosFiltrados.length === 0 ? (
+                  ) : lancamentosOrdenados.length === 0 ? (
                     <div className="py-12 text-center text-xs text-slate-500">
                       Nenhum lançamento encontrado para o filtro selecionado.
                     </div>
@@ -869,7 +1133,7 @@ export default function Centros() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {lancamentosFiltrados.map((l) => {
+                          {lancamentosOrdenados.map((l) => {
                             const tipo = l.tipo_despesa ? tiposDespesaMap.get(l.tipo_despesa) : null
                             const concluido = !!l.concluido
                             return (
@@ -1017,6 +1281,30 @@ export default function Centros() {
                   onChange={(e) => setCentroField('descricao', e.target.value)}
                   className="h-9 text-xs"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-centro-meta-mensal"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Meta mensal (R$)
+                </Label>
+                <Input
+                  id="edit-centro-meta-mensal"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  placeholder="Opcional — ex: 5000.00"
+                  value={centroForm.meta_mensal}
+                  onChange={(e) => setCentroField('meta_mensal', e.target.value)}
+                  className={`h-9 text-xs ${
+                    centroErrors.meta_mensal ? 'border-red-500 focus-visible:ring-red-500' : ''
+                  }`}
+                />
+                {centroErrors.meta_mensal ? (
+                  <p className="text-[11px] text-red-600 font-medium">{centroErrors.meta_mensal}</p>
+                ) : null}
               </div>
             </div>
 

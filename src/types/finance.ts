@@ -112,6 +112,7 @@ export interface CentroRecord extends RecordModel {
   nome: string
   descricao?: string
   tipo: TipoCentro
+  meta_mensal?: number
   user: string
 }
 
