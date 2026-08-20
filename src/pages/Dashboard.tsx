@@ -7,6 +7,7 @@ import {
   contasService,
   dreService,
   lancamentosCentroService,
+  lancamentosService,
   planoContasService,
   tiposDespesaService,
 } from '@/services/financeService'
@@ -16,6 +17,7 @@ import type {
   ContaRecord,
   DreRecord,
   LancamentoCentroRecord,
+  LancamentoRecord,
   PlanoContaRecord,
   TipoDespesaRecord,
 } from '@/types/finance'
@@ -77,6 +79,7 @@ export default function Dashboard() {
   const [dres, setDres] = useState<DreRecord[]>([])
   const [allBalancos, setAllBalancos] = useState<BalancoRecord[]>([])
   const [lancamentosCentro, setLancamentosCentro] = useState<LancamentoCentroRecord[]>([])
+  const [lancamentosFinanceiros, setLancamentosFinanceiros] = useState<LancamentoRecord[]>([])
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
@@ -86,7 +89,7 @@ export default function Dashboard() {
   const loadData = async () => {
     try {
       setLoadingData(true)
-      const [allB, allD, allL, allTd, allC, allContas, allPlano] = await Promise.all([
+      const [allB, allD, allL, allTd, allC, allContas, allPlano, allLancFin] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
         lancamentosCentroService.getAll(),
@@ -94,6 +97,7 @@ export default function Dashboard() {
         centrosService.getAll(),
         contasService.getAll(),
         planoContasService.getAll(),
+        lancamentosService.getAll({ expandRelations: true }),
       ])
       setAllBalancos(allB)
       setDres(allD)
@@ -102,6 +106,7 @@ export default function Dashboard() {
       setCentros(allC)
       setContas(allContas)
       setPlanoContas(allPlano)
+      setLancamentosFinanceiros(allLancFin)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -124,6 +129,9 @@ export default function Dashboard() {
     loadData()
   })
   useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => {
+    loadData()
+  })
+  useRealtime<LancamentoRecord>('lancamentos', () => {
     loadData()
   })
   useRealtime<TipoDespesaRecord>('tipos_despesa', () => {
@@ -226,6 +234,153 @@ export default function Dashboard() {
     }
     return map
   }, [matrizPlanoItens])
+
+  // =========================================================================
+  // SEÇÃO: RESUMO DE LANÇAMENTOS POR EMPRESA (MÊS A MÊS E ÚLTIMOS 6 MESES POR TIPO DE CONTA)
+  // =========================================================================
+  const resumoLancamentosEmpresa = useMemo(() => {
+    if (!selectedEmpresaId) return null
+
+    const lancamentosDaEmpresa = lancamentosFinanceiros.filter(
+      (l) => l.empresa === selectedEmpresaId,
+    )
+
+    const now = new Date()
+    const anoAtual = now.getFullYear()
+    const mesAtual = now.getMonth() // 0-11
+
+    // Mês atual: yyyy-mm
+    const mmAtualStr = String(mesAtual + 1).padStart(2, '0')
+    const anoMesAtualKey = `${anoAtual}-${mmAtualStr}`
+
+    // Mês anterior
+    const dataMesAnterior = new Date(anoAtual, mesAtual - 1, 1)
+    const anoAnterior = dataMesAnterior.getFullYear()
+    const mesAnterior = dataMesAnterior.getMonth()
+    const mmAntStr = String(mesAnterior + 1).padStart(2, '0')
+    const anoMesAnteriorKey = `${anoAnterior}-${mmAntStr}`
+
+    let totalMesAtual = 0
+    let totalMesAnterior = 0
+    let qtdMesAtual = 0
+    let qtdMesAnterior = 0
+
+    // Gera array dos últimos 6 meses cronológicos: [m-5, m-4, m-3, m-2, m-1, m-0]
+    const mesesUltimos6: {
+      key: string // YYYY-MM
+      label: string // 'Out/24', 'Nov/24', etc.
+      ativo: number
+      passivo: number
+      receita: number
+      despesa: number
+      pl: number
+      outros: number
+      total: number
+    }[] = []
+
+    const nomesMesesAbrev = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ]
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(anoAtual, mesAtual - i, 1)
+      const y = d.getFullYear()
+      const m = d.getMonth()
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`
+      const label = `${nomesMesesAbrev[m]}/${String(y).slice(2)}`
+      mesesUltimos6.push({
+        key,
+        label,
+        ativo: 0,
+        passivo: 0,
+        receita: 0,
+        despesa: 0,
+        pl: 0,
+        outros: 0,
+        total: 0,
+      })
+    }
+
+    const mapMeses = new Map<string, (typeof mesesUltimos6)[0]>()
+    for (const mObj of mesesUltimos6) {
+      mapMeses.set(mObj.key, mObj)
+    }
+
+    // Processar cada lançamento da empresa
+    for (const l of lancamentosDaEmpresa) {
+      const val = Number(l.valor) || 0
+      const dStr = (l.data || '').slice(0, 7) // YYYY-MM
+      if (!dStr) continue
+
+      if (dStr === anoMesAtualKey) {
+        totalMesAtual += val
+        qtdMesAtual += 1
+      }
+      if (dStr === anoMesAnteriorKey) {
+        totalMesAnterior += val
+        qtdMesAnterior += 1
+      }
+
+      const mesObj = mapMeses.get(dStr)
+      if (mesObj) {
+        mesObj.total += val
+        // Identificar tipo de conta do plano de contas
+        const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
+        const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
+        const tipoConta = conta?.tipo
+
+        if (tipoConta === 'Ativo') {
+          mesObj.ativo += val
+        } else if (tipoConta === 'Passivo') {
+          mesObj.passivo += val
+        } else if (tipoConta === 'Receita') {
+          mesObj.receita += val
+        } else if (tipoConta === 'Despesa') {
+          mesObj.despesa += val
+        } else if (tipoConta === 'Patrimônio Líquido') {
+          mesObj.pl += val
+        } else {
+          mesObj.outros += val
+        }
+      }
+    }
+
+    // Variação percentual entre mês atual e anterior
+    let variacaoPercentual: number | null = null
+    if (totalMesAnterior > 0) {
+      variacaoPercentual = ((totalMesAtual - totalMesAnterior) / totalMesAnterior) * 100
+    } else if (totalMesAtual > 0 && totalMesAnterior === 0) {
+      variacaoPercentual = 100
+    } else if (totalMesAtual === 0 && totalMesAnterior === 0) {
+      variacaoPercentual = 0
+    }
+
+    const nomeMesAtual = `${nomesMesesAbrev[mesAtual]}/${anoAtual}`
+    const nomeMesAnterior = `${nomesMesesAbrev[mesAnterior]}/${anoAnterior}`
+
+    return {
+      totalMesAtual,
+      totalMesAnterior,
+      qtdMesAtual,
+      qtdMesAnterior,
+      variacaoPercentual,
+      nomeMesAtual,
+      nomeMesAnterior,
+      dadosUltimos6Meses: mesesUltimos6,
+      totalLancamentosEmpresa: lancamentosDaEmpresa.length,
+    }
+  }, [selectedEmpresaId, lancamentosFinanceiros, planoContas, contasMap])
 
   // Totais e Indicadores calculados
   const calcB = calcularBalanco(balancoAtual)
@@ -1005,6 +1160,231 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ========================================================================= */}
+      {/* NOVA SEÇÃO: RESUMO DE LANÇAMENTOS POR EMPRESA (COMPARATIVO E GRÁFICO 6 MESES) */}
+      {/* ========================================================================= */}
+      <Card className="bg-white border-slate-200 shadow-2xs">
+        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-blue-600" />
+              Resumo de Lançamentos por Empresa
+              {selectedEmpresa && (
+                <Badge
+                  variant="outline"
+                  className="ml-1 bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold"
+                >
+                  {selectedEmpresa.nome}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Comparativo mês a mês e histórico dos últimos 6 meses segmentado por tipo de conta
+              (Ativo, Passivo, Receita, Despesa)
+            </CardDescription>
+          </div>
+
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium gap-1 shrink-0"
+          >
+            <Link to="/lancamentos">
+              Ir para Lançamentos <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </Button>
+        </CardHeader>
+
+        <CardContent className="pt-4 space-y-4">
+          {!selectedEmpresaId || !resumoLancamentosEmpresa ? (
+            /* Estado Vazio Amigável se nenhuma empresa estiver selecionada */
+            <div className="py-12 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhuma empresa selecionada</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                Selecione uma empresa no topo do dashboard para visualizar os lançamentos do mês
+                atual, comparativo com o mês anterior e gráfico segmentado por tipo de conta.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Cards Comparativos Mês Atual vs Mês Anterior */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Total Mês Atual */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Mês Atual ({resumoLancamentosEmpresa.nomeMesAtual})
+                    </span>
+                    <Badge className="bg-blue-100 text-blue-700 border-blue-200 text-[10px] font-semibold">
+                      {resumoLancamentosEmpresa.qtdMesAtual} lanç.
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-xl font-bold text-[#0B1F3A] tracking-tight">
+                    <AnimatedCounter
+                      value={resumoLancamentosEmpresa.totalMesAtual}
+                      formatter={(v) => formatBrlMil(v)}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Volume financeiro lançado no mês
+                  </p>
+                </div>
+
+                {/* Total Mês Anterior */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Mês Anterior ({resumoLancamentosEmpresa.nomeMesAnterior})
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-semibold text-slate-600">
+                      {resumoLancamentosEmpresa.qtdMesAnterior} lanç.
+                    </Badge>
+                  </div>
+                  <div className="mt-2 text-xl font-bold text-slate-700 tracking-tight">
+                    <AnimatedCounter
+                      value={resumoLancamentosEmpresa.totalMesAnterior}
+                      formatter={(v) => formatBrlMil(v)}
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">Base de comparação do período</p>
+                </div>
+
+                {/* Variação Percentual */}
+                <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Variação Mês a Mês
+                    </span>
+                    {resumoLancamentosEmpresa.variacaoPercentual !== null && (
+                      <div
+                        className={`p-1 rounded-md ${
+                          resumoLancamentosEmpresa.variacaoPercentual >= 0
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : 'bg-red-50 text-red-600'
+                        }`}
+                      >
+                        {resumoLancamentosEmpresa.variacaoPercentual >= 0 ? (
+                          <TrendingUp className="w-3.5 h-3.5" />
+                        ) : (
+                          <TrendingDown className="w-3.5 h-3.5" />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div
+                    className={`mt-2 text-xl font-bold tracking-tight ${
+                      resumoLancamentosEmpresa.variacaoPercentual === null
+                        ? 'text-slate-400'
+                        : resumoLancamentosEmpresa.variacaoPercentual >= 0
+                          ? 'text-emerald-600'
+                          : 'text-red-600'
+                    }`}
+                  >
+                    {resumoLancamentosEmpresa.variacaoPercentual !== null ? (
+                      <>
+                        {resumoLancamentosEmpresa.variacaoPercentual > 0 ? '+' : ''}
+                        <AnimatedCounter
+                          value={resumoLancamentosEmpresa.variacaoPercentual}
+                          formatter={(v) => formatPercent(v, 1)}
+                        />
+                      </>
+                    ) : (
+                      '—'
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    {resumoLancamentosEmpresa.variacaoPercentual === null
+                      ? 'Sem base anterior'
+                      : resumoLancamentosEmpresa.variacaoPercentual > 0
+                        ? 'Crescimento em relação ao mês anterior'
+                        : resumoLancamentosEmpresa.variacaoPercentual < 0
+                          ? 'Redução em relação ao mês anterior'
+                          : 'Estável em relação ao mês anterior'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Gráfico de Barras Agrupadas/Empilhadas dos Últimos 6 Meses por Tipo de Conta */}
+              <div className="pt-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
+                    Lançamentos por Mês (Últimos 6 Meses por Tipo de Conta)
+                  </h4>
+                  <span className="text-[11px] text-slate-500">
+                    Total cadastrado: {resumoLancamentosEmpresa.totalLancamentosEmpresa}{' '}
+                    lançamento(s)
+                  </span>
+                </div>
+
+                <div className="h-68 w-full bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart
+                      data={resumoLancamentosEmpresa.dadosUltimos6Meses}
+                      margin={{ top: 10, right: 10, left: -15, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: '#64748B' }}
+                        tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                      />
+                      <RechartsTooltip
+                        formatter={(val: any, name: any) => [formatBrlMil(Number(val)), name]}
+                        labelFormatter={(label) => `Mês: ${label}`}
+                      />
+                      <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
+                      <Bar
+                        dataKey="ativo"
+                        name="Ativo"
+                        fill="#2563EB"
+                        radius={[3, 3, 0, 0]}
+                        stackId="a"
+                      />
+                      <Bar
+                        dataKey="passivo"
+                        name="Passivo"
+                        fill="#F59E0B"
+                        radius={[3, 3, 0, 0]}
+                        stackId="a"
+                      />
+                      <Bar
+                        dataKey="receita"
+                        name="Receita"
+                        fill="#10B981"
+                        radius={[3, 3, 0, 0]}
+                        stackId="a"
+                      />
+                      <Bar
+                        dataKey="despesa"
+                        name="Despesa"
+                        fill="#EF4444"
+                        radius={[3, 3, 0, 0]}
+                        stackId="a"
+                      />
+                      <Bar
+                        dataKey="pl"
+                        name="Patrimônio Líquido"
+                        fill="#8B5CF6"
+                        radius={[3, 3, 0, 0]}
+                        stackId="a"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Seção Matriz Plano de Contas */}
       <Card className="bg-white border-slate-200 shadow-2xs">

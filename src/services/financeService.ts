@@ -10,6 +10,7 @@ import type {
   ContaRecord,
   PlanoContaRecord,
   LancamentoRecord,
+  LancamentoRecorrenteRecord,
 } from '@/types/finance'
 
 export const empresasService = {
@@ -377,6 +378,8 @@ export const lancamentosService = {
   async getAll(options?: {
     empresaId?: string
     data?: string
+    dataInicio?: string
+    dataFim?: string
     expandRelations?: boolean
   }): Promise<LancamentoRecord[]> {
     const filters: string[] = []
@@ -388,9 +391,17 @@ export const lancamentosService = {
       const dateStr = options.data.slice(0, 10)
       filters.push(`data >= '${dateStr} 00:00:00' && data <= '${dateStr} 23:59:59'`)
     }
+    if (options?.dataInicio) {
+      const inicio = options.dataInicio.slice(0, 10)
+      filters.push(`data >= '${inicio} 00:00:00'`)
+    }
+    if (options?.dataFim) {
+      const fim = options.dataFim.slice(0, 10)
+      filters.push(`data <= '${fim} 23:59:59'`)
+    }
 
     const queryParams: Record<string, unknown> = {
-      sort: '-created',
+      sort: '-data',
     }
     if (filters.length > 0) {
       queryParams.filter = filters.join(' && ')
@@ -457,5 +468,96 @@ export const lancamentosService = {
 
   async delete(id: string): Promise<boolean> {
     return await pb.collection('lancamentos').delete(id)
+  },
+}
+
+export const lancamentosRecorrentesService = {
+  async getAll(options?: {
+    empresaId?: string
+    expandRelations?: boolean
+  }): Promise<LancamentoRecorrenteRecord[]> {
+    const filters: string[] = []
+    if (options?.empresaId) {
+      filters.push(`empresa = '${options.empresaId}'`)
+    }
+
+    const queryParams: Record<string, unknown> = {
+      sort: 'dia_mes',
+    }
+    if (filters.length > 0) {
+      queryParams.filter = filters.join(' && ')
+    }
+    if (options?.expandRelations ?? true) {
+      queryParams.expand = 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa'
+    }
+
+    return await pb
+      .collection('lancamentos_recorrentes')
+      .getFullList<LancamentoRecorrenteRecord>(queryParams)
+  },
+
+  async create(data: {
+    empresa: string
+    plano_conta: string
+    dia_mes: number
+    valor: number
+    historico?: string
+    ativo?: boolean
+  }): Promise<LancamentoRecorrenteRecord> {
+    const diaClamped = Math.min(Math.max(Number(data.dia_mes) || 1, 1), 28)
+    return await pb.collection('lancamentos_recorrentes').create<LancamentoRecorrenteRecord>(
+      {
+        empresa: data.empresa,
+        plano_conta: data.plano_conta,
+        dia_mes: diaClamped,
+        valor: Number(data.valor) || 0,
+        historico: data.historico?.trim() || undefined,
+        ativo: data.ativo ?? true,
+        user: currentUserId(),
+      } as any,
+      {
+        expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+      },
+    )
+  },
+
+  async update(
+    id: string,
+    data: Partial<
+      Pick<
+        LancamentoRecorrenteRecord,
+        'empresa' | 'plano_conta' | 'dia_mes' | 'valor' | 'historico' | 'ativo'
+      >
+    >,
+  ): Promise<LancamentoRecorrenteRecord> {
+    const payload: Record<string, unknown> = { ...data }
+    if (data.historico !== undefined) {
+      payload.historico = data.historico.trim() || undefined
+    }
+    if (data.valor !== undefined) {
+      payload.valor = Number(data.valor) || 0
+    }
+    if (data.dia_mes !== undefined) {
+      payload.dia_mes = Math.min(Math.max(Number(data.dia_mes) || 1, 1), 28)
+    }
+    return await pb
+      .collection('lancamentos_recorrentes')
+      .update<LancamentoRecorrenteRecord>(id, payload, {
+        expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+      })
+  },
+
+  async toggleAtivo(id: string, ativo: boolean): Promise<LancamentoRecorrenteRecord> {
+    return await pb.collection('lancamentos_recorrentes').update<LancamentoRecorrenteRecord>(
+      id,
+      { ativo },
+      {
+        expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+      },
+    )
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('lancamentos_recorrentes').delete(id)
   },
 }

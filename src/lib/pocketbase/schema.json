@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T18:24:34.902Z",
+  "generatedAt": "2026-08-20T18:39:30.353Z",
   "collections": [
     {
       "name": "users",
@@ -900,6 +900,84 @@
         "CREATE INDEX idx_lancamentos_empresa ON lancamentos (empresa)",
         "CREATE INDEX idx_lancamentos_plano_conta ON lancamentos (plano_conta)",
         "CREATE INDEX idx_lancamentos_data ON lancamentos (data)"
+      ]
+    },
+    {
+      "name": "lancamentos_recorrentes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && user = @request.auth.id",
+        "view": "@request.auth.id != \"\" && user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\" && user = @request.auth.id",
+        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "plano_conta",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "plano_contas"
+        },
+        {
+          "name": "dia_mes",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "historico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_lancamentos_rec_user ON lancamentos_recorrentes (user)",
+        "CREATE INDEX idx_lancamentos_rec_empresa ON lancamentos_recorrentes (empresa)",
+        "CREATE INDEX idx_lancamentos_rec_plano_conta ON lancamentos_recorrentes (plano_conta)",
+        "CREATE INDEX idx_lancamentos_rec_ativo ON lancamentos_recorrentes (ativo)"
       ]
     }
   ]

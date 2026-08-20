@@ -187,6 +187,26 @@ export interface LancamentoRecord extends RecordModel {
   }
 }
 
+export interface LancamentoRecorrenteRecord extends RecordModel {
+  empresa: string
+  plano_conta: string
+  dia_mes: number
+  valor: number
+  historico?: string
+  ativo: boolean
+  user: string
+  expand?: {
+    empresa?: EmpresaRecord
+    plano_conta?: PlanoContaRecord & {
+      expand?: {
+        conta?: ContaRecord
+        centro?: CentroRecord
+        tipo_despesa?: TipoDespesaRecord
+      }
+    }
+  }
+}
+
 export interface BalancoCalculado {
   // Grupos
   ativoCirculante: number
