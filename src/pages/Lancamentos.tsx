@@ -285,9 +285,11 @@ export default function Lancamentos() {
   const empresaAtiva = empresaMap.get(empresaFixaId)
 
   // Formata o label de um item do plano de contas para exibição
+  // Formato: PC-001 | CO-003 - Caixa → CC-002 - Marketing [→ TD-001 - Fixa]
   const formatPlanoContaLabel = (item: PlanoContaRecord): string => {
     const expandConta = item.expand?.conta
     const expandCentro = item.expand?.centro
+    const expandTipo = item.expand?.tipo_despesa
 
     const codPC = item.codigo || 'PC-???'
     const codConta = expandConta?.codigo || 'CO-???'
@@ -295,7 +297,15 @@ export default function Lancamentos() {
     const codCentro = expandCentro?.codigo || 'CC-???'
     const nomeCentro = expandCentro?.nome || 'Centro'
 
-    return `${codPC} | ${codConta} ${nomeConta} → ${codCentro} ${nomeCentro}`
+    let label = `${codPC} | ${codConta} - ${nomeConta} → ${codCentro} - ${nomeCentro}`
+
+    if (expandTipo && expandTipo.nome) {
+      const codTipo = expandTipo.codigo || 'TD-???'
+      const nomeTipo = expandTipo.nome
+      label += ` → ${codTipo} - ${nomeTipo}`
+    }
+
+    return label
   }
 
   // Itens do Plano de Contas ordenados e formatados
@@ -1155,7 +1165,7 @@ export default function Lancamentos() {
                           ref={planoContaTriggerRef}
                           className="h-9 text-xs bg-white text-left truncate"
                         >
-                          <SelectValue placeholder="Selecione a conta e centro (PC-xxx)" />
+                          <SelectValue placeholder="Selecione o plano de contas (PC-xxx | Conta → Centro)" />
                         </SelectTrigger>
                         <SelectContent className="max-h-72">
                           {planoContasOptions.length === 0 ? (
@@ -1165,9 +1175,6 @@ export default function Lancamentos() {
                           ) : (
                             planoContasOptions.map((item) => (
                               <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                                <span className="font-mono font-bold text-blue-700 mr-1.5">
-                                  {item.codigo || 'PC-???'}
-                                </span>
                                 <span className="text-slate-800">
                                   {formatPlanoContaLabel(item)}
                                 </span>
@@ -1386,9 +1393,22 @@ export default function Lancamentos() {
                                 className="hover:bg-slate-50/80 transition-colors align-top"
                               >
                                 <td className="py-3 px-3.5 whitespace-nowrap">
-                                  <span className="font-mono font-semibold text-blue-700 text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                    {pc?.codigo || 'PC-???'}
-                                  </span>
+                                  <div className="flex flex-col">
+                                    <span className="font-mono font-semibold text-blue-700 text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 w-fit">
+                                      {pc?.codigo || 'PC-???'}
+                                    </span>
+                                    {conta && (
+                                      <span
+                                        className="text-[11px] text-slate-700 font-medium mt-1 truncate max-w-[170px]"
+                                        title={`${conta.codigo || 'CO-???'} - ${conta.nome}`}
+                                      >
+                                        <span className="font-mono text-slate-500 text-[10px]">
+                                          {conta.codigo || 'CO-???'} -
+                                        </span>{' '}
+                                        {conta.nome}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
 
                                 <td className="py-3 px-3 max-w-[150px]">
@@ -1513,7 +1533,7 @@ export default function Lancamentos() {
               </div>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                 {/* Seletor Empresa */}
                 <div className="space-y-1.5">
                   <Label htmlFor="hist-empresa" className="text-xs font-semibold text-slate-700">
@@ -1530,6 +1550,31 @@ export default function Lancamentos() {
                       {empresas.map((emp) => (
                         <SelectItem key={emp.id} value={emp.id} className="text-xs">
                           {emp.nome} ({emp.segmento})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Filtro Plano de Contas */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="hist-plano" className="text-xs font-semibold text-slate-700">
+                    Plano de Contas
+                  </Label>
+                  <Select value={histPlanoContaFiltro} onValueChange={setHistPlanoContaFiltro}>
+                    <SelectTrigger
+                      id="hist-plano"
+                      className="h-9 text-xs bg-white truncate text-left"
+                    >
+                      <SelectValue placeholder="Todos os planos" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 max-w-[420px]">
+                      <SelectItem value="todos" className="text-xs font-semibold text-blue-700">
+                        Todos os Planos de Contas
+                      </SelectItem>
+                      {planoContasOptions.map((item) => (
+                        <SelectItem key={item.id} value={item.id} className="text-xs py-2">
+                          <span>{formatPlanoContaLabel(item)}</span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1720,9 +1765,22 @@ export default function Lancamentos() {
 
                             {/* Código PC */}
                             <td className="py-3 px-3 whitespace-nowrap">
-                              <span className="font-mono font-semibold text-blue-700 text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
-                                {pc?.codigo || 'PC-???'}
-                              </span>
+                              <div className="flex flex-col">
+                                <span className="font-mono font-semibold text-blue-700 text-[11px] bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 w-fit">
+                                  {pc?.codigo || 'PC-???'}
+                                </span>
+                                {conta && (
+                                  <span
+                                    className="text-[11px] text-slate-700 font-medium mt-1 truncate max-w-[170px]"
+                                    title={`${conta.codigo || 'CO-???'} - ${conta.nome}`}
+                                  >
+                                    <span className="font-mono text-slate-500 text-[10px]">
+                                      {conta.codigo || 'CO-???'} -
+                                    </span>{' '}
+                                    {conta.nome}
+                                  </span>
+                                )}
+                              </div>
                             </td>
 
                             {/* Conta */}
@@ -1990,7 +2048,7 @@ export default function Lancamentos() {
                             </td>
 
                             {/* Plano de Contas */}
-                            <td className="py-3 px-3 max-w-[200px]">
+                            <td className="py-3 px-3 max-w-[240px]">
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-1">
                                   <span className="font-mono font-bold text-blue-700 text-[11px]">
@@ -1998,13 +2056,24 @@ export default function Lancamentos() {
                                   </span>
                                   <span
                                     className="font-medium text-slate-800 truncate"
-                                    title={conta?.nome}
+                                    title={
+                                      conta
+                                        ? `${conta.codigo || 'CO-???'} - ${conta.nome}`
+                                        : 'Conta'
+                                    }
                                   >
-                                    {conta?.nome || 'Conta'}
+                                    | {conta?.codigo || 'CO-???'} - {conta?.nome || 'Conta'}
                                   </span>
                                 </div>
-                                <span className="text-[10px] text-slate-400 truncate">
-                                  → {centro?.codigo || ''} {centro?.nome || 'Centro'}
+                                <span className="text-[10px] text-slate-500 truncate mt-0.5">
+                                  → {centro?.codigo || 'CC-???'} - {centro?.nome || 'Centro'}
+                                  {pc?.expand?.tipo_despesa && (
+                                    <span className="text-slate-400">
+                                      {' '}
+                                      → {pc.expand.tipo_despesa.codigo || 'TD-???'} -{' '}
+                                      {pc.expand.tipo_despesa.nome}
+                                    </span>
+                                  )}
                                 </span>
                               </div>
                             </td>
@@ -2079,7 +2148,7 @@ export default function Lancamentos() {
 
       {/* ============ MODAL DE EDIÇÃO DE LANÇAMENTO ============ */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white">
+        <DialogContent className="sm:max-w-[580px] bg-white">
           <form onSubmit={handleSaveEdit}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
@@ -2153,14 +2222,11 @@ export default function Lancamentos() {
                     id="edit-lan-plano"
                     className="h-9 text-xs bg-white text-left truncate"
                   >
-                    <SelectValue placeholder="Selecione a conta/centro" />
+                    <SelectValue placeholder="Selecione o plano de contas (PC-xxx | Conta → Centro)" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
                     {planoContasOptions.map((item) => (
                       <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                        <span className="font-mono font-bold text-blue-700 mr-1.5">
-                          {item.codigo || 'PC-???'}
-                        </span>
                         <span>{formatPlanoContaLabel(item)}</span>
                       </SelectItem>
                     ))}
@@ -2232,7 +2298,7 @@ export default function Lancamentos() {
 
       {/* ============ MODAL DE CRIAÇÃO / EDIÇÃO DE RECORRÊNCIA ============ */}
       <Dialog open={recModalOpen} onOpenChange={setRecModalOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white">
+        <DialogContent className="sm:max-w-[580px] bg-white">
           <form onSubmit={handleSaveRecorrenciaModal}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
@@ -2289,14 +2355,11 @@ export default function Lancamentos() {
                     id="modal-rec-plano"
                     className="h-9 text-xs bg-white text-left truncate"
                   >
-                    <SelectValue placeholder="Selecione a conta/centro" />
+                    <SelectValue placeholder="Selecione o plano de contas (PC-xxx | Conta → Centro)" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
                     {planoContasOptions.map((item) => (
                       <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                        <span className="font-mono font-bold text-blue-700 mr-1.5">
-                          {item.codigo || 'PC-???'}
-                        </span>
                         <span>{formatPlanoContaLabel(item)}</span>
                       </SelectItem>
                     ))}
