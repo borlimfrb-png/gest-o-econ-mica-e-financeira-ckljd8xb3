@@ -207,6 +207,21 @@ export interface LancamentoRecorrenteRecord extends RecordModel {
   }
 }
 
+export type TipoMetaLancamento = 'Receita' | 'Despesa'
+
+export interface MetaLancamentoRecord extends RecordModel {
+  empresa: string
+  tipo: TipoMetaLancamento
+  valor: number
+  mes: number
+  ano: number
+  ativo?: boolean
+  user: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
+}
+
 export interface BalancoCalculado {
   // Grupos
   ativoCirculante: number

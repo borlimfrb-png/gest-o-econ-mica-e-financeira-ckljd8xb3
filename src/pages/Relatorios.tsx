@@ -12,6 +12,7 @@ import {
   formatPercent,
   formatCnpj,
 } from '@/lib/financeCalculations'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -231,6 +232,17 @@ export default function Relatorios() {
 
         {/* Botões de Ação */}
         <div className="flex items-center gap-2">
+          <Button
+            asChild
+            variant="outline"
+            className="h-9 text-xs font-semibold border-blue-200 hover:bg-blue-50 text-blue-700"
+          >
+            <Link to="/relatorio-anual">
+              <FileText className="w-4 h-4 mr-1.5" />
+              Ver Relatório Anual (12 Meses)
+            </Link>
+          </Button>
+
           <Button
             onClick={handleExportCsv}
             variant="outline"

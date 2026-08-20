@@ -11,6 +11,7 @@ import type {
   PlanoContaRecord,
   LancamentoRecord,
   LancamentoRecorrenteRecord,
+  MetaLancamentoRecord,
 } from '@/types/finance'
 
 export const empresasService = {
@@ -559,5 +560,96 @@ export const lancamentosRecorrentesService = {
 
   async delete(id: string): Promise<boolean> {
     return await pb.collection('lancamentos_recorrentes').delete(id)
+  },
+}
+
+export const metasLancamentosService = {
+  async getAll(options?: {
+    empresaId?: string
+    ano?: number
+    mes?: number
+    expandRelations?: boolean
+  }): Promise<MetaLancamentoRecord[]> {
+    const filters: string[] = []
+    if (options?.empresaId) {
+      filters.push(`empresa = '${options.empresaId}'`)
+    }
+    if (options?.ano !== undefined) {
+      filters.push(`ano = ${options.ano}`)
+    }
+    if (options?.mes !== undefined) {
+      filters.push(`mes = ${options.mes}`)
+    }
+
+    const queryParams: Record<string, unknown> = {
+      sort: '-ano,-mes,tipo',
+    }
+    if (filters.length > 0) {
+      queryParams.filter = filters.join(' && ')
+    }
+    if (options?.expandRelations ?? true) {
+      queryParams.expand = 'empresa'
+    }
+
+    return await pb.collection('metas_lancamentos').getFullList<MetaLancamentoRecord>(queryParams)
+  },
+
+  async create(data: {
+    empresa: string
+    tipo: 'Receita' | 'Despesa'
+    valor: number
+    mes: number
+    ano: number
+    ativo?: boolean
+  }): Promise<MetaLancamentoRecord> {
+    return await pb.collection('metas_lancamentos').create<MetaLancamentoRecord>(
+      {
+        empresa: data.empresa,
+        tipo: data.tipo,
+        valor: Number(data.valor) || 0,
+        mes: Number(data.mes),
+        ano: Number(data.ano),
+        ativo: data.ativo ?? true,
+        user: currentUserId(),
+      } as any,
+      {
+        expand: 'empresa',
+      },
+    )
+  },
+
+  async update(
+    id: string,
+    data: Partial<
+      Pick<MetaLancamentoRecord, 'empresa' | 'tipo' | 'valor' | 'mes' | 'ano' | 'ativo'>
+    >,
+  ): Promise<MetaLancamentoRecord> {
+    const payload: Record<string, unknown> = { ...data }
+    if (data.valor !== undefined) {
+      payload.valor = Number(data.valor) || 0
+    }
+    if (data.mes !== undefined) {
+      payload.mes = Number(data.mes)
+    }
+    if (data.ano !== undefined) {
+      payload.ano = Number(data.ano)
+    }
+    return await pb.collection('metas_lancamentos').update<MetaLancamentoRecord>(id, payload, {
+      expand: 'empresa',
+    })
+  },
+
+  async toggleAtivo(id: string, ativo: boolean): Promise<MetaLancamentoRecord> {
+    return await pb.collection('metas_lancamentos').update<MetaLancamentoRecord>(
+      id,
+      { ativo },
+      {
+        expand: 'empresa',
+      },
+    )
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('metas_lancamentos').delete(id)
   },
 }

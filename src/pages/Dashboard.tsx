@@ -8,6 +8,7 @@ import {
   dreService,
   lancamentosCentroService,
   lancamentosService,
+  metasLancamentosService,
   planoContasService,
   tiposDespesaService,
 } from '@/services/financeService'
@@ -18,9 +19,11 @@ import type {
   DreRecord,
   LancamentoCentroRecord,
   LancamentoRecord,
+  MetaLancamentoRecord,
   PlanoContaRecord,
   TipoDespesaRecord,
 } from '@/types/finance'
+import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import {
   calcularBalanco,
   calcularDre,
@@ -84,21 +87,25 @@ export default function Dashboard() {
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [metas, setMetas] = useState<MetaLancamentoRecord[]>([])
+  const [modalMetasOpen, setModalMetasOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
   const loadData = async () => {
     try {
       setLoadingData(true)
-      const [allB, allD, allL, allTd, allC, allContas, allPlano, allLancFin] = await Promise.all([
-        balancosService.getAll(),
-        dreService.getAll(),
-        lancamentosCentroService.getAll(),
-        tiposDespesaService.getAll(),
-        centrosService.getAll(),
-        contasService.getAll(),
-        planoContasService.getAll(),
-        lancamentosService.getAll({ expandRelations: true }),
-      ])
+      const [allB, allD, allL, allTd, allC, allContas, allPlano, allLancFin, allMetas] =
+        await Promise.all([
+          balancosService.getAll(),
+          dreService.getAll(),
+          lancamentosCentroService.getAll(),
+          tiposDespesaService.getAll(),
+          centrosService.getAll(),
+          contasService.getAll(),
+          planoContasService.getAll(),
+          lancamentosService.getAll({ expandRelations: true }),
+          metasLancamentosService.getAll({ expandRelations: true }),
+        ])
       setAllBalancos(allB)
       setDres(allD)
       setLancamentosCentro(allL)
@@ -107,6 +114,7 @@ export default function Dashboard() {
       setContas(allContas)
       setPlanoContas(allPlano)
       setLancamentosFinanceiros(allLancFin)
+      setMetas(allMetas)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -146,6 +154,167 @@ export default function Dashboard() {
   useRealtime<PlanoContaRecord>('plano_contas', () => {
     loadData()
   })
+  useRealtime<MetaLancamentoRecord>('metas_lancamentos', () => {
+    loadData()
+  })
+
+  // Lookup maps
+  const contasMap = useMemo(() => {
+    const map = new Map<string, ContaRecord>()
+    for (const c of contas) map.set(c.id, c)
+    return map
+  }, [contas])
+
+  const centrosMap = useMemo(() => {
+    const map = new Map<string, CentroRecord>()
+    for (const c of centros) map.set(c.id, c)
+    return map
+  }, [centros])
+
+  const tiposMap = useMemo(() => {
+    const map = new Map<string, TipoDespesaRecord>()
+    for (const t of tiposDespesa) map.set(t.id, t)
+    return map
+  }, [tiposDespesa])
+
+  // Balanço e DRE do ano selecionado
+  const balancoAtual = balancos.find((b) => b.ano === selectedAno)
+  const dreAtual = dres.find((d) => d.empresa === selectedEmpresaId && d.ano === selectedAno)
+
+  // Totais e Indicadores calculados
+  const calcB = calcularBalanco(balancoAtual)
+  const calcD = calcularDre(dreAtual)
+  const calcInd = calcularIndicadores(balancoAtual, dreAtual)
+
+  // SEÇÃO METAS DE LANÇAMENTOS DO MÊS / EXERCÍCIO
+  const cardsMetasCalculados = useMemo(() => {
+    const metasFiltradas = metas.filter((m) => {
+      const isAtiva = m.ativo ?? true
+      if (!isAtiva) return false
+      if (selectedEmpresaId && m.empresa !== selectedEmpresaId) return false
+      return true
+    })
+
+    const nomesMesesLista = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ]
+
+    return metasFiltradas.map((meta) => {
+      const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
+      const empNome = emp?.nome || 'Empresa'
+
+      // Calcular realizado no mês e ano da meta
+      const lancamentosMeta = lancamentosFinanceiros.filter((l) => {
+        if (l.empresa !== meta.empresa) return false
+        if (!l.data) return false
+        const anoLanc = parseInt(l.data.slice(0, 4), 10)
+        const mesLanc = parseInt(l.data.slice(5, 7), 10)
+        if (anoLanc !== meta.ano || mesLanc !== meta.mes) return false
+
+        const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
+        const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
+        return conta?.tipo === meta.tipo
+      })
+
+      const realizado = lancamentosMeta.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+      const atingimentoPct = meta.valor > 0 ? (realizado / meta.valor) * 100 : 0
+
+      // Indicador visual: verde ≥100%, âmbar 70-99%, vermelho <70%
+      let statusCor: 'green' | 'amber' | 'red' = 'red'
+      if (atingimentoPct >= 100) {
+        statusCor = 'green'
+      } else if (atingimentoPct >= 70) {
+        statusCor = 'amber'
+      } else {
+        statusCor = 'red'
+      }
+
+      const mesNome = nomesMesesLista[meta.mes - 1] || `Mês ${meta.mes}`
+
+      return {
+        ...meta,
+        empresaNome: empNome,
+        mesNome,
+        realizado,
+        atingimentoPct,
+        statusCor,
+      }
+    })
+  }, [metas, selectedEmpresaId, lancamentosFinanceiros, planoContas, contasMap, empresas])
+
+  // SEÇÃO COMPARATIVO ENTRE EMPRESAS (MÊS ATUAL)
+  const dadosComparativoEmpresas = useMemo(() => {
+    const now = new Date()
+    const anoAtual = now.getFullYear()
+    const mesAtual = now.getMonth() // 0-11
+    const mmAtualStr = String(mesAtual + 1).padStart(2, '0')
+    const anoMesAtualKey = `${anoAtual}-${mmAtualStr}`
+
+    const NOMES_MESES_ABREV = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ]
+    const nomeMesAtual = `${NOMES_MESES_ABREV[mesAtual]}/${anoAtual}`
+
+    const CORES_EMPRESAS = [
+      '#2563EB',
+      '#10B981',
+      '#F59E0B',
+      '#8B5CF6',
+      '#EC4899',
+      '#06B6D4',
+      '#F97316',
+      '#14B8A6',
+      '#6366F1',
+      '#84CC16',
+    ]
+
+    const dados = empresas.map((emp, idx) => {
+      const lancs = lancamentosFinanceiros.filter(
+        (l) => l.empresa === emp.id && (l.data || '').slice(0, 7) === anoMesAtualKey,
+      )
+      const totalMes = lancs.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+
+      return {
+        empresaId: emp.id,
+        nome: emp.nome,
+        nomeCurto: emp.nome.length > 15 ? emp.nome.slice(0, 13) + '...' : emp.nome,
+        segmento: emp.segmento,
+        total: totalMes,
+        qtd: lancs.length,
+        color: CORES_EMPRESAS[idx % CORES_EMPRESAS.length],
+      }
+    })
+
+    const totalGeral = dados.reduce((acc, d) => acc + d.total, 0)
+
+    return {
+      dados,
+      nomeMesAtual,
+      totalGeral,
+    }
+  }, [empresas, lancamentosFinanceiros])
 
   // Distribuição de gastos por tipo de despesa (todos os lançamentos do usuário)
   const dataGastosPorTipo = useMemo(() => {
@@ -169,45 +338,19 @@ export default function Dashboard() {
     }
   }, [lancamentosCentro, tiposDespesa])
 
-  // Balanço e DRE do ano selecionado
-  const balancoAtual = balancos.find((b) => b.ano === selectedAno)
-  const dreAtual = dres.find((d) => d.empresa === selectedEmpresaId && d.ano === selectedAno)
-
-  // Mapas de lookup para Contas, Centros e Tipos de Despesa
-  const contasMap = useMemo(() => {
-    const map = new Map<string, ContaRecord>()
-    for (const c of contas) map.set(c.id, c)
-    return map
-  }, [contas])
-
-  const centrosMap = useMemo(() => {
-    const map = new Map<string, CentroRecord>()
-    for (const c of centros) map.set(c.id, c)
-    return map
-  }, [centros])
-
-  const tiposMap = useMemo(() => {
-    const map = new Map<string, TipoDespesaRecord>()
-    for (const t of tiposDespesa) map.set(t.id, t)
-    return map
-  }, [tiposDespesa])
-
-  // Contas vinculadas ao balanço do exercício selecionado (se houver mapeamento vinculos_contas)
+  // Contas vinculadas ao balanço do exercício selecionado
   const contasVinculadasBalançoIds = useMemo(() => {
     if (!balancoAtual?.vinculos_contas) return null
     const ids = Object.values(balancoAtual.vinculos_contas).filter(Boolean) as string[]
     return ids.length > 0 ? new Set(ids) : null
   }, [balancoAtual])
 
-  // Lista de itens do plano de contas para a Matriz
-  // Se o balanço atual possui contas vinculadas, prioriza/filtra por elas; caso contrário usa todas do plano
   const matrizPlanoItens = useMemo(() => {
     if (!contasVinculadasBalançoIds) return planoContas
     const filtrados = planoContas.filter((p) => contasVinculadasBalançoIds.has(p.conta))
     return filtrados.length > 0 ? filtrados : planoContas
   }, [planoContas, contasVinculadasBalançoIds])
 
-  // Contas presentes na matriz (ordenadas por código)
   const matrizContas = useMemo(() => {
     const contasIds = Array.from(new Set(matrizPlanoItens.map((p) => p.conta)))
     const lista = contasIds
@@ -216,7 +359,6 @@ export default function Dashboard() {
     return lista.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
   }, [matrizPlanoItens, contasMap])
 
-  // Centros presentes no sistema (ordenados por código/nome)
   const matrizCentros = useMemo(() => {
     return [...centros].sort((a, b) => {
       const codA = a.codigo || ''
@@ -226,7 +368,6 @@ export default function Dashboard() {
     })
   }, [centros])
 
-  // Lookup de vínculos: chave `${contaId}_${centroId}` -> PlanoContaRecord
   const vinculosMatrizMap = useMemo(() => {
     const map = new Map<string, PlanoContaRecord>()
     for (const item of matrizPlanoItens) {
@@ -235,9 +376,7 @@ export default function Dashboard() {
     return map
   }, [matrizPlanoItens])
 
-  // =========================================================================
-  // SEÇÃO: RESUMO DE LANÇAMENTOS POR EMPRESA (MÊS A MÊS E ÚLTIMOS 6 MESES POR TIPO DE CONTA)
-  // =========================================================================
+  // RESUMO DE LANÇAMENTOS POR EMPRESA
   const resumoLancamentosEmpresa = useMemo(() => {
     if (!selectedEmpresaId) return null
 
@@ -249,11 +388,9 @@ export default function Dashboard() {
     const anoAtual = now.getFullYear()
     const mesAtual = now.getMonth() // 0-11
 
-    // Mês atual: yyyy-mm
     const mmAtualStr = String(mesAtual + 1).padStart(2, '0')
     const anoMesAtualKey = `${anoAtual}-${mmAtualStr}`
 
-    // Mês anterior
     const dataMesAnterior = new Date(anoAtual, mesAtual - 1, 1)
     const anoAnterior = dataMesAnterior.getFullYear()
     const mesAnterior = dataMesAnterior.getMonth()
@@ -265,10 +402,9 @@ export default function Dashboard() {
     let qtdMesAtual = 0
     let qtdMesAnterior = 0
 
-    // Gera array dos últimos 6 meses cronológicos: [m-5, m-4, m-3, m-2, m-1, m-0]
     const mesesUltimos6: {
-      key: string // YYYY-MM
-      label: string // 'Out/24', 'Nov/24', etc.
+      key: string
+      label: string
       ativo: number
       passivo: number
       receita: number
@@ -317,10 +453,9 @@ export default function Dashboard() {
       mapMeses.set(mObj.key, mObj)
     }
 
-    // Processar cada lançamento da empresa
     for (const l of lancamentosDaEmpresa) {
       const val = Number(l.valor) || 0
-      const dStr = (l.data || '').slice(0, 7) // YYYY-MM
+      const dStr = (l.data || '').slice(0, 7)
       if (!dStr) continue
 
       if (dStr === anoMesAtualKey) {
@@ -335,7 +470,6 @@ export default function Dashboard() {
       const mesObj = mapMeses.get(dStr)
       if (mesObj) {
         mesObj.total += val
-        // Identificar tipo de conta do plano de contas
         const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
         const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
         const tipoConta = conta?.tipo
@@ -356,7 +490,6 @@ export default function Dashboard() {
       }
     }
 
-    // Variação percentual entre mês atual e anterior
     let variacaoPercentual: number | null = null
     if (totalMesAnterior > 0) {
       variacaoPercentual = ((totalMesAtual - totalMesAnterior) / totalMesAnterior) * 100
@@ -382,25 +515,18 @@ export default function Dashboard() {
     }
   }, [selectedEmpresaId, lancamentosFinanceiros, planoContas, contasMap])
 
-  // Totais e Indicadores calculados
-  const calcB = calcularBalanco(balancoAtual)
-  const calcD = calcularDre(dreAtual)
-  const calcInd = calcularIndicadores(balancoAtual, dreAtual)
-
-  // Dados para Gráfico Composição do Ativo
+  // Gráficos Composição
   const dataComposicaoAtivo = [
     { name: 'Ativo Circulante', value: calcB.ativoCirculante, color: '#2563EB' },
     { name: 'Ativo Não Circulante', value: calcB.ativoNaoCirculante, color: '#0EA5E9' },
   ].filter((d) => d.value > 0)
 
-  // Dados para Gráfico Composição Passivo + PL
   const dataComposicaoPassivoPL = [
     { name: 'Passivo Circulante', value: calcB.passivoCirculante, color: '#F59E0B' },
     { name: 'Passivo Não Circulante', value: calcB.passivoNaoCirculante, color: '#8B5CF6' },
     { name: 'Patrimônio Líquido', value: calcB.patrimonioLiquido, color: '#10B981' },
   ].filter((d) => d.value > 0)
 
-  // Dados para Evolução do PL e Receita vs Lucro (últimos anos da empresa)
   const anosOrdenados = Array.from(new Set(balancos.map((b) => b.ano))).sort((a, b) => a - b)
 
   const dataEvolucaoPL = anosOrdenados.map((ano) => {
@@ -423,7 +549,6 @@ export default function Dashboard() {
     }
   })
 
-  // ---------- ALERTAS INTELIGENTES ----------
   interface AlertaItem {
     id: string
     titulo: string
@@ -437,12 +562,11 @@ export default function Dashboard() {
     const lista: AlertaItem[] = []
     const agora = new Date()
     const anoCorrente = agora.getFullYear()
-    const mesCorrente = agora.getMonth() // 0-11
+    const mesCorrente = agora.getMonth()
     const diaDoMes = agora.getDate()
     const diasNoMes = new Date(anoCorrente, mesCorrente + 1, 0).getDate()
     const diasRestantesMes = diasNoMes - diaDoMes
 
-    // 1. Centros de custo com menos de 50% da meta mensal atingida e faltando < 7 dias para o fim do mês
     if (diasRestantesMes < 7) {
       for (const c of centros) {
         const meta = c.meta_mensal ? Number(c.meta_mensal) || 0 : 0
@@ -468,7 +592,6 @@ export default function Dashboard() {
       }
     }
 
-    // 2. Centros de custo com menos de 60% da meta anual e já passados 9+ meses do ano
     if (mesCorrente + 1 >= 9) {
       for (const c of centros) {
         const metaAnual = c.meta_anual ? Number(c.meta_anual) || 0 : 0
@@ -494,7 +617,6 @@ export default function Dashboard() {
       }
     }
 
-    // 3. Empresas sem balanço lançado no ano corrente
     for (const emp of empresas) {
       const temBalancoAnoCorrente = allBalancos.some(
         (b) => b.empresa === emp.id && b.ano === anoCorrente,
@@ -511,7 +633,6 @@ export default function Dashboard() {
       }
     }
 
-    // 4. Liquidez Corrente < 0.8 (empresa/ano selecionados)
     if (calcInd.liquidezCorrente !== null && calcInd.liquidezCorrente < 0.8) {
       lista.push({
         id: 'liquidez-baixa',
@@ -527,11 +648,11 @@ export default function Dashboard() {
     }
 
     return lista
-  }, [lancamentosCentro, empresas, allBalancos, calcInd, selectedEmpresaId])
+  }, [lancamentosCentro, empresas, allBalancos, calcInd, selectedEmpresaId, centros])
 
   const alertasVisiveis = alertas.slice(0, 4)
 
-  // Lista de Últimos Balanços (todas as empresas ou empresa selecionada)
+  // Lista de Últimos Balanços
   const ultimosBalancosList = allBalancos.slice(0, 5).map((b) => {
     const emp = empresas.find((e) => e.id === b.empresa)
     const cb = calcularBalanco(b)
@@ -588,6 +709,17 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Modal Gerenciar Metas */}
+      <ModalGerenciarMetas
+        open={modalMetasOpen}
+        onOpenChange={setModalMetasOpen}
+        empresas={empresas}
+        metas={metas}
+        selectedEmpresaId={selectedEmpresaId}
+        selectedAno={selectedAno}
+        onMetaChanged={loadData}
+      />
+
       {/* Seção de Alertas Inteligentes */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -697,7 +829,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Grid de KPIs - 2 colunas mobile, 4 colunas desktop */}
+      {/* Grid de KPIs - 2 colunas mobile, 6 colunas desktop */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
         {/* Ativo Total */}
         <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
@@ -814,20 +946,12 @@ export default function Dashboard() {
             }`}
           >
             {calcInd.roe !== null ? (
-              <AnimatedCounter value={calcInd.roe} formatter={(v) => formatPercent(v, 1)} />
+              <AnimatedCounter value={calcInd.roe} formatter={(v) => formatPercent(v)} />
             ) : (
               '—'
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {calcInd.roe === null
-              ? 'Sem dados'
-              : calcInd.roe >= 10
-                ? 'Gera valor (>10%)'
-                : calcInd.roe >= 0
-                  ? 'Rentável'
-                  : 'Prejuízo patrimonial'}
-          </p>
+          <p className="text-[11px] text-slate-500 mt-1">Rentabilidade do capital</p>
         </Card>
 
         {/* Margem Líquida */}
@@ -836,7 +960,7 @@ export default function Dashboard() {
             <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
               Margem Líquida
             </span>
-            <span className="text-[10px] font-bold text-slate-500">LL / RL</span>
+            <span className="text-[10px] font-bold text-slate-500">LL / Rec</span>
           </div>
           <div
             className={`mt-2 text-xl sm:text-2xl font-bold tracking-tight ${
@@ -848,38 +972,181 @@ export default function Dashboard() {
             }`}
           >
             {calcInd.margemLiquida !== null ? (
-              <AnimatedCounter
-                value={calcInd.margemLiquida}
-                formatter={(v) => formatPercent(v, 1)}
-              />
+              <AnimatedCounter value={calcInd.margemLiquida} formatter={(v) => formatPercent(v)} />
             ) : (
               '—'
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {calcInd.margemLiquida === null
-              ? 'Sem dados'
-              : calcInd.margemLiquida >= 0
-                ? 'Margem positiva'
-                : 'Alerta de prejuízo'}
-          </p>
+          <p className="text-[11px] text-slate-500 mt-1">Eficiência operacional</p>
         </Card>
       </div>
 
+      {/* ========================================================================= */}
+      {/* SEÇÃO METAS DE LANÇAMENTOS (ABAIXO DOS KPIS E ANTES DOS GRÁFICOS) */}
+      {/* ========================================================================= */}
+      <Card className="bg-white border-slate-200 shadow-2xs">
+        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <Target className="w-4 h-4 text-blue-600" />
+              Metas de Lançamentos Mensais
+              {cardsMetasCalculados.length > 0 && (
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-semibold">
+                  {cardsMetasCalculados.length} ativa(s)
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Acompanhamento do valor realizado versus meta mensal estipulada com indicador visual
+              de atingimento (Verde ≥100%, Âmbar 70-99%, Vermelho &lt;70%)
+            </CardDescription>
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => setModalMetasOpen(true)}
+            className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold self-start sm:self-auto gap-1.5 shrink-0 shadow-xs"
+          >
+            <Target className="w-3.5 h-3.5" />
+            Gerenciar Metas
+          </Button>
+        </CardHeader>
+
+        <CardContent className="pt-4">
+          {cardsMetasCalculados.length === 0 ? (
+            <div className="py-8 flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-2">
+                <Target className="w-5 h-5" />
+              </div>
+              <p className="text-xs font-bold text-slate-700">Nenhuma meta ativa cadastrada</p>
+              <p className="text-[11px] text-slate-500 mt-0.5 max-w-sm mb-3">
+                Cadastre metas mensais de receitas ou despesas para acompanhar o progresso e
+                atingimento em tempo real.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setModalMetasOpen(true)}
+                variant="outline"
+                className="text-xs border-blue-200 text-blue-700 hover:bg-blue-50 font-semibold"
+              >
+                Definir Nova Meta
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {cardsMetasCalculados.map((m) => {
+                const corBadge =
+                  m.statusCor === 'green'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                    : m.statusCor === 'amber'
+                      ? 'bg-amber-50 text-amber-700 border-amber-300'
+                      : 'bg-red-50 text-red-700 border-red-300'
+
+                const corProgresso =
+                  m.statusCor === 'green'
+                    ? 'bg-emerald-500'
+                    : m.statusCor === 'amber'
+                      ? 'bg-amber-500'
+                      : 'bg-red-500'
+
+                const borderCard =
+                  m.statusCor === 'green'
+                    ? 'border-emerald-200 hover:border-emerald-300'
+                    : m.statusCor === 'amber'
+                      ? 'border-amber-200 hover:border-amber-300'
+                      : 'border-red-200 hover:border-red-300'
+
+                return (
+                  <div
+                    key={m.id}
+                    className={`p-3.5 rounded-xl bg-white border ${borderCard} shadow-2xs hover:shadow-md transition-all flex flex-col justify-between`}
+                  >
+                    <div>
+                      {/* Topo do Card da Meta */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p
+                            className="text-xs font-bold text-[#0B1F3A] truncate"
+                            title={m.empresaNome}
+                          >
+                            {m.empresaNome}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {m.mesNome}/{m.ano}
+                          </p>
+                        </div>
+
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] font-bold shrink-0 ${
+                            m.tipo === 'Receita'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-red-50 text-red-700 border-red-200'
+                          }`}
+                        >
+                          {m.tipo}
+                        </Badge>
+                      </div>
+
+                      {/* Valores: Meta vs Realizado */}
+                      <div className="mt-3 space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">Meta Estipulada:</span>
+                          <span className="font-bold text-slate-700">{formatBrlMil(m.valor)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-500">Realizado:</span>
+                          <span className="font-extrabold text-[#0B1F3A]">
+                            {formatBrlMil(m.realizado)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Barra de Progresso Visual */}
+                      <div className="mt-3">
+                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${corProgresso}`}
+                            style={{ width: `${Math.min(m.atingimentoPct, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Rodapé: % de Atingimento e Badge */}
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-slate-500">Atingimento:</span>
+                      <Badge className={`text-[11px] font-bold border px-2 py-0.5 ${corBadge}`}>
+                        {formatPercent(m.atingimentoPct, 1)}
+                      </Badge>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Gráficos de Composição e Evolução */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Composição do Ativo (Donut) */}
         <Card className="bg-white border-slate-200 shadow-2xs">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center justify-between">
-              <span>Composição do Ativo ({selectedAno})</span>
+              <span className="flex items-center gap-2">
+                <PieIcon className="w-4 h-4 text-blue-600" />
+                Composição do Ativo
+              </span>
               <span className="text-xs font-normal text-slate-500">
                 Total: {formatBrlMil(calcB.ativoTotal)}
               </span>
             </CardTitle>
             <CardDescription className="text-xs">
-              Distribuição entre Ativo Circulante (Curto Prazo) e Não Circulante (Longo
-              Prazo/Imobilizado)
+              Divisão entre Ativo Circulante (curto prazo) e Não Circulante (longo
+              prazo/imobilizado)
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
@@ -897,7 +1164,7 @@ export default function Dashboard() {
                       dataKey="value"
                     >
                       {dataComposicaoAtivo.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell key={`cell-a-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <RechartsTooltip
@@ -927,17 +1194,20 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Composição do Passivo + PL (Donut) */}
+        {/* Composição Passivo + PL (Donut) */}
         <Card className="bg-white border-slate-200 shadow-2xs">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center justify-between">
-              <span>Composição do Passivo + PL ({selectedAno})</span>
+              <span className="flex items-center gap-2">
+                <PieIcon className="w-4 h-4 text-blue-600" />
+                Estrutura de Capital (Passivo + PL)
+              </span>
               <span className="text-xs font-normal text-slate-500">
-                Total: {formatBrlMil(calcB.passivoEPL)}
+                Total: {formatBrlMil(calcB.passivoTotal + calcB.patrimonioLiquido)}
               </span>
             </CardTitle>
             <CardDescription className="text-xs">
-              Origem dos recursos: Passivo Circulante, Não Circulante e Patrimônio Líquido
+              Origem dos recursos: Terceiros (Circulante/Não Circulante) vs Próprios (PL)
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
@@ -965,7 +1235,7 @@ export default function Dashboard() {
                       verticalAlign="bottom"
                       height={36}
                       formatter={(val, entry: any) => {
-                        const total = calcB.passivoEPL || 1
+                        const total = calcB.passivoTotal + calcB.patrimonioLiquido || 1
                         const pct = ((entry.payload.value / total) * 100).toFixed(1)
                         return (
                           <span className="text-xs font-medium text-slate-700">
@@ -979,20 +1249,21 @@ export default function Dashboard() {
               </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-xs text-slate-400">
-                Sem dados de passivo para {selectedAno}
+                Sem dados de balanço para {selectedAno}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Evolução do Patrimônio Líquido (Área) */}
+        {/* Evolução Histórica do Patrimônio Líquido e Ativo */}
         <Card className="bg-white border-slate-200 shadow-2xs">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-              Evolução do Patrimônio Líquido vs Ativo
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
+              Evolução Patrimonial (Ativo e PL)
             </CardTitle>
             <CardDescription className="text-xs">
-              Crescimento do capital próprio e base de ativos ao longo dos anos
+              Crescimento do Ativo Total e Patrimônio Líquido ao longo dos exercícios
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
@@ -1004,13 +1275,13 @@ export default function Dashboard() {
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
                     <defs>
-                      <linearGradient id="colorPL" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
-                      </linearGradient>
                       <linearGradient id="colorAtivo" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2563EB" stopOpacity={0.3} />
+                        <stop offset="5%" stopColor="#2563EB" stopOpacity={0.2} />
                         <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorPL" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10B981" stopOpacity={0.2} />
+                        <stop offset="95%" stopColor="#10B981" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
@@ -1026,18 +1297,18 @@ export default function Dashboard() {
                       dataKey="ativo"
                       name="Ativo Total"
                       stroke="#2563EB"
-                      strokeWidth={2}
                       fillOpacity={1}
                       fill="url(#colorAtivo)"
+                      strokeWidth={2}
                     />
                     <Area
                       type="monotone"
                       dataKey="pl"
                       name="Patrimônio Líquido"
                       stroke="#10B981"
-                      strokeWidth={2}
                       fillOpacity={1}
                       fill="url(#colorPL)"
+                      strokeWidth={2}
                     />
                   </AreaChart>
                 </ResponsiveContainer>
@@ -1050,14 +1321,15 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Evolução Receita vs Lucro Líquido (Barras agrupadas) */}
+        {/* Receita Líquida vs Lucro Líquido (Histórico) */}
         <Card className="bg-white border-slate-200 shadow-2xs">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-              Evolução da Receita Líquida vs Lucro Líquido
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-blue-600" />
+              Receita Líquida vs Lucro Líquido
             </CardTitle>
             <CardDescription className="text-xs">
-              Desempenho operacional e conversão em lucro ao longo dos exercícios
+              Comparação anual do faturamento com o resultado final da operação (DRE)
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-2">
@@ -1162,7 +1434,7 @@ export default function Dashboard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* NOVA SEÇÃO: RESUMO DE LANÇAMENTOS POR EMPRESA (COMPARATIVO E GRÁFICO 6 MESES) */}
+      {/* SEÇÃO: RESUMO DE LANÇAMENTOS POR EMPRESA (COMPARATIVO E GRÁFICO 6 MESES) */}
       {/* ========================================================================= */}
       <Card className="bg-white border-slate-200 shadow-2xs">
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1199,7 +1471,6 @@ export default function Dashboard() {
 
         <CardContent className="pt-4 space-y-4">
           {!selectedEmpresaId || !resumoLancamentosEmpresa ? (
-            /* Estado Vazio Amigável se nenhuma empresa estiver selecionada */
             <div className="py-12 flex flex-col items-center justify-center text-center">
               <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
                 <Building2 className="w-6 h-6" />
@@ -1380,6 +1651,133 @@ export default function Dashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ========================================================================= */}
+      {/* SEÇÃO: COMPARATIVO ENTRE EMPRESAS (ABAIXO DE RESUMO DE LANÇAMENTOS) */}
+      {/* ========================================================================= */}
+      <Card className="bg-white border-slate-200 shadow-2xs">
+        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-blue-600" />
+              Comparativo entre Empresas
+              <Badge
+                variant="outline"
+                className="ml-1 bg-slate-50 text-slate-700 border-slate-200 text-[11px] font-semibold"
+              >
+                Mês Atual: {dadosComparativoEmpresas.nomeMesAtual}
+              </Badge>
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Comparação lado a lado do total de lançamentos de cada empresa no mês corrente com
+              cores distintas
+            </CardDescription>
+          </div>
+
+          <div className="text-left sm:text-right">
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">
+              Total Geral do Mês
+            </span>
+            <span className="text-sm font-bold text-[#0B1F3A]">
+              {formatBrlMil(dadosComparativoEmpresas.totalGeral)}
+            </span>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-4">
+          {empresas.length <= 1 ? (
+            <div className="py-10 flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-2">
+                <Building2 className="w-6 h-6" />
+              </div>
+              <h3 className="text-xs font-bold text-[#0B1F3A]">
+                Cadastre mais empresas para ver o comparativo
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1 max-w-sm mb-3">
+                O gráfico comparativo posiciona todas as empresas do usuário lado a lado no mês
+                atual. Adicione uma segunda empresa para comparar volumes.
+              </p>
+              <Button
+                asChild
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold"
+              >
+                <Link to="/empresas">Cadastrar Nova Empresa</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Gráfico de Barras Agrupadas com Recharts BarChart */}
+              <div className="h-72 w-full bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart
+                    data={dadosComparativoEmpresas.dados}
+                    margin={{ top: 15, right: 15, left: -10, bottom: 25 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="nomeCurto"
+                      tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
+                      interval={0}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#64748B' }}
+                      tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: any, _name: any, item: any) => [
+                        formatBrlMil(Number(val)),
+                        `Total (${item.payload.nome} - ${item.payload.segmento})`,
+                      ]}
+                      labelFormatter={(_label, payload) => {
+                        if (payload && payload[0]) {
+                          return `Empresa: ${payload[0].payload.nome}`
+                        }
+                        return ''
+                      }}
+                    />
+                    <Bar dataKey="total" name="Total Lançado (R$)" radius={[4, 4, 0, 0]}>
+                      {dadosComparativoEmpresas.dados.map((entry, index) => (
+                        <Cell key={`cell-comp-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Cards de Resumo por Empresa no Mês */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 pt-1">
+                {dadosComparativoEmpresas.dados.map((d) => (
+                  <div
+                    key={d.empresaId}
+                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: d.color }}
+                        />
+                        <p className="text-xs font-bold text-[#0B1F3A] truncate" title={d.nome}>
+                          {d.nome}
+                        </p>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 truncate">{d.segmento}</p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-extrabold text-slate-800">
+                        {formatBrlMil(d.total)}
+                      </p>
+                      <p className="text-[10px] text-slate-400">{d.qtd} lanç.</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

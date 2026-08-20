@@ -74,6 +74,7 @@ export default function Layout() {
     { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
     { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
     { name: 'Lançamentos', path: '/lancamentos', icon: FileText },
+    { name: 'Relatório Anual', path: '/relatorio-anual', icon: FileText },
     { name: 'Relatórios', path: '/relatorios', icon: FileText },
     { name: 'Importação', path: '/importacao', icon: Upload },
   ]
@@ -85,6 +86,7 @@ export default function Layout() {
   const showHeaderFilters =
     location.pathname === '/dashboard' ||
     location.pathname === '/relatorios' ||
+    location.pathname === '/relatorio-anual' ||
     location.pathname.startsWith('/empresas/')
 
   return (
@@ -326,6 +328,7 @@ export default function Layout() {
                 <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
                   {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
                   {location.pathname === '/relatorios' && 'Relatórios e Pareceres'}
+                  {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
                   {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
                 </h1>
                 <p className="text-xs text-[#5B6B7F]">
@@ -333,6 +336,8 @@ export default function Layout() {
                     'Visão consolidada de indicadores e evolução patrimonial'}
                   {location.pathname === '/relatorios' &&
                     'Gere relatórios executivos para impressão ou exportação'}
+                  {location.pathname === '/relatorio-anual' &&
+                    'Visão consolidada de 12 meses por tipo de conta com exportação CSV'}
                   {location.pathname.startsWith('/empresas/') &&
                     'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
                 </p>

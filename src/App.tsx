@@ -16,6 +16,7 @@ import Contas from './pages/Contas'
 import PlanoContas from './pages/PlanoContas'
 import Lancamentos from './pages/Lancamentos'
 import Relatorios from './pages/Relatorios'
+import RelatorioAnual from './pages/RelatorioAnual'
 import Importacao from './pages/Importacao'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
@@ -67,6 +68,7 @@ const App = () => (
               <Route path="/plano-contas" element={<PlanoContas />} />
               <Route path="/lancamentos" element={<Lancamentos />} />
               <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/relatorio-anual" element={<RelatorioAnual />} />
               <Route path="/importacao" element={<Importacao />} />
             </Route>
 
