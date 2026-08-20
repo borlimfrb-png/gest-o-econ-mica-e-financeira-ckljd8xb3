@@ -161,6 +161,30 @@ export interface PlanoContaRecord extends RecordModel {
   tipo_despesa?: string
   descricao?: string
   user: string
+  expand?: {
+    conta?: ContaRecord
+    centro?: CentroRecord
+    tipo_despesa?: TipoDespesaRecord
+  }
+}
+
+export interface LancamentoRecord extends RecordModel {
+  empresa: string
+  plano_conta: string
+  data: string
+  valor: number
+  historico?: string
+  user: string
+  expand?: {
+    empresa?: EmpresaRecord
+    plano_conta?: PlanoContaRecord & {
+      expand?: {
+        conta?: ContaRecord
+        centro?: CentroRecord
+        tipo_despesa?: TipoDespesaRecord
+      }
+    }
+  }
 }
 
 export interface BalancoCalculado {

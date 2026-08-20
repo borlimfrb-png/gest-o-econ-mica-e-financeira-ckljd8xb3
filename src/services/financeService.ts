@@ -9,6 +9,7 @@ import type {
   TipoCentro,
   ContaRecord,
   PlanoContaRecord,
+  LancamentoRecord,
 } from '@/types/finance'
 
 export const empresasService = {
@@ -369,5 +370,92 @@ export const planoContasService = {
 
   async delete(id: string): Promise<boolean> {
     return await pb.collection('plano_contas').delete(id)
+  },
+}
+
+export const lancamentosService = {
+  async getAll(options?: {
+    empresaId?: string
+    data?: string
+    expandRelations?: boolean
+  }): Promise<LancamentoRecord[]> {
+    const filters: string[] = []
+    if (options?.empresaId) {
+      filters.push(`empresa = '${options.empresaId}'`)
+    }
+    if (options?.data) {
+      // Normaliza se vier YYYY-MM-DD
+      const dateStr = options.data.slice(0, 10)
+      filters.push(`data >= '${dateStr} 00:00:00' && data <= '${dateStr} 23:59:59'`)
+    }
+
+    const queryParams: Record<string, unknown> = {
+      sort: '-created',
+    }
+    if (filters.length > 0) {
+      queryParams.filter = filters.join(' && ')
+    }
+    if (options?.expandRelations ?? true) {
+      queryParams.expand = 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa'
+    }
+
+    return await pb.collection('lancamentos').getFullList<LancamentoRecord>(queryParams)
+  },
+
+  async getById(id: string): Promise<LancamentoRecord> {
+    return await pb.collection('lancamentos').getOne<LancamentoRecord>(id, {
+      expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+    })
+  },
+
+  async create(data: {
+    empresa: string
+    plano_conta: string
+    data: string
+    valor: number
+    historico?: string
+  }): Promise<LancamentoRecord> {
+    const dateFormatted =
+      data.data.includes(' ') || data.data.includes('T') ? data.data : `${data.data} 12:00:00`
+
+    return await pb.collection('lancamentos').create<LancamentoRecord>(
+      {
+        empresa: data.empresa,
+        plano_conta: data.plano_conta,
+        data: dateFormatted,
+        valor: Number(data.valor) || 0,
+        historico: data.historico?.trim() || undefined,
+        user: currentUserId(),
+      } as any,
+      {
+        expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+      },
+    )
+  },
+
+  async update(
+    id: string,
+    data: Partial<
+      Pick<LancamentoRecord, 'empresa' | 'plano_conta' | 'data' | 'valor' | 'historico'>
+    >,
+  ): Promise<LancamentoRecord> {
+    const payload: Record<string, unknown> = { ...data }
+    if (data.historico !== undefined) {
+      payload.historico = data.historico.trim() || undefined
+    }
+    if (data.valor !== undefined) {
+      payload.valor = Number(data.valor) || 0
+    }
+    if (data.data !== undefined) {
+      payload.data =
+        data.data.includes(' ') || data.data.includes('T') ? data.data : `${data.data} 12:00:00`
+    }
+    return await pb.collection('lancamentos').update<LancamentoRecord>(id, payload, {
+      expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+    })
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('lancamentos').delete(id)
   },
 }

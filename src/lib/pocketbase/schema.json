@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T17:36:27.679Z",
+  "generatedAt": "2026-08-20T18:24:34.902Z",
   "collections": [
     {
       "name": "users",
@@ -829,6 +829,78 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_plano_contas_user ON plano_contas (user)"]
+    },
+    {
+      "name": "lancamentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && user = @request.auth.id",
+        "view": "@request.auth.id != \"\" && user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\" && user = @request.auth.id",
+        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "plano_conta",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "plano_contas"
+        },
+        {
+          "name": "data",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "historico",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_lancamentos_user ON lancamentos (user)",
+        "CREATE INDEX idx_lancamentos_empresa ON lancamentos (empresa)",
+        "CREATE INDEX idx_lancamentos_plano_conta ON lancamentos (plano_conta)",
+        "CREATE INDEX idx_lancamentos_data ON lancamentos (data)"
+      ]
     }
   ]
 }

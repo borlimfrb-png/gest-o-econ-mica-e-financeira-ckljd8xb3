@@ -73,6 +73,7 @@ export default function Layout() {
     { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
     { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
     { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
+    { name: 'Lançamentos', path: '/lancamentos', icon: FileText },
     { name: 'Relatórios', path: '/relatorios', icon: FileText },
     { name: 'Importação', path: '/importacao', icon: Upload },
   ]
