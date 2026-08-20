@@ -48,7 +48,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { FolderTree, Plus, Pencil, Trash2, AlertCircle, Search } from 'lucide-react'
+import {
+  FolderTree,
+  Plus,
+  Pencil,
+  Trash2,
+  AlertCircle,
+  Search,
+  Download,
+  Filter,
+} from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
@@ -110,8 +119,10 @@ export default function PlanoContas() {
   const [toDelete, setToDelete] = useState<PlanoContaRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Filtro
+  // Filtros
   const [busca, setBusca] = useState('')
+  const [filtroConta, setFiltroConta] = useState<string>('todos')
+  const [filtroCentro, setFiltroCentro] = useState<string>('todos')
 
   const loadData = async () => {
     try {
@@ -192,27 +203,99 @@ export default function PlanoContas() {
     return map
   }, [centros])
 
-  // Itens filtrados por busca (código, nome da conta, nome do centro)
+  // Itens filtrados por busca (código, nome da conta, nome do centro) e dropdowns
   const itensFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    if (!q) return itens
     return itens.filter((i) => {
+      // Filtro por Conta
+      if (filtroConta !== 'todos' && i.conta !== filtroConta) {
+        return false
+      }
+      // Filtro por Centro
+      if (filtroCentro !== 'todos' && i.centro !== filtroCentro) {
+        return false
+      }
+      // Filtro por Busca de Texto
+      if (!q) return true
+
       const codigo = (i.codigo || '').toLowerCase()
       const conta = contaMap.get(i.conta)
       const centro = centroMap.get(i.centro)
+      const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
       const nomeConta = (conta?.nome || '').toLowerCase()
       const codConta = (conta?.codigo || '').toLowerCase()
       const nomeCentro = (centro?.nome || '').toLowerCase()
       const codCentro = (centro?.codigo || '').toLowerCase()
+      const nomeTipo = (tipo?.nome || '').toLowerCase()
+      const codTipo = (tipo?.codigo || '').toLowerCase()
+      const desc = (i.descricao || '').toLowerCase()
+
       return (
         codigo.includes(q) ||
         nomeConta.includes(q) ||
         codConta.includes(q) ||
         nomeCentro.includes(q) ||
-        codCentro.includes(q)
+        codCentro.includes(q) ||
+        nomeTipo.includes(q) ||
+        codTipo.includes(q) ||
+        desc.includes(q)
       )
     })
-  }, [itens, busca, contaMap, centroMap])
+  }, [itens, busca, filtroConta, filtroCentro, contaMap, centroMap, tipoMap])
+
+  // Exportação CSV do Plano de Contas
+  const handleExportCsv = () => {
+    if (itensFiltrados.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nenhum dado para exportar',
+        description: 'Não há itens no plano de contas correspondentes aos filtros selecionados.',
+      })
+      return
+    }
+
+    const escapeCsv = (val: string | number | undefined | null): string => {
+      if (val === null || val === undefined) return ''
+      const s = String(val)
+      if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }
+
+    const colunas = ['Código', 'Conta', 'Centro', 'Tipo de Despesa', 'Descrição']
+
+    const linhas: string[] = []
+    linhas.push(colunas.map(escapeCsv).join(';'))
+
+    for (const item of itensFiltrados) {
+      const conta = contaMap.get(item.conta)
+      const centro = centroMap.get(item.centro)
+      const tipo = item.tipo_despesa ? tipoMap.get(item.tipo_despesa) : undefined
+
+      const codPlano = item.codigo || ''
+      const contaStr = conta ? `${conta.codigo || '—'} - ${conta.nome}` : ''
+      const centroStr = centro ? `${centro.codigo || '—'} - ${centro.nome}` : ''
+      const tipoStr = tipo ? `${tipo.codigo || '—'} - ${tipo.nome}` : ''
+      const descStr = item.descricao || ''
+
+      linhas.push([codPlano, contaStr, centroStr, tipoStr, descStr].map(escapeCsv).join(';'))
+    }
+
+    const csvContent = '\uFEFF' + linhas.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    const dataStr = new Date().toISOString().slice(0, 10)
+    link.setAttribute('download', `plano-de-contas-${dataStr}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+
+    toast({
+      title: 'CSV exportado com sucesso',
+      description: `Arquivo com ${itensFiltrados.length} item(ns) do plano de contas baixado.`,
+    })
+  }
 
   // Resumo para os cards
   const totalItens = itens.length
@@ -534,28 +617,128 @@ export default function PlanoContas() {
         {/* ============ COLUNA DIREITA: TABELA ============ */}
         <Card className="bg-white border-slate-200 shadow-xs">
           <CardHeader className="pb-3 border-b border-slate-100 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                Itens do Plano ({itensFiltrados.length}
-                {busca.trim() ? ` de ${itens.length}` : ''})
-              </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                  Itens do Plano ({itensFiltrados.length}
+                  {busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos'
+                    ? ` de ${itens.length}`
+                    : ''}
+                  )
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  {itens.length === 0
+                    ? 'Nenhum vínculo cadastrado ainda.'
+                    : `${itens.length} item(ns) no total.`}
+                </CardDescription>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportCsv}
+                disabled={itensFiltrados.length === 0}
+                className="h-8 text-xs border-slate-200 hover:border-blue-300 hover:text-blue-700 font-medium self-start sm:self-auto shrink-0 gap-1.5"
+                title="Exportar registros filtrados para arquivo CSV (formato brasileiro)"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                Exportar CSV
+              </Button>
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-              <div className="relative flex-1 sm:w-56">
+
+            {/* Linha de filtros: Busca + Filtro por Conta + Filtro por Centro */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <Input
-                  placeholder="Buscar por código, conta ou centro"
+                  placeholder="Buscar por código, conta, centro..."
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                   className="h-8 text-xs pl-8"
                 />
               </div>
+
+              {/* Filtro por Conta */}
+              <div className="relative">
+                <Select value={filtroConta} onValueChange={setFiltroConta}>
+                  <SelectTrigger className="h-8 text-xs bg-white">
+                    <SelectValue placeholder="Todas as contas" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="todos" className="text-xs font-medium">
+                      Todas as contas
+                    </SelectItem>
+                    {TIPOS_CONTA.map((tipo) => {
+                      const lista = contasPorTipo.get(tipo) || []
+                      if (lista.length === 0) return null
+                      return (
+                        <SelectGroup key={tipo}>
+                          <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            {tipo}
+                          </SelectLabel>
+                          {lista.map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="text-xs">
+                              {c.codigo || '—'} - {c.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Filtro por Centro */}
+              <div className="relative">
+                <Select value={filtroCentro} onValueChange={setFiltroCentro}>
+                  <SelectTrigger className="h-8 text-xs bg-white">
+                    <SelectValue placeholder="Todos os centros" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="todos" className="text-xs font-medium">
+                      Todos os centros
+                    </SelectItem>
+                    {TIPOS_CENTRO.map((tipo) => {
+                      const lista = centrosPorTipo.get(tipo) || []
+                      if (lista.length === 0) return null
+                      return (
+                        <SelectGroup key={tipo}>
+                          <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            {tipo}
+                          </SelectLabel>
+                          {lista.map((c) => (
+                            <SelectItem key={c.id} value={c.id} className="text-xs">
+                              {c.codigo || '—'} - {c.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <CardDescription className="text-xs">
-              {itens.length === 0
-                ? 'Nenhum vínculo cadastrado ainda.'
-                : `${itens.length} item(ns) no total.`}
-            </CardDescription>
+
+            {(busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos') && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Filter className="w-3 h-3 text-blue-600" />
+                  Filtros ativos: exibindo {itensFiltrados.length} de {itens.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusca('')
+                    setFiltroConta('todos')
+                    setFiltroCentro('todos')
+                  }}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                >
+                  Limpar filtros
+                </button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (

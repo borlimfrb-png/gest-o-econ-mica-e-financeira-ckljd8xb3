@@ -4,15 +4,19 @@ import { useFilter } from '@/contexts/FilterContext'
 import {
   balancosService,
   centrosService,
+  contasService,
   dreService,
   lancamentosCentroService,
+  planoContasService,
   tiposDespesaService,
 } from '@/services/financeService'
 import type {
   BalancoRecord,
   CentroRecord,
+  ContaRecord,
   DreRecord,
   LancamentoCentroRecord,
+  PlanoContaRecord,
   TipoDespesaRecord,
 } from '@/types/finance'
 import {
@@ -58,6 +62,9 @@ import {
   AlertTriangle,
   CalendarClock,
   Target,
+  FolderTree,
+  Check,
+  Tag,
 } from 'lucide-react'
 
 const CHART_COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
@@ -72,23 +79,29 @@ export default function Dashboard() {
   const [lancamentosCentro, setLancamentosCentro] = useState<LancamentoCentroRecord[]>([])
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
   const [centros, setCentros] = useState<CentroRecord[]>([])
+  const [contas, setContas] = useState<ContaRecord[]>([])
+  const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
   const loadData = async () => {
     try {
       setLoadingData(true)
-      const [allB, allD, allL, allTd, allC] = await Promise.all([
+      const [allB, allD, allL, allTd, allC, allContas, allPlano] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
         lancamentosCentroService.getAll(),
         tiposDespesaService.getAll(),
         centrosService.getAll(),
+        contasService.getAll(),
+        planoContasService.getAll(),
       ])
       setAllBalancos(allB)
       setDres(allD)
       setLancamentosCentro(allL)
       setTiposDespesa(allTd)
       setCentros(allC)
+      setContas(allContas)
+      setPlanoContas(allPlano)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -119,6 +132,12 @@ export default function Dashboard() {
   useRealtime<CentroRecord>('centros', () => {
     loadData()
   })
+  useRealtime<ContaRecord>('contas', () => {
+    loadData()
+  })
+  useRealtime<PlanoContaRecord>('plano_contas', () => {
+    loadData()
+  })
 
   // Distribuição de gastos por tipo de despesa (todos os lançamentos do usuário)
   const dataGastosPorTipo = useMemo(() => {
@@ -145,6 +164,68 @@ export default function Dashboard() {
   // Balanço e DRE do ano selecionado
   const balancoAtual = balancos.find((b) => b.ano === selectedAno)
   const dreAtual = dres.find((d) => d.empresa === selectedEmpresaId && d.ano === selectedAno)
+
+  // Mapas de lookup para Contas, Centros e Tipos de Despesa
+  const contasMap = useMemo(() => {
+    const map = new Map<string, ContaRecord>()
+    for (const c of contas) map.set(c.id, c)
+    return map
+  }, [contas])
+
+  const centrosMap = useMemo(() => {
+    const map = new Map<string, CentroRecord>()
+    for (const c of centros) map.set(c.id, c)
+    return map
+  }, [centros])
+
+  const tiposMap = useMemo(() => {
+    const map = new Map<string, TipoDespesaRecord>()
+    for (const t of tiposDespesa) map.set(t.id, t)
+    return map
+  }, [tiposDespesa])
+
+  // Contas vinculadas ao balanço do exercício selecionado (se houver mapeamento vinculos_contas)
+  const contasVinculadasBalançoIds = useMemo(() => {
+    if (!balancoAtual?.vinculos_contas) return null
+    const ids = Object.values(balancoAtual.vinculos_contas).filter(Boolean) as string[]
+    return ids.length > 0 ? new Set(ids) : null
+  }, [balancoAtual])
+
+  // Lista de itens do plano de contas para a Matriz
+  // Se o balanço atual possui contas vinculadas, prioriza/filtra por elas; caso contrário usa todas do plano
+  const matrizPlanoItens = useMemo(() => {
+    if (!contasVinculadasBalançoIds) return planoContas
+    const filtrados = planoContas.filter((p) => contasVinculadasBalançoIds.has(p.conta))
+    return filtrados.length > 0 ? filtrados : planoContas
+  }, [planoContas, contasVinculadasBalançoIds])
+
+  // Contas presentes na matriz (ordenadas por código)
+  const matrizContas = useMemo(() => {
+    const contasIds = Array.from(new Set(matrizPlanoItens.map((p) => p.conta)))
+    const lista = contasIds
+      .map((id) => contasMap.get(id))
+      .filter((c): c is ContaRecord => Boolean(c))
+    return lista.sort((a, b) => (a.codigo || '').localeCompare(b.codigo || ''))
+  }, [matrizPlanoItens, contasMap])
+
+  // Centros presentes no sistema (ordenados por código/nome)
+  const matrizCentros = useMemo(() => {
+    return [...centros].sort((a, b) => {
+      const codA = a.codigo || ''
+      const codB = b.codigo || ''
+      if (codA && codB) return codA.localeCompare(codB)
+      return a.nome.localeCompare(b.nome)
+    })
+  }, [centros])
+
+  // Lookup de vínculos: chave `${contaId}_${centroId}` -> PlanoContaRecord
+  const vinculosMatrizMap = useMemo(() => {
+    const map = new Map<string, PlanoContaRecord>()
+    for (const item of matrizPlanoItens) {
+      map.set(`${item.conta}_${item.centro}`, item)
+    }
+    return map
+  }, [matrizPlanoItens])
 
   // Totais e Indicadores calculados
   const calcB = calcularBalanco(balancoAtual)
@@ -924,6 +1005,255 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Seção Matriz Plano de Contas */}
+      <Card className="bg-white border-slate-200 shadow-2xs">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div>
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <FolderTree className="w-4 h-4 text-blue-600" />
+              Matriz Plano de Contas
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Mapeamento visual dos vínculos entre Contas (CO-xxx) e Centros de Custo (CC-xxx)
+              {selectedEmpresa ? ` · ${selectedEmpresa.nome} (${selectedAno})` : ''}
+            </CardDescription>
+          </div>
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium gap-1 shrink-0"
+          >
+            <Link to="/plano-contas">
+              Gerenciar Plano <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {matrizPlanoItens.length === 0 ||
+          matrizContas.length === 0 ||
+          matrizCentros.length === 0 ? (
+            <div className="py-12 flex flex-col items-center justify-center text-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
+                <FolderTree className="w-6 h-6 text-slate-400" />
+              </div>
+              <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhum vínculo cadastrado</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mb-4">
+                Não há dados cadastrados no Plano de Contas para compor a matriz de vínculos.
+              </p>
+              <Button
+                asChild
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs"
+              >
+                <Link to="/plano-contas">Cadastrar Vínculos no Plano de Contas</Link>
+              </Button>
+            </div>
+          ) : (
+            <div>
+              {/* Legenda e Totalizadores */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pb-3 text-xs text-slate-600">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 font-bold text-[10px]">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </span>
+                    <span className="font-medium text-slate-700">Vínculo Ativo</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-5 h-5 rounded bg-slate-100 border border-slate-200 text-slate-400" />
+                    <span className="text-slate-500">Sem Vínculo</span>
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-500 font-medium">
+                  {matrizContas.length} conta(s) · {matrizCentros.length} centro(s) ·{' '}
+                  {matrizPlanoItens.length} vínculo(s)
+                </div>
+              </div>
+
+              {/* Visualização Desktop: Grid / Tabela da Matriz */}
+              <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="py-2.5 px-3 font-bold text-[#0B1F3A] sticky left-0 bg-slate-50 z-10 min-w-[220px] shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                        Conta
+                      </th>
+                      {matrizCentros.map((centro) => (
+                        <th
+                          key={centro.id}
+                          className="py-2.5 px-3 font-semibold text-slate-700 text-center min-w-[120px]"
+                          title={`${centro.codigo || '—'} - ${centro.nome} (${centro.tipo})`}
+                        >
+                          <div className="flex flex-col items-center">
+                            <span className="font-mono text-[11px] text-blue-700 font-bold">
+                              {centro.codigo || '—'}
+                            </span>
+                            <span className="text-[11px] text-slate-700 truncate max-w-[110px] font-medium">
+                              {centro.nome}
+                            </span>
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {matrizContas.map((conta) => (
+                      <tr key={conta.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-2.5 px-3 sticky left-0 bg-white z-10 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.06)]">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-slate-800 text-[11px]">
+                                {conta.codigo || '—'}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1 py-0 border-slate-200 text-slate-500 font-normal"
+                              >
+                                {conta.tipo}
+                              </Badge>
+                            </div>
+                            <span
+                              className="text-xs text-slate-700 font-medium truncate max-w-[210px]"
+                              title={conta.nome}
+                            >
+                              {conta.nome}
+                            </span>
+                          </div>
+                        </td>
+                        {matrizCentros.map((centro) => {
+                          const vinculo = vinculosMatrizMap.get(`${conta.id}_${centro.id}`)
+                          const tipoDespesa = vinculo?.tipo_despesa
+                            ? tiposMap.get(vinculo.tipo_despesa)
+                            : undefined
+
+                          return (
+                            <td key={centro.id} className="py-2.5 px-3 text-center align-middle">
+                              {vinculo ? (
+                                <div
+                                  className="inline-flex flex-col items-center justify-center p-1 rounded-md bg-emerald-50/90 border border-emerald-200 hover:bg-emerald-100 transition-colors group cursor-default"
+                                  title={`Vínculo: ${vinculo.codigo || 'PC'} | ${conta.nome} ↔ ${centro.nome}${
+                                    tipoDespesa ? ` (${tipoDespesa.nome})` : ''
+                                  }${vinculo.descricao ? ` - ${vinculo.descricao}` : ''}`}
+                                >
+                                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-600 text-white shadow-xs">
+                                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                  </span>
+                                  {vinculo.codigo && (
+                                    <span className="text-[9px] font-mono font-semibold text-emerald-800 mt-0.5">
+                                      {vinculo.codigo}
+                                    </span>
+                                  )}
+                                  {tipoDespesa && (
+                                    <span
+                                      className="text-[9px] text-slate-600 truncate max-w-[90px] mt-0.5 px-1 py-0.2 bg-white rounded border border-emerald-200/60"
+                                      title={tipoDespesa.nome}
+                                    >
+                                      {tipoDespesa.codigo || tipoDespesa.nome}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="inline-flex items-center justify-center w-6 h-6 rounded bg-slate-100/70 border border-slate-200/60 text-slate-300">
+                                  <span className="text-xs">·</span>
+                                </div>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Visualização Mobile: Lista Agrupada por Conta */}
+              <div className="md:hidden space-y-3">
+                {matrizContas.map((conta) => {
+                  const vinculosConta = matrizCentros
+                    .map((centro) => ({
+                      centro,
+                      vinculo: vinculosMatrizMap.get(`${conta.id}_${centro.id}`),
+                    }))
+                    .filter((item) => Boolean(item.vinculo))
+
+                  return (
+                    <div
+                      key={conta.id}
+                      className="p-3 bg-slate-50/70 rounded-xl border border-slate-200 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-blue-700 text-xs">
+                            {conta.codigo || '—'}
+                          </span>
+                          <span className="font-semibold text-slate-800 text-xs truncate max-w-[180px]">
+                            {conta.nome}
+                          </span>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1.5 py-0 border-slate-200 text-slate-600"
+                        >
+                          {conta.tipo}
+                        </Badge>
+                      </div>
+
+                      {vinculosConta.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 italic">
+                          Nenhum centro vinculado a esta conta.
+                        </p>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                          {vinculosConta.map(({ centro, vinculo }) => {
+                            if (!vinculo) return null
+                            const tipoDespesa = vinculo.tipo_despesa
+                              ? tiposMap.get(vinculo.tipo_despesa)
+                              : undefined
+
+                            return (
+                              <div
+                                key={centro.id}
+                                className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-xs shadow-2xs"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white shrink-0">
+                                    <Check className="w-3 h-3 stroke-[3]" />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <p className="font-semibold text-slate-800 truncate text-[11px]">
+                                      <span className="font-mono text-blue-700 mr-1">
+                                        {centro.codigo || '—'}
+                                      </span>
+                                      {centro.nome}
+                                    </p>
+                                    {tipoDespesa && (
+                                      <p className="text-[10px] text-slate-500 truncate flex items-center gap-1">
+                                        <Tag className="w-2.5 h-2.5 text-slate-400" />
+                                        {tipoDespesa.codigo || '—'} · {tipoDespesa.nome}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                {vinculo.codigo && (
+                                  <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-mono px-1.5 py-0 shrink-0">
+                                    {vinculo.codigo}
+                                  </Badge>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Tabela de Últimos Balanços Lançados */}
       <Card className="bg-white border-slate-200 shadow-2xs">
