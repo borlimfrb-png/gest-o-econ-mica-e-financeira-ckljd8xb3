@@ -330,6 +330,7 @@ export const planoContasService = {
   async getAll(): Promise<PlanoContaRecord[]> {
     return await pb.collection('plano_contas').getFullList<PlanoContaRecord>({
       sort: 'codigo',
+      expand: 'conta,centro,tipo_despesa',
     })
   },
 
