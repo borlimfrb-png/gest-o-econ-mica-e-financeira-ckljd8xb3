@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21T19:49:08.104Z",
+  "generatedAt": "2026-08-21T20:58:12.869Z",
   "collections": [
     {
       "name": "users",
@@ -1151,6 +1151,324 @@
       "indexes": [
         "CREATE INDEX idx_alertas_meta_data ON alertas_enviados (meta, data_envio)",
         "CREATE INDEX idx_alertas_user ON alertas_enviados (user)"
+      ]
+    },
+    {
+      "name": "minha_empresa",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "razao_social",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_fantasia",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cnpj",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "inscricao_estadual",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inscricao_municipal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regime_tributario",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Simples Nacional", "Lucro Presumido", "Lucro Real", "MEI"]
+        },
+        {
+          "name": "data_abertura",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "porte",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "MEI",
+            "Micro Empresa",
+            "Empresa de Pequeno Porte",
+            "Média Empresa",
+            "Grande Empresa"
+          ]
+        },
+        {
+          "name": "cep",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "logradouro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "complemento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bairro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estado",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "AC",
+            "AL",
+            "AP",
+            "AM",
+            "BA",
+            "CE",
+            "DF",
+            "ES",
+            "GO",
+            "MA",
+            "MT",
+            "MS",
+            "MG",
+            "PA",
+            "PB",
+            "PR",
+            "PE",
+            "PI",
+            "RJ",
+            "RN",
+            "RS",
+            "RO",
+            "RR",
+            "SC",
+            "SP",
+            "SE",
+            "TO"
+          ]
+        },
+        {
+          "name": "pais",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone_comercial",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "celular_whatsapp",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email_comercial",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email_financeiro",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "site",
+          "type": "url",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contador_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "contador_crc",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "contador_uf_crc",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "AC",
+            "AL",
+            "AP",
+            "AM",
+            "BA",
+            "CE",
+            "DF",
+            "ES",
+            "GO",
+            "MA",
+            "MT",
+            "MS",
+            "MG",
+            "PA",
+            "PB",
+            "PR",
+            "PE",
+            "PI",
+            "RJ",
+            "RN",
+            "RS",
+            "RO",
+            "RR",
+            "SC",
+            "SP",
+            "SE",
+            "TO"
+          ]
+        },
+        {
+          "name": "contador_email",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contador_telefone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "logo",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cor_primaria",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cor_secundaria",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "banco",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Banco do Brasil",
+            "Itaú",
+            "Bradesco",
+            "Santander",
+            "Caixa Econômica",
+            "Nubank",
+            "Inter",
+            "Sicoob",
+            "Sicredi",
+            "BTG Pactual",
+            "C6 Bank",
+            "Safra",
+            "Original",
+            "Outro"
+          ]
+        },
+        {
+          "name": "agencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta_corrente",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chave_pix",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_minha_empresa_user ON minha_empresa (user)",
+        "CREATE INDEX idx_minha_empresa_cnpj ON minha_empresa (cnpj)"
       ]
     }
   ]

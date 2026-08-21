@@ -20,6 +20,7 @@ import RelatorioAnual from './pages/RelatorioAnual'
 import Importacao from './pages/Importacao'
 import Configuracoes from './pages/Configuracoes'
 import DashboardEmpresa from './pages/DashboardEmpresa'
+import MinhaEmpresa from './pages/MinhaEmpresa'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -69,6 +70,7 @@ const App = () => (
               <Route path="/tipos-despesas" element={<TiposDespesas />} />
               <Route path="/contas" element={<Contas />} />
               <Route path="/plano-contas" element={<PlanoContas />} />
+              <Route path="/minha-empresa" element={<MinhaEmpresa />} />
               <Route path="/lancamentos" element={<Lancamentos />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/relatorio-anual" element={<RelatorioAnual />} />

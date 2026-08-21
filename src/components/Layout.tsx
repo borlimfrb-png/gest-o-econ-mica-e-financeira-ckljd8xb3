@@ -56,6 +56,7 @@ export default function Layout() {
     { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
     { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
     { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
+    { name: 'Minha Empresa', path: '/minha-empresa', icon: Building },
   ]
 
   const isCadastroActive =
@@ -63,7 +64,8 @@ export default function Layout() {
     location.pathname.startsWith('/centros') ||
     location.pathname.startsWith('/tipos-despesas') ||
     location.pathname.startsWith('/contas') ||
-    location.pathname.startsWith('/plano-contas')
+    location.pathname.startsWith('/plano-contas') ||
+    location.pathname === '/minha-empresa'
 
   // Grupo "Cadastros" expansível/colapsável
   // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente

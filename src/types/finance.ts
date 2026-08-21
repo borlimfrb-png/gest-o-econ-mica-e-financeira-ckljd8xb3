@@ -249,6 +249,57 @@ export interface DreCalculado {
   ebitda: number
 }
 
+export type RegimeTributario = 'Simples Nacional' | 'Lucro Presumido' | 'Lucro Real' | 'MEI'
+export type PorteMinhaEmpresa =
+  | 'MEI'
+  | 'Micro Empresa'
+  | 'Empresa de Pequeno Porte'
+  | 'Média Empresa'
+  | 'Grande Empresa'
+
+export interface MinhaEmpresaRecord extends RecordModel {
+  user: string
+  // Seção 1 — Dados da Empresa
+  razao_social: string
+  nome_fantasia: string
+  cnpj: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
+  regime_tributario?: RegimeTributario
+  data_abertura?: string
+  porte?: PorteMinhaEmpresa
+  // Seção 2 — Endereço
+  cep?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  cidade?: string
+  estado?: UfEmpresa
+  pais?: string
+  // Seção 3 — Contato
+  telefone_comercial?: string
+  celular_whatsapp?: string
+  email_comercial?: string
+  email_financeiro?: string
+  site?: string
+  // Seção 4 — Responsável Técnico
+  contador_nome: string
+  contador_crc: string
+  contador_uf_crc?: UfEmpresa
+  contador_email?: string
+  contador_telefone?: string
+  // Seção 5 — Identidade Visual
+  logo?: string
+  cor_primaria?: string
+  cor_secundaria?: string
+  // Seção 6 — Dados Bancários
+  banco?: string
+  agencia?: string
+  conta_corrente?: string
+  chave_pix?: string
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null
