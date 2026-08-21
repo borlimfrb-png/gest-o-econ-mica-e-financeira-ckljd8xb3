@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import {
   empresasService,
   lancamentosService,
@@ -112,6 +113,7 @@ export default function RelatorioAnual() {
     anosDisponiveis,
     selectedEmpresa,
   } = useFilter()
+  const { minhaEmpresa, logoUrl, corPrimaria } = useMinhaEmpresa()
   const { toast } = useToast()
 
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
@@ -530,25 +532,46 @@ export default function RelatorioAnual() {
           {/* Banner de Identificação */}
           <div className="bg-white border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
-                <FileSpreadsheet className="w-5 h-5" />
-              </div>
+              {logoUrl ? (
+                <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-200 p-1 flex items-center justify-center shadow-xs overflow-hidden shrink-0">
+                  <img
+                    src={logoUrl}
+                    alt={minhaEmpresa?.nome_fantasia || 'Logotipo'}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                </div>
+              ) : (
+                <div
+                  className="w-10 h-10 rounded-xl text-white flex items-center justify-center shrink-0 shadow-xs"
+                  style={{ backgroundColor: corPrimaria }}
+                >
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+              )}
               <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-bold text-[#0B1F3A]">{selectedEmpresa.nome}</h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base font-bold" style={{ color: corPrimaria }}>
+                    {selectedEmpresa.nome}
+                  </h2>
                   <Badge
-                    variant="secondary"
-                    className="text-[11px] font-semibold bg-blue-50 text-blue-700 border-blue-200"
+                    variant="outline"
+                    className="text-[10px] bg-slate-50 text-slate-700 border-slate-200"
                   >
                     {selectedEmpresa.segmento}
                   </Badge>
+                  {minhaEmpresa?.nome_fantasia && (
+                    <Badge className="text-[10px] bg-blue-50 text-blue-800 border-blue-200">
+                      Emitido por: {minhaEmpresa.nome_fantasia}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-xs text-slate-500">
-                  CNPJ: {formatCnpj(selectedEmpresa.cnpj)} · Exercício de Referência:{' '}
+                  CNPJ Cliente: {formatCnpj(selectedEmpresa.cnpj)} · Exercício de Referência:{' '}
                   <span className="font-semibold text-slate-700">{selectedAno}</span> · Total de
                   Lançamentos: <strong>{dadosConsolidados.qtdLancamentos}</strong>
+                  {minhaEmpresa?.razao_social && ` · Consultoria: ${minhaEmpresa.razao_social}`}
                 </p>
-              </div>
+              </div>{' '}
             </div>
 
             <div className="text-right sm:border-l sm:border-slate-200 sm:pl-4">

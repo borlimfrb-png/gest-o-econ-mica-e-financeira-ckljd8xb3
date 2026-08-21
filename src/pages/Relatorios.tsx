@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { balancosService, dreService } from '@/services/financeService'
 import type { BalancoRecord, DreRecord } from '@/types/finance'
 import {
@@ -8,6 +9,7 @@ import {
   calcularIndicadores,
   gerarAnaliseAutomatica,
   formatBrlMil,
+  formatCurrency,
   formatNumber,
   formatPercent,
   formatCnpj,
@@ -16,6 +18,9 @@ import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Select,
   SelectContent,
@@ -34,10 +39,18 @@ import {
   AlertCircle,
   CheckCircle2,
   AlertTriangle,
+  Receipt,
+  Landmark,
+  QrCode,
+  DollarSign,
+  User,
+  Hash,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
-type TipoRelatorio = 'completo' | 'balanco' | 'dre' | 'indicadores'
+type TipoRelatorio = 'completo' | 'balanco' | 'dre' | 'indicadores' | 'recibo'
 
 export default function Relatorios() {
   const {
@@ -49,12 +62,50 @@ export default function Relatorios() {
     anosDisponiveis,
     selectedEmpresa,
   } = useFilter()
+  const { minhaEmpresa, logoUrl, corPrimaria, corSecundaria } = useMinhaEmpresa()
   const { toast } = useToast()
 
   const [tipoRelatorio, setTipoRelatorio] = useState<TipoRelatorio>('completo')
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [loading, setLoading] = useState(false)
+
+  // Estado do Recibo
+  const [reciboNumero, setReciboNumero] = useState<string>(() => {
+    const saved = localStorage.getItem('last_recibo_num')
+    const next = saved ? parseInt(saved, 10) + 1 : 1001
+    return String(next)
+  })
+  const [reciboClienteId, setReciboClienteId] = useState<string>(selectedEmpresaId || '')
+  const [reciboValor, setReciboValor] = useState<number>(3500)
+  const [reciboData, setReciboData] = useState<string>(() => {
+    return new Date().toISOString().slice(0, 10)
+  })
+  const [reciboDescricao, setReciboDescricao] = useState<string>(
+    'Prestação de serviços de consultoria contábil, análise de balanço patrimonial, diagnóstico econômico-financeiro e parecer gerencial referente ao exercício corrente.',
+  )
+
+  // Sincroniza o cliente selecionado quando muda no filtro
+  useEffect(() => {
+    if (selectedEmpresaId) {
+      setReciboClienteId(selectedEmpresaId)
+    }
+  }, [selectedEmpresaId])
+
+  const reciboCliente = useMemo(() => {
+    return empresas.find((e) => e.id === reciboClienteId) || selectedEmpresa
+  }, [empresas, reciboClienteId, selectedEmpresa])
+
+  // Gerar novo número sequencial de recibo
+  const handleGerarNovoNumero = () => {
+    const next = parseInt(reciboNumero || '1000', 10) + 1
+    setReciboNumero(String(next))
+    localStorage.setItem('last_recibo_num', String(next))
+    toast({
+      title: 'Novo número gerado',
+      description: `Recibo sequencial: #${next}`,
+    })
+  }
 
   const loadRelatorioData = async () => {
     if (!selectedEmpresaId) return
@@ -209,7 +260,7 @@ export default function Relatorios() {
               value={tipoRelatorio}
               onValueChange={(val) => setTipoRelatorio(val as TipoRelatorio)}
             >
-              <SelectTrigger className="h-8 text-xs font-semibold bg-slate-50 border-slate-200 w-[200px]">
+              <SelectTrigger className="h-8 text-xs font-semibold bg-slate-50 border-slate-200 w-[220px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -225,32 +276,53 @@ export default function Relatorios() {
                 <SelectItem value="indicadores" className="text-xs">
                   Painel de Indicadores
                 </SelectItem>
+                <SelectItem value="recibo" className="text-xs font-semibold text-blue-700">
+                  📄 Recibo de Prestação de Serviços
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
         </div>
 
         {/* Botões de Ação */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
-            asChild
-            variant="outline"
-            className="h-9 text-xs font-semibold border-blue-200 hover:bg-blue-50 text-blue-700"
+            type="button"
+            variant={tipoRelatorio === 'recibo' ? 'default' : 'outline'}
+            onClick={() => setTipoRelatorio('recibo')}
+            className={`h-9 text-xs font-semibold ${
+              tipoRelatorio === 'recibo'
+                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                : 'border-blue-200 hover:bg-blue-50 text-blue-700'
+            }`}
           >
-            <Link to="/relatorio-anual">
-              <FileText className="w-4 h-4 mr-1.5" />
-              Ver Relatório Anual (12 Meses)
-            </Link>
+            <Receipt className="w-4 h-4 mr-1.5" />
+            Recibos
           </Button>
 
-          <Button
-            onClick={handleExportCsv}
-            variant="outline"
-            className="h-9 text-xs font-semibold border-slate-200 hover:bg-slate-50 text-slate-700"
-          >
-            <Download className="w-4 h-4 mr-1.5" />
-            Exportar CSV
-          </Button>
+          {tipoRelatorio !== 'recibo' && (
+            <Button
+              asChild
+              variant="outline"
+              className="h-9 text-xs font-semibold border-blue-200 hover:bg-blue-50 text-blue-700"
+            >
+              <Link to="/relatorio-anual">
+                <FileText className="w-4 h-4 mr-1.5" />
+                Ver Relatório Anual (12 Meses)
+              </Link>
+            </Button>
+          )}
+
+          {tipoRelatorio !== 'recibo' && (
+            <Button
+              onClick={handleExportCsv}
+              variant="outline"
+              className="h-9 text-xs font-semibold border-slate-200 hover:bg-slate-50 text-slate-700"
+            >
+              <Download className="w-4 h-4 mr-1.5" />
+              Exportar CSV
+            </Button>
+          )}
 
           <Button
             onClick={handlePrint}
@@ -262,8 +334,127 @@ export default function Relatorios() {
         </div>
       </div>
 
+      {/* Painel de Edição Rápida do Recibo (Aparece somente quando tipoRelatorio === 'recibo' e oculto na impressão) */}
+      {tipoRelatorio === 'recibo' && (
+        <Card className="print:hidden border-slate-200 bg-white shadow-2xs animate-fadeIn">
+          <CardHeader className="pb-3 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <Receipt className="w-4 h-4 text-blue-600" />
+                  Configurar Dados do Recibo / Cobrança
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Preencha os campos abaixo. As alterações atualizam a folha A4 em tempo real.
+                </CardDescription>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleGerarNovoNumero}
+                  className="h-8 text-xs gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                  Próximo Nº Sequencial
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs text-blue-700 border-blue-200"
+                >
+                  <Link to="/minha-empresa">
+                    <Landmark className="w-3.5 h-3.5 mr-1" />
+                    Editar Dados Bancários
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Cliente */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Cliente (Empresa)</Label>
+                <Select value={reciboClienteId} onValueChange={setReciboClienteId}>
+                  <SelectTrigger className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione o cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                        {emp.nome} ({formatCnpj(emp.cnpj)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Valor */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Valor do Serviço (R$)
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs text-slate-400 font-semibold">
+                    R$
+                  </span>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={reciboValor}
+                    onChange={(e) => setReciboValor(parseFloat(e.target.value) || 0)}
+                    className="h-9 text-xs pl-9 font-semibold"
+                  />
+                </div>
+              </div>
+
+              {/* Data */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Data de Emissão</Label>
+                <Input
+                  type="date"
+                  value={reciboData}
+                  onChange={(e) => setReciboData(e.target.value)}
+                  className="h-9 text-xs"
+                />
+              </div>
+
+              {/* Número Recibo */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Nº do Recibo</Label>
+                <Input
+                  value={reciboNumero}
+                  onChange={(e) => setReciboNumero(e.target.value)}
+                  placeholder="Ex: 00102"
+                  className="h-9 text-xs font-mono font-bold"
+                />
+              </div>
+
+              {/* Descrição dos Serviços */}
+              <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Descrição dos Serviços Prestados
+                </Label>
+                <Textarea
+                  value={reciboDescricao}
+                  onChange={(e) => setReciboDescricao(e.target.value)}
+                  rows={2}
+                  className="text-xs resize-none"
+                  placeholder="Descreva detalhadamente os serviços prestados..."
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Aviso quando o ano anterior não existir (Oculto na impressão se desejar) */}
-      {!hasAnoAnterior && (
+      {!hasAnoAnterior && tipoRelatorio !== 'recibo' && (
         <div className="print:hidden bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 flex items-center gap-2.5">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
           <span>
@@ -279,18 +470,46 @@ export default function Relatorios() {
       ========================================================================= */}
       <div className="bg-white border border-slate-200 print:border-none shadow-md print:shadow-none rounded-2xl print:rounded-none max-w-[210mm] mx-auto p-8 sm:p-12 print:p-0 min-h-[297mm] text-slate-900">
         {/* Cabeçalho Corporativo Relatório */}
-        <div className="border-b-2 border-[#0B1F3A] pb-5 mb-6 flex items-start justify-between">
+        <div
+          className="border-b-2 pb-5 mb-6 flex items-start justify-between"
+          style={{ borderColor: corPrimaria }}
+        >
           <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-[#0B1F3A] text-white flex items-center justify-center font-bold">
-              <Scale className="w-6 h-6" />
-            </div>
+            {logoUrl ? (
+              <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 p-1 flex items-center justify-center shadow-xs overflow-hidden">
+                <img
+                  src={logoUrl}
+                  alt={minhaEmpresa?.nome_fantasia || 'Logotipo'}
+                  className="max-w-full max-h-full object-contain"
+                />
+              </div>
+            ) : (
+              <div
+                className="w-11 h-11 rounded-xl text-white flex items-center justify-center font-bold shadow-xs"
+                style={{ backgroundColor: corPrimaria }}
+              >
+                <Scale className="w-6 h-6" />
+              </div>
+            )}
             <div>
-              <span className="font-extrabold text-base tracking-tight text-[#0B1F3A] block">
-                Analise de Balanço
+              <span
+                className="font-extrabold text-base tracking-tight block"
+                style={{ color: corPrimaria }}
+              >
+                {minhaEmpresa?.razao_social || minhaEmpresa?.nome_fantasia || 'Analise de Balanço'}
               </span>
               <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold block">
-                Consultoria Financeira Corporativa
+                {minhaEmpresa?.nome_fantasia && minhaEmpresa?.razao_social
+                  ? `${minhaEmpresa.nome_fantasia} · Consultoria Financeira & Contábil`
+                  : 'Consultoria Financeira Corporativa'}
               </span>
+              {minhaEmpresa?.cnpj && (
+                <span className="text-[10px] text-slate-400 font-mono block">
+                  CNPJ: {formatCnpj(minhaEmpresa.cnpj)}
+                  {minhaEmpresa?.contador_nome &&
+                    ` · CRC Resp: ${minhaEmpresa.contador_nome} (${minhaEmpresa.contador_crc})`}
+                </span>
+              )}
             </div>
           </div>
 
@@ -300,34 +519,297 @@ export default function Relatorios() {
               {tipoRelatorio === 'balanco' && 'Balanço Patrimonial'}
               {tipoRelatorio === 'dre' && 'Demonstrativo de Resultado'}
               {tipoRelatorio === 'indicadores' && 'Painel de Indicadores'}
+              {tipoRelatorio === 'recibo' && `Recibo Oficial #${reciboNumero}`}
             </Badge>
             <p className="text-[11px] text-slate-500">
-              Emissão: {new Date().toLocaleDateString('pt-BR')}
+              Emissão:{' '}
+              {tipoRelatorio === 'recibo' && reciboData
+                ? new Date(reciboData + 'T12:00:00').toLocaleDateString('pt-BR')
+                : new Date().toLocaleDateString('pt-BR')}
             </p>
           </div>
         </div>
 
-        {/* Informações da Empresa Cliente */}
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div>
-            <span className="text-slate-500 font-medium block text-[11px]">Empresa Cliente</span>
-            <strong className="text-slate-900 font-bold">{selectedEmpresa.nome}</strong>
+        {/* =========================================================================
+            CORPO DO RELATÓRIO — QUANDO FOR RECIBO
+        ========================================================================= */}
+        {tipoRelatorio === 'recibo' && (
+          <div className="space-y-6">
+            {/* Título do Recibo e Caixa de Destaque de Valor */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-xl border border-slate-200 bg-slate-50/70">
+              <div>
+                <span className="text-[11px] uppercase tracking-widest font-bold text-slate-500 block">
+                  Comprovante de Pagamento / Cobrança
+                </span>
+                <h3 className="text-xl font-extrabold text-[#0B1F3A]">
+                  RECIBO DE PRESTAÇÃO DE SERVIÇOS
+                </h3>
+                <p className="text-xs text-slate-600 font-mono mt-0.5">
+                  Número de Controle: <strong>#{reciboNumero}</strong> · Emissão:{' '}
+                  {new Date(reciboData + 'T12:00:00').toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+
+              <div
+                className="p-4 rounded-xl text-white text-right self-start sm:self-auto min-w-[200px] shadow-xs"
+                style={{ backgroundColor: corPrimaria }}
+              >
+                <span className="text-[10px] uppercase tracking-wider font-medium opacity-80 block">
+                  Valor Total do Recibo
+                </span>
+                <strong className="text-2xl font-black block tracking-tight">
+                  {formatCurrency(reciboValor)}
+                </strong>
+              </div>
+            </div>
+
+            {/* Dados do Tomador (Cliente) e Prestador (Minha Empresa) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+              {/* Prestador / Emitente */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-2">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <Building2 className="w-4 h-4 text-blue-600" />
+                  <strong className="font-bold text-slate-900 uppercase text-[11px] tracking-wider">
+                    Prestador dos Serviços (Emitente)
+                  </strong>
+                </div>
+                <div className="space-y-1 text-slate-700">
+                  <p>
+                    <strong className="text-slate-900 font-semibold">Razão Social:</strong>{' '}
+                    {minhaEmpresa?.razao_social || 'Apex Consultoria Contábil & Financeira Ltda'}
+                  </p>
+                  {minhaEmpresa?.nome_fantasia && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">Nome Fantasia:</strong>{' '}
+                      {minhaEmpresa.nome_fantasia}
+                    </p>
+                  )}
+                  <p>
+                    <strong className="text-slate-900 font-semibold">CNPJ:</strong>{' '}
+                    <span className="font-mono">
+                      {minhaEmpresa?.cnpj ? formatCnpj(minhaEmpresa.cnpj) : '—'}
+                    </span>
+                  </p>
+                  {minhaEmpresa?.logradouro && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">Endereço:</strong>{' '}
+                      {minhaEmpresa.logradouro}
+                      {minhaEmpresa.numero ? `, ${minhaEmpresa.numero}` : ''}
+                      {minhaEmpresa.complemento ? ` - ${minhaEmpresa.complemento}` : ''}
+                      {minhaEmpresa.bairro ? ` - ${minhaEmpresa.bairro}` : ''}
+                      {minhaEmpresa.cidade
+                        ? ` - ${minhaEmpresa.cidade}/${minhaEmpresa.estado}`
+                        : ''}
+                    </p>
+                  )}
+                  {minhaEmpresa?.telefone_comercial && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">Telefone:</strong>{' '}
+                      {minhaEmpresa.telefone_comercial}
+                    </p>
+                  )}
+                  {minhaEmpresa?.email_comercial && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">E-mail:</strong>{' '}
+                      {minhaEmpresa.email_comercial}
+                    </p>
+                  )}
+                  {minhaEmpresa?.contador_nome && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">Responsável Técnico:</strong>{' '}
+                      {minhaEmpresa.contador_nome} (CRC {minhaEmpresa.contador_crc})
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Tomador (Cliente Pagador) */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-2">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <strong className="font-bold text-slate-900 uppercase text-[11px] tracking-wider">
+                    Tomador dos Serviços (Cliente)
+                  </strong>
+                </div>
+                <div className="space-y-1 text-slate-700">
+                  <p>
+                    <strong className="text-slate-900 font-semibold">Razão Social / Nome:</strong>{' '}
+                    {reciboCliente?.nome || '—'}
+                  </p>
+                  {reciboCliente?.nome_fantasia && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">Nome Fantasia:</strong>{' '}
+                      {reciboCliente.nome_fantasia}
+                    </p>
+                  )}
+                  <p>
+                    <strong className="text-slate-900 font-semibold">CNPJ:</strong>{' '}
+                    <span className="font-mono">
+                      {reciboCliente?.cnpj ? formatCnpj(reciboCliente.cnpj) : '—'}
+                    </span>
+                  </p>
+                  <p>
+                    <strong className="text-slate-900 font-semibold">Segmento:</strong>{' '}
+                    {reciboCliente?.segmento || '—'}
+                  </p>
+                  {reciboCliente?.logradouro && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">Endereço:</strong>{' '}
+                      {reciboCliente.logradouro}
+                      {reciboCliente.numero ? `, ${reciboCliente.numero}` : ''}
+                      {reciboCliente.cidade
+                        ? ` - ${reciboCliente.cidade}/${reciboCliente.estado}`
+                        : ''}
+                    </p>
+                  )}
+                  {reciboCliente?.email && (
+                    <p>
+                      <strong className="text-slate-900 font-semibold">E-mail:</strong>{' '}
+                      {reciboCliente.email}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Declaração e Descrição do Serviço */}
+            <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3 text-xs">
+              <strong className="font-bold text-slate-900 uppercase text-[11px] tracking-wider block border-b border-slate-100 pb-2">
+                Declaração de Recebimento & Discriminação dos Serviços
+              </strong>
+
+              <p className="text-slate-700 leading-relaxed text-[12px]">
+                Recebemos de <strong>{reciboCliente?.nome || 'Empresa Cliente'}</strong>, inscrito
+                no CNPJ sob o nº{' '}
+                <strong>{reciboCliente?.cnpj ? formatCnpj(reciboCliente.cnpj) : '—'}</strong>, a
+                importância líquida e certa de <strong>{formatCurrency(reciboValor)}</strong>,
+                referente à prestação dos seguintes serviços:
+              </p>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 text-[11px] text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+                {reciboDescricao || 'Consultoria e assessoria financeira corporativa.'}
+              </div>
+            </div>
+
+            {/* Seção de Dados Bancários para Pagamento / Quitação */}
+            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3 text-xs">
+              <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
+                <Landmark className="w-4 h-4 text-blue-600" />
+                <strong className="font-bold text-slate-900 uppercase text-[11px] tracking-wider">
+                  Dados Bancários para Transferência / Liquidação
+                </strong>
+              </div>
+
+              {minhaEmpresa?.banco || minhaEmpresa?.chave_pix ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 font-medium block text-[10px] uppercase tracking-wider">
+                      Banco
+                    </span>
+                    <strong className="text-slate-900 font-semibold">
+                      {minhaEmpresa.banco || 'Não informado'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-medium block text-[10px] uppercase tracking-wider">
+                      Agência
+                    </span>
+                    <strong className="text-slate-900 font-mono font-semibold">
+                      {minhaEmpresa.agencia || '—'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-medium block text-[10px] uppercase tracking-wider">
+                      Conta Corrente
+                    </span>
+                    <strong className="text-slate-900 font-mono font-semibold">
+                      {minhaEmpresa.conta_corrente || '—'}
+                    </strong>
+                  </div>
+                  <div className="bg-blue-50/60 border border-blue-200/60 rounded-lg p-2">
+                    <span className="text-blue-800 font-bold block text-[10px] uppercase tracking-wider flex items-center gap-1">
+                      <QrCode className="w-3 h-3 text-blue-600" /> Chave PIX
+                    </span>
+                    <strong className="text-blue-900 font-mono text-[11px] break-all">
+                      {minhaEmpresa.chave_pix || '—'}
+                    </strong>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-xs flex items-center justify-between gap-2">
+                  <span>
+                    Nenhum dado bancário cadastrado em <strong>Minha Empresa</strong>. Preencha na
+                    tela de configurações de sua consultoria para exibir banco, agência e chave PIX
+                    automaticamente aqui.
+                  </span>
+                  <Button
+                    asChild
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[11px] bg-white border-amber-300"
+                  >
+                    <Link to="/minha-empresa">Cadastrar Agora</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Assinatura / Quitação */}
+            <div className="pt-8 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-8 text-center text-xs">
+              <div className="border-t border-slate-300 pt-3">
+                <strong className="text-slate-900 font-bold block">
+                  {minhaEmpresa?.razao_social || 'Apex Consultoria Ltda'}
+                </strong>
+                <span className="text-slate-500 text-[11px] block">
+                  {minhaEmpresa?.contador_nome
+                    ? `${minhaEmpresa.contador_nome} (CRC ${minhaEmpresa.contador_crc})`
+                    : 'Representante Legal / Prestador'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  Assinatura do Emitente
+                </span>
+              </div>
+
+              <div className="border-t border-slate-300 pt-3">
+                <strong className="text-slate-900 font-bold block">
+                  {reciboCliente?.nome || 'Cliente Tomador'}
+                </strong>
+                <span className="text-slate-500 text-[11px] block">
+                  CNPJ: {reciboCliente?.cnpj ? formatCnpj(reciboCliente.cnpj) : '—'}
+                </span>
+                <span className="text-[10px] text-slate-400 block mt-0.5">
+                  Assinatura do Pagador
+                </span>
+              </div>
+            </div>
           </div>
-          <div>
-            <span className="text-slate-500 font-medium block text-[11px]">CNPJ</span>
-            <strong className="text-slate-900 font-mono">{formatCnpj(selectedEmpresa.cnpj)}</strong>
+        )}
+
+        {/* Informações da Empresa Cliente (Para Relatórios Financeiros) */}
+        {tipoRelatorio !== 'recibo' && (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div>
+              <span className="text-slate-500 font-medium block text-[11px]">Empresa Cliente</span>
+              <strong className="text-slate-900 font-bold">{selectedEmpresa.nome}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium block text-[11px]">CNPJ</span>
+              <strong className="text-slate-900 font-mono">
+                {formatCnpj(selectedEmpresa.cnpj)}
+              </strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium block text-[11px]">Segmento</span>
+              <strong className="text-slate-900 font-semibold">{selectedEmpresa.segmento}</strong>
+            </div>
+            <div>
+              <span className="text-slate-500 font-medium block text-[11px]">
+                Exercício Analisado
+              </span>
+              <strong className="text-blue-700 font-bold">{selectedAno}</strong>
+            </div>
           </div>
-          <div>
-            <span className="text-slate-500 font-medium block text-[11px]">Segmento</span>
-            <strong className="text-slate-900 font-semibold">{selectedEmpresa.segmento}</strong>
-          </div>
-          <div>
-            <span className="text-slate-500 font-medium block text-[11px]">
-              Exercício Analisado
-            </span>
-            <strong className="text-blue-700 font-bold">{selectedAno}</strong>
-          </div>
-        </div>
+        )}
 
         {/* 1. SEÇÃO EXECUTIVA: RESUMO DE KPIS (SE COMPLETO) */}
         {tipoRelatorio === 'completo' && (
@@ -735,7 +1217,10 @@ export default function Relatorios() {
 
         {/* Rodapé A4 */}
         <div className="border-t border-slate-200 pt-4 mt-8 flex items-center justify-between text-[10px] text-slate-500">
-          <span>Analise de Balanço · Consultoria Financeira &copy; {new Date().getFullYear()}</span>
+          <span>
+            {minhaEmpresa?.razao_social || minhaEmpresa?.nome_fantasia || 'Analise de Balanço'} ·
+            Consultoria Financeira &copy; {new Date().getFullYear()}
+          </span>
           <span>Documento gerado eletronicamente para fins de análise gerencial</span>
         </div>
       </div>

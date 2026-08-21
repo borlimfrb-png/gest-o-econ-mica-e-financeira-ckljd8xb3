@@ -5,6 +5,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { FilterProvider } from '@/contexts/FilterContext'
+import { MinhaEmpresaProvider } from '@/contexts/MinhaEmpresaContext'
 
 import Index from './pages/Index'
 import Dashboard from './pages/Dashboard'
@@ -46,43 +47,45 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 const App = () => (
   <BrowserRouter>
     <AuthProvider>
-      <FilterProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            {/* Rota pública de login/cadastro */}
-            <Route path="/" element={<Index />} />
+      <MinhaEmpresaProvider>
+        <FilterProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              {/* Rota pública de login/cadastro */}
+              <Route path="/" element={<Index />} />
 
-            {/* Rotas autenticadas dentro do Layout Corporativo */}
-            <Route
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/dashboard/empresa/:id" element={<DashboardEmpresa />} />
-              <Route path="/empresas" element={<Empresas />} />
-              <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
-              <Route path="/centros" element={<Centros />} />
-              <Route path="/tipos-despesas" element={<TiposDespesas />} />
-              <Route path="/contas" element={<Contas />} />
-              <Route path="/plano-contas" element={<PlanoContas />} />
-              <Route path="/minha-empresa" element={<MinhaEmpresa />} />
-              <Route path="/lancamentos" element={<Lancamentos />} />
-              <Route path="/relatorios" element={<Relatorios />} />
-              <Route path="/relatorio-anual" element={<RelatorioAnual />} />
-              <Route path="/importacao" element={<Importacao />} />
-              <Route path="/configuracoes" element={<Configuracoes />} />
-            </Route>
+              {/* Rotas autenticadas dentro do Layout Corporativo */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <Layout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/dashboard/empresa/:id" element={<DashboardEmpresa />} />
+                <Route path="/empresas" element={<Empresas />} />
+                <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
+                <Route path="/centros" element={<Centros />} />
+                <Route path="/tipos-despesas" element={<TiposDespesas />} />
+                <Route path="/contas" element={<Contas />} />
+                <Route path="/plano-contas" element={<PlanoContas />} />
+                <Route path="/minha-empresa" element={<MinhaEmpresa />} />
+                <Route path="/lancamentos" element={<Lancamentos />} />
+                <Route path="/relatorios" element={<Relatorios />} />
+                <Route path="/relatorio-anual" element={<RelatorioAnual />} />
+                <Route path="/importacao" element={<Importacao />} />
+                <Route path="/configuracoes" element={<Configuracoes />} />
+              </Route>
 
-            {/* Rota 404 */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </TooltipProvider>
-      </FilterProvider>
+              {/* Rota 404 */}
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TooltipProvider>
+        </FilterProvider>
+      </MinhaEmpresaProvider>
     </AuthProvider>
   </BrowserRouter>
 )

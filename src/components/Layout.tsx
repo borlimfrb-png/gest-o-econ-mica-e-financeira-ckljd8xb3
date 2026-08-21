@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { ModalPerfil } from '@/components/ModalPerfil'
 import {
   Scale,
@@ -43,6 +44,7 @@ export default function Layout() {
     setSelectedAno,
     anosDisponiveis,
   } = useFilter()
+  const { minhaEmpresa, logoUrl, corPrimaria, corSecundaria } = useMinhaEmpresa()
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -112,7 +114,10 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-[#F5F7FA] flex flex-col antialiased text-slate-800">
       {/* Mobile Topbar (< 768px) */}
-      <header className="md:hidden sticky top-0 z-40 h-16 bg-[#0B1F3A] text-white px-4 flex items-center justify-between border-b border-blue-950 shadow-md">
+      <header
+        className="md:hidden sticky top-0 z-40 h-16 text-white px-4 flex items-center justify-between border-b border-white/10 shadow-md transition-colors"
+        style={{ backgroundColor: corPrimaria }}
+      >
         <button
           onClick={() => setMobileDrawerOpen(true)}
           className="p-2 -ml-2 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 transition-colors"
@@ -122,19 +127,37 @@ export default function Layout() {
         </button>
 
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white">
-            <Scale className="w-4 h-4" />
-          </div>
-          <span className="font-bold text-base tracking-tight text-white">Analise de Balanço</span>
+          {logoUrl ? (
+            <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center p-1 overflow-hidden">
+              <img
+                src={logoUrl}
+                alt={minhaEmpresa?.nome_fantasia || 'Logo'}
+                className="w-full h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-white"
+              style={{ backgroundColor: corSecundaria }}
+            >
+              <Scale className="w-4 h-4" />
+            </div>
+          )}
+          <span className="font-bold text-base tracking-tight text-white truncate max-w-[180px]">
+            {minhaEmpresa?.nome_fantasia || minhaEmpresa?.razao_social || 'Analise de Balanço'}
+          </span>
         </div>
 
         <Avatar
           onClick={() => navigate('/configuracoes')}
-          className="w-8 h-8 border border-white/20 bg-blue-700 text-white text-xs font-semibold cursor-pointer hover:opacity-90"
+          className="w-8 h-8 border border-white/20 text-white text-xs font-semibold cursor-pointer hover:opacity-90"
+          style={{ backgroundColor: corSecundaria }}
           title="Configurações"
         >
           {user?.avatar && <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />}
-          <AvatarFallback className="bg-blue-600 text-white">{userInitial}</AvatarFallback>
+          <AvatarFallback style={{ backgroundColor: corSecundaria }} className="text-white">
+            {userInitial}
+          </AvatarFallback>
         </Avatar>
       </header>
 
@@ -148,19 +171,37 @@ export default function Layout() {
           />
 
           {/* Drawer Content */}
-          <div className="relative w-72 max-w-[80vw] bg-[#0B1F3A] text-white flex flex-col justify-between h-full p-5 shadow-2xl z-10">
+          <div
+            className="relative w-72 max-w-[80vw] text-white flex flex-col justify-between h-full p-5 shadow-2xl z-10 transition-colors"
+            style={{ backgroundColor: corPrimaria }}
+          >
             <div>
               <div className="flex items-center justify-between pb-6 border-b border-white/10">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
-                    <Scale className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-sm block leading-tight text-white">
-                      Analise de Balanço
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  {logoUrl ? (
+                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md">
+                      <img
+                        src={logoUrl}
+                        alt={minhaEmpresa?.nome_fantasia || 'Logo'}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
+                      style={{ backgroundColor: corSecundaria }}
+                    >
+                      <Scale className="w-5 h-5" />
+                    </div>
+                  )}
+                  <div className="truncate">
+                    <span className="font-bold text-sm block leading-tight text-white truncate">
+                      {minhaEmpresa?.nome_fantasia ||
+                        minhaEmpresa?.razao_social ||
+                        'Analise de Balanço'}
                     </span>
-                    <span className="text-[10px] text-blue-300 uppercase tracking-wider font-semibold">
-                      Consultoria
+                    <span className="text-[10px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
+                      {minhaEmpresa?.razao_social ? 'Consultoria Oficial' : 'Consultoria'}
                     </span>
                   </div>
                 </div>
@@ -192,9 +233,17 @@ export default function Layout() {
                   <button
                     type="button"
                     onClick={() => setCadastrosOpen((prev) => !prev)}
+                    style={
+                      isCadastroActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
                     className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                       isCadastroActive
-                        ? 'bg-blue-600/20 text-white font-semibold border border-blue-500/30'
+                        ? 'text-white font-semibold border'
                         : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
@@ -353,20 +402,38 @@ export default function Layout() {
       {/* Main Container with Sidebar */}
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar Tablet (60px) & Desktop (264px) */}
-        <aside className="hidden md:flex flex-col justify-between bg-[#0B1F3A] text-white shrink-0 md:w-[60px] lg:w-[264px] transition-all duration-200 z-30 select-none border-r border-blue-950">
+        <aside
+          className="hidden md:flex flex-col justify-between text-white shrink-0 md:w-[60px] lg:w-[264px] transition-colors duration-200 z-30 select-none border-r border-white/10"
+          style={{ backgroundColor: corPrimaria }}
+        >
           <div>
             {/* Logo */}
             <div className="h-16 flex items-center px-3.5 lg:px-5 border-b border-white/10">
               <div className="flex items-center gap-3 overflow-hidden">
-                <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-md">
-                  <Scale className="w-5 h-5" />
-                </div>
+                {logoUrl ? (
+                  <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md overflow-hidden">
+                    <img
+                      src={logoUrl}
+                      alt={minhaEmpresa?.nome_fantasia || 'Logo'}
+                      className="w-full h-full object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
+                    style={{ backgroundColor: corSecundaria }}
+                  >
+                    <Scale className="w-5 h-5" />
+                  </div>
+                )}
                 <div className="hidden lg:block truncate">
-                  <span className="font-bold text-base text-white tracking-tight leading-tight block">
-                    Analise de Balanço
+                  <span className="font-bold text-base text-white tracking-tight leading-tight block truncate">
+                    {minhaEmpresa?.nome_fantasia ||
+                      minhaEmpresa?.razao_social ||
+                      'Analise de Balanço'}
                   </span>
-                  <span className="text-[10px] text-blue-300 uppercase tracking-widest font-semibold block">
-                    Consultoria Financeira
+                  <span className="text-[10px] text-blue-200/80 uppercase tracking-widest font-semibold block truncate">
+                    {minhaEmpresa?.razao_social ? 'Consultoria Oficial' : 'Consultoria Financeira'}
                   </span>
                 </div>
               </div>
@@ -454,9 +521,17 @@ export default function Layout() {
                   <button
                     type="button"
                     onClick={() => setCadastrosOpen((prev) => !prev)}
+                    style={
+                      isCadastroActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                       isCadastroActive
-                        ? 'bg-blue-600/20 text-white font-semibold border border-blue-500/30'
+                        ? 'text-white font-semibold border'
                         : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
@@ -721,11 +796,17 @@ export default function Layout() {
                 className="flex items-center gap-2.5 overflow-hidden text-left flex-1 hover:opacity-90"
                 title="Configurações da Conta"
               >
-                <Avatar className="w-8 h-8 border border-white/20 bg-blue-600 shrink-0">
+                <Avatar
+                  className="w-8 h-8 border border-white/20 shrink-0"
+                  style={{ backgroundColor: corSecundaria }}
+                >
                   {user?.avatar && (
                     <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
                   )}
-                  <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
+                  <AvatarFallback
+                    className="text-white font-semibold text-xs"
+                    style={{ backgroundColor: corSecundaria }}
+                  >
                     {userInitial}
                   </AvatarFallback>
                 </Avatar>

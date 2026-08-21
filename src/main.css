@@ -56,6 +56,12 @@
 
     --sidebar-ring: 222.2 84% 4.9%;
 
+    /* Cores Institucionais Customizáveis */
+    --brand-primary: #0b1f3a;
+    --brand-primary-hsl: 214.3 68.2% 13.7%;
+    --brand-secondary: #2563eb;
+    --brand-secondary-hsl: 221.2 83.2% 53.3%;
+
     --chart-1: 34 100% 44%;
     --chart-2: 189 100% 38%;
     --chart-3: 209 100% 32%;

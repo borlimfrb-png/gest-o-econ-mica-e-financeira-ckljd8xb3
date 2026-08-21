@@ -14,9 +14,18 @@ export function formatBrlMil(val: number | null | undefined): string {
     maximumFractionDigits: 1,
     minimumFractionDigits: 0,
   }).format(absVal)
-  return `${isNegative ? '- ' : ''}R$ ${formatted} mil`
+  return isNegative ? `-R$ ${formatted} mil` : `R$ ${formatted} mil`
 }
 
+export function formatCurrency(val: number | null | undefined): string {
+  if (val === null || val === undefined || isNaN(val)) return 'R$ 0,00'
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(val)
+}
 export function formatNumber(val: number | null | undefined, decimals = 2): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
   return new Intl.NumberFormat('pt-BR', {
