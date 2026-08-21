@@ -110,6 +110,7 @@ export default function Importacao() {
   const [pdfCurrentPage, setPdfCurrentPage] = useState(0)
   const [pdfTotalPages, setPdfTotalPages] = useState(0)
   const [pdfResult, setPdfResult] = useState<PdfExtractionResult | null>(null)
+  const [pdfErrorDetail, setPdfErrorDetail] = useState<string | null>(null)
   const [matchedItems, setMatchedItems] = useState<MatchedItem[]>([])
   const [pdfActiveStep, setPdfActiveStep] = useState<1 | 2 | 3>(1)
   const [showRawTextPreview, setShowRawTextPreview] = useState(false)
@@ -205,6 +206,7 @@ export default function Importacao() {
     setPdfProgress(0)
     setPdfCurrentPage(0)
     setPdfTotalPages(0)
+    setPdfErrorDetail(null)
     setCreatedLancamentosSummary(null)
 
     try {
@@ -215,6 +217,7 @@ export default function Importacao() {
       })
 
       setPdfResult(res)
+      setPdfErrorDetail(null)
 
       // Executa matching inicial
       const matched = matchPdfCandidatesWithPlanoContas(res.candidates, planoContas)
@@ -236,10 +239,12 @@ export default function Importacao() {
       }
     } catch (err: unknown) {
       const error = err as Error
+      const errorMessage = error?.message || 'Ocorreu um erro inesperado ao ler o arquivo PDF.'
       console.error('Erro na extração de PDF:', error)
+      setPdfErrorDetail(errorMessage)
       toast({
         title: 'Falha ao processar PDF',
-        description: error.message || 'Ocorreu um erro ao ler o conteúdo do PDF.',
+        description: errorMessage,
         variant: 'destructive',
       })
     } finally {
@@ -258,6 +263,7 @@ export default function Importacao() {
   const handleResetPdf = () => {
     setPdfFile(null)
     setPdfResult(null)
+    setPdfErrorDetail(null)
     setMatchedItems([])
     setPdfActiveStep(1)
     setCreatedLancamentosSummary(null)
@@ -822,6 +828,33 @@ export default function Importacao() {
                   </Button>
                 </div>
 
+                {/* Alerta detalhado de erro se ocorrer falha no processamento */}
+                {pdfErrorDetail && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-left flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1 text-sm text-rose-900 flex-1">
+                      <p className="font-semibold text-rose-950">
+                        Falha ao processar o arquivo PDF
+                      </p>
+                      <p className="text-xs text-rose-800 leading-relaxed">{pdfErrorDetail}</p>
+                      <div className="pt-2 text-xs text-rose-700 flex items-center gap-2">
+                        <span>
+                          Dica: Verifique se o arquivo não está corrompido, protegido por senha ou é
+                          um PDF escaneado (imagem).
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setPdfErrorDetail(null)}
+                      className="text-rose-600 hover:text-rose-800 hover:bg-rose-100 h-7 px-2 text-xs"
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                )}
+
                 {/* Informações e dicas sobre extração client-side */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
@@ -883,7 +916,6 @@ export default function Importacao() {
               )}
             </div>
           )}
-
           {/* SEÇÃO 2: Revisão dos dados e Matching (Passo 2) */}
           {pdfActiveStep === 2 && pdfResult && (
             <div className="space-y-6">

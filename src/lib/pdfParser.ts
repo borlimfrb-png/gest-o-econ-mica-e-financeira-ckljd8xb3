@@ -1,8 +1,23 @@
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
-// Configure worker src from Vite asset URL
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+// Configura o worker do pdfjs-dist com fallback para CDN caso falhe
+const PDFJS_VERSION = '4.10.38'
+const FALLBACK_WORKER_URL = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`
+
+try {
+  if (typeof window !== 'undefined') {
+    // Tenta carregar worker via Vite / import.meta.url
+    const localWorkerUrl = new URL(
+      'pdfjs-dist/build/pdf.worker.min.mjs',
+      import.meta.url,
+    ).toString()
+    pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerUrl
+  } else {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = FALLBACK_WORKER_URL
+  }
+} catch {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = FALLBACK_WORKER_URL
+}
 
 export interface ExtractedPageText {
   pageNumber: number
@@ -177,22 +192,119 @@ export async function extractTextFromPdf(
   file: File,
   onProgress?: (progress: number, currentPage: number, totalPages: number) => void,
 ): Promise<PdfExtractionResult> {
-  const arrayBuffer = await file.arrayBuffer()
-  const loadingTask = pdfjsLib.getDocument({
-    data: new Uint8Array(arrayBuffer),
-    cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/',
-    cMapPacked: true,
-  })
+  // Garante que o worker esteja configurado antes do processamento
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = FALLBACK_WORKER_URL
+  }
 
-  const pdfDoc = await loadingTask.promise
-  const totalPages = Math.min(pdfDoc.numPages, 300) // Suporta até 300 páginas
+  let arrayBuffer: ArrayBuffer
+  try {
+    arrayBuffer = await file.arrayBuffer()
+  } catch (err: unknown) {
+    const error = err as Error
+    throw new Error(
+      `Erro ao ler o arquivo selecionado no navegador: ${error.message || 'Falha de I/O'}`,
+    )
+  }
+
+  if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+    throw new Error('O arquivo PDF selecionado está vazio (0 bytes).')
+  }
+
+  const pdfData = new Uint8Array(arrayBuffer)
+
+  // Função auxiliar para carregar o documento com ou sem CMap
+  const loadDocument = async (useCMap = true) => {
+    const docParams: Parameters<typeof pdfjsLib.getDocument>[0] = {
+      data: pdfData,
+      useSystemFonts: true,
+      isEvalSupported: false,
+    }
+
+    if (useCMap) {
+      docParams.cMapUrl = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/cmaps/`
+      docParams.cMapPacked = true
+    }
+
+    const loadingTask = pdfjsLib.getDocument(docParams)
+    return await loadingTask.promise
+  }
+
+  // Tentativa de carregar o documento (com fallback sem CMaps e fallback de worker se necessário)
+  let pdfDoc: pdfjsLib.PDFDocumentProxy
+  try {
+    pdfDoc = await loadDocument(true)
+  } catch (firstErr: unknown) {
+    console.warn('Tentativa inicial de abrir PDF falhou. Tentando sem CMaps remotos...', firstErr)
+    try {
+      // Tenta alternar worker para o fallback CDN se ainda não estiver
+      if (pdfjsLib.GlobalWorkerOptions.workerSrc !== FALLBACK_WORKER_URL) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = FALLBACK_WORKER_URL
+      }
+      pdfDoc = await loadDocument(false)
+    } catch (secondErr: unknown) {
+      const errObj = (secondErr || firstErr) as Error
+      const errMsg = errObj?.message || ''
+
+      if (
+        errMsg.includes('Password') ||
+        errMsg.includes('password') ||
+        errMsg.includes('encrypted')
+      ) {
+        throw new Error('O arquivo PDF está protegido por senha. Remova a senha antes de importar.')
+      }
+      if (
+        errMsg.includes('Invalid PDF') ||
+        errMsg.includes('corrupted') ||
+        errMsg.includes('FormatError')
+      ) {
+        throw new Error(
+          'Erro ao carregar o documento PDF: o arquivo parece estar corrompido ou em formato inválido.',
+        )
+      }
+      if (
+        errMsg.includes('Worker') ||
+        errMsg.includes('worker') ||
+        errMsg.includes('WorkerMessageHandler')
+      ) {
+        throw new Error(
+          'Erro de inicialização do leitor de PDF (Worker). Verifique sua conexão ou tente novamente.',
+        )
+      }
+
+      throw new Error(
+        `Erro ao carregar o documento PDF. Verifique se o arquivo não está corrompido ou protegido por senha (${errMsg || 'Falha desconhecida'}).`,
+      )
+    }
+  }
+
+  const totalPages = Math.min(pdfDoc.numPages || 1, 300) // Suporta até 300 páginas
   const pages: ExtractedPageText[] = []
   const allCandidates: ExtractedAccountValueCandidate[] = []
   let totalExtractedLength = 0
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-    const page = await pdfDoc.getPage(pageNum)
-    const textContent = await page.getTextContent()
+    let page: pdfjsLib.PDFPageProxy
+    try {
+      page = await pdfDoc.getPage(pageNum)
+    } catch (pageErr: unknown) {
+      const pError = pageErr as Error
+      console.warn(`Erro ao carregar página ${pageNum}:`, pError)
+      throw new Error(
+        `Erro ao carregar a página ${pageNum} do PDF: ${pError.message || 'Falha na renderização da página'}`,
+      )
+    }
+
+    let textContent: Awaited<ReturnType<typeof page.getTextContent>>
+    try {
+      textContent = await page.getTextContent()
+    } catch (textErr: unknown) {
+      const tError = textErr as Error
+      console.warn(`Erro ao extrair conteúdo da página ${pageNum}:`, tError)
+      throw new Error(
+        `Erro ao extrair o texto da página ${pageNum}: ${tError.message || 'Falha na extração de texto'}`,
+      )
+    }
 
     // Reconstrói as linhas baseando-se na posição Y dos itens ou quebras naturais
     const items = textContent.items as Array<{
@@ -205,7 +317,7 @@ export async function extractTextFromPdf(
 
     // Agrupa texto por linha (mesmo translateY aproximado)
     for (const item of items) {
-      if (!('str' in item)) continue
+      if (!item || !('str' in item)) continue
       const str = item.str
       if (!str && !item.hasEOL) continue
 
