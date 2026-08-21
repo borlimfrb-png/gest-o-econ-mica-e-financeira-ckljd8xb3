@@ -564,6 +564,73 @@ export const lancamentosRecorrentesService = {
   },
 }
 
+export const financeService = {
+  getEmpresas: empresasService.getAll,
+  getCentros: centrosService.getAll,
+  getTiposDespesas: tiposDespesaService.getAll,
+  getContas: contasService.getAll,
+  createConta: contasService.create,
+  getPlanoContas: planoContasService.getAll,
+  createPlanoConta: planoContasService.create,
+  getLancamentos: lancamentosService.getAll,
+  createLancamento: lancamentosService.create,
+}
+
+export const GRUPOS_POR_TIPO: Record<string, string[]> = {
+  Ativo: [
+    'Ativo Circulante',
+    'Disponibilidades',
+    'Clientes / Contas a Receber',
+    'Estoques',
+    'Outros Créditos',
+    'Ativo Não Circulante',
+    'Realizável a Longo Prazo',
+    'Investimentos',
+    'Imobilizado',
+    'Intangível',
+  ],
+  Passivo: [
+    'Passivo Circulante',
+    'Fornecedores',
+    'Obrigações Sociais e Trabalhistas',
+    'Obrigações Fiscais e Tributárias',
+    'Empréstimos e Financiamentos CP',
+    'Outras Obrigações',
+    'Passivo Não Circulante',
+    'Empréstimos e Financiamentos LP',
+    'Provisões',
+  ],
+  'Patrimônio Líquido': [
+    'Capital Social',
+    'Reservas de Capital',
+    'Reservas de Lucros',
+    'Lucros ou Prejuízos Acumulados',
+  ],
+  Receita: [
+    'Receitas Operacionais',
+    'Receita Bruta de Vendas',
+    'Receita de Prestação de Serviços',
+    'Deduções da Receita Bruta',
+    'Receitas Financeiras',
+    'Outras Receitas Operacionais',
+    'Receitas Não Operacionais',
+  ],
+  Despesa: [
+    'Custos dos Produtos/Serviços Vendidos (CPV/CSV)',
+    'Despesas Operacionais',
+    'Despesas Administrativas',
+    'Despesas Comerciais / Vendas',
+    'Despesas com Pessoal',
+    'Despesas Gerais',
+    'Despesas Financeiras',
+    'Outras Despesas Operacionais',
+    'Despesas Tributárias',
+  ],
+}
+
+export type TipoConta = 'Ativo' | 'Passivo' | 'Patrimônio Líquido' | 'Receita' | 'Despesa'
+export type GrupoConta = string
+
 export const metasLancamentosService = {
   async getAll(options?: {
     empresaId?: string
