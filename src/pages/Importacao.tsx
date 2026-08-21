@@ -226,15 +226,14 @@ export default function Importacao() {
 
       if (res.isScannedOrEmpty) {
         toast({
-          title: 'Aviso sobre o PDF',
+          title: 'Aviso: PDF Digitalizado/Escaneado',
           description:
-            'Pouco ou nenhum texto foi detectado. Se for um PDF digitalizado/escaneado (imagem), o OCR nativo pode não reconhecer caracteres.',
-          variant: 'destructive',
+            'Pouco ou nenhum texto foi detectado no documento. Se for um PDF escaneado (imagem/foto), use OCR antes do upload para extrair os lançamentos.',
         })
       } else {
         toast({
           title: 'PDF Processado com sucesso!',
-          description: `${res.totalPages} páginas analisadas. Encontradas ${res.candidates.length} linhas de contas/valores.`,
+          description: `${res.totalPages} ${res.totalPages === 1 ? 'página analisada' : 'páginas analisadas'}. Encontrados ${res.candidates.length} candidatos de contas/valores.`,
         })
       }
     } catch (err: unknown) {
