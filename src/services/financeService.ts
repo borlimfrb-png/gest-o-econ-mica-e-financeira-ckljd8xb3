@@ -601,7 +601,7 @@ export const metasLancamentosService = {
     valor: number
     mes: number
     ano: number
-    periodo?: 'Mensal' | 'Trimestral'
+    periodo?: 'Mensal' | 'Trimestral' | 'Anual'
     trimestre?: 'Q1' | 'Q2' | 'Q3' | 'Q4' | null
     centro?: string | null
     ativo?: boolean

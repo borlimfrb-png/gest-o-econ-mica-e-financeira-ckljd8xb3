@@ -208,7 +208,7 @@ export interface LancamentoRecorrenteRecord extends RecordModel {
 }
 
 export type TipoMetaLancamento = 'Receita' | 'Despesa'
-export type PeriodoMeta = 'Mensal' | 'Trimestral'
+export type PeriodoMeta = 'Mensal' | 'Trimestral' | 'Anual'
 export type TrimestreMeta = 'Q1' | 'Q2' | 'Q3' | 'Q4'
 
 export interface MetaLancamentoRecord extends RecordModel {

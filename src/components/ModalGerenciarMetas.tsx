@@ -151,8 +151,9 @@ export function ModalGerenciarMetas({
               : formTrimestre === 'Q3'
                 ? 7
                 : 10
-          : Number(formMes)
-
+          : formPeriodo === 'Anual'
+            ? 1
+            : Number(formMes)
       if (editingMetaId) {
         await metasLancamentosService.update(editingMetaId, {
           empresa: formEmpresa,
@@ -243,11 +244,11 @@ export function ModalGerenciarMetas({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#0B1F3A]">
             <Target className="w-5 h-5 text-blue-600" />
-            Metas de Lançamentos (Mensais e Trimestrais)
+            Metas de Lançamentos (Mensais, Trimestrais e Anuais)
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Defina metas mensais ou trimestrais de Receita ou Despesa por empresa para acompanhar o
-            % de atingimento e projeção em tempo real no Dashboard.
+            Defina metas mensais, trimestrais ou anuais de Receita ou Despesa por empresa para
+            acompanhar o % de atingimento e projeção em tempo real no Dashboard.
           </DialogDescription>
         </DialogHeader>
 
@@ -296,6 +297,9 @@ export function ModalGerenciarMetas({
                   <SelectItem value="Trimestral" className="text-xs font-semibold text-purple-700">
                     Trimestral (Q1, Q2, Q3, Q4)
                   </SelectItem>
+                  <SelectItem value="Anual" className="text-xs font-semibold text-emerald-700">
+                    Anual
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -341,7 +345,13 @@ export function ModalGerenciarMetas({
             {/* Valor */}
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-700">
-                Valor da Meta {formPeriodo === 'Trimestral' ? 'Trimestral' : 'Mensal'} (R$) *
+                Valor da Meta{' '}
+                {formPeriodo === 'Trimestral'
+                  ? 'Trimestral'
+                  : formPeriodo === 'Anual'
+                    ? 'Anual'
+                    : 'Mensal'}{' '}
+                (R$) *
               </Label>
               <Input
                 type="number"
@@ -381,7 +391,7 @@ export function ModalGerenciarMetas({
               </Select>
             </div>
 
-            {/* Período específico: Mês OU Trimestre + Ano */}
+            {/* Período específico: Mês OU Trimestre + Ano OU Apenas Ano */}
             {formPeriodo === 'Trimestral' ? (
               <div className="grid grid-cols-2 gap-2 sm:col-span-2">
                 <div className="space-y-1.5">
@@ -422,6 +432,19 @@ export function ModalGerenciarMetas({
                     required
                   />
                 </div>
+              </div>
+            ) : formPeriodo === 'Anual' ? (
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs text-slate-700 font-semibold">Ano de Referência *</Label>
+                <Input
+                  type="number"
+                  min="2000"
+                  max="2100"
+                  value={formAno}
+                  onChange={(e) => setFormAno(e.target.value)}
+                  className="h-8 text-xs bg-white"
+                  required
+                />
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 sm:col-span-2">
@@ -492,9 +515,12 @@ export function ModalGerenciarMetas({
                     : centroVinculado.nome
                   : null
                 const isTrimestral = meta.periodo === 'Trimestral'
+                const isAnual = meta.periodo === 'Anual'
                 const periodoLabel = isTrimestral
                   ? `${meta.trimestre || 'Q1'}/${meta.ano}`
-                  : `${MESES.find((m) => m.valor === meta.mes)?.nome || `Mês ${meta.mes}`}/${meta.ano}`
+                  : isAnual
+                    ? `Ano ${meta.ano}`
+                    : `${MESES.find((m) => m.valor === meta.mes)?.nome || `Mês ${meta.mes}`}/${meta.ano}`
                 const isAtivo = meta.ativo ?? true
 
                 return (
@@ -539,10 +565,12 @@ export function ModalGerenciarMetas({
                             className={`text-[10px] font-semibold ${
                               isTrimestral
                                 ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : isAnual
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
                             }`}
                           >
-                            {isTrimestral ? 'Trimestral' : 'Mensal'}
+                            {isTrimestral ? 'Trimestral' : isAnual ? 'Anual' : 'Mensal'}
                           </Badge>
                           {centroNome && (
                             <Badge

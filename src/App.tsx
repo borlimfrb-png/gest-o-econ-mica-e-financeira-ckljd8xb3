@@ -18,6 +18,8 @@ import Lancamentos from './pages/Lancamentos'
 import Relatorios from './pages/Relatorios'
 import RelatorioAnual from './pages/RelatorioAnual'
 import Importacao from './pages/Importacao'
+import Configuracoes from './pages/Configuracoes'
+import DashboardEmpresa from './pages/DashboardEmpresa'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
 
@@ -60,6 +62,7 @@ const App = () => (
               }
             >
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard/empresa/:id" element={<DashboardEmpresa />} />
               <Route path="/empresas" element={<Empresas />} />
               <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
               <Route path="/centros" element={<Centros />} />
@@ -70,6 +73,7 @@ const App = () => (
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/relatorio-anual" element={<RelatorioAnual />} />
               <Route path="/importacao" element={<Importacao />} />
+              <Route path="/configuracoes" element={<Configuracoes />} />
             </Route>
 
             {/* Rota 404 */}

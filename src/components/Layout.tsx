@@ -22,7 +22,8 @@ import {
   Folder,
   Settings,
 } from 'lucide-react'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import pb from '@/lib/pocketbase/client'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Select,
@@ -125,7 +126,12 @@ export default function Layout() {
           <span className="font-bold text-base tracking-tight text-white">Analise de Balanço</span>
         </div>
 
-        <Avatar className="w-8 h-8 border border-white/20 bg-blue-700 text-white text-xs font-semibold">
+        <Avatar
+          onClick={() => navigate('/configuracoes')}
+          className="w-8 h-8 border border-white/20 bg-blue-700 text-white text-xs font-semibold cursor-pointer hover:opacity-90"
+          title="Configurações"
+        >
+          {user?.avatar && <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />}
           <AvatarFallback className="bg-blue-600 text-white">{userInitial}</AvatarFallback>
         </Avatar>
       </header>
@@ -307,12 +313,15 @@ export default function Layout() {
                 type="button"
                 onClick={() => {
                   setMobileDrawerOpen(false)
-                  setModalPerfilOpen(true)
+                  navigate('/configuracoes')
                 }}
                 className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <Avatar className="w-9 h-9 border border-white/20 shrink-0">
+                    {user?.avatar && (
+                      <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
+                    )}
                     <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
                       {userInitial}
                     </AvatarFallback>
@@ -706,11 +715,14 @@ export default function Layout() {
             <div className="hidden lg:flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
               <button
                 type="button"
-                onClick={() => setModalPerfilOpen(true)}
+                onClick={() => navigate('/configuracoes')}
                 className="flex items-center gap-2.5 overflow-hidden text-left flex-1 hover:opacity-90"
-                title="Configurações e Alertas"
+                title="Configurações da Conta"
               >
                 <Avatar className="w-8 h-8 border border-white/20 bg-blue-600 shrink-0">
+                  {user?.avatar && (
+                    <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
+                  )}
                   <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
                     {userInitial}
                   </AvatarFallback>
@@ -725,9 +737,13 @@ export default function Layout() {
               <div className="flex items-center gap-1 shrink-0">
                 <button
                   type="button"
-                  onClick={() => setModalPerfilOpen(true)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-white/10 transition-colors"
-                  title="Configurações de Alertas e Perfil"
+                  onClick={() => navigate('/configuracoes')}
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    location.pathname === '/configuracoes'
+                      ? 'bg-white/20 text-blue-300'
+                      : 'text-slate-400 hover:text-blue-300 hover:bg-white/10'
+                  }`}
+                  title="Configurações da Conta"
                 >
                   <Settings className="w-4 h-4" />
                 </button>
@@ -749,14 +765,18 @@ export default function Layout() {
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={() => setModalPerfilOpen(true)}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-blue-300 hover:bg-white/10 transition-colors"
+                    onClick={() => navigate('/configuracoes')}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+                      location.pathname === '/configuracoes'
+                        ? 'bg-white/20 text-blue-300'
+                        : 'text-slate-300 hover:text-blue-300 hover:bg-white/10'
+                    }`}
                   >
                     <Settings className="w-5 h-5" />
                   </button>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="bg-[#0B1F3A] text-white border-blue-900">
-                  Perfil e Alertas
+                  Configurações
                 </TooltipContent>
               </Tooltip>
               <Tooltip>

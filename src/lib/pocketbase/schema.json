@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21T17:48:34.649Z",
+  "generatedAt": "2026-08-21T18:04:56.899Z",
   "collections": [
     {
       "name": "users",
@@ -1068,7 +1068,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["Mensal", "Trimestral"]
+          "selectValues": ["Mensal", "Trimestral", "Anual"]
         },
         {
           "name": "trimestre",

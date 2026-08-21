@@ -220,6 +220,7 @@ export default function Dashboard() {
 
     return metasFiltradas.map((meta) => {
       const isTrimestral = meta.periodo === 'Trimestral'
+      const isAnual = meta.periodo === 'Anual'
       const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
       const empNome = emp?.nome || 'Empresa'
 
@@ -231,9 +232,11 @@ export default function Dashboard() {
           : centroObj.nome
         : null
 
-      // Meses correspondentes se for trimestral
+      // Meses correspondentes se for trimestral / anual
       let mesesDoPeriodo: number[] = []
-      if (isTrimestral) {
+      if (isAnual) {
+        mesesDoPeriodo = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+      } else if (isTrimestral) {
         const qStr = meta.trimestre || 'Q1'
         const qNum = parseInt(qStr.replace('Q', ''), 10) || 1
         mesesDoPeriodo = [(qNum - 1) * 3 + 1, (qNum - 1) * 3 + 2, (qNum - 1) * 3 + 3]
@@ -265,12 +268,42 @@ export default function Dashboard() {
       const realizado = lancamentosMeta.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
       const atingimentoPct = meta.valor > 0 ? (realizado / meta.valor) * 100 : 0
 
-      // Projeção para trimestral: com base no ritmo atual (realizado / meses decorridos * 3)
+      // Projeção para trimestral e anual
       let projecaoValor: number | null = null
       let projecaoPct: number | null = null
       let statusCor: 'green' | 'amber' | 'red' = 'red'
 
-      if (isTrimestral) {
+      if (isAnual) {
+        // Meta Anual: Realizado acumulado até o mês atual. Projeção = (realizado / meses decorridos) * 12
+        let mesesDecorridos = 0
+        if (anoAtual > meta.ano) {
+          mesesDecorridos = 12
+        } else if (anoAtual < meta.ano) {
+          mesesDecorridos = 0
+        } else {
+          // Mesmo ano: meses passados inteiros + fração do mês atual
+          const totalDiasMes = new Date(anoAtual, mesAtual, 0).getDate()
+          const fracaoMes = Math.min(1, Math.max(0.1, diaAtual / totalDiasMes))
+          mesesDecorridos = mesAtual - 1 + fracaoMes
+        }
+
+        if (mesesDecorridos > 0 && realizado > 0) {
+          projecaoValor = (realizado / mesesDecorridos) * 12
+          projecaoPct = meta.valor > 0 ? (projecaoValor / meta.valor) * 100 : 0
+        } else {
+          projecaoValor = realizado
+          projecaoPct = atingimentoPct
+        }
+
+        // Indicador tricolor: 🟢 projeção ≥ 100%, 🟠 70-99%, 🔴 < 70%
+        if ((projecaoPct ?? 0) >= 100) {
+          statusCor = 'green'
+        } else if ((projecaoPct ?? 0) >= 70) {
+          statusCor = 'amber'
+        } else {
+          statusCor = 'red'
+        }
+      } else if (isTrimestral) {
         let mesesDecorridos = 0
         if (anoAtual > meta.ano) {
           mesesDecorridos = 3
@@ -298,8 +331,6 @@ export default function Dashboard() {
           projecaoPct = atingimentoPct
         }
 
-        // Indicador visual trimestral: verde (projeção ≥ meta ou projecaoPct >= 100),
-        // âmbar (projeção entre 70-99%), vermelho (projeção < 70%)
         if ((projecaoPct ?? 0) >= 100) {
           statusCor = 'green'
         } else if ((projecaoPct ?? 0) >= 70) {
@@ -319,7 +350,8 @@ export default function Dashboard() {
       }
 
       // Sparkline de evolução diária (apenas para metas do mês corrente, quando mensal)
-      const isMesCorrente = !isTrimestral && meta.ano === anoAtual && meta.mes === mesAtual
+      const isMesCorrente =
+        !isTrimestral && !isAnual && meta.ano === anoAtual && meta.mes === mesAtual
       let sparklineData: { dia: number; valorAcumulado: number; pctAcumulado: number }[] = []
 
       if (isMesCorrente) {
@@ -351,13 +383,16 @@ export default function Dashboard() {
       const mesNome = nomesMesesLista[meta.mes - 1] || `Mês ${meta.mes}`
       const periodoLabel = isTrimestral
         ? `${meta.trimestre || 'Q1'}/${meta.ano}`
-        : `${mesNome}/${meta.ano}`
+        : isAnual
+          ? `Ano ${meta.ano}`
+          : `${mesNome}/${meta.ano}`
 
       return {
         ...meta,
         empresaNome: empNome,
         centroNome,
         mesNome,
+        isAnual,
         periodoLabel,
         isTrimestral,
         isMesCorrente,
@@ -404,8 +439,8 @@ export default function Dashboard() {
         `"${m.empresaNome.replace(/"/g, '""')}"`,
         `"${m.tipo}"`,
         `"${(m.centroNome || 'Geral').replace(/"/g, '""')}"`,
-        `"${m.isTrimestral ? 'Trimestral' : 'Mensal'}"`,
-        `"${m.isTrimestral ? m.trimestre : m.mesNome}"`,
+        `"${m.isTrimestral ? 'Trimestral' : m.isAnual ? 'Anual' : 'Mensal'}"`,
+        `"${m.isTrimestral ? m.trimestre : m.isAnual ? `Ano ${m.ano}` : m.mesNome}"`,
         m.ano,
         m.valor.toFixed(2),
         m.realizado.toFixed(2),
@@ -756,7 +791,7 @@ export default function Dashboard() {
     const diffTimeTrimestre = fimTrimestreDate.getTime() - agora.getTime()
     const diasRestantesTrimestre = Math.max(0, Math.ceil(diffTimeTrimestre / (1000 * 60 * 60 * 24)))
 
-    // Filtrar metas ativas do período corrente (mensais do mês atual OU trimestrais do trimestre atual)
+    // Filtrar metas ativas do período corrente (mensais do mês atual OU trimestrais do trimestre atual OU anuais do ano atual)
     const metasCorrentes = metas.filter((m) => {
       const isAtiva = m.ativo ?? true
       if (!isAtiva) return false
@@ -764,6 +799,8 @@ export default function Dashboard() {
       if (selectedEmpresaId && m.empresa !== selectedEmpresaId) return false
 
       const isTrimestral = m.periodo === 'Trimestral'
+      const isAnual = m.periodo === 'Anual'
+      if (isAnual) return true
       if (isTrimestral) {
         return m.trimestre === trimAtualStr
       }
@@ -772,6 +809,7 @@ export default function Dashboard() {
 
     for (const meta of metasCorrentes) {
       const isTrimestral = meta.periodo === 'Trimestral'
+      const isAnual = meta.periodo === 'Anual'
       const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
       const empNome = emp?.nome || 'Empresa'
       const centroObj =
@@ -779,7 +817,11 @@ export default function Dashboard() {
       const centroLabel = centroObj
         ? ` · ${centroObj.codigo ? `${centroObj.codigo} ` : ''}${centroObj.nome}`
         : ''
-      const periodoTag = isTrimestral ? ` [Trimestral ${meta.trimestre}]` : ''
+      const periodoTag = isAnual
+        ? ` [Anual ${meta.ano}]`
+        : isTrimestral
+          ? ` [Trimestral ${meta.trimestre}]`
+          : ''
       const nomeIdentificador = `Meta de ${meta.tipo}${centroLabel}${periodoTag} (${empNome})`
 
       // Calcular realizado da meta respeitando tipo e centro vinculado
@@ -790,7 +832,10 @@ export default function Dashboard() {
         const mesLanc = parseInt(l.data.slice(5, 7), 10)
         if (anoLanc !== meta.ano) return false
 
-        if (isTrimestral) {
+        if (isAnual) {
+          // Todos os meses até o atual
+          if (mesLanc > mesAtual) return false
+        } else if (isTrimestral) {
           if (!mesesDoTrimestre.includes(mesLanc)) return false
         } else {
           if (mesLanc !== meta.mes) return false
@@ -811,7 +856,27 @@ export default function Dashboard() {
       const pct = meta.valor > 0 ? (realizado / meta.valor) * 100 : 0
       const temLancamentos = lancs.length > 0 && realizado > 0
 
-      if (isTrimestral) {
+      if (isAnual) {
+        // Regra Anual: < 50% faltando 3 meses ou menos para o fim do ano
+        const mesesRestantesAno = 12 - mesAtual
+        if (pct < 50 && mesesRestantesAno <= 3) {
+          lista.push({
+            id: `meta-risco-anual-${meta.id}`,
+            titulo: `Meta Anual em risco: ${nomeIdentificador} está em ${formatPercent(
+              pct,
+              0,
+            )} faltando ${mesesRestantesAno} ${mesesRestantesAno === 1 ? 'mês' : 'meses'}`,
+            descricao: `Realizado acumulado de ${formatBrlMil(realizado)} de ${formatBrlMil(
+              meta.valor,
+            )} (${formatPercent(pct, 1)}). Faltam apenas ${mesesRestantesAno} ${
+              mesesRestantesAno === 1 ? 'mês' : 'meses'
+            } para o encerramento do exercício ${meta.ano}.`,
+            severidade: 'amber',
+            atingimentoPct: pct,
+            diasRestantes: mesesRestantesAno * 30,
+          })
+        }
+      } else if (isTrimestral) {
         // Regra Trimestral: menos de 50% e faltando menos de 15 dias para o fim do trimestre
         if (pct < 50 && diasRestantesTrimestre <= 15) {
           lista.push({
@@ -1255,7 +1320,7 @@ export default function Dashboard() {
           <div>
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
               <Target className="w-4 h-4 text-blue-600" />
-              Metas de Lançamentos (Mensais e Trimestrais)
+              Metas de Lançamentos (Mensais, Trimestrais e Anuais)
               {cardsMetasCalculados.length > 0 && (
                 <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-semibold">
                   {cardsMetasCalculados.length} ativa(s)
@@ -1263,8 +1328,8 @@ export default function Dashboard() {
               )}
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              Acompanhamento de metas mensais e trimestrais com evolução diária (sparkline) e
-              projeção automática
+              Acompanhamento de metas mensais, trimestrais e anuais com evolução diária (sparkline)
+              e projeção automática
             </CardDescription>
           </div>
 
@@ -1381,10 +1446,12 @@ export default function Dashboard() {
                             className={`text-[9px] font-semibold px-1.5 py-0 ${
                               m.isTrimestral
                                 ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                : m.isAnual
+                                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  : 'bg-blue-50 text-blue-700 border border-blue-200'
                             }`}
                           >
-                            {m.isTrimestral ? 'Trimestral' : 'Mensal'}
+                            {m.isTrimestral ? 'Trimestral' : m.isAnual ? 'Anual' : 'Mensal'}
                           </Badge>
                           <Badge
                             variant="outline"
@@ -1403,32 +1470,39 @@ export default function Dashboard() {
                       <div className="mt-3 space-y-1">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-slate-500">
-                            {m.isTrimestral ? 'Meta Trimestral:' : 'Meta Estipulada:'}
+                            {m.isTrimestral
+                              ? 'Meta Trimestral:'
+                              : m.isAnual
+                                ? 'Meta Anual:'
+                                : 'Meta Estipulada:'}
                           </span>
                           <span className="font-bold text-slate-700">{formatBrlMil(m.valor)}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-slate-500">
-                            {m.isTrimestral ? 'Realizado Acumulado:' : 'Realizado:'}
+                            {m.isTrimestral || m.isAnual ? 'Realizado Acumulado:' : 'Realizado:'}
                           </span>
                           <span className="font-extrabold text-[#0B1F3A]">
                             {formatBrlMil(m.realizado)}
                           </span>
                         </div>
-
-                        {/* Projeção (apenas para trimestrais) */}
-                        {m.isTrimestral && (
+                        {/* Projeção (para trimestrais e anuais) */}
+                        {(m.isTrimestral || m.isAnual) && (
                           <div className="pt-1.5 mt-1 border-t border-dashed border-slate-100 flex items-center justify-between text-xs">
                             <span className="text-slate-500 flex items-center gap-1">
-                              <TrendingUp className="w-3 h-3 text-purple-600" />
-                              Projeção Trimestre:
+                              <TrendingUp
+                                className={`w-3 h-3 ${m.isAnual ? 'text-emerald-600' : 'text-purple-600'}`}
+                              />
+                              {m.isAnual ? 'Projeção Anual:' : 'Projeção Trimestre:'}
                             </span>
-                            <span className="font-bold text-purple-900">
+                            <span
+                              className={`font-bold ${m.isAnual ? 'text-emerald-900' : 'text-purple-900'}`}
+                            >
                               {formatBrlMil(m.projecaoValor ?? 0)} (
                               {formatPercent(m.projecaoPct ?? 0, 0)})
                             </span>
                           </div>
-                        )}
+                        )}{' '}
                       </div>
 
                       {/* Barra de Progresso Visual */}
@@ -2129,9 +2203,11 @@ export default function Dashboard() {
               {/* Cards de Resumo por Empresa no Mês */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 pt-1">
                 {dadosComparativoEmpresas.dados.map((d) => (
-                  <div
+                  <Link
                     key={d.empresaId}
-                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-2"
+                    to={`/dashboard/empresa/${d.empresaId}`}
+                    className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-between gap-2 hover:border-blue-300 hover:shadow-sm hover:scale-[1.01] transition-all group"
+                    title={`Abrir Dashboard Exclusivo de ${d.nome}`}
                   >
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
@@ -2139,7 +2215,10 @@ export default function Dashboard() {
                           className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: d.color }}
                         />
-                        <p className="text-xs font-bold text-[#0B1F3A] truncate" title={d.nome}>
+                        <p
+                          className="text-xs font-bold text-[#0B1F3A] group-hover:text-blue-600 truncate transition-colors"
+                          title={d.nome}
+                        >
                           {d.nome}
                         </p>
                       </div>
@@ -2147,12 +2226,12 @@ export default function Dashboard() {
                     </div>
 
                     <div className="text-right shrink-0">
-                      <p className="text-xs font-extrabold text-slate-800">
+                      <p className="text-xs font-extrabold text-slate-800 group-hover:text-blue-700 transition-colors">
                         {formatBrlMil(d.total)}
                       </p>
                       <p className="text-[10px] text-slate-400">{d.qtd} lanç.</p>
                     </div>
-                  </div>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -2170,7 +2249,22 @@ export default function Dashboard() {
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
               Mapeamento visual dos vínculos entre Contas (CO-xxx) e Centros de Custo (CC-xxx)
-              {selectedEmpresa ? ` · ${selectedEmpresa.nome} (${selectedAno})` : ''}
+              {selectedEmpresa ? (
+                <span>
+                  {' '}
+                  ·{' '}
+                  <Link
+                    to={`/dashboard/empresa/${selectedEmpresa.id}`}
+                    className="text-blue-600 hover:underline font-semibold"
+                    title="Ver Dashboard desta empresa"
+                  >
+                    {selectedEmpresa.nome}
+                  </Link>{' '}
+                  ({selectedAno})
+                </span>
+              ) : (
+                ''
+              )}
             </CardDescription>
           </div>
           <Button
@@ -2450,9 +2544,13 @@ export default function Dashboard() {
                   <tr key={row.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-3">
                       <div>
-                        <span className="font-semibold text-slate-800 block">
+                        <Link
+                          to={`/dashboard/empresa/${row.empresaId}`}
+                          className="font-semibold text-slate-800 hover:text-blue-600 block transition-colors"
+                          title="Abrir Dashboard da Empresa"
+                        >
                           {row.empresaNome}
-                        </span>
+                        </Link>
                         <span className="text-[11px] text-slate-400">
                           {row.segmento} · {formatCnpj(row.cnpj)}
                         </span>
@@ -2488,7 +2586,7 @@ export default function Dashboard() {
                         variant="outline"
                         className="h-7 text-[11px] font-medium border-slate-200 hover:border-blue-300 hover:text-blue-700"
                       >
-                        <Link to={`/empresas/${row.empresaId}`}>Ver Análise</Link>
+                        <Link to={`/dashboard/empresa/${row.empresaId}`}>Ver Dashboard</Link>
                       </Button>
                     </td>
                   </tr>

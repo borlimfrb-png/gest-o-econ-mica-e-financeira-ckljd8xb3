@@ -73,7 +73,59 @@ cronAdd('verificar_metas_em_risco_diario', '0 8 * * *', () => {
       let realizado = 0
       let nomePeriodo = ''
 
-      if (periodo === 'Trimestral') {
+      if (periodo === 'Anual') {
+        nomePeriodo = 'Ano ' + metaAno
+        const ultimoDiaAno = new Date(anoAtual, 11, 31)
+        const diffTimeAno = ultimoDiaAno.getTime() - agora.getTime()
+        diasRestantes = Math.max(0, Math.ceil(diffTimeAno / (1000 * 60 * 60 * 24)))
+        const mesesRestantes = 12 - mesAtual
+
+        let lancs = []
+        try {
+          lancs = $app.findRecordsByFilter('lancamentos', 'empresa = {:emp}', '-data', 0, 0, {
+            emp: empresaId,
+          })
+        } catch (_) {}
+
+        for (const l of lancs) {
+          const dt = l.getString('data')
+          if (!dt) continue
+          const anoL = parseInt(dt.slice(0, 4), 10)
+          const mesL = parseInt(dt.slice(5, 7), 10)
+          if (anoL !== anoAtual || mesL > mesAtual) continue
+
+          const planoId = l.getString('plano_conta')
+          if (!planoId) continue
+          let plano = null
+          try {
+            plano = $app.findRecordById('plano_contas', planoId)
+          } catch (_) {}
+          if (!plano) continue
+
+          if (centroId) {
+            const cPlano = plano.getString('centro')
+            if (cPlano !== centroId) continue
+          }
+
+          const contaId = plano.getString('conta')
+          if (!contaId) continue
+          let conta = null
+          try {
+            conta = $app.findRecordById('contas', contaId)
+          } catch (_) {}
+          if (!conta || conta.getString('tipo') !== metaTipo) continue
+
+          realizado += l.getFloat('valor')
+        }
+
+        atingimentoPct = metaValor > 0 ? (realizado / metaValor) * 100 : 0
+
+        // Regra Anual: menos de 50% faltando 3 meses ou menos para o fim do ano
+        if (atingimentoPct < 50 && mesesRestantes <= 3) {
+          isAlerta = true
+          tipoAlerta = 'RISCO_ANUAL_MENOS_50'
+        }
+      } else if (periodo === 'Trimestral') {
         if (metaTrim !== trimAtualStr) continue
         nomePeriodo = metaTrim + '/' + metaAno
         diasRestantes = diasRestantesTrimestre
@@ -263,6 +315,11 @@ cronAdd('verificar_metas_em_risco_diario', '0 8 * * *', () => {
           ' e restam menos de ' +
           diasRestantes +
           ' dia(s) para o término do trimestre.'
+      } else if (tipoAlerta === 'RISCO_ANUAL_MENOS_50') {
+        motivoTexto =
+          'O atingimento anual acumulado está em apenas ' +
+          pctFormatado +
+          ' e restam 3 meses ou menos para o término do ano fiscal.'
       }
 
       // Montar HTML do e-mail
