@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
+import { ModalPerfil } from '@/components/ModalPerfil'
 import {
   Scale,
   LayoutDashboard,
@@ -19,6 +20,7 @@ import {
   Building,
   FolderTree,
   Folder,
+  Settings,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -44,6 +46,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [modalPerfilOpen, setModalPerfilOpen] = useState(false)
 
   // Itens do submenu Cadastros
   const cadastroSubItems = [
@@ -299,18 +302,28 @@ export default function Layout() {
             </div>
 
             {/* Footer Drawer */}
-            <div className="pt-4 border-t border-white/10">
-              <div className="flex items-center gap-3 mb-4 px-2">
-                <Avatar className="w-9 h-9 border border-white/20">
-                  <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
-                    {userInitial}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="overflow-hidden">
-                  <p className="text-sm font-semibold text-white truncate">{userName}</p>
-                  <p className="text-xs text-slate-400 truncate">{userEmail}</p>
+            <div className="pt-4 border-t border-white/10 space-y-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileDrawerOpen(false)
+                  setModalPerfilOpen(true)
+                }}
+                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+              >
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <Avatar className="w-9 h-9 border border-white/20 shrink-0">
+                    <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
+                      {userInitial}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="overflow-hidden">
+                    <p className="text-sm font-semibold text-white truncate">{userName}</p>
+                    <p className="text-xs text-slate-400 truncate">{userEmail}</p>
+                  </div>
                 </div>
-              </div>
+                <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+              </button>
               <button
                 onClick={() => {
                   logout()
@@ -691,7 +704,12 @@ export default function Layout() {
           <div className="p-2 lg:p-3 border-t border-white/10">
             {/* Desktop User Card */}
             <div className="hidden lg:flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-              <div className="flex items-center gap-2.5 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setModalPerfilOpen(true)}
+                className="flex items-center gap-2.5 overflow-hidden text-left flex-1 hover:opacity-90"
+                title="Configurações e Alertas"
+              >
                 <Avatar className="w-8 h-8 border border-white/20 bg-blue-600 shrink-0">
                   <AvatarFallback className="bg-blue-600 text-white font-semibold text-xs">
                     {userInitial}
@@ -703,21 +721,44 @@ export default function Layout() {
                   </p>
                   <p className="text-[11px] text-blue-200/70 truncate">{userEmail}</p>
                 </div>
-              </div>
-              <button
-                onClick={() => {
-                  logout()
-                  navigate('/')
-                }}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-red-300 hover:bg-red-950/50 transition-colors"
-                title="Sair do sistema"
-              >
-                <LogOut className="w-4 h-4" />
               </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setModalPerfilOpen(true)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-blue-300 hover:bg-white/10 transition-colors"
+                  title="Configurações de Alertas e Perfil"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => {
+                    logout()
+                    navigate('/')
+                  }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-300 hover:bg-red-950/50 transition-colors"
+                  title="Sair do sistema"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Tablet Minimal Logout */}
+            {/* Tablet Minimal Profile / Logout */}
             <div className="lg:hidden flex flex-col items-center gap-2 py-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setModalPerfilOpen(true)}
+                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-blue-300 hover:bg-white/10 transition-colors"
+                  >
+                    <Settings className="w-5 h-5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="bg-[#0B1F3A] text-white border-blue-900">
+                  Perfil e Alertas
+                </TooltipContent>
+              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -827,6 +868,9 @@ export default function Layout() {
           </footer>
         </div>
       </div>
+
+      {/* Modal de Perfil e Preferências de Alertas */}
+      <ModalPerfil open={modalPerfilOpen} onOpenChange={setModalPerfilOpen} />
     </div>
   )
 }

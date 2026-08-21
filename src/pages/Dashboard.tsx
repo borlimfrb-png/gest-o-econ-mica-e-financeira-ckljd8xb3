@@ -49,6 +49,8 @@ import {
   Legend,
   AreaChart,
   Area,
+  LineChart,
+  Line,
 } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -70,6 +72,7 @@ import {
   FolderTree,
   Check,
   Tag,
+  Download,
 } from 'lucide-react'
 
 const CHART_COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
@@ -186,8 +189,13 @@ export default function Dashboard() {
   const calcD = calcularDre(dreAtual)
   const calcInd = calcularIndicadores(balancoAtual, dreAtual)
 
-  // SEÇÃO METAS DE LANÇAMENTOS DO MÊS / EXERCÍCIO
+  // SEÇÃO METAS DE LANÇAMENTOS DO MÊS / EXERCÍCIO / TRIMESTRE
   const cardsMetasCalculados = useMemo(() => {
+    const agora = new Date()
+    const anoAtual = agora.getFullYear()
+    const mesAtual = agora.getMonth() + 1
+    const diaAtual = agora.getDate()
+
     const metasFiltradas = metas.filter((m) => {
       const isAtiva = m.ativo ?? true
       if (!isAtiva) return false
@@ -211,6 +219,7 @@ export default function Dashboard() {
     ]
 
     return metasFiltradas.map((meta) => {
+      const isTrimestral = meta.periodo === 'Trimestral'
       const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
       const empNome = emp?.nome || 'Empresa'
 
@@ -222,19 +231,29 @@ export default function Dashboard() {
           : centroObj.nome
         : null
 
-      // Calcular realizado no mês e ano da meta (e filtrando por centro se a meta tiver vínculo com centro)
+      // Meses correspondentes se for trimestral
+      let mesesDoPeriodo: number[] = []
+      if (isTrimestral) {
+        const qStr = meta.trimestre || 'Q1'
+        const qNum = parseInt(qStr.replace('Q', ''), 10) || 1
+        mesesDoPeriodo = [(qNum - 1) * 3 + 1, (qNum - 1) * 3 + 2, (qNum - 1) * 3 + 3]
+      } else {
+        mesesDoPeriodo = [meta.mes]
+      }
+
+      // Filtrar lançamentos da meta
       const lancamentosMeta = lancamentosFinanceiros.filter((l) => {
         if (l.empresa !== meta.empresa) return false
         if (!l.data) return false
         const anoLanc = parseInt(l.data.slice(0, 4), 10)
         const mesLanc = parseInt(l.data.slice(5, 7), 10)
-        if (anoLanc !== meta.ano || mesLanc !== meta.mes) return false
+        if (anoLanc !== meta.ano) return false
+        if (!mesesDoPeriodo.includes(mesLanc)) return false
 
         const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
         const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
         if (conta?.tipo !== meta.tipo) return false
 
-        // Se meta vinculada a centro, verificar se o plano_conta pertence àquele centro
         if (meta.centro) {
           const centroDoPlano = pc?.expand?.centro?.id || pc?.centro
           if (centroDoPlano !== meta.centro) return false
@@ -246,25 +265,107 @@ export default function Dashboard() {
       const realizado = lancamentosMeta.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
       const atingimentoPct = meta.valor > 0 ? (realizado / meta.valor) * 100 : 0
 
-      // Indicador visual: verde ≥100%, âmbar 70-99%, vermelho <70%
+      // Projeção para trimestral: com base no ritmo atual (realizado / meses decorridos * 3)
+      let projecaoValor: number | null = null
+      let projecaoPct: number | null = null
       let statusCor: 'green' | 'amber' | 'red' = 'red'
-      if (atingimentoPct >= 100) {
-        statusCor = 'green'
-      } else if (atingimentoPct >= 70) {
-        statusCor = 'amber'
+
+      if (isTrimestral) {
+        let mesesDecorridos = 0
+        if (anoAtual > meta.ano) {
+          mesesDecorridos = 3
+        } else if (anoAtual < meta.ano) {
+          mesesDecorridos = 0
+        } else {
+          // Mesmo ano
+          for (const m of mesesDoPeriodo) {
+            if (mesAtual > m) {
+              mesesDecorridos += 1
+            } else if (mesAtual === m) {
+              // Mês corrente: fração dos dias passados do mês
+              const totalDiasMes = new Date(anoAtual, mesAtual, 0).getDate()
+              const fracaoMes = Math.min(1, Math.max(0.1, diaAtual / totalDiasMes))
+              mesesDecorridos += fracaoMes
+            }
+          }
+        }
+
+        if (mesesDecorridos > 0 && realizado > 0) {
+          projecaoValor = (realizado / mesesDecorridos) * 3
+          projecaoPct = meta.valor > 0 ? (projecaoValor / meta.valor) * 100 : 0
+        } else {
+          projecaoValor = realizado
+          projecaoPct = atingimentoPct
+        }
+
+        // Indicador visual trimestral: verde (projeção ≥ meta ou projecaoPct >= 100),
+        // âmbar (projeção entre 70-99%), vermelho (projeção < 70%)
+        if ((projecaoPct ?? 0) >= 100) {
+          statusCor = 'green'
+        } else if ((projecaoPct ?? 0) >= 70) {
+          statusCor = 'amber'
+        } else {
+          statusCor = 'red'
+        }
       } else {
-        statusCor = 'red'
+        // Indicador mensal padrão: verde ≥100%, âmbar 70-99%, vermelho <70%
+        if (atingimentoPct >= 100) {
+          statusCor = 'green'
+        } else if (atingimentoPct >= 70) {
+          statusCor = 'amber'
+        } else {
+          statusCor = 'red'
+        }
+      }
+
+      // Sparkline de evolução diária (apenas para metas do mês corrente, quando mensal)
+      const isMesCorrente = !isTrimestral && meta.ano === anoAtual && meta.mes === mesAtual
+      let sparklineData: { dia: number; valorAcumulado: number; pctAcumulado: number }[] = []
+
+      if (isMesCorrente) {
+        // Mapear cada dia de 1 até hoje
+        const mapaDias = new Map<number, number>()
+        for (let d = 1; d <= diaAtual; d++) {
+          mapaDias.set(d, 0)
+        }
+
+        for (const l of lancamentosMeta) {
+          const diaLanc = parseInt(l.data.slice(8, 10), 10)
+          if (diaLanc >= 1 && diaLanc <= diaAtual) {
+            mapaDias.set(diaLanc, (mapaDias.get(diaLanc) || 0) + (Number(l.valor) || 0))
+          }
+        }
+
+        let somaAcumulada = 0
+        for (let d = 1; d <= diaAtual; d++) {
+          somaAcumulada += mapaDias.get(d) || 0
+          const pctAcum = meta.valor > 0 ? (somaAcumulada / meta.valor) * 100 : 0
+          sparklineData.push({
+            dia: d,
+            valorAcumulado: somaAcumulada,
+            pctAcumulado: Number(pctAcum.toFixed(1)),
+          })
+        }
       }
 
       const mesNome = nomesMesesLista[meta.mes - 1] || `Mês ${meta.mes}`
+      const periodoLabel = isTrimestral
+        ? `${meta.trimestre || 'Q1'}/${meta.ano}`
+        : `${mesNome}/${meta.ano}`
 
       return {
         ...meta,
         empresaNome: empNome,
         centroNome,
         mesNome,
+        periodoLabel,
+        isTrimestral,
+        isMesCorrente,
+        sparklineData,
         realizado,
         atingimentoPct,
+        projecaoValor,
+        projecaoPct,
         statusCor,
       }
     })
@@ -277,6 +378,54 @@ export default function Dashboard() {
     centrosMap,
     empresas,
   ])
+
+  // Exportação CSV do Resumo de Metas
+  const exportarResumoMetasCsv = () => {
+    if (cardsMetasCalculados.length === 0) return
+
+    const headers = [
+      'Empresa',
+      'Tipo',
+      'Centro de Custo',
+      'Período',
+      'Referência',
+      'Ano',
+      'Valor Meta (R$)',
+      'Realizado (R$)',
+      'Atingimento (%)',
+      'Projeção Trimestre (R$)',
+      'Status',
+    ]
+
+    const rows = cardsMetasCalculados.map((m) => {
+      const statusTexto =
+        m.statusCor === 'green' ? 'No Alvo' : m.statusCor === 'amber' ? 'Atenção' : 'Em Risco'
+      return [
+        `"${m.empresaNome.replace(/"/g, '""')}"`,
+        `"${m.tipo}"`,
+        `"${(m.centroNome || 'Geral').replace(/"/g, '""')}"`,
+        `"${m.isTrimestral ? 'Trimestral' : 'Mensal'}"`,
+        `"${m.isTrimestral ? m.trimestre : m.mesNome}"`,
+        m.ano,
+        m.valor.toFixed(2),
+        m.realizado.toFixed(2),
+        m.atingimentoPct.toFixed(2),
+        m.projecaoValor !== null ? m.projecaoValor.toFixed(2) : '',
+        `"${statusTexto}"`,
+      ].join(';')
+    })
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows].join('\r\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `resumo_metas_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   // SEÇÃO COMPARATIVO ENTRE EMPRESAS (MÊS ATUAL)
   const dadosComparativoEmpresas = useMemo(() => {
@@ -593,16 +742,36 @@ export default function Dashboard() {
     const totalDiasNoMes = new Date(anoAtual, agora.getMonth() + 1, 0).getDate()
     const diasRestantesMes = totalDiasNoMes - diaAtual
 
-    // Filtrar metas ativas do mês e ano correntes (respeitando filtro de empresa se houver)
-    const metasDoMes = metas.filter((m) => {
+    // Trimestre atual
+    const trimAtualNum = Math.floor((mesAtual - 1) / 3) + 1
+    const trimAtualStr = `Q${trimAtualNum}` as const
+    const mesesDoTrimestre = [
+      (trimAtualNum - 1) * 3 + 1,
+      (trimAtualNum - 1) * 3 + 2,
+      (trimAtualNum - 1) * 3 + 3,
+    ]
+    const ultimoMesTrimestre = mesesDoTrimestre[2]
+    const ultimoDiaTrimestre = new Date(anoAtual, ultimoMesTrimestre, 0).getDate()
+    const fimTrimestreDate = new Date(anoAtual, ultimoMesTrimestre - 1, ultimoDiaTrimestre)
+    const diffTimeTrimestre = fimTrimestreDate.getTime() - agora.getTime()
+    const diasRestantesTrimestre = Math.max(0, Math.ceil(diffTimeTrimestre / (1000 * 60 * 60 * 24)))
+
+    // Filtrar metas ativas do período corrente (mensais do mês atual OU trimestrais do trimestre atual)
+    const metasCorrentes = metas.filter((m) => {
       const isAtiva = m.ativo ?? true
       if (!isAtiva) return false
-      if (m.ano !== anoAtual || m.mes !== mesAtual) return false
+      if (m.ano !== anoAtual) return false
       if (selectedEmpresaId && m.empresa !== selectedEmpresaId) return false
-      return true
+
+      const isTrimestral = m.periodo === 'Trimestral'
+      if (isTrimestral) {
+        return m.trimestre === trimAtualStr
+      }
+      return m.mes === mesAtual
     })
 
-    for (const meta of metasDoMes) {
+    for (const meta of metasCorrentes) {
+      const isTrimestral = meta.periodo === 'Trimestral'
       const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
       const empNome = emp?.nome || 'Empresa'
       const centroObj =
@@ -610,7 +779,8 @@ export default function Dashboard() {
       const centroLabel = centroObj
         ? ` · ${centroObj.codigo ? `${centroObj.codigo} ` : ''}${centroObj.nome}`
         : ''
-      const nomeIdentificador = `Meta de ${meta.tipo}${centroLabel} (${empNome})`
+      const periodoTag = isTrimestral ? ` [Trimestral ${meta.trimestre}]` : ''
+      const nomeIdentificador = `Meta de ${meta.tipo}${centroLabel}${periodoTag} (${empNome})`
 
       // Calcular realizado da meta respeitando tipo e centro vinculado
       const lancs = lancamentosFinanceiros.filter((l) => {
@@ -618,7 +788,13 @@ export default function Dashboard() {
         if (!l.data) return false
         const anoLanc = parseInt(l.data.slice(0, 4), 10)
         const mesLanc = parseInt(l.data.slice(5, 7), 10)
-        if (anoLanc !== meta.ano || mesLanc !== meta.mes) return false
+        if (anoLanc !== meta.ano) return false
+
+        if (isTrimestral) {
+          if (!mesesDoTrimestre.includes(mesLanc)) return false
+        } else {
+          if (mesLanc !== meta.mes) return false
+        }
 
         const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
         const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
@@ -635,40 +811,59 @@ export default function Dashboard() {
       const pct = meta.valor > 0 ? (realizado / meta.valor) * 100 : 0
       const temLancamentos = lancs.length > 0 && realizado > 0
 
-      // Critério 2 (Vermelho): Meta com 0% de atingimento e mais de 15 dias do mês já passados
-      // Alerta: "Atenção: [nome da meta] ainda não teve lançamentos este mês"
-      if (!temLancamentos && diaAtual > 15) {
-        lista.push({
-          id: `meta-zero-${meta.id}`,
-          titulo: `Atenção: ${nomeIdentificador} ainda não teve lançamentos este mês`,
-          descricao: `Passaram-se ${diaAtual} dias do mês e nenhum lançamento de ${meta.tipo.toLowerCase()} foi registrado para esta meta de ${formatBrlMil(
-            meta.valor,
-          )}.`,
-          severidade: 'red',
-          atingimentoPct: 0,
-          diasRestantes: diasRestantesMes,
-        })
-        continue
-      }
+      if (isTrimestral) {
+        // Regra Trimestral: menos de 50% e faltando menos de 15 dias para o fim do trimestre
+        if (pct < 50 && diasRestantesTrimestre <= 15) {
+          lista.push({
+            id: `meta-risco-trim-${meta.id}`,
+            titulo: `Meta Trimestral em risco: ${nomeIdentificador} está em ${formatPercent(
+              pct,
+              0,
+            )} faltando ${diasRestantesTrimestre} ${diasRestantesTrimestre === 1 ? 'dia' : 'dias'}`,
+            descricao: `Realizado acumulado de ${formatBrlMil(realizado)} de ${formatBrlMil(
+              meta.valor,
+            )} (${formatPercent(pct, 1)}). Faltam apenas ${diasRestantesTrimestre} ${
+              diasRestantesTrimestre === 1 ? 'dia' : 'dias'
+            } para o encerramento do trimestre (${meta.trimestre}/${meta.ano}).`,
+            severidade: 'amber',
+            atingimentoPct: pct,
+            diasRestantes: diasRestantesTrimestre,
+          })
+        }
+      } else {
+        // Critério 2 (Vermelho): Meta com 0% de atingimento e mais de 15 dias do mês já passados
+        if (!temLancamentos && diaAtual > 15) {
+          lista.push({
+            id: `meta-zero-${meta.id}`,
+            titulo: `Atenção: ${nomeIdentificador} ainda não teve lançamentos este mês`,
+            descricao: `Passaram-se ${diaAtual} dias do mês e nenhum lançamento de ${meta.tipo.toLowerCase()} foi registrado para esta meta de ${formatBrlMil(
+              meta.valor,
+            )}.`,
+            severidade: 'red',
+            atingimentoPct: 0,
+            diasRestantes: diasRestantesMes,
+          })
+          continue
+        }
 
-      // Critério 1 (Laranja/Amber): Meta de receita ou despesa com menos de 50% de atingimento E faltando 5 dias ou menos para o fim do mês
-      // Alerta: "Meta em risco: [nome da meta] está em [X]% faltando [Y] dias"
-      if (pct < 50 && diasRestantesMes <= 5) {
-        lista.push({
-          id: `meta-risco-${meta.id}`,
-          titulo: `Meta em risco: ${nomeIdentificador} está em ${formatPercent(
-            pct,
-            0,
-          )} faltando ${diasRestantesMes} ${diasRestantesMes === 1 ? 'dia' : 'dias'}`,
-          descricao: `Realizado de ${formatBrlMil(realizado)} de ${formatBrlMil(
-            meta.valor,
-          )} (${formatPercent(pct, 1)}). Faltam apenas ${diasRestantesMes} ${
-            diasRestantesMes === 1 ? 'dia' : 'dias'
-          } para encerrar o mês.`,
-          severidade: 'amber',
-          atingimentoPct: pct,
-          diasRestantes: diasRestantesMes,
-        })
+        // Critério 1 (Laranja/Amber): Meta com menos de 50% de atingimento E faltando 5 dias ou menos para o fim do mês
+        if (pct < 50 && diasRestantesMes <= 5) {
+          lista.push({
+            id: `meta-risco-${meta.id}`,
+            titulo: `Meta em risco: ${nomeIdentificador} está em ${formatPercent(
+              pct,
+              0,
+            )} faltando ${diasRestantesMes} ${diasRestantesMes === 1 ? 'dia' : 'dias'}`,
+            descricao: `Realizado de ${formatBrlMil(realizado)} de ${formatBrlMil(
+              meta.valor,
+            )} (${formatPercent(pct, 1)}). Faltam apenas ${diasRestantesMes} ${
+              diasRestantesMes === 1 ? 'dia' : 'dias'
+            } para encerrar o mês.`,
+            severidade: 'amber',
+            atingimentoPct: pct,
+            diasRestantes: diasRestantesMes,
+          })
+        }
       }
     }
 
@@ -1060,7 +1255,7 @@ export default function Dashboard() {
           <div>
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
               <Target className="w-4 h-4 text-blue-600" />
-              Metas de Lançamentos Mensais
+              Metas de Lançamentos (Mensais e Trimestrais)
               {cardsMetasCalculados.length > 0 && (
                 <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-semibold">
                   {cardsMetasCalculados.length} ativa(s)
@@ -1068,20 +1263,33 @@ export default function Dashboard() {
               )}
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              Acompanhamento do valor realizado versus meta mensal estipulada com indicador visual
-              de atingimento (Verde ≥100%, Âmbar 70-99%, Vermelho &lt;70%)
+              Acompanhamento de metas mensais e trimestrais com evolução diária (sparkline) e
+              projeção automática
             </CardDescription>
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => setModalMetasOpen(true)}
-            className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold self-start sm:self-auto gap-1.5 shrink-0 shadow-xs"
-          >
-            <Target className="w-3.5 h-3.5" />
-            Gerenciar Metas
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={exportarResumoMetasCsv}
+              className="text-xs border-slate-200 text-slate-700 hover:bg-slate-50 gap-1.5 font-medium"
+              title="Exportar resumo de metas em arquivo CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              Exportar CSV
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setModalMetasOpen(true)}
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold self-start sm:self-auto gap-1.5 shrink-0 shadow-xs"
+            >
+              <Target className="w-3.5 h-3.5" />
+              Gerenciar Metas
+            </Button>
+          </div>
         </CardHeader>
 
         <CardContent className="pt-4">
@@ -1092,8 +1300,8 @@ export default function Dashboard() {
               </div>
               <p className="text-xs font-bold text-slate-700">Nenhuma meta ativa cadastrada</p>
               <p className="text-[11px] text-slate-500 mt-0.5 max-w-sm mb-3">
-                Cadastre metas mensais de receitas ou despesas para acompanhar o progresso e
-                atingimento em tempo real.
+                Cadastre metas mensais ou trimestrais de receitas ou despesas para acompanhar o
+                progresso, atingimento e projeção em tempo real.
               </p>
               <Button
                 type="button"
@@ -1129,6 +1337,13 @@ export default function Dashboard() {
                       ? 'border-amber-200 hover:border-amber-300'
                       : 'border-red-200 hover:border-red-300'
 
+                const lineColor =
+                  m.statusCor === 'green'
+                    ? '#10B981'
+                    : m.statusCor === 'amber'
+                      ? '#F59E0B'
+                      : '#EF4444'
+
                 return (
                   <div
                     key={m.id}
@@ -1153,46 +1368,127 @@ export default function Dashboard() {
                               </span>
                             )}
                           </p>
-                          <p className="text-[10px] text-slate-500 font-medium">
-                            {m.empresaNome} · {m.mesNome}/{m.ano}
+                          <p className="text-[10px] text-slate-500 font-medium flex items-center gap-1.5 flex-wrap">
+                            <span>{m.empresaNome}</span>
+                            <span>·</span>
+                            <span className="font-semibold text-slate-700">{m.periodoLabel}</span>
                           </p>
                         </div>
 
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] font-bold shrink-0 ${
-                            m.tipo === 'Receita'
-                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                              : 'bg-red-50 text-red-700 border-red-200'
-                          }`}
-                        >
-                          {m.tipo}
-                        </Badge>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Badge
+                            variant="secondary"
+                            className={`text-[9px] font-semibold px-1.5 py-0 ${
+                              m.isTrimestral
+                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}
+                          >
+                            {m.isTrimestral ? 'Trimestral' : 'Mensal'}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`text-[9px] font-bold px-1.5 py-0 ${
+                              m.tipo === 'Receita'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-red-50 text-red-700 border-red-200'
+                            }`}
+                          >
+                            {m.tipo}
+                          </Badge>
+                        </div>
                       </div>
 
                       {/* Valores: Meta vs Realizado */}
                       <div className="mt-3 space-y-1">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Meta Estipulada:</span>
+                          <span className="text-slate-500">
+                            {m.isTrimestral ? 'Meta Trimestral:' : 'Meta Estipulada:'}
+                          </span>
                           <span className="font-bold text-slate-700">{formatBrlMil(m.valor)}</span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-500">Realizado:</span>
+                          <span className="text-slate-500">
+                            {m.isTrimestral ? 'Realizado Acumulado:' : 'Realizado:'}
+                          </span>
                           <span className="font-extrabold text-[#0B1F3A]">
                             {formatBrlMil(m.realizado)}
                           </span>
                         </div>
+
+                        {/* Projeção (apenas para trimestrais) */}
+                        {m.isTrimestral && (
+                          <div className="pt-1.5 mt-1 border-t border-dashed border-slate-100 flex items-center justify-between text-xs">
+                            <span className="text-slate-500 flex items-center gap-1">
+                              <TrendingUp className="w-3 h-3 text-purple-600" />
+                              Projeção Trimestre:
+                            </span>
+                            <span className="font-bold text-purple-900">
+                              {formatBrlMil(m.projecaoValor ?? 0)} (
+                              {formatPercent(m.projecaoPct ?? 0, 0)})
+                            </span>
+                          </div>
+                        )}
                       </div>
 
                       {/* Barra de Progresso Visual */}
-                      <div className="mt-3">
-                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                      <div className="mt-2.5">
+                        <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                           <div
                             className={`h-full rounded-full transition-all duration-500 ${corProgresso}`}
                             style={{ width: `${Math.min(m.atingimentoPct, 100)}%` }}
                           />
                         </div>
                       </div>
+
+                      {/* Mini Gráfico de Linha (Sparkline) para metas do mês corrente */}
+                      {m.isMesCorrente && m.sparklineData && m.sparklineData.length > 0 ? (
+                        <div className="mt-2.5 pt-2 border-t border-slate-100">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
+                            <span>Evolução diária (Dia 1 ao {m.sparklineData.length})</span>
+                            <span className="text-slate-600 font-semibold">
+                              {m.sparklineData[m.sparklineData.length - 1]?.pctAcumulado}%
+                            </span>
+                          </div>
+                          <div className="h-[60px] w-full">
+                            <ResponsiveContainer width="100%" height={60}>
+                              <LineChart
+                                data={m.sparklineData}
+                                margin={{ top: 4, right: 4, left: 4, bottom: 4 }}
+                              >
+                                <RechartsTooltip
+                                  content={({ active, payload }) => {
+                                    if (active && payload && payload.length) {
+                                      const d = payload[0].payload
+                                      return (
+                                        <div className="bg-[#0B1F3A] text-white text-[11px] rounded-md px-2 py-1 shadow-md">
+                                          <p className="font-semibold">Dia {d.dia}</p>
+                                          <p className="text-emerald-300">
+                                            {formatBrlMil(d.valorAcumulado)} ({d.pctAcumulado}%)
+                                          </p>
+                                        </div>
+                                      )
+                                    }
+                                    return null
+                                  }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="pctAcumulado"
+                                  stroke={lineColor}
+                                  strokeWidth={2}
+                                  dot={false}
+                                  isAnimationActive={true}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+                      ) : !m.isTrimestral ? (
+                        <div className="mt-2 pt-2 border-t border-slate-100 text-[10px] text-slate-400 text-center">
+                          Meta de {m.mesNome}/{m.ano}
+                        </div>
+                      ) : null}
                     </div>
 
                     {/* Rodapé: % de Atingimento e Badge */}

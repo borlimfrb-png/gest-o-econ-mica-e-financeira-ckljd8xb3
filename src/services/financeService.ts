@@ -601,6 +601,8 @@ export const metasLancamentosService = {
     valor: number
     mes: number
     ano: number
+    periodo?: 'Mensal' | 'Trimestral'
+    trimestre?: 'Q1' | 'Q2' | 'Q3' | 'Q4' | null
     centro?: string | null
     ativo?: boolean
   }): Promise<MetaLancamentoRecord> {
@@ -611,6 +613,8 @@ export const metasLancamentosService = {
         valor: Number(data.valor) || 0,
         mes: Number(data.mes),
         ano: Number(data.ano),
+        periodo: data.periodo || 'Mensal',
+        trimestre: data.trimestre || null,
         centro: data.centro || null,
         ativo: data.ativo ?? true,
         user: currentUserId(),
@@ -624,7 +628,10 @@ export const metasLancamentosService = {
   async update(
     id: string,
     data: Partial<
-      Pick<MetaLancamentoRecord, 'empresa' | 'tipo' | 'valor' | 'mes' | 'ano' | 'centro' | 'ativo'>
+      Pick<
+        MetaLancamentoRecord,
+        'empresa' | 'tipo' | 'valor' | 'mes' | 'ano' | 'periodo' | 'trimestre' | 'centro' | 'ativo'
+      >
     >,
   ): Promise<MetaLancamentoRecord> {
     const payload: Record<string, unknown> = { ...data }
@@ -639,6 +646,12 @@ export const metasLancamentosService = {
     }
     if (data.centro !== undefined) {
       payload.centro = data.centro || null
+    }
+    if (data.periodo !== undefined) {
+      payload.periodo = data.periodo
+    }
+    if (data.trimestre !== undefined) {
+      payload.trimestre = data.trimestre || null
     }
     return await pb.collection('metas_lancamentos').update<MetaLancamentoRecord>(id, payload, {
       expand: 'empresa,centro',

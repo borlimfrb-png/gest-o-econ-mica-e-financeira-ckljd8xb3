@@ -9,6 +9,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   login: (email: string, pass: string) => Promise<void>
   signup: (email: string, pass: string, name: string) => Promise<void>
+  updateUser: (data: Partial<Record<string, any>>) => Promise<AuthModel>
   logout: () => void
 }
 
@@ -68,6 +69,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await login(email, pass)
   }
 
+  const updateUser = async (data: Partial<Record<string, any>>) => {
+    if (!pb.authStore.record?.id) throw new Error('Usuário não autenticado')
+    const updated = await pb.collection('users').update(pb.authStore.record.id, data)
+    setUser(updated)
+    return updated
+  }
+
   const logout = () => {
     pb.authStore.clear()
     setUser(null)
@@ -83,6 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!token && pb.authStore.isValid,
         login,
         signup,
+        updateUser,
         logout,
       }}
     >

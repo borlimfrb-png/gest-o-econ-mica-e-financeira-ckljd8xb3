@@ -24,6 +24,8 @@ import type {
   EmpresaRecord,
   MetaLancamentoRecord,
   TipoMetaLancamento,
+  PeriodoMeta,
+  TrimestreMeta,
   CentroRecord,
 } from '@/types/finance'
 import { formatBrlMil, formatPercent } from '@/lib/financeCalculations'
@@ -81,6 +83,12 @@ export function ModalGerenciarMetas({
   const [formEmpresa, setFormEmpresa] = useState<string>(
     selectedEmpresaId || (empresas[0]?.id ?? ''),
   )
+  const [formPeriodo, setFormPeriodo] = useState<PeriodoMeta>('Mensal')
+  const [formTrimestre, setFormTrimestre] = useState<TrimestreMeta>(() => {
+    const m = new Date().getMonth() + 1
+    const q = Math.ceil(m / 3)
+    return `Q${q}` as TrimestreMeta
+  })
   const [formTipo, setFormTipo] = useState<TipoMetaLancamento>('Receita')
   const [formCentro, setFormCentro] = useState<string>('all')
   const [formValor, setFormValor] = useState<string>('')
@@ -100,15 +108,20 @@ export function ModalGerenciarMetas({
   const handleOpenEdit = (meta: MetaLancamentoRecord) => {
     setEditingMetaId(meta.id)
     setFormEmpresa(meta.empresa)
+    setFormPeriodo(meta.periodo || 'Mensal')
+    if (meta.trimestre) {
+      setFormTrimestre(meta.trimestre)
+    }
     setFormTipo(meta.tipo)
     setFormCentro(meta.centro || 'all')
     setFormValor(String(meta.valor))
-    setFormMes(String(meta.mes))
-    setFormAno(String(meta.ano))
+    setFormMes(String(meta.mes || new Date().getMonth() + 1))
+    setFormAno(String(meta.ano || selectedAno || new Date().getFullYear()))
   }
 
   const handleCancelEdit = () => {
     setEditingMetaId(null)
+    setFormPeriodo('Mensal')
     setFormCentro('all')
     setFormValor('')
   }
@@ -129,18 +142,31 @@ export function ModalGerenciarMetas({
       setIsSubmitting(true)
       const centroId = formCentro === 'all' || !formCentro ? null : formCentro
 
+      const mesCalculado =
+        formPeriodo === 'Trimestral'
+          ? formTrimestre === 'Q1'
+            ? 1
+            : formTrimestre === 'Q2'
+              ? 4
+              : formTrimestre === 'Q3'
+                ? 7
+                : 10
+          : Number(formMes)
+
       if (editingMetaId) {
         await metasLancamentosService.update(editingMetaId, {
           empresa: formEmpresa,
           tipo: formTipo,
           valor: valorNum,
-          mes: Number(formMes),
+          mes: mesCalculado,
           ano: Number(formAno),
+          periodo: formPeriodo,
+          trimestre: formPeriodo === 'Trimestral' ? formTrimestre : null,
           centro: centroId,
         })
         toast({
           title: 'Meta atualizada',
-          description: 'A meta mensal foi alterada com sucesso.',
+          description: `A meta ${formPeriodo.toLowerCase()} foi alterada com sucesso.`,
         })
         handleCancelEdit()
       } else {
@@ -148,14 +174,16 @@ export function ModalGerenciarMetas({
           empresa: formEmpresa,
           tipo: formTipo,
           valor: valorNum,
-          mes: Number(formMes),
+          mes: mesCalculado,
           ano: Number(formAno),
+          periodo: formPeriodo,
+          trimestre: formPeriodo === 'Trimestral' ? formTrimestre : null,
           centro: centroId,
           ativo: true,
         })
         toast({
           title: 'Meta cadastrada',
-          description: 'A meta mensal foi criada com sucesso.',
+          description: `A meta ${formPeriodo.toLowerCase()} foi criada com sucesso.`,
         })
         setFormValor('')
         setFormCentro('all')
@@ -215,11 +243,11 @@ export function ModalGerenciarMetas({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[#0B1F3A]">
             <Target className="w-5 h-5 text-blue-600" />
-            Metas de Lançamentos Mensais
+            Metas de Lançamentos (Mensais e Trimestrais)
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Defina metas mensais de Receita ou Despesa por empresa para acompanhar o % de
-            atingimento em tempo real no Dashboard.
+            Defina metas mensais ou trimestrais de Receita ou Despesa por empresa para acompanhar o
+            % de atingimento e projeção em tempo real no Dashboard.
           </DialogDescription>
         </DialogHeader>
 
@@ -235,7 +263,7 @@ export function ModalGerenciarMetas({
               ) : (
                 <Plus className="w-3.5 h-3.5 text-blue-600" />
               )}
-              {editingMetaId ? 'Editar Meta' : 'Nova Meta Mensal'}
+              {editingMetaId ? `Editar Meta (${formPeriodo})` : `Nova Meta ${formPeriodo}`}
             </span>
             {editingMetaId && (
               <Button
@@ -251,6 +279,27 @@ export function ModalGerenciarMetas({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Período: Mensal ou Trimestral */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-700 font-semibold">Período *</Label>
+              <Select
+                value={formPeriodo}
+                onValueChange={(val) => setFormPeriodo(val as PeriodoMeta)}
+              >
+                <SelectTrigger className="h-8 text-xs bg-white font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Mensal" className="text-xs font-semibold text-blue-700">
+                    Mensal
+                  </SelectItem>
+                  <SelectItem value="Trimestral" className="text-xs font-semibold text-purple-700">
+                    Trimestral (Q1, Q2, Q3, Q4)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Empresa */}
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-700">Empresa *</Label>
@@ -268,7 +317,7 @@ export function ModalGerenciarMetas({
               </Select>
             </div>
 
-            {/* Tipo */}
+            {/* Tipo de Conta */}
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-700">Tipo de Conta *</Label>
               <Select
@@ -289,12 +338,29 @@ export function ModalGerenciarMetas({
               </Select>
             </div>
 
+            {/* Valor */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-slate-700">
+                Valor da Meta {formPeriodo === 'Trimestral' ? 'Trimestral' : 'Mensal'} (R$) *
+              </Label>
+              <Input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Ex: 50000"
+                value={formValor}
+                onChange={(e) => setFormValor(e.target.value)}
+                className="h-8 text-xs bg-white font-semibold"
+                required
+              />
+            </div>
+
             {/* Centro de Custo (Opcional) */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label className="text-xs text-slate-700 flex items-center justify-between">
                 <span>Centro de Custo (Opcional)</span>
                 <span className="text-[10px] text-slate-400 font-normal">
-                  Se vazio, soma toda a empresa
+                  Se vazio, consolida toda a empresa
                 </span>
               </Label>
               <Select value={formCentro} onValueChange={setFormCentro}>
@@ -315,52 +381,80 @@ export function ModalGerenciarMetas({
               </Select>
             </div>
 
-            {/* Valor */}
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-700">Valor da Meta Mensal (R$) *</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="Ex: 50000"
-                value={formValor}
-                onChange={(e) => setFormValor(e.target.value)}
-                className="h-8 text-xs bg-white"
-                required
-              />
-            </div>
-
-            {/* Mês e Ano */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-700">Mês *</Label>
-                <Select value={formMes} onValueChange={setFormMes}>
-                  <SelectTrigger className="h-8 text-xs bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MESES.map((m) => (
-                      <SelectItem key={m.valor} value={String(m.valor)} className="text-xs">
-                        {m.nome}
+            {/* Período específico: Mês OU Trimestre + Ano */}
+            {formPeriodo === 'Trimestral' ? (
+              <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-700 font-semibold">Trimestre *</Label>
+                  <Select
+                    value={formTrimestre}
+                    onValueChange={(val) => setFormTrimestre(val as TrimestreMeta)}
+                  >
+                    <SelectTrigger className="h-8 text-xs bg-white font-medium">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Q1" className="text-xs font-semibold">
+                        Q1 (Jan - Mar)
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                      <SelectItem value="Q2" className="text-xs font-semibold">
+                        Q2 (Abr - Jun)
+                      </SelectItem>
+                      <SelectItem value="Q3" className="text-xs font-semibold">
+                        Q3 (Jul - Set)
+                      </SelectItem>
+                      <SelectItem value="Q4" className="text-xs font-semibold">
+                        Q4 (Out - Dez)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-700">Ano *</Label>
-                <Input
-                  type="number"
-                  min="2000"
-                  max="2100"
-                  value={formAno}
-                  onChange={(e) => setFormAno(e.target.value)}
-                  className="h-8 text-xs bg-white"
-                  required
-                />
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-700">Ano *</Label>
+                  <Input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    value={formAno}
+                    onChange={(e) => setFormAno(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                    required
+                  />
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-700">Mês *</Label>
+                  <Select value={formMes} onValueChange={setFormMes}>
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MESES.map((m) => (
+                        <SelectItem key={m.valor} value={String(m.valor)} className="text-xs">
+                          {m.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-700">Ano *</Label>
+                  <Input
+                    type="number"
+                    min="2000"
+                    max="2100"
+                    value={formAno}
+                    onChange={(e) => setFormAno(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                    required
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end pt-1">
@@ -397,7 +491,10 @@ export function ModalGerenciarMetas({
                     ? `${centroVinculado.codigo} ${centroVinculado.nome}`
                     : centroVinculado.nome
                   : null
-                const mesNome = MESES.find((m) => m.valor === meta.mes)?.nome || `Mês ${meta.mes}`
+                const isTrimestral = meta.periodo === 'Trimestral'
+                const periodoLabel = isTrimestral
+                  ? `${meta.trimestre || 'Q1'}/${meta.ano}`
+                  : `${MESES.find((m) => m.valor === meta.mes)?.nome || `Mês ${meta.mes}`}/${meta.ano}`
                 const isAtivo = meta.ativo ?? true
 
                 return (
@@ -437,6 +534,16 @@ export function ModalGerenciarMetas({
                           >
                             {meta.tipo}
                           </Badge>
+                          <Badge
+                            variant="secondary"
+                            className={`text-[10px] font-semibold ${
+                              isTrimestral
+                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}
+                          >
+                            {isTrimestral ? 'Trimestral' : 'Mensal'}
+                          </Badge>
                           {centroNome && (
                             <Badge
                               variant="secondary"
@@ -445,8 +552,8 @@ export function ModalGerenciarMetas({
                               CC: {centroNome}
                             </Badge>
                           )}
-                          <span className="text-[11px] text-slate-500">
-                            {mesNome}/{meta.ano}
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {periodoLabel}
                           </span>
                         </div>
                         <p className="text-xs font-semibold text-slate-800 mt-0.5">
