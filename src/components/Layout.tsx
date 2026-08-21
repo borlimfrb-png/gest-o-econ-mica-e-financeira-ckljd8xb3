@@ -18,6 +18,7 @@ import {
   Calendar,
   Building,
   FolderTree,
+  Folder,
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -44,6 +45,32 @@ export default function Layout() {
   const location = useLocation()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
 
+  // Itens do submenu Cadastros
+  const cadastroSubItems = [
+    { name: 'Empresas', path: '/empresas', icon: Building2 },
+    { name: 'Centros de Custo', path: '/centros', icon: PieChart },
+    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
+    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
+    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
+  ]
+
+  const isCadastroActive =
+    location.pathname.startsWith('/empresas') ||
+    location.pathname.startsWith('/centros') ||
+    location.pathname.startsWith('/tipos-despesas') ||
+    location.pathname.startsWith('/contas') ||
+    location.pathname.startsWith('/plano-contas')
+
+  // Grupo "Cadastros" expansível/colapsável
+  // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente
+  const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
+
+  React.useEffect(() => {
+    if (isCadastroActive) {
+      setCadastrosOpen(true)
+    }
+  }, [isCadastroActive])
+
   // Redirect to login if not authenticated
   React.useEffect(() => {
     if (!isLoading && !isAuthenticated && location.pathname !== '/') {
@@ -65,19 +92,6 @@ export default function Layout() {
   if (!isAuthenticated && location.pathname === '/') {
     return <Outlet />
   }
-
-  const navItems = [
-    { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { name: 'Empresas', path: '/empresas', icon: Building2 },
-    { name: 'Centros de Custo', path: '/centros', icon: PieChart },
-    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
-    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
-    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
-    { name: 'Lançamentos', path: '/lancamentos', icon: FileText },
-    { name: 'Relatório Anual', path: '/relatorio-anual', icon: FileText },
-    { name: 'Relatórios', path: '/relatorios', icon: FileText },
-    { name: 'Importação', path: '/importacao', icon: Upload },
-  ]
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
   const userName = user?.name || 'Consultor Financeiro'
@@ -147,29 +161,140 @@ export default function Layout() {
                 </button>
               </div>
 
-              <nav className="mt-6 space-y-1.5">
-                {navItems.map((item) => {
-                  const Icon = item.icon
-                  const isActive =
-                    item.path === '/empresas'
-                      ? location.pathname.startsWith('/empresas')
-                      : location.pathname === item.path
-                  return (
-                    <NavLink
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setMobileDrawerOpen(false)}
-                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                        isActive
-                          ? 'bg-white/15 text-white font-semibold shadow-inner'
-                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+              <nav className="mt-6 space-y-1.5 overflow-y-auto max-h-[calc(100vh-210px)] pr-1">
+                {/* 1. Dashboard */}
+                <NavLink
+                  to="/dashboard"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/dashboard'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <LayoutDashboard className="w-4 h-4 text-blue-400" />
+                  Dashboard
+                </NavLink>
+
+                {/* 2. Cadastros (Expansível / Colapsável) */}
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setCadastrosOpen((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isCadastroActive
+                        ? 'bg-blue-600/20 text-white font-semibold border border-blue-500/30'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Folder
+                        className={`w-4 h-4 ${isCadastroActive ? 'text-blue-300' : 'text-blue-400'}`}
+                      />
+                      <span>Cadastros</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                        cadastrosOpen ? 'rotate-0' : '-rotate-90'
                       }`}
-                    >
-                      <Icon className="w-4 h-4 text-blue-400" />
-                      {item.name}
-                    </NavLink>
-                  )
-                })}
+                    />
+                  </button>
+
+                  {/* Submenu Cadastros com transição suave */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      cadastrosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-3 pl-3 border-l border-blue-500/20 space-y-1 py-1">
+                        {cadastroSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive =
+                            sub.path === '/empresas'
+                              ? location.pathname.startsWith('/empresas')
+                              : location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              onClick={() => setMobileDrawerOpen(false)}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-3.5 h-3.5 ${
+                                  isSubActive ? 'text-blue-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Lançamentos */}
+                <NavLink
+                  to="/lancamentos"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/lancamentos'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  Lançamentos
+                </NavLink>
+
+                {/* 4. Importação */}
+                <NavLink
+                  to="/importacao"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/importacao'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Upload className="w-4 h-4 text-blue-400" />
+                  Importação
+                </NavLink>
+
+                {/* 5. Relatório Anual */}
+                <NavLink
+                  to="/relatorio-anual"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/relatorio-anual'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  Relatório Anual
+                </NavLink>
+
+                {/* 6. Relatórios */}
+                <NavLink
+                  to="/relatorios"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/relatorios'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-blue-400" />
+                  Relatórios
+                </NavLink>
               </nav>
             </div>
 
@@ -223,48 +348,342 @@ export default function Layout() {
               </div>
             </div>
 
-            {/* Nav */}
-            <nav className="p-2 lg:p-3 space-y-1.5 mt-2">
-              {navItems.map((item) => {
-                const Icon = item.icon
-                const isActive =
-                  item.path === '/empresas'
-                    ? location.pathname.startsWith('/empresas')
-                    : location.pathname === item.path
-
-                const content = (
+            {/* Nav Desktop / Tablet */}
+            <nav className="p-2 lg:p-3 space-y-1.5 mt-2 overflow-y-auto max-h-[calc(100vh-170px)]">
+              {/* 1. Dashboard */}
+              <div>
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/dashboard"
+                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          location.pathname === '/dashboard'
+                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <LayoutDashboard
+                          className={`w-5 h-5 ${
+                            location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
+                          }`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Dashboard
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="hidden lg:block">
                   <NavLink
-                    to={item.path}
+                    to="/dashboard"
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      isActive
+                      location.pathname === '/dashboard'
                         ? 'bg-white/15 text-white font-semibold shadow-sm'
                         : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <Icon
-                      className={`w-5 h-5 shrink-0 ${isActive ? 'text-blue-300' : 'text-slate-400'}`}
+                    <LayoutDashboard
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
+                      }`}
                     />
-                    <span className="hidden lg:inline truncate">{item.name}</span>
+                    <span className="truncate">Dashboard</span>
                   </NavLink>
-                )
+                </div>
+              </div>
 
-                return (
-                  <div key={item.path}>
-                    <div className="lg:hidden">
-                      <Tooltip>
-                        <TooltipTrigger asChild>{content}</TooltipTrigger>
-                        <TooltipContent
-                          side="right"
-                          className="bg-[#0B1F3A] text-white border-blue-900"
-                        >
-                          {item.name}
-                        </TooltipContent>
-                      </Tooltip>
+              {/* 2. Cadastros - Grupo com Subitens */}
+              <div className="space-y-1">
+                {/* Visualização Tablet */}
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/empresas"
+                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          isCadastroActive
+                            ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Folder
+                          className={`w-5 h-5 ${isCadastroActive ? 'text-blue-300' : 'text-slate-400'}`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Cadastros (Empresas, Centros, etc.)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                <div className="hidden lg:block">
+                  <button
+                    type="button"
+                    onClick={() => setCadastrosOpen((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isCadastroActive
+                        ? 'bg-blue-600/20 text-white font-semibold border border-blue-500/30'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Folder
+                        className={`w-5 h-5 shrink-0 ${
+                          isCadastroActive ? 'text-blue-300' : 'text-slate-400'
+                        }`}
+                      />
+                      <span className="truncate font-medium">Cadastros</span>
                     </div>
-                    <div className="hidden lg:block">{content}</div>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                        cadastrosOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu com animação suave via grid template rows */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      cadastrosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-4 pl-3 border-l border-blue-500/20 space-y-1 py-1 mt-1">
+                        {cadastroSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive =
+                            sub.path === '/empresas'
+                              ? location.pathname.startsWith('/empresas')
+                              : location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-4 h-4 shrink-0 ${
+                                  isSubActive ? 'text-blue-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
                   </div>
-                )
-              })}
+                </div>
+              </div>
+
+              {/* 3. Lançamentos */}
+              <div>
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/lancamentos"
+                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          location.pathname === '/lancamentos'
+                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <FileText
+                          className={`w-5 h-5 ${
+                            location.pathname === '/lancamentos'
+                              ? 'text-blue-300'
+                              : 'text-slate-400'
+                          }`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Lançamentos
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="hidden lg:block">
+                  <NavLink
+                    to="/lancamentos"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/lancamentos'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <FileText
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/lancamentos' ? 'text-blue-300' : 'text-slate-400'
+                      }`}
+                    />
+                    <span className="truncate">Lançamentos</span>
+                  </NavLink>
+                </div>
+              </div>
+
+              {/* 4. Importação */}
+              <div>
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/importacao"
+                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          location.pathname === '/importacao'
+                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Upload
+                          className={`w-5 h-5 ${
+                            location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
+                          }`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Importação
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="hidden lg:block">
+                  <NavLink
+                    to="/importacao"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/importacao'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <Upload
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
+                      }`}
+                    />
+                    <span className="truncate">Importação</span>
+                  </NavLink>
+                </div>
+              </div>
+
+              {/* 5. Relatório Anual */}
+              <div>
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/relatorio-anual"
+                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          location.pathname === '/relatorio-anual'
+                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <FileText
+                          className={`w-5 h-5 ${
+                            location.pathname === '/relatorio-anual'
+                              ? 'text-blue-300'
+                              : 'text-slate-400'
+                          }`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Relatório Anual
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="hidden lg:block">
+                  <NavLink
+                    to="/relatorio-anual"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/relatorio-anual'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <FileText
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/relatorio-anual'
+                          ? 'text-blue-300'
+                          : 'text-slate-400'
+                      }`}
+                    />
+                    <span className="truncate">Relatório Anual</span>
+                  </NavLink>
+                </div>
+              </div>
+
+              {/* 6. Relatórios */}
+              <div>
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/relatorios"
+                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          location.pathname === '/relatorios'
+                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <FileText
+                          className={`w-5 h-5 ${
+                            location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
+                          }`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Relatórios
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="hidden lg:block">
+                  <NavLink
+                    to="/relatorios"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/relatorios'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <FileText
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
+                      }`}
+                    />
+                    <span className="truncate">Relatórios</span>
+                  </NavLink>
+                </div>
+              </div>
             </nav>
           </div>
 
