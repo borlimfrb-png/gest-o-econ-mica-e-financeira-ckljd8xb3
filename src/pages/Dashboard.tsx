@@ -214,7 +214,15 @@ export default function Dashboard() {
       const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
       const empNome = emp?.nome || 'Empresa'
 
-      // Calcular realizado no mês e ano da meta
+      const centroObj =
+        meta.expand?.centro || (meta.centro ? centrosMap.get(meta.centro) : undefined)
+      const centroNome = centroObj
+        ? centroObj.codigo
+          ? `${centroObj.codigo} ${centroObj.nome}`
+          : centroObj.nome
+        : null
+
+      // Calcular realizado no mês e ano da meta (e filtrando por centro se a meta tiver vínculo com centro)
       const lancamentosMeta = lancamentosFinanceiros.filter((l) => {
         if (l.empresa !== meta.empresa) return false
         if (!l.data) return false
@@ -224,7 +232,15 @@ export default function Dashboard() {
 
         const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
         const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
-        return conta?.tipo === meta.tipo
+        if (conta?.tipo !== meta.tipo) return false
+
+        // Se meta vinculada a centro, verificar se o plano_conta pertence àquele centro
+        if (meta.centro) {
+          const centroDoPlano = pc?.expand?.centro?.id || pc?.centro
+          if (centroDoPlano !== meta.centro) return false
+        }
+
+        return true
       })
 
       const realizado = lancamentosMeta.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
@@ -245,13 +261,22 @@ export default function Dashboard() {
       return {
         ...meta,
         empresaNome: empNome,
+        centroNome,
         mesNome,
         realizado,
         atingimentoPct,
         statusCor,
       }
     })
-  }, [metas, selectedEmpresaId, lancamentosFinanceiros, planoContas, contasMap, empresas])
+  }, [
+    metas,
+    selectedEmpresaId,
+    lancamentosFinanceiros,
+    planoContas,
+    contasMap,
+    centrosMap,
+    empresas,
+  ])
 
   // SEÇÃO COMPARATIVO ENTRE EMPRESAS (MÊS ATUAL)
   const dadosComparativoEmpresas = useMemo(() => {
@@ -549,108 +574,126 @@ export default function Dashboard() {
     }
   })
 
-  interface AlertaItem {
+  interface AlertaMetaRiscoItem {
     id: string
     titulo: string
     descricao: string
-    to: string
-    severidade: 'amber' | 'red'
-    icone: 'target' | 'calendar' | 'building' | 'liquidez'
+    severidade: 'amber' | 'red' // amber = laranja, red = vermelho
+    atingimentoPct: number
+    diasRestantes: number
   }
 
-  const alertas = useMemo<AlertaItem[]>(() => {
-    const lista: AlertaItem[] = []
+  // Alertas de Metas em Risco (Critérios específicos do requisito 1)
+  const alertasMetasEmRisco = useMemo<AlertaMetaRiscoItem[]>(() => {
+    const lista: AlertaMetaRiscoItem[] = []
     const agora = new Date()
-    const anoCorrente = agora.getFullYear()
-    const mesCorrente = agora.getMonth()
-    const diaDoMes = agora.getDate()
-    const diasNoMes = new Date(anoCorrente, mesCorrente + 1, 0).getDate()
-    const diasRestantesMes = diasNoMes - diaDoMes
+    const anoAtual = agora.getFullYear()
+    const mesAtual = agora.getMonth() + 1 // 1-12
+    const diaAtual = agora.getDate()
+    const totalDiasNoMes = new Date(anoAtual, agora.getMonth() + 1, 0).getDate()
+    const diasRestantesMes = totalDiasNoMes - diaAtual
 
-    if (diasRestantesMes < 7) {
-      for (const c of centros) {
-        const meta = c.meta_mensal ? Number(c.meta_mensal) || 0 : 0
-        if (meta <= 0) continue
-        const realizado = lancamentosCentro
-          .filter((l) => {
-            if (l.centro !== c.id || !l.data) return false
-            const d = new Date(l.data + 'T00:00:00')
-            return d.getMonth() === mesCorrente && d.getFullYear() === anoCorrente
-          })
-          .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
-        const pct = meta > 0 ? (realizado / meta) * 100 : 0
-        if (pct < 50) {
-          lista.push({
-            id: `meta-mensal-${c.id}`,
-            titulo: `Meta mensal baixa: ${c.nome}`,
-            descricao: `Atingiu ${pct.toFixed(0)}% da meta mensal e faltam apenas ${diasRestantesMes} dia(s) para o fim do mês.`,
-            to: '/centros',
-            severidade: 'amber',
-            icone: 'target',
-          })
+    // Filtrar metas ativas do mês e ano correntes (respeitando filtro de empresa se houver)
+    const metasDoMes = metas.filter((m) => {
+      const isAtiva = m.ativo ?? true
+      if (!isAtiva) return false
+      if (m.ano !== anoAtual || m.mes !== mesAtual) return false
+      if (selectedEmpresaId && m.empresa !== selectedEmpresaId) return false
+      return true
+    })
+
+    for (const meta of metasDoMes) {
+      const emp = meta.expand?.empresa || empresas.find((e) => e.id === meta.empresa)
+      const empNome = emp?.nome || 'Empresa'
+      const centroObj =
+        meta.expand?.centro || (meta.centro ? centrosMap.get(meta.centro) : undefined)
+      const centroLabel = centroObj
+        ? ` · ${centroObj.codigo ? `${centroObj.codigo} ` : ''}${centroObj.nome}`
+        : ''
+      const nomeIdentificador = `Meta de ${meta.tipo}${centroLabel} (${empNome})`
+
+      // Calcular realizado da meta respeitando tipo e centro vinculado
+      const lancs = lancamentosFinanceiros.filter((l) => {
+        if (l.empresa !== meta.empresa) return false
+        if (!l.data) return false
+        const anoLanc = parseInt(l.data.slice(0, 4), 10)
+        const mesLanc = parseInt(l.data.slice(5, 7), 10)
+        if (anoLanc !== meta.ano || mesLanc !== meta.mes) return false
+
+        const pc = l.expand?.plano_conta || planoContas.find((p) => p.id === l.plano_conta)
+        const conta = pc?.expand?.conta || (pc?.conta ? contasMap.get(pc.conta) : undefined)
+        if (conta?.tipo !== meta.tipo) return false
+
+        if (meta.centro) {
+          const centroDoPlano = pc?.expand?.centro?.id || pc?.centro
+          if (centroDoPlano !== meta.centro) return false
         }
-      }
-    }
+        return true
+      })
 
-    if (mesCorrente + 1 >= 9) {
-      for (const c of centros) {
-        const metaAnual = c.meta_anual ? Number(c.meta_anual) || 0 : 0
-        if (metaAnual <= 0) continue
-        const realizado = lancamentosCentro
-          .filter((l) => {
-            if (l.centro !== c.id || !l.data) return false
-            const d = new Date(l.data + 'T00:00:00')
-            return d.getFullYear() === anoCorrente
-          })
-          .reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
-        const pct = metaAnual > 0 ? (realizado / metaAnual) * 100 : 0
-        if (pct < 60) {
-          lista.push({
-            id: `meta-anual-${c.id}`,
-            titulo: `Meta anual em risco: ${c.nome}`,
-            descricao: `Atingiu ${pct.toFixed(0)}% da meta anual com ${mesCorrente + 1} meses decorridos.`,
-            to: '/centros',
-            severidade: 'amber',
-            icone: 'calendar',
-          })
-        }
-      }
-    }
+      const realizado = lancs.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+      const pct = meta.valor > 0 ? (realizado / meta.valor) * 100 : 0
+      const temLancamentos = lancs.length > 0 && realizado > 0
 
-    for (const emp of empresas) {
-      const temBalancoAnoCorrente = allBalancos.some(
-        (b) => b.empresa === emp.id && b.ano === anoCorrente,
-      )
-      if (!temBalancoAnoCorrente) {
+      // Critério 2 (Vermelho): Meta com 0% de atingimento e mais de 15 dias do mês já passados
+      // Alerta: "Atenção: [nome da meta] ainda não teve lançamentos este mês"
+      if (!temLancamentos && diaAtual > 15) {
         lista.push({
-          id: `sem-balanco-${emp.id}`,
-          titulo: `Sem balanço em ${anoCorrente}: ${emp.nome}`,
-          descricao: `A empresa não possui balanço lançado para o exercício de ${anoCorrente}.`,
-          to: `/empresas/${emp.id}`,
+          id: `meta-zero-${meta.id}`,
+          titulo: `Atenção: ${nomeIdentificador} ainda não teve lançamentos este mês`,
+          descricao: `Passaram-se ${diaAtual} dias do mês e nenhum lançamento de ${meta.tipo.toLowerCase()} foi registrado para esta meta de ${formatBrlMil(
+            meta.valor,
+          )}.`,
+          severidade: 'red',
+          atingimentoPct: 0,
+          diasRestantes: diasRestantesMes,
+        })
+        continue
+      }
+
+      // Critério 1 (Laranja/Amber): Meta de receita ou despesa com menos de 50% de atingimento E faltando 5 dias ou menos para o fim do mês
+      // Alerta: "Meta em risco: [nome da meta] está em [X]% faltando [Y] dias"
+      if (pct < 50 && diasRestantesMes <= 5) {
+        lista.push({
+          id: `meta-risco-${meta.id}`,
+          titulo: `Meta em risco: ${nomeIdentificador} está em ${formatPercent(
+            pct,
+            0,
+          )} faltando ${diasRestantesMes} ${diasRestantesMes === 1 ? 'dia' : 'dias'}`,
+          descricao: `Realizado de ${formatBrlMil(realizado)} de ${formatBrlMil(
+            meta.valor,
+          )} (${formatPercent(pct, 1)}). Faltam apenas ${diasRestantesMes} ${
+            diasRestantesMes === 1 ? 'dia' : 'dias'
+          } para encerrar o mês.`,
           severidade: 'amber',
-          icone: 'building',
+          atingimentoPct: pct,
+          diasRestantes: diasRestantesMes,
         })
       }
     }
 
-    if (calcInd.liquidezCorrente !== null && calcInd.liquidezCorrente < 0.8) {
-      lista.push({
-        id: 'liquidez-baixa',
-        titulo: 'Liquidez Corrente crítica',
-        descricao: `Índice de liquidez corrente de ${formatNumber(
-          calcInd.liquidezCorrente,
-          2,
-        )} está abaixo de 0,8 — atenção à capacidade de pagamento de curto prazo.`,
-        to: `/empresas/${selectedEmpresaId}`,
-        severidade: 'red',
-        icone: 'liquidez',
-      })
-    }
-
     return lista
-  }, [lancamentosCentro, empresas, allBalancos, calcInd, selectedEmpresaId, centros])
+  }, [
+    metas,
+    selectedEmpresaId,
+    empresas,
+    centrosMap,
+    lancamentosFinanceiros,
+    planoContas,
+    contasMap,
+  ])
 
-  const alertasVisiveis = alertas.slice(0, 4)
+  const [mostrarTodosAlertas, setMostrarTodosAlertas] = useState(false)
+  const alertasVisiveis = mostrarTodosAlertas
+    ? alertasMetasEmRisco
+    : alertasMetasEmRisco.slice(0, 4)
+
+  const scrollToMetas = () => {
+    const el = document.getElementById('secao-metas-dashboard')
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }
 
   // Lista de Últimos Balanços
   const ultimosBalancosList = allBalancos.slice(0, 5).map((b) => {
@@ -700,13 +743,6 @@ export default function Dashboard() {
     )
   }
 
-  const renderAlertIcon = (icone: AlertaItem['icone']) => {
-    if (icone === 'target') return <Target className="w-4 h-4" />
-    if (icone === 'calendar') return <CalendarClock className="w-4 h-4" />
-    if (icone === 'building') return <Building2 className="w-4 h-4" />
-    return <Scale className="w-4 h-4" />
-  }
-
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Modal Gerenciar Metas */}
@@ -714,83 +750,12 @@ export default function Dashboard() {
         open={modalMetasOpen}
         onOpenChange={setModalMetasOpen}
         empresas={empresas}
+        centros={centros}
         metas={metas}
         selectedEmpresaId={selectedEmpresaId}
         selectedAno={selectedAno}
         onMetaChanged={loadData}
       />
-
-      {/* Seção de Alertas Inteligentes */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-amber-500" />
-            Alertas
-            {alertas.length > 0 && (
-              <Badge className="bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-50 text-[10px] font-semibold">
-                {alertas.length}
-              </Badge>
-            )}
-          </h2>
-        </div>
-        {alertas.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-3 shadow-2xs">
-            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[#0B1F3A]">Nenhum alerta no momento</p>
-              <p className="text-[11px] text-slate-500">
-                Todos os indicadores estão dentro dos parâmetros esperados.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div
-            className={`grid gap-3 ${
-              alertasVisiveis.length >= 4
-                ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
-                : `grid-cols-1 sm:grid-cols-2 lg:grid-cols-${alertasVisiveis.length}`
-            }`}
-          >
-            {alertasVisiveis.map((a) => (
-              <Link
-                key={a.id}
-                to={a.to}
-                className={`bg-white border rounded-xl p-3.5 flex flex-col gap-2 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all ${
-                  a.severidade === 'red' ? 'border-red-200' : 'border-amber-200'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                      a.severidade === 'red'
-                        ? 'bg-red-50 text-red-600'
-                        : 'bg-amber-50 text-amber-600'
-                    }`}
-                  >
-                    {renderAlertIcon(a.icone)}
-                  </div>
-                  <AlertTriangle
-                    className={`w-3.5 h-3.5 ml-auto ${
-                      a.severidade === 'red' ? 'text-red-500' : 'text-amber-500'
-                    }`}
-                  />
-                </div>
-                <p className="text-xs font-bold text-[#0B1F3A] leading-tight line-clamp-2">
-                  {a.titulo}
-                </p>
-                <p className="text-[11px] text-slate-500 line-clamp-3">{a.descricao}</p>
-              </Link>
-            ))}
-          </div>
-        )}
-        {alertas.length > 4 && (
-          <p className="text-[11px] text-slate-400 mt-2 text-right">
-            Mostrando 4 de {alertas.length} alertas.
-          </p>
-        )}
-      </div>
 
       {/* Banner Empresa Selecionada */}
       {selectedEmpresa && (
@@ -982,9 +947,115 @@ export default function Dashboard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* SEÇÃO METAS DE LANÇAMENTOS (ABAIXO DOS KPIS E ANTES DOS GRÁFICOS) */}
+      {/* SEÇÃO 1: ALERTAS DE METAS EM RISCO (LOGO ABAIXO DOS KPIS) */}
       {/* ========================================================================= */}
-      <Card className="bg-white border-slate-200 shadow-2xs">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 text-amber-500" />
+            Alertas de Metas em Risco
+            {alertasMetasEmRisco.length > 0 && (
+              <Badge
+                className={`text-[10px] font-semibold ${
+                  alertasMetasEmRisco.some((a) => a.severidade === 'red')
+                    ? 'bg-red-50 text-red-700 border-red-200'
+                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                }`}
+              >
+                {alertasMetasEmRisco.length} meta(s) em risco
+              </Badge>
+            )}
+          </h2>
+
+          {alertasMetasEmRisco.length > 4 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setMostrarTodosAlertas((prev) => !prev)}
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 h-7 px-2"
+            >
+              {mostrarTodosAlertas ? 'Mostrar menos' : `Ver todos (${alertasMetasEmRisco.length})`}
+            </Button>
+          )}
+        </div>
+
+        {alertasMetasEmRisco.length === 0 ? (
+          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex items-center gap-3 shadow-2xs">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-emerald-900">Todas as metas estão em dia ✓</p>
+              <p className="text-[11px] text-emerald-700">
+                Nenhuma meta com risco de não atingimento ou sem lançamentos identificada no
+                período.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`grid gap-3 ${
+              alertasVisiveis.length === 1
+                ? 'grid-cols-1'
+                : alertasVisiveis.length === 2
+                  ? 'grid-cols-1 sm:grid-cols-2'
+                  : alertasVisiveis.length === 3
+                    ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+                    : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+            }`}
+          >
+            {alertasVisiveis.map((alerta) => {
+              const isRed = alerta.severidade === 'red'
+              const cardBg = isRed
+                ? 'bg-red-50/80 border-red-300 hover:bg-red-100/70'
+                : 'bg-amber-50/80 border-amber-300 hover:bg-amber-100/70'
+              const iconBoxBg = isRed ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+              const titleColor = isRed ? 'text-red-950' : 'text-amber-950'
+              const descColor = isRed ? 'text-red-800' : 'text-amber-800'
+
+              return (
+                <button
+                  key={alerta.id}
+                  type="button"
+                  onClick={scrollToMetas}
+                  className={`text-left p-3.5 rounded-xl border shadow-2xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-2 ${cardBg}`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${iconBoxBg}`}
+                    >
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-xs font-bold leading-snug line-clamp-2 ${titleColor}`}>
+                        {alerta.titulo}
+                      </p>
+                      <p className={`text-[11px] mt-1 line-clamp-2 ${descColor}`}>
+                        {alerta.descricao}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 border-t border-black/5 text-[10px] font-semibold text-slate-600">
+                    <span className="flex items-center gap-1 text-blue-700">
+                      Ver meta na seção abaixo <ArrowRight className="w-3 h-3" />
+                    </span>
+                    <span className={isRed ? 'text-red-700 font-bold' : 'text-amber-700 font-bold'}>
+                      {isRed ? '0% Realizado' : `${alerta.atingimentoPct.toFixed(0)}% Atingido`}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ========================================================================= */}
+      {/* SEÇÃO METAS DE LANÇAMENTOS (ABAIXO DOS KPIS E ALERTAS, ANTES DOS GRÁFICOS) */}
+      {/* ========================================================================= */}
+      <Card id="secao-metas-dashboard" className="bg-white border-slate-200 shadow-2xs scroll-mt-6">
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
@@ -1069,12 +1140,21 @@ export default function Dashboard() {
                         <div className="min-w-0">
                           <p
                             className="text-xs font-bold text-[#0B1F3A] truncate"
-                            title={m.empresaNome}
+                            title={
+                              m.centroNome
+                                ? `Meta de ${m.tipo} · ${m.centroNome} (${m.empresaNome})`
+                                : `Meta de ${m.tipo} (${m.empresaNome})`
+                            }
                           >
-                            {m.empresaNome}
+                            Meta de {m.tipo}
+                            {m.centroNome && (
+                              <span className="font-semibold text-blue-700 ml-1">
+                                · {m.centroNome}
+                              </span>
+                            )}
                           </p>
                           <p className="text-[10px] text-slate-500 font-medium">
-                            {m.mesNome}/{m.ano}
+                            {m.empresaNome} · {m.mesNome}/{m.ano}
                           </p>
                         </div>
 

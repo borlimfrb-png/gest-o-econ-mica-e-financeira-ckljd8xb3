@@ -20,7 +20,12 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { metasLancamentosService } from '@/services/financeService'
-import type { EmpresaRecord, MetaLancamentoRecord, TipoMetaLancamento } from '@/types/finance'
+import type {
+  EmpresaRecord,
+  MetaLancamentoRecord,
+  TipoMetaLancamento,
+  CentroRecord,
+} from '@/types/finance'
 import { formatBrlMil, formatPercent } from '@/lib/financeCalculations'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -54,6 +59,7 @@ interface ModalGerenciarMetasProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   empresas: EmpresaRecord[]
+  centros?: CentroRecord[]
   metas: MetaLancamentoRecord[]
   selectedEmpresaId?: string
   selectedAno: number
@@ -64,6 +70,7 @@ export function ModalGerenciarMetas({
   open,
   onOpenChange,
   empresas,
+  centros = [],
   metas,
   selectedEmpresaId,
   selectedAno,
@@ -75,16 +82,26 @@ export function ModalGerenciarMetas({
     selectedEmpresaId || (empresas[0]?.id ?? ''),
   )
   const [formTipo, setFormTipo] = useState<TipoMetaLancamento>('Receita')
+  const [formCentro, setFormCentro] = useState<string>('all')
   const [formValor, setFormValor] = useState<string>('')
   const [formMes, setFormMes] = useState<string>(String(new Date().getMonth() + 1))
   const [formAno, setFormAno] = useState<string>(String(selectedAno || new Date().getFullYear()))
   const [editingMetaId, setEditingMetaId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Centros de custo ordenados por código ou nome
+  const centrosOrdenados = [...centros].sort((a, b) => {
+    const codA = a.codigo || ''
+    const codB = b.codigo || ''
+    if (codA && codB) return codA.localeCompare(codB)
+    return a.nome.localeCompare(b.nome)
+  })
+
   const handleOpenEdit = (meta: MetaLancamentoRecord) => {
     setEditingMetaId(meta.id)
     setFormEmpresa(meta.empresa)
     setFormTipo(meta.tipo)
+    setFormCentro(meta.centro || 'all')
     setFormValor(String(meta.valor))
     setFormMes(String(meta.mes))
     setFormAno(String(meta.ano))
@@ -92,6 +109,7 @@ export function ModalGerenciarMetas({
 
   const handleCancelEdit = () => {
     setEditingMetaId(null)
+    setFormCentro('all')
     setFormValor('')
   }
 
@@ -109,6 +127,8 @@ export function ModalGerenciarMetas({
 
     try {
       setIsSubmitting(true)
+      const centroId = formCentro === 'all' || !formCentro ? null : formCentro
+
       if (editingMetaId) {
         await metasLancamentosService.update(editingMetaId, {
           empresa: formEmpresa,
@@ -116,6 +136,7 @@ export function ModalGerenciarMetas({
           valor: valorNum,
           mes: Number(formMes),
           ano: Number(formAno),
+          centro: centroId,
         })
         toast({
           title: 'Meta atualizada',
@@ -129,6 +150,7 @@ export function ModalGerenciarMetas({
           valor: valorNum,
           mes: Number(formMes),
           ano: Number(formAno),
+          centro: centroId,
           ativo: true,
         })
         toast({
@@ -136,6 +158,7 @@ export function ModalGerenciarMetas({
           description: 'A meta mensal foi criada com sucesso.',
         })
         setFormValor('')
+        setFormCentro('all')
       }
       onMetaChanged()
     } catch (err: any) {
@@ -266,6 +289,32 @@ export function ModalGerenciarMetas({
               </Select>
             </div>
 
+            {/* Centro de Custo (Opcional) */}
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label className="text-xs text-slate-700 flex items-center justify-between">
+                <span>Centro de Custo (Opcional)</span>
+                <span className="text-[10px] text-slate-400 font-normal">
+                  Se vazio, soma toda a empresa
+                </span>
+              </Label>
+              <Select value={formCentro} onValueChange={setFormCentro}>
+                <SelectTrigger className="h-8 text-xs bg-white">
+                  <SelectValue placeholder="Todos os centros da empresa (Geral)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" className="text-xs text-slate-600 font-medium">
+                    Todos os centros (Geral da empresa)
+                  </SelectItem>
+                  {centrosOrdenados.map((centro) => (
+                    <SelectItem key={centro.id} value={centro.id} className="text-xs">
+                      {centro.codigo ? `${centro.codigo} - ${centro.nome}` : centro.nome} (
+                      {centro.tipo})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Valor */}
             <div className="space-y-1.5">
               <Label className="text-xs text-slate-700">Valor da Meta Mensal (R$) *</Label>
@@ -340,6 +389,14 @@ export function ModalGerenciarMetas({
                   meta.expand?.empresa?.nome ||
                   empresas.find((e) => e.id === meta.empresa)?.nome ||
                   'Empresa'
+                const centroVinculado =
+                  meta.expand?.centro ||
+                  (meta.centro ? centros.find((c) => c.id === meta.centro) : null)
+                const centroNome = centroVinculado
+                  ? centroVinculado.codigo
+                    ? `${centroVinculado.codigo} ${centroVinculado.nome}`
+                    : centroVinculado.nome
+                  : null
                 const mesNome = MESES.find((m) => m.valor === meta.mes)?.nome || `Mês ${meta.mes}`
                 const isAtivo = meta.ativo ?? true
 
@@ -380,6 +437,14 @@ export function ModalGerenciarMetas({
                           >
                             {meta.tipo}
                           </Badge>
+                          {centroNome && (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200"
+                            >
+                              CC: {centroNome}
+                            </Badge>
+                          )}
                           <span className="text-[11px] text-slate-500">
                             {mesNome}/{meta.ano}
                           </span>

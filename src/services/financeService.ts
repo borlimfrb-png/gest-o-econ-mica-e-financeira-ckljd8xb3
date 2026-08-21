@@ -589,7 +589,7 @@ export const metasLancamentosService = {
       queryParams.filter = filters.join(' && ')
     }
     if (options?.expandRelations ?? true) {
-      queryParams.expand = 'empresa'
+      queryParams.expand = 'empresa,centro'
     }
 
     return await pb.collection('metas_lancamentos').getFullList<MetaLancamentoRecord>(queryParams)
@@ -601,6 +601,7 @@ export const metasLancamentosService = {
     valor: number
     mes: number
     ano: number
+    centro?: string | null
     ativo?: boolean
   }): Promise<MetaLancamentoRecord> {
     return await pb.collection('metas_lancamentos').create<MetaLancamentoRecord>(
@@ -610,11 +611,12 @@ export const metasLancamentosService = {
         valor: Number(data.valor) || 0,
         mes: Number(data.mes),
         ano: Number(data.ano),
+        centro: data.centro || null,
         ativo: data.ativo ?? true,
         user: currentUserId(),
       } as any,
       {
-        expand: 'empresa',
+        expand: 'empresa,centro',
       },
     )
   },
@@ -622,7 +624,7 @@ export const metasLancamentosService = {
   async update(
     id: string,
     data: Partial<
-      Pick<MetaLancamentoRecord, 'empresa' | 'tipo' | 'valor' | 'mes' | 'ano' | 'ativo'>
+      Pick<MetaLancamentoRecord, 'empresa' | 'tipo' | 'valor' | 'mes' | 'ano' | 'centro' | 'ativo'>
     >,
   ): Promise<MetaLancamentoRecord> {
     const payload: Record<string, unknown> = { ...data }
@@ -635,8 +637,11 @@ export const metasLancamentosService = {
     if (data.ano !== undefined) {
       payload.ano = Number(data.ano)
     }
+    if (data.centro !== undefined) {
+      payload.centro = data.centro || null
+    }
     return await pb.collection('metas_lancamentos').update<MetaLancamentoRecord>(id, payload, {
-      expand: 'empresa',
+      expand: 'empresa,centro',
     })
   },
 
@@ -645,7 +650,7 @@ export const metasLancamentosService = {
       id,
       { ativo },
       {
-        expand: 'empresa',
+        expand: 'empresa,centro',
       },
     )
   },

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21T16:51:33.539Z",
+  "generatedAt": "2026-08-21T16:55:58.153Z",
   "collections": [
     {
       "name": "users",
@@ -1049,6 +1049,13 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "centro",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "centros"
         }
       ],
       "indexes": [

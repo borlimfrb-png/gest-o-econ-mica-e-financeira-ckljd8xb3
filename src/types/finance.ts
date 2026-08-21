@@ -215,10 +215,12 @@ export interface MetaLancamentoRecord extends RecordModel {
   valor: number
   mes: number
   ano: number
+  centro?: string | null
   ativo?: boolean
   user: string
   expand?: {
     empresa?: EmpresaRecord
+    centro?: CentroRecord
   }
 }
 
