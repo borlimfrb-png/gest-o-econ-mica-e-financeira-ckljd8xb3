@@ -61,7 +61,7 @@ import {
   type MatchedItem,
 } from '@/lib/pdfMatching'
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
-import { useNavigate } from 'react-router'
+import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 
 export default function Importacao() {
