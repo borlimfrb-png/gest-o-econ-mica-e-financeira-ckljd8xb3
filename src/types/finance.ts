@@ -316,6 +316,25 @@ export interface RecebivelRecord extends RecordModel {
   }
 }
 
+export interface ContratoRecord extends RecordModel {
+  user: string
+  contratada_razao_social: string
+  contratada_cnpj: string
+  contratada_endereco?: string
+  contratada_crc?: string
+  contratante: string
+  data_inicio: string
+  prazo_inicial: number
+  quantidade_meses: number
+  valor_parcela: number
+  dia_vencimento: number
+  data_final: string
+  parcelas: number
+  expand?: {
+    contratante?: EmpresaRecord
+  }
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null

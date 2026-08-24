@@ -74,11 +74,14 @@ export default function Layout() {
   // Itens do submenu Financeiro
   const financeiroSubItems = [
     { name: 'Financeiro', path: '/financeiro', icon: Calendar },
-    { name: 'Baixa de Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
+    { name: 'Baixa dos Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
+    { name: 'Contratos', path: '/contratos', icon: FileText },
   ]
 
   const isFinanceiroActive =
-    location.pathname === '/financeiro' || location.pathname === '/baixa-recebiveis'
+    location.pathname === '/financeiro' ||
+    location.pathname === '/baixa-recebiveis' ||
+    location.pathname === '/contratos'
 
   // Grupo "Cadastros" expansível/colapsável
   // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente

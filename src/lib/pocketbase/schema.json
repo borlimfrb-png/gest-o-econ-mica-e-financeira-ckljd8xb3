@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T16:15:03.657Z",
+  "generatedAt": "2026-08-24T16:33:46.513Z",
   "collections": [
     {
       "name": "users",
@@ -1553,6 +1553,118 @@
         "CREATE INDEX idx_recebiveis_empresa ON recebiveis (empresa)",
         "CREATE INDEX idx_recebiveis_vencimento ON recebiveis (vencimento)",
         "CREATE INDEX idx_recebiveis_status ON recebiveis (status)"
+      ]
+    },
+    {
+      "name": "contratos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "contratada_razao_social",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "contratada_cnpj",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "contratada_endereco",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contratada_crc",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contratante",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "data_inicio",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "prazo_inicial",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "quantidade_meses",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_parcela",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "dia_vencimento",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "data_final",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "parcelas",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_contratos_user ON contratos (user)",
+        "CREATE INDEX idx_contratos_contratante ON contratos (contratante)",
+        "CREATE INDEX idx_contratos_data_inicio ON contratos (data_inicio)"
       ]
     }
   ]
