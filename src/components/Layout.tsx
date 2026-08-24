@@ -22,6 +22,8 @@ import {
   FolderTree,
   Folder,
   Settings,
+  DollarSign,
+  CheckCircle2,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -69,15 +71,33 @@ export default function Layout() {
     location.pathname.startsWith('/plano-contas') ||
     location.pathname === '/minha-empresa'
 
+  // Itens do submenu Financeiro
+  const financeiroSubItems = [
+    { name: 'Financeiro', path: '/financeiro', icon: Calendar },
+    { name: 'Baixa de Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
+  ]
+
+  const isFinanceiroActive =
+    location.pathname === '/financeiro' || location.pathname === '/baixa-recebiveis'
+
   // Grupo "Cadastros" expansível/colapsável
   // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente
   const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
+
+  // Grupo "Financeiro" expansível/colapsável
+  const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroActive)
 
   React.useEffect(() => {
     if (isCadastroActive) {
       setCadastrosOpen(true)
     }
   }, [isCadastroActive])
+
+  React.useEffect(() => {
+    if (isFinanceiroActive) {
+      setFinanceiroOpen(true)
+    }
+  }, [isFinanceiroActive])
 
   // Redirect to login if not authenticated
   React.useEffect(() => {
@@ -314,7 +334,76 @@ export default function Layout() {
                   Lançamentos
                 </NavLink>
 
-                {/* 4. Importação */}
+                {/* 4. Financeiro (Expansível / Colapsável) */}
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setFinanceiroOpen((prev) => !prev)}
+                    style={
+                      isFinanceiroActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isFinanceiroActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <DollarSign
+                        className={`w-4 h-4 ${isFinanceiroActive ? 'text-emerald-300' : 'text-emerald-400'}`}
+                      />
+                      <span>Financeiro</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                        financeiroOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu Financeiro com transição suave */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      financeiroOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-3 pl-3 border-l border-emerald-500/30 space-y-1 py-1">
+                        {financeiroSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive = location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              onClick={() => setMobileDrawerOpen(false)}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-3.5 h-3.5 ${
+                                  isSubActive ? 'text-emerald-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Importação */}
                 <NavLink
                   to="/importacao"
                   onClick={() => setMobileDrawerOpen(false)}
@@ -639,7 +728,106 @@ export default function Layout() {
                 </div>
               </div>
 
-              {/* 4. Importação */}
+              {/* 4. Financeiro - Grupo com Subitens (entre Lançamentos e Importação) */}
+              <div className="space-y-1">
+                {/* Visualização Tablet */}
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/financeiro"
+                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          isFinanceiroActive
+                            ? 'bg-emerald-600/30 text-white font-semibold shadow-sm border border-emerald-500/40'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <DollarSign
+                          className={`w-5 h-5 ${isFinanceiroActive ? 'text-emerald-300' : 'text-slate-400'}`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Financeiro (Gerador, Baixa de Recebíveis)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                <div className="hidden lg:block">
+                  <button
+                    type="button"
+                    onClick={() => setFinanceiroOpen((prev) => !prev)}
+                    style={
+                      isFinanceiroActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isFinanceiroActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <DollarSign
+                        className={`w-5 h-5 shrink-0 ${
+                          isFinanceiroActive ? 'text-emerald-300' : 'text-emerald-400'
+                        }`}
+                      />
+                      <span className="truncate font-medium">Financeiro</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                        financeiroOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu com animação suave via grid template rows */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      financeiroOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-4 pl-3 border-l border-emerald-500/30 space-y-1 py-1 mt-1">
+                        {financeiroSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive = location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-4 h-4 shrink-0 ${
+                                  isSubActive ? 'text-emerald-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Importação */}
               <div>
                 <div className="lg:hidden">
                   <Tooltip>

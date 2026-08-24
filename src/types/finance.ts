@@ -300,6 +300,22 @@ export interface MinhaEmpresaRecord extends RecordModel {
   chave_pix?: string
 }
 
+export type StatusRecebivel = 'Pendente' | 'Pago'
+
+export interface RecebivelRecord extends RecordModel {
+  user: string
+  empresa: string
+  parcela: number
+  vencimento: string
+  valor: number
+  status: StatusRecebivel
+  data_pagamento?: string | null
+  data_inicio_servicos: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null

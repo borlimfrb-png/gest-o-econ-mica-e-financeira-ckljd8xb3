@@ -16,6 +16,8 @@ import TiposDespesas from './pages/TiposDespesas'
 import Contas from './pages/Contas'
 import PlanoContas from './pages/PlanoContas'
 import Lancamentos from './pages/Lancamentos'
+import Financeiro from './pages/Financeiro'
+import BaixaRecebiveis from './pages/BaixaRecebiveis'
 import Relatorios from './pages/Relatorios'
 import RelatorioAnual from './pages/RelatorioAnual'
 import Importacao from './pages/Importacao'
@@ -74,6 +76,8 @@ const App = () => (
                 <Route path="/plano-contas" element={<PlanoContas />} />
                 <Route path="/minha-empresa" element={<MinhaEmpresa />} />
                 <Route path="/lancamentos" element={<Lancamentos />} />
+                <Route path="/financeiro" element={<Financeiro />} />
+                <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />
                 <Route path="/importacao" element={<Importacao />} />

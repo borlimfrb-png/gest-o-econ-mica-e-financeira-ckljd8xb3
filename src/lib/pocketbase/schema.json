@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-21T21:04:45.371Z",
+  "generatedAt": "2026-08-24T16:15:03.657Z",
   "collections": [
     {
       "name": "users",
@@ -1469,6 +1469,90 @@
       "indexes": [
         "CREATE UNIQUE INDEX idx_minha_empresa_user ON minha_empresa (user)",
         "CREATE INDEX idx_minha_empresa_cnpj ON minha_empresa (cnpj)"
+      ]
+    },
+    {
+      "name": "recebiveis",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && user = @request.auth.id",
+        "view": "@request.auth.id != \"\" && user = @request.auth.id",
+        "create": "@request.auth.id != \"\"",
+        "update": "@request.auth.id != \"\" && user = @request.auth.id",
+        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "parcela",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "vencimento",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Pendente", "Pago"]
+        },
+        {
+          "name": "data_pagamento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_inicio_servicos",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_recebiveis_user ON recebiveis (user)",
+        "CREATE INDEX idx_recebiveis_empresa ON recebiveis (empresa)",
+        "CREATE INDEX idx_recebiveis_vencimento ON recebiveis (vencimento)",
+        "CREATE INDEX idx_recebiveis_status ON recebiveis (status)"
       ]
     }
   ]
