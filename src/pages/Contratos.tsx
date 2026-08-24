@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { empresasService } from '@/services/financeService'
-import { minhaEmpresaService } from '@/services/minhaEmpresaService'
 import { contratosService } from '@/services/contratosService'
 import { recebiveisService, type ParcelaPreview } from '@/services/recebiveisService'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
-import type { EmpresaRecord, MinhaEmpresaRecord, ContratoRecord } from '@/types/finance'
+import type { EmpresaRecord, ContratoRecord } from '@/types/finance'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
   SelectContent,
@@ -47,8 +48,40 @@ import {
   History,
   Eye,
   Check,
+  RotateCcw,
+  SlidersHorizontal,
+  Search,
+  Filter,
+  AlertTriangle,
+  RefreshCw,
+  PlusCircle,
+  ArrowRight,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+
+// Modelos das 6 cláusulas padrão
+export interface ClausulasContrato {
+  objeto: string
+  prazo: string
+  valor: string
+  reajuste: string
+  obrigacoes: string
+  foro: string
+}
+
+export const CLAUSULAS_PADRAO: ClausulasContrato = {
+  objeto:
+    'O presente instrumento tem por objeto a prestação, pela CONTRATADA à CONTRATANTE, de serviços especializados de consultoria, diagnóstico financeiro, análise de balanços patrimoniais, estruturação de planos de contas, controle orçamentário e emissão de relatórios periódicos de desempenho econômico-financeiro.',
+  prazo:
+    'O presente contrato vigorará pelo prazo total de {MESES} ({MESES} meses), com início em {DATA_INICIO} e término previsto para {DATA_FINAL}.\n\nFica estipulado um prazo inicial de carência/implantação de {PRAZO_INICIAL} {PRAZO_INICIAL_LABEL} para estruturação e parametrização dos relatórios contábeis e financeiros.',
+  valor:
+    'Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA a quantia mensal de {VALOR_PARCELA}, totalizando o valor global de {VALOR_TOTAL} ao longo da vigência contratual de {MESES} parcelas.\n\nAs parcelas vencerão impreterivelmente no dia {DIA_VENCIMENTO} de cada mês subsequente, mediante emissão de boleto bancário, transferência ou chave PIX informada pela CONTRATADA.',
+  reajuste:
+    'O valor estipulado na Cláusula Terceira será reajustado anualmente a cada 12 (doze) meses de vigência, aplicando-se a variação positiva acumulada do IGP-M/FGV (Índice Geral de Preços do Mercado) ou, na sua ausência ou extinção, pelo IPCA/IBGE acumulado no período.',
+  obrigacoes:
+    'I – Da CONTRATADA: Prestar os serviços acordados com zelo, ética e técnica profissional, guardando sigilo irrestrito de todas as informações comerciais, fiscais e estratégicas a que tiver acesso.\n\nII – Da CONTRATANTE: Fornecer em tempo hábil todos os documentos contábeis, extratos, demonstrativos e dados necessários para a correta elaboração dos diagnósticos e relatórios.',
+  foro: 'Para dirimir quaisquer controvérsias oriundas do presente contrato, as partes elegem o Foro da comarca de {CIDADE_ESTADO}, com renúncia expressa a qualquer outro, por mais privilegiado que seja.',
+}
 
 // Formata data YYYY-MM-DD para dd/mm/aaaa
 function formatarDataBr(dataStr?: string): string {
@@ -119,12 +152,33 @@ function calcularDataFinal(dataInicio: string, quantidadeMeses: number): string 
   const baseMonth = startMonth ? startMonth - 1 : new Date().getMonth()
   const baseDay = startDay || 1
 
-  // Soma os meses
   const targetDate = new Date(baseYear, baseMonth + Number(quantidadeMeses), baseDay)
   const y = targetDate.getFullYear()
   const m = String(targetDate.getMonth() + 1).padStart(2, '0')
   const d = String(targetDate.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+// Calcula dias restantes para o término do contrato
+function calcularDiasRestantesContrato(dataFinalStr?: string): {
+  dias: number
+  isVigente: boolean
+  isVencendo: boolean
+} {
+  if (!dataFinalStr) return { dias: 0, isVigente: false, isVencendo: false }
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const [ano, mes, dia] = dataFinalStr.slice(0, 10).split('-').map(Number)
+  const dataFim = new Date(ano, mes - 1, dia)
+  dataFim.setHours(0, 0, 0, 0)
+
+  const diffTime = dataFim.getTime() - hoje.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+  const isVigente = diffDays >= 0
+  const isVencendo = isVigente && diffDays <= 30
+
+  return { dias: diffDays, isVigente, isVencendo }
 }
 
 // Monta endereço formatado
@@ -158,6 +212,9 @@ export default function Contratos() {
   const navigate = useNavigate()
   const { minhaEmpresa } = useMinhaEmpresa()
 
+  // Aba ativa: 'novo' (Gerador) | 'historico' (Histórico de Contratos)
+  const [abaAtiva, setAbaAtiva] = useState<'novo' | 'historico'>('novo')
+
   // Lista de empresas cadastradas
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [loadingEmpresas, setLoadingEmpresas] = useState(true)
@@ -165,7 +222,14 @@ export default function Contratos() {
   // Lista de contratos salvos
   const [contratosSalvos, setContratosSalvos] = useState<ContratoRecord[]>([])
   const [loadingContratos, setLoadingContratos] = useState(true)
-  const [modalContratosOpen, setModalContratosOpen] = useState(false)
+
+  // Filtros da aba Histórico
+  const [filtroHistoricoCliente, setFiltroHistoricoCliente] = useState<string>('todos')
+  const [filtroHistoricoStatus, setFiltroHistoricoStatus] = useState<
+    'todos' | 'vigente' | 'encerrado'
+  >('todos')
+  const [filtroHistoricoBusca, setFiltroHistoricoBusca] = useState<string>('')
+  const [filtroHistoricoDataInicio, setFiltroHistoricoDataInicio] = useState<string>('')
 
   // Formulário de geração
   const [contratanteId, setContratanteId] = useState<string>('')
@@ -176,7 +240,16 @@ export default function Contratos() {
   const [diaVencimento, setDiaVencimento] = useState<number>(10)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
-  // Estado da Pré-visualização
+  // Cláusulas personalizadas (em memória da sessão)
+  const [clausulas, setClausulas] = useState<ClausulasContrato>({ ...CLAUSULAS_PADRAO })
+  const [modalClausulasOpen, setModalClausulasOpen] = useState(false)
+  const [clausulasEdit, setClausulasEdit] = useState<ClausulasContrato>({ ...CLAUSULAS_PADRAO })
+
+  // Modal de Pré-visualização A4 rápida a partir do histórico
+  const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [contratoParaVisualizar, setContratoParaVisualizar] = useState<ContratoRecord | null>(null)
+
+  // Estado da Pré-visualização Principal
   const [contratoGerado, setContratoGerado] = useState<{
     contratada: {
       razao_social: string
@@ -203,6 +276,7 @@ export default function Contratos() {
     valor_parcela: number
     dia_vencimento: number
     data_final: string
+    clausulasPersonalizadas?: ClausulasContrato
     parcelas: ParcelaPreview[]
   } | null>(null)
 
@@ -292,6 +366,80 @@ export default function Contratos() {
     return contratoGerado.parcelas.reduce((acc, p) => acc + (Number(p.valor) || 0), 0)
   }, [contratoGerado])
 
+  // Contratos que estão vencendo nos próximos 30 dias (para notificação no topo da página)
+  const contratosVencendo = useMemo(() => {
+    return contratosSalvos
+      .map((c) => {
+        const dataFimCalculada = c.data_final
+          ? c.data_final.slice(0, 10)
+          : calcularDataFinal(c.data_inicio ? c.data_inicio.slice(0, 10) : '', c.quantidade_meses)
+        const { dias, isVigente, isVencendo } = calcularDiasRestantesContrato(dataFimCalculada)
+        const emp = c.expand?.contratante || empresas.find((e) => e.id === c.contratante)
+        return {
+          ...c,
+          empresaNome: emp?.nome || 'Empresa Cliente',
+          dataFinalReal: dataFimCalculada,
+          diasRestantes: dias,
+          isVigente,
+          isVencendo,
+        }
+      })
+      .filter((c) => c.isVencendo)
+  }, [contratosSalvos, empresas])
+
+  // Lista de contratos do histórico filtrada
+  const contratosFiltradosHistorico = useMemo(() => {
+    return contratosSalvos
+      .map((c) => {
+        const emp = c.expand?.contratante || empresas.find((e) => e.id === c.contratante)
+        const dataFimCalculada = c.data_final
+          ? c.data_final.slice(0, 10)
+          : calcularDataFinal(c.data_inicio ? c.data_inicio.slice(0, 10) : '', c.quantidade_meses)
+        const { dias, isVigente } = calcularDiasRestantesContrato(dataFimCalculada)
+        return {
+          ...c,
+          empresaNome: emp?.nome || 'Empresa Cliente',
+          empresaCnpj: emp?.cnpj || '',
+          dataFinalReal: dataFimCalculada,
+          diasRestantes: dias,
+          isVigente,
+        }
+      })
+      .filter((c) => {
+        // Filtro por cliente
+        if (filtroHistoricoCliente !== 'todos' && c.contratante !== filtroHistoricoCliente) {
+          return false
+        }
+
+        // Filtro por status
+        if (filtroHistoricoStatus === 'vigente' && !c.isVigente) return false
+        if (filtroHistoricoStatus === 'encerrado' && c.isVigente) return false
+
+        // Filtro por busca de texto (nome ou cnpj)
+        if (filtroHistoricoBusca.trim()) {
+          const q = filtroHistoricoBusca.toLowerCase()
+          const matchNome = c.empresaNome.toLowerCase().includes(q)
+          const matchCnpj = c.empresaCnpj.toLowerCase().includes(q)
+          if (!matchNome && !matchCnpj) return false
+        }
+
+        // Filtro por data de início
+        if (filtroHistoricoDataInicio) {
+          const inicioStr = (c.data_inicio || '').slice(0, 10)
+          if (inicioStr < filtroHistoricoDataInicio) return false
+        }
+
+        return true
+      })
+  }, [
+    contratosSalvos,
+    empresas,
+    filtroHistoricoCliente,
+    filtroHistoricoStatus,
+    filtroHistoricoBusca,
+    filtroHistoricoDataInicio,
+  ])
+
   // Manipulador de valor com máscara
   const handleValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value
@@ -340,8 +488,8 @@ export default function Contratos() {
   }
 
   // Gerar Contrato (Monta pré-visualização em memória)
-  const handleGerarContrato = (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleGerarContrato = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     if (!validateForm()) return
 
     if (!minhaEmpresa || !contratanteSelecionada) {
@@ -391,17 +539,17 @@ export default function Contratos() {
       valor_parcela: valorNumerico,
       dia_vencimento: Number(diaVencimento),
       data_final: dataFimCalculada,
+      clausulasPersonalizadas: { ...clausulas },
       parcelas: parcelasPreview,
     })
 
-    // Reset status de salvamento para novo contrato
     setContratoSalvoId(null)
     setFinanceiroGerado(false)
 
     toast({
       title: 'Contrato gerado com sucesso!',
       description:
-        'A pré-visualização foi carregada. Você pode imprimir, salvar ou gerar as parcelas no financeiro.',
+        'A pré-visualização foi atualizada. Você pode imprimir, salvar ou gerar as parcelas no financeiro.',
     })
   }
 
@@ -437,7 +585,7 @@ export default function Contratos() {
 
       toast({
         title: 'Contrato salvo com sucesso!',
-        description: `O contrato com ${contratoGerado.contratante.razao_social} foi registrado no banco de dados.`,
+        description: `O contrato com ${contratoGerado.contratante.razao_social} foi registrado no histórico.`,
       })
     } catch (err: any) {
       console.error('Erro ao salvar contrato:', err)
@@ -486,7 +634,33 @@ export default function Contratos() {
     }
   }
 
-  // Carregar contrato salvo para visualização
+  // Ação de Renovar contrato existente: pré-preenche o formulário com a nova data de início sendo a data final do contrato anterior
+  const handleRenovarContrato = (c: ContratoRecord) => {
+    const dataFimAnterior = c.data_final
+      ? c.data_final.slice(0, 10)
+      : calcularDataFinal(c.data_inicio ? c.data_inicio.slice(0, 10) : '', c.quantidade_meses)
+
+    // Data de início da renovação = data final do contrato anterior (ou hoje se já passou)
+    const dataInicioRenovacao = dataFimAnterior >= dataHojeIso() ? dataFimAnterior : dataHojeIso()
+
+    setContratanteId(c.contratante)
+    setDataInicio(dataInicioRenovacao)
+    setPrazoInicial(c.prazo_inicial || 1)
+    setQuantidadeMeses(c.quantidade_meses || 12)
+    setValorInput(formatarInputMoeda(Number(c.valor_parcela) || 0))
+    setDiaVencimento(c.dia_vencimento || 10)
+
+    setContratoSalvoId(null)
+    setFinanceiroGerado(false)
+    setAbaAtiva('novo')
+
+    toast({
+      title: 'Formulário pré-preenchido para Renovação',
+      description: `Definida data de início em ${formatarDataBr(dataInicioRenovacao)} com os parâmetros do contrato anterior.`,
+    })
+  }
+
+  // Carregar contrato salvo para visualização na tela principal de edição
   const handleCarregarContratoSalvo = (c: ContratoRecord) => {
     const contratanteObj = c.expand?.contratante || empresas.find((e) => e.id === c.contratante)
     const valorNum = Number(c.valor_parcela) || 0
@@ -536,17 +710,24 @@ export default function Contratos() {
       valor_parcela: valorNum,
       dia_vencimento: c.dia_vencimento,
       data_final: dataFimCalculada,
+      clausulasPersonalizadas: { ...clausulas },
       parcelas: parcelasPreview,
     })
 
     setContratoSalvoId(c.id)
     setFinanceiroGerado(false)
-    setModalContratosOpen(false)
+    setAbaAtiva('novo')
 
     toast({
       title: 'Contrato carregado',
       description: `Contrato de ${contratanteObj?.nome || 'Empresa'} carregado na pré-visualização.`,
     })
+  }
+
+  // Abrir modal de visualização A4 do contrato do histórico
+  const handleAbrirPreviewModal = (c: ContratoRecord) => {
+    setContratoParaVisualizar(c)
+    setPreviewModalOpen(true)
   }
 
   // Excluir contrato salvo
@@ -570,6 +751,54 @@ export default function Contratos() {
         description: err?.message,
       })
     }
+  }
+
+  // Handlers para o Modal de Personalização de Cláusulas
+  const handleAbrirModalClausulas = () => {
+    setClausulasEdit({ ...clausulas })
+    setModalClausulasOpen(true)
+  }
+
+  const handleSalvarClausulasPersonalizadas = () => {
+    setClausulas({ ...clausulasEdit })
+    if (contratoGerado) {
+      setContratoGerado((prev) =>
+        prev ? { ...prev, clausulasPersonalizadas: { ...clausulasEdit } } : null,
+      )
+    }
+    setModalClausulasOpen(false)
+    toast({
+      title: 'Cláusulas atualizadas!',
+      description: 'As alterações foram salvas para esta sessão do contrato.',
+    })
+  }
+
+  const handleRestaurarClausulasPadrao = () => {
+    setClausulasEdit({ ...CLAUSULAS_PADRAO })
+    toast({
+      title: 'Texto padrão restaurado',
+      description: 'As cláusulas retornaram ao modelo padrão original.',
+    })
+  }
+
+  // Renderiza o texto da cláusula substituindo variáveis
+  const renderClausulaTexto = (template: string, dados: typeof contratoGerado) => {
+    if (!dados) return template
+    const cidadeEstado =
+      dados.contratada.cidade || dados.contratante.cidade
+        ? `${dados.contratada.cidade || dados.contratante.cidade || 'São Paulo'}/${dados.contratada.estado || dados.contratante.estado || 'SP'}`
+        : 'São Paulo/SP'
+
+    return template
+      .replace(/{MESES}/g, String(dados.quantidade_meses))
+      .replace(/{DATA_INICIO}/g, formatarDataBr(dados.data_inicio))
+      .replace(/{DATA_FINAL}/g, formatarDataBr(dados.data_final))
+      .replace(/{PRAZO_INICIAL}/g, String(dados.prazo_inicial))
+      .replace(/{PRAZO_INICIAL_LABEL}/g, dados.prazo_inicial === 1 ? 'mês' : 'meses')
+      .replace(/{VALOR_PARCELA}/g, formatarMoeda(dados.valor_parcela))
+      .replace(/{VALOR_TOTAL}/g, formatarMoeda(totalGeralCalculado))
+      .replace(/{DIA_VENCIMENTO}/g, String(dados.dia_vencimento))
+      .replace(/{CIDADE_ESTADO}/g, cidadeEstado)
   }
 
   return (
@@ -603,7 +832,50 @@ export default function Contratos() {
         }
       `}</style>
 
-      {/* 1. Cabeçalho da Página */}
+      {/* 2.3 NOTIFICAÇÃO DE RENOVAÇÃO NO TOPO DA PÁGINA DE CONTRATOS (Banner de Alerta) */}
+      {contratosVencendo.length > 0 && (
+        <div className="no-print space-y-2">
+          {contratosVencendo.map((cv) => (
+            <div
+              key={`aviso-venc-${cv.id}`}
+              className="bg-amber-50/90 border border-amber-300 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs"
+            >
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-amber-950">
+                    Contrato com {cv.empresaNome} vence em{' '}
+                    <span className="text-amber-800 underline font-extrabold">
+                      {cv.diasRestantes === 0
+                        ? 'hoje'
+                        : `${cv.diasRestantes} ${cv.diasRestantes === 1 ? 'dia' : 'dias'}`}
+                    </span>{' '}
+                    ({formatarDataBr(cv.dataFinalReal)})
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    O contrato atual está próximo do término. Prepare a renovação para garantir a
+                    continuidade da prestação de serviços.
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleRenovarContrato(cv)}
+                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Renovar Contrato
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Cabeçalho da Página */}
       <div className="no-print flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight flex items-center gap-2">
@@ -611,25 +883,12 @@ export default function Contratos() {
             Contratos de Prestação de Serviço
           </h1>
           <p className="text-xs text-[#5B6B7F]">
-            Elabore, pré-visualize e gere contratos de consultoria financeira com cronograma
-            automático de parcelas.
+            Elabore, personalize cláusulas, visualize histórico e renove contratos de consultoria
+            financeira.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {contratosSalvos.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setModalContratosOpen(true)}
-              className="h-8 text-xs font-semibold text-slate-700 bg-white border-slate-200 hover:bg-slate-50 gap-1.5 shadow-2xs"
-            >
-              <History className="w-3.5 h-3.5 text-blue-600" />
-              Contratos Salvos ({contratosSalvos.length})
-            </Button>
-          )}
-
           <Button
             type="button"
             variant="outline"
@@ -664,807 +923,1190 @@ export default function Contratos() {
         </Alert>
       )}
 
-      {/* Grid Principal: Formulário (Esquerda) e Pré-visualização A4 (Direita) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* LADO ESQUERDO: Formulário de Geração (5 colunas no desktop) */}
-        <div className="no-print lg:col-span-5 space-y-4">
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
-                <FileSignature className="w-4 h-4 text-blue-600" />
-                Dados do Contrato
-              </CardTitle>
-              <CardDescription className="text-xs mt-0.5">
-                Preencha os parâmetros para redigir o contrato e calcular o cronograma.
-              </CardDescription>
-            </CardHeader>
+      {/* Abas Principais: "Novo Contrato" vs "Histórico de Contratos" */}
+      <Tabs
+        value={abaAtiva}
+        onValueChange={(v) => setAbaAtiva(v as 'novo' | 'historico')}
+        className="space-y-4"
+      >
+        <div className="no-print border-b border-slate-200">
+          <TabsList className="bg-slate-100 p-1 rounded-xl h-10">
+            <TabsTrigger
+              value="novo"
+              className="text-xs font-bold rounded-lg px-4 gap-1.5 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              Novo Contrato / Edição
+            </TabsTrigger>
+            <TabsTrigger
+              value="historico"
+              className="text-xs font-bold rounded-lg px-4 gap-1.5 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs"
+            >
+              <History className="w-3.5 h-3.5" />
+              Histórico de Contratos ({contratosSalvos.length})
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-            <CardContent className="pt-4">
-              <form onSubmit={handleGerarContrato} className="space-y-4">
-                {/* 1. Seção CONTRATADA (Minha Empresa) - Readonly */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-[#0B1F3A] uppercase tracking-wide flex items-center gap-1.5">
-                      <Building className="w-3.5 h-3.5 text-blue-600" />
-                      Contratada (Minha Empresa)
-                    </span>
-                    <Link
-                      to="/minha-empresa"
-                      className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
-                    >
-                      Editar dados
-                      <ExternalLink className="w-2.5 h-2.5" />
-                    </Link>
+        {/* ========================================================================= */}
+        {/* ABA 1: GERADOR DE CONTRATO (FORMULÁRIO + PRÉ-VISUALIZAÇÃO A4) */}
+        {/* ========================================================================= */}
+        <TabsContent value="novo" className="space-y-6 focus-visible:outline-none">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            {/* LADO ESQUERDO: Formulário de Geração (5 colunas no desktop) */}
+            <div className="no-print lg:col-span-5 space-y-4">
+              <Card className="bg-white border-slate-200 shadow-xs">
+                <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                      <FileSignature className="w-4 h-4 text-blue-600" />
+                      Dados do Contrato
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Preencha os parâmetros para redigir o contrato e calcular o cronograma.
+                    </CardDescription>
                   </div>
 
-                  {minhaEmpresa ? (
-                    <div className="space-y-1.5 text-xs">
-                      <div>
-                        <span className="text-[10px] text-slate-500 font-medium block">
-                          Razão Social:
+                  {/* 2.1 Botão Personalizar Cláusulas */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAbrirModalClausulas}
+                    className="text-xs border-blue-200 text-blue-700 hover:bg-blue-50 font-semibold gap-1.5 shrink-0"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
+                    Personalizar Cláusulas
+                  </Button>
+                </CardHeader>
+
+                <CardContent className="pt-4">
+                  <form onSubmit={handleGerarContrato} className="space-y-4">
+                    {/* 1. Seção CONTRATADA (Minha Empresa) - Readonly */}
+                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-[#0B1F3A] uppercase tracking-wide flex items-center gap-1.5">
+                          <Building className="w-3.5 h-3.5 text-blue-600" />
+                          Contratada (Minha Empresa)
                         </span>
-                        <p className="font-semibold text-slate-800 truncate">
-                          {minhaEmpresa.razao_social || 'Não informada'}
-                        </p>
+                        <Link
+                          to="/minha-empresa"
+                          className="text-[10px] text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-0.5"
+                        >
+                          Editar dados
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </Link>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <span className="text-[10px] text-slate-500 font-medium block">
-                            CNPJ:
-                          </span>
-                          <p className="font-mono text-slate-700 text-[11px]">
-                            {minhaEmpresa.cnpj || 'Não informado'}
+                      {minhaEmpresa ? (
+                        <div className="space-y-1.5 text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-medium block">
+                              Razão Social:
+                            </span>
+                            <p className="font-semibold text-slate-800 truncate">
+                              {minhaEmpresa.razao_social || 'Não informada'}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] text-slate-500 font-medium block">
+                                CNPJ:
+                              </span>
+                              <p className="font-mono text-slate-700 text-[11px]">
+                                {minhaEmpresa.cnpj || 'Não informado'}
+                              </p>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-500 font-medium block">
+                                CRC do Contador:
+                              </span>
+                              <p className="font-semibold text-slate-700 text-[11px]">
+                                {crcContador}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] text-slate-500 font-medium block">
+                              Endereço:
+                            </span>
+                            <p className="text-slate-600 text-[11px] line-clamp-2 leading-relaxed">
+                              {enderecoMinhaEmpresa}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-amber-700 font-medium">
+                          Nenhuma empresa configurada. Acesse Minha Empresa para cadastrar.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* 2. Seção CONTRATANTE (Empresa Selecionada) */}
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="contrato-contratante"
+                        className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                      >
+                        <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                        Contratante (Cliente) *
+                      </Label>
+                      <Select
+                        value={contratanteId}
+                        onValueChange={(val) => {
+                          setContratanteId(val)
+                          if (formErrors.contratante) {
+                            setFormErrors((prev) => ({ ...prev, contratante: '' }))
+                          }
+                        }}
+                        disabled={loadingEmpresas}
+                      >
+                        <SelectTrigger id="contrato-contratante" className="h-9 text-xs bg-white">
+                          <SelectValue placeholder="Selecione a empresa contratante" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-64">
+                          {empresas.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                              <div className="flex flex-col text-left py-0.5">
+                                <span className="font-semibold text-slate-800">
+                                  {emp.nome} {emp.nome_fantasia ? `(${emp.nome_fantasia})` : ''}
+                                </span>
+                                <span className="text-[10px] text-slate-500 font-mono">
+                                  CNPJ: {emp.cnpj || 'Não informado'}{' '}
+                                  {emp.segmento ? `· ${emp.segmento}` : ''}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {formErrors.contratante && (
+                        <p className="text-[11px] text-red-600 font-medium">
+                          {formErrors.contratante}
+                        </p>
+                      )}
+
+                      {contratanteSelecionada && (
+                        <div className="mt-1 p-2 bg-blue-50/50 border border-blue-100 rounded-lg text-[11px] text-slate-600 space-y-0.5">
+                          <p>
+                            <strong className="text-slate-800">Razão Social:</strong>{' '}
+                            {contratanteSelecionada.nome}
+                          </p>
+                          <p>
+                            <strong className="text-slate-800">CNPJ:</strong>{' '}
+                            <span className="font-mono">{contratanteSelecionada.cnpj || '—'}</span>
+                          </p>
+                          <p className="truncate">
+                            <strong className="text-slate-800">Endereço:</strong>{' '}
+                            {enderecoContratante}
                           </p>
                         </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 font-medium block">
-                            CRC do Contador:
-                          </span>
-                          <p className="font-semibold text-slate-700 text-[11px]">{crcContador}</p>
-                        </div>
+                      )}
+                    </div>
+
+                    {/* 3. Data de Início da Consultoria e Prazo Inicial */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Data de Início */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="contrato-inicio"
+                          className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                        >
+                          <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
+                          Início da Consultoria *
+                        </Label>
+                        <Input
+                          id="contrato-inicio"
+                          type="date"
+                          value={dataInicio}
+                          onChange={(e) => {
+                            setDataInicio(e.target.value)
+                            if (formErrors.dataInicio) {
+                              setFormErrors((prev) => ({ ...prev, dataInicio: '' }))
+                            }
+                          }}
+                          className="h-9 text-xs bg-white"
+                        />
+                        {formErrors.dataInicio && (
+                          <p className="text-[11px] text-red-600 font-medium">
+                            {formErrors.dataInicio}
+                          </p>
+                        )}
                       </div>
 
-                      <div>
-                        <span className="text-[10px] text-slate-500 font-medium block">
-                          Endereço:
-                        </span>
-                        <p className="text-slate-600 text-[11px] line-clamp-2 leading-relaxed">
-                          {enderecoMinhaEmpresa}
-                        </p>
+                      {/* Prazo Inicial (meses) */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="contrato-prazo-inicial"
+                          className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-blue-600" />
+                          Prazo Inicial (meses) *
+                        </Label>
+                        <Input
+                          id="contrato-prazo-inicial"
+                          type="number"
+                          min={1}
+                          max={60}
+                          placeholder="1"
+                          value={prazoInicial}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10)
+                            setPrazoInicial(isNaN(v) ? ('' as any) : v)
+                            if (formErrors.prazoInicial) {
+                              setFormErrors((prev) => ({ ...prev, prazoInicial: '' }))
+                            }
+                          }}
+                          className="h-9 text-xs bg-white font-mono font-bold"
+                        />
+                        {formErrors.prazoInicial && (
+                          <p className="text-[11px] text-red-600 font-medium">
+                            {formErrors.prazoInicial}
+                          </p>
+                        )}
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-xs text-amber-700 font-medium">
-                      Nenhuma empresa configurada. Acesse Minha Empresa para cadastrar.
+
+                    {/* 4. Quantidade de Meses do Contrato com Atalhos Rápidos */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label
+                          htmlFor="contrato-meses"
+                          className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-blue-600" />
+                          Quantidade de Meses do Contrato *
+                        </Label>
+                        <span className="text-[11px] font-semibold text-blue-700">
+                          Término: {formatarDataBr(calcularDataFinal(dataInicio, quantidadeMeses))}
+                        </span>
+                      </div>
+
+                      <Input
+                        id="contrato-meses"
+                        type="number"
+                        min={1}
+                        max={120}
+                        placeholder="12"
+                        value={quantidadeMeses}
+                        onChange={(e) => {
+                          const v = parseInt(e.target.value, 10)
+                          setQuantidadeMeses(isNaN(v) ? ('' as any) : v)
+                          if (formErrors.quantidadeMeses) {
+                            setFormErrors((prev) => ({ ...prev, quantidadeMeses: '' }))
+                          }
+                        }}
+                        className="h-9 text-xs bg-white font-mono font-bold"
+                      />
+                      {formErrors.quantidadeMeses && (
+                        <p className="text-[11px] text-red-600 font-medium">
+                          {formErrors.quantidadeMeses}
+                        </p>
+                      )}
+
+                      {/* Atalhos Rápidos */}
+                      <div className="flex items-center gap-1.5 pt-1">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase">
+                          Atalhos:
+                        </span>
+                        {[6, 12, 24, 36].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setQuantidadeMeses(m)}
+                            className={`text-[11px] px-2.5 py-0.5 rounded-md font-semibold transition-colors border ${
+                              quantidadeMeses === m
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {m} meses
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 5. Valor da Parcela (R$) e Dia de Vencimento */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Valor da Parcela */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="contrato-valor"
+                          className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                        >
+                          <DollarSign className="w-3.5 h-3.5 text-blue-600" />
+                          Valor da Parcela (R$) *
+                        </Label>
+                        <div className="relative">
+                          <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <Input
+                            id="contrato-valor"
+                            type="text"
+                            placeholder="R$ 0,00"
+                            value={valorInput}
+                            onChange={handleValorChange}
+                            className="h-9 text-xs pl-8 font-mono font-bold text-slate-900"
+                          />
+                        </div>
+                        {formErrors.valor && (
+                          <p className="text-[11px] text-red-600 font-medium">{formErrors.valor}</p>
+                        )}
+                      </div>
+
+                      {/* Dia de Vencimento (Select 1 a 28) */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="contrato-dia-vencimento"
+                          className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                        >
+                          <Clock className="w-3.5 h-3.5 text-blue-600" />
+                          Dia de Vencimento *
+                        </Label>
+                        <Select
+                          value={String(diaVencimento)}
+                          onValueChange={(val) => {
+                            setDiaVencimento(Number(val))
+                            if (formErrors.diaVencimento) {
+                              setFormErrors((prev) => ({ ...prev, diaVencimento: '' }))
+                            }
+                          }}
+                        >
+                          <SelectTrigger
+                            id="contrato-dia-vencimento"
+                            className="h-9 text-xs bg-white"
+                          >
+                            <SelectValue placeholder="Selecione o dia" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-56">
+                            {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
+                              <SelectItem key={dia} value={String(dia)} className="text-xs">
+                                Dia {dia} de cada mês
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {formErrors.diaVencimento && (
+                          <p className="text-[11px] text-red-600 font-medium">
+                            {formErrors.diaVencimento}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Botão Gerar Contrato */}
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
+                      <Button
+                        type="submit"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-10 shadow-sm gap-2"
+                        disabled={loadingEmpresas || empresas.length === 0}
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        Gerar Contrato
+                      </Button>
+                    </div>
+                  </form>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* LADO DIREITO: Pré-visualização do Contrato (Card simulando folha A4) */}
+            <div className="lg:col-span-7 space-y-4">
+              {/* Barra de Ações Superior (Apenas se o contrato estiver gerado) */}
+              {contratoGerado && (
+                <div className="no-print bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs font-bold px-2.5 py-1">
+                      Contrato Pronto
+                    </Badge>
+                    {contratoSalvoId && (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-bold px-2.5 py-1 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Salvo no Banco
+                      </Badge>
+                    )}
+                    {financeiroGerado && (
+                      <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs font-bold px-2.5 py-1 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Recebíveis Criados
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {/* 1. Imprimir / Salvar PDF */}
+                    <Button
+                      type="button"
+                      onClick={handleImprimir}
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs font-semibold text-slate-700 bg-white border-slate-300 hover:bg-slate-50 gap-1.5 shadow-2xs"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-blue-600" />
+                      Imprimir / Salvar PDF
+                    </Button>
+
+                    {/* 2. Salvar Contrato */}
+                    <Button
+                      type="button"
+                      onClick={handleSalvarContrato}
+                      disabled={salvandoContrato || !!contratoSalvoId}
+                      size="sm"
+                      className="h-8 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-2xs"
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {salvandoContrato
+                        ? 'Salvando...'
+                        : contratoSalvoId
+                          ? 'Contrato Salvo'
+                          : 'Salvar Contrato'}
+                    </Button>
+
+                    {/* 3. Gerar Parcelas no Financeiro */}
+                    <Button
+                      type="button"
+                      onClick={handleGerarParcelasNoFinanceiro}
+                      disabled={gerandoFinanceiro || financeiroGerado}
+                      size="sm"
+                      className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-2xs"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {gerandoFinanceiro
+                        ? 'Gerando...'
+                        : financeiroGerado
+                          ? 'Parcelas Geradas'
+                          : 'Gerar Parcelas no Financeiro'}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Folha A4 Simulada */}
+              {!contratoGerado ? (
+                <Card className="no-print bg-white border-slate-200 shadow-xs">
+                  <CardContent className="py-24 flex flex-col items-center justify-center text-center px-4">
+                    <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+                      <FileSignature className="w-8 h-8" />
+                    </div>
+                    <h3 className="text-base font-bold text-[#0B1F3A]">
+                      Pré-visualização do Contrato
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-md">
+                      Preencha os campos do formulário à esquerda e clique no botão{' '}
+                      <strong className="text-blue-700">"Gerar Contrato"</strong> para visualizar o
+                      documento redigido com as cláusulas jurídicas e a tabela de parcelas.
                     </p>
-                  )}
+                  </CardContent>
+                </Card>
+              ) : (
+                <div
+                  id="contrato-folha-a4"
+                  className="bg-white rounded-2xl border border-slate-200 shadow-lg p-8 sm:p-12 text-slate-800 text-xs sm:text-sm leading-relaxed space-y-6 font-serif"
+                  style={{ minHeight: '1050px' }}
+                >
+                  {/* Cabeçalho do Contrato */}
+                  <div className="text-center border-b-2 border-slate-900 pb-5 space-y-1">
+                    <h2 className="text-base sm:text-lg font-bold tracking-tight uppercase text-slate-950 font-sans">
+                      CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE CONSULTORIA
+                    </h2>
+                    <p className="text-[11px] sm:text-xs text-slate-500 uppercase tracking-widest font-sans font-semibold">
+                      Assessoria, Diagnóstico e Planejamento Financeiro
+                    </p>
+                  </div>
+
+                  {/* Qualificação das Partes */}
+                  <div className="space-y-3 text-justify">
+                    <p>
+                      Por este instrumento particular de contrato de prestação de serviços, de um
+                      lado:
+                    </p>
+
+                    {/* CONTRATADA */}
+                    <div className="pl-4 border-l-2 border-blue-600 space-y-1 bg-slate-50/70 p-3 rounded-r-lg font-sans text-xs">
+                      <p className="font-bold text-slate-900 uppercase">
+                        CONTRATADA:{' '}
+                        <span className="font-normal text-slate-800">
+                          {contratoGerado.contratada.razao_social || 'CONTRATADA NÃO IDENTIFICADA'}
+                        </span>
+                      </p>
+                      <p className="text-slate-700">
+                        <strong>CNPJ:</strong>{' '}
+                        <span className="font-mono">{contratoGerado.contratada.cnpj || '—'}</span>
+                        {contratoGerado.contratada.crc &&
+                          ` | Responsável Técnico: ${contratoGerado.contratada.crc}`}
+                      </p>
+                      <p className="text-slate-700">
+                        <strong>Endereço:</strong>{' '}
+                        {contratoGerado.contratada.endereco || 'Endereço não informado'}
+                      </p>
+                    </div>
+
+                    <p>E, de outro lado:</p>
+
+                    {/* CONTRATANTE */}
+                    <div className="pl-4 border-l-2 border-slate-600 space-y-1 bg-slate-50/70 p-3 rounded-r-lg font-sans text-xs">
+                      <p className="font-bold text-slate-900 uppercase">
+                        CONTRATANTE:{' '}
+                        <span className="font-normal text-slate-800">
+                          {contratoGerado.contratante.razao_social}
+                        </span>
+                        {contratoGerado.contratante.nome_fantasia && (
+                          <span className="text-slate-600 font-normal">
+                            {' '}
+                            (Nome Fantasia: {contratoGerado.contratante.nome_fantasia})
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-slate-700">
+                        <strong>CNPJ:</strong>{' '}
+                        <span className="font-mono">{contratoGerado.contratante.cnpj || '—'}</span>
+                      </p>
+                      <p className="text-slate-700">
+                        <strong>Endereço:</strong>{' '}
+                        {contratoGerado.contratante.endereco || 'Endereço não informado'}
+                      </p>
+                    </div>
+
+                    <p>
+                      Têm entre si, justo e acordado, o presente Contrato de Prestação de Serviços
+                      de Consultoria Financeira, que se regerá pelas seguintes cláusulas e
+                      condições:
+                    </p>
+                  </div>
+
+                  {/* Cláusulas do Contrato (Utilizando as personalizadas se houver) */}
+                  <div className="space-y-4 text-justify">
+                    {/* CLÁUSULA 1 - DO OBJETO */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
+                        CLÁUSULA PRIMEIRA – DO OBJETO
+                      </h3>
+                      <p className="whitespace-pre-line">
+                        {renderClausulaTexto(
+                          contratoGerado.clausulasPersonalizadas?.objeto || clausulas.objeto,
+                          contratoGerado,
+                        )}
+                      </p>
+                    </div>
+
+                    {/* CLÁUSULA 2 - DO PRAZO */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
+                        CLÁUSULA SEGUNDA – DO PRAZO E VIGÊNCIA
+                      </h3>
+                      <p className="whitespace-pre-line">
+                        {renderClausulaTexto(
+                          contratoGerado.clausulasPersonalizadas?.prazo || clausulas.prazo,
+                          contratoGerado,
+                        )}
+                      </p>
+                    </div>
+
+                    {/* CLÁUSULA 3 - DO VALOR E FORMA DE PAGAMENTO */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
+                        CLÁUSULA TERCEIRA – DO VALOR E DA FORMA DE PAGAMENTO
+                      </h3>
+                      <p className="whitespace-pre-line">
+                        {renderClausulaTexto(
+                          contratoGerado.clausulasPersonalizadas?.valor || clausulas.valor,
+                          contratoGerado,
+                        )}
+                      </p>
+                    </div>
+
+                    {/* CLÁUSULA 4 - DO REAJUSTE */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
+                        CLÁUSULA QUARTA – DO REAJUSTE ANUAL
+                      </h3>
+                      <p className="whitespace-pre-line">
+                        {renderClausulaTexto(
+                          contratoGerado.clausulasPersonalizadas?.reajuste || clausulas.reajuste,
+                          contratoGerado,
+                        )}
+                      </p>
+                    </div>
+
+                    {/* CLÁUSULA 5 - DAS OBRIGAÇÕES */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
+                        CLÁUSULA QUINTA – DAS OBRIGAÇÕES DAS PARTES
+                      </h3>
+                      <p className="whitespace-pre-line">
+                        {renderClausulaTexto(
+                          contratoGerado.clausulasPersonalizadas?.obrigacoes ||
+                            clausulas.obrigacoes,
+                          contratoGerado,
+                        )}
+                      </p>
+                    </div>
+
+                    {/* CLÁUSULA 6 - DO FORO */}
+                    <div className="space-y-1.5">
+                      <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
+                        CLÁUSULA SEXTA – DO FORO
+                      </h3>
+                      <p className="whitespace-pre-line">
+                        {renderClausulaTexto(
+                          contratoGerado.clausulasPersonalizadas?.foro || clausulas.foro,
+                          contratoGerado,
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Data e Local */}
+                  <div className="pt-4 text-right font-sans text-xs sm:text-sm text-slate-800">
+                    <p>
+                      {contratoGerado.contratada.cidade || 'Local'},{' '}
+                      {formatarDataExtenso(contratoGerado.data_inicio)}
+                    </p>
+                  </div>
+
+                  {/* Espaço de Assinatura */}
+                  <div className="pt-8 sm:pt-12 grid grid-cols-1 sm:grid-cols-2 gap-8 font-sans text-xs text-center">
+                    <div className="space-y-1">
+                      <div className="border-t border-slate-900 mx-auto w-4/5 pt-1" />
+                      <p className="font-bold text-slate-900 uppercase">
+                        {contratoGerado.contratada.razao_social || 'CONTRATADA'}
+                      </p>
+                      <p className="text-slate-600 text-[11px]">CONTRATADA (Minha Empresa)</p>
+                      {contratoGerado.contratada.crc && (
+                        <p className="text-slate-500 text-[10px]">
+                          {contratoGerado.contratada.crc}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="border-t border-slate-900 mx-auto w-4/5 pt-1" />
+                      <p className="font-bold text-slate-900 uppercase">
+                        {contratoGerado.contratante.razao_social}
+                      </p>
+                      <p className="text-slate-600 text-[11px]">CONTRATANTE (Cliente)</p>
+                      <p className="text-slate-500 text-[10px] font-mono">
+                        CNPJ: {contratoGerado.contratante.cnpj || '—'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 4. Cronograma de Parcelas */}
+                  <div className="pt-8 border-t border-slate-200 font-sans space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase flex items-center gap-2">
+                        <CalendarIcon className="w-4 h-4 text-blue-600" />
+                        Anexo I – Cronograma Financeiro de Parcelas
+                      </h4>
+                      <Badge variant="outline" className="text-[10px] font-bold font-mono">
+                        {contratoGerado.parcelas.length} parcelas
+                      </Badge>
+                    </div>
+
+                    <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                            <th className="py-2 px-3 text-center w-16">Nº</th>
+                            <th className="py-2 px-3">Data de Vencimento</th>
+                            <th className="py-2 px-3 text-right">Valor da Parcela</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {contratoGerado.parcelas.map((p) => (
+                            <tr key={p.parcela} className="hover:bg-slate-50/50">
+                              <td className="py-1.5 px-3 text-center font-mono font-bold text-blue-800">
+                                {String(p.parcela).padStart(2, '0')}
+                              </td>
+                              <td className="py-1.5 px-3 font-medium text-slate-700">
+                                {formatarDataBr(p.vencimento)}
+                              </td>
+                              <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900">
+                                {formatarMoeda(p.valor)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-slate-100/80 font-bold border-t border-slate-300 text-slate-900">
+                            <td colSpan={2} className="py-2.5 px-3 text-xs uppercase">
+                              Total Geral do Contrato
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-xs sm:text-sm font-mono text-emerald-700">
+                              {formatarMoeda(totalGeralCalculado)}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ========================================================================= */}
+        {/* ABA 2: HISTÓRICO DE CONTRATOS (2.2 HISTÓRICO COMPLETO COM FILTROS E TABELA) */}
+        {/* ========================================================================= */}
+        <TabsContent value="historico" className="space-y-4 focus-visible:outline-none">
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <History className="w-4 h-4 text-blue-600" />
+                  Histórico de Contratos Salvos
+                </CardTitle>
+                <CardDescription className="text-xs mt-0.5">
+                  Lista detalhada de todos os contratos gerados e salvos, com filtros por cliente,
+                  período e status de vigência.
+                </CardDescription>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => setAbaAtiva('novo')}
+                  className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5 shadow-2xs"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  Criar Novo Contrato
+                </Button>
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-4 space-y-4">
+              {/* Barra de Filtros */}
+              <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* 1. Busca por texto */}
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                    <Search className="w-3 h-3 text-blue-600" />
+                    Buscar por cliente/CNPJ
+                  </Label>
+                  <Input
+                    type="text"
+                    placeholder="Nome da empresa ou CNPJ..."
+                    value={filtroHistoricoBusca}
+                    onChange={(e) => setFiltroHistoricoBusca(e.target.value)}
+                    className="h-8 text-xs bg-white"
+                  />
                 </div>
 
-                {/* 2. Seção CONTRATANTE (Empresa Selecionada) */}
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="contrato-contratante"
-                    className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                  >
-                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
-                    Contratante (Cliente) *
+                {/* 2. Filtro por Cliente (Select) */}
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-blue-600" />
+                    Empresa Contratante
                   </Label>
                   <Select
-                    value={contratanteId}
-                    onValueChange={(val) => {
-                      setContratanteId(val)
-                      if (formErrors.contratante) {
-                        setFormErrors((prev) => ({ ...prev, contratante: '' }))
-                      }
-                    }}
-                    disabled={loadingEmpresas}
+                    value={filtroHistoricoCliente}
+                    onValueChange={(val) => setFiltroHistoricoCliente(val)}
                   >
-                    <SelectTrigger id="contrato-contratante" className="h-9 text-xs bg-white">
-                      <SelectValue placeholder="Selecione a empresa contratante" />
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue placeholder="Todas as empresas" />
                     </SelectTrigger>
-                    <SelectContent className="max-h-64">
+                    <SelectContent>
+                      <SelectItem value="todos" className="text-xs">
+                        Todas as empresas ({empresas.length})
+                      </SelectItem>
                       {empresas.map((emp) => (
                         <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                          <div className="flex flex-col text-left py-0.5">
-                            <span className="font-semibold text-slate-800">
-                              {emp.nome} {emp.nome_fantasia ? `(${emp.nome_fantasia})` : ''}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                              CNPJ: {emp.cnpj || 'Não informado'}{' '}
-                              {emp.segmento ? `· ${emp.segmento}` : ''}
-                            </span>
-                          </div>
+                          {emp.nome}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {formErrors.contratante && (
-                    <p className="text-[11px] text-red-600 font-medium">{formErrors.contratante}</p>
-                  )}
-
-                  {contratanteSelecionada && (
-                    <div className="mt-1 p-2 bg-blue-50/50 border border-blue-100 rounded-lg text-[11px] text-slate-600 space-y-0.5">
-                      <p>
-                        <strong className="text-slate-800">Razão Social:</strong>{' '}
-                        {contratanteSelecionada.nome}
-                      </p>
-                      <p>
-                        <strong className="text-slate-800">CNPJ:</strong>{' '}
-                        <span className="font-mono">{contratanteSelecionada.cnpj || '—'}</span>
-                      </p>
-                      <p className="truncate">
-                        <strong className="text-slate-800">Endereço:</strong> {enderecoContratante}
-                      </p>
-                    </div>
-                  )}
                 </div>
 
-                {/* 3. Data de Início da Consultoria e Prazo Inicial */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Data de Início */}
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="contrato-inicio"
-                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
-                      <CalendarIcon className="w-3.5 h-3.5 text-blue-600" />
-                      Início da Consultoria *
-                    </Label>
-                    <Input
-                      id="contrato-inicio"
-                      type="date"
-                      value={dataInicio}
-                      onChange={(e) => {
-                        setDataInicio(e.target.value)
-                        if (formErrors.dataInicio) {
-                          setFormErrors((prev) => ({ ...prev, dataInicio: '' }))
-                        }
-                      }}
-                      className="h-9 text-xs bg-white"
-                    />
-                    {formErrors.dataInicio && (
-                      <p className="text-[11px] text-red-600 font-medium">
-                        {formErrors.dataInicio}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Prazo Inicial (meses) */}
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="contrato-prazo-inicial"
-                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
-                      <Clock className="w-3.5 h-3.5 text-blue-600" />
-                      Prazo Inicial (meses) *
-                    </Label>
-                    <Input
-                      id="contrato-prazo-inicial"
-                      type="number"
-                      min={1}
-                      max={60}
-                      placeholder="1"
-                      value={prazoInicial}
-                      onChange={(e) => {
-                        const v = parseInt(e.target.value, 10)
-                        setPrazoInicial(isNaN(v) ? ('' as any) : v)
-                        if (formErrors.prazoInicial) {
-                          setFormErrors((prev) => ({ ...prev, prazoInicial: '' }))
-                        }
-                      }}
-                      className="h-9 text-xs bg-white font-mono font-bold"
-                    />
-                    {formErrors.prazoInicial && (
-                      <p className="text-[11px] text-red-600 font-medium">
-                        {formErrors.prazoInicial}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* 4. Quantidade de Meses do Contrato com Atalhos Rápidos */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label
-                      htmlFor="contrato-meses"
-                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
-                      <Layers className="w-3.5 h-3.5 text-blue-600" />
-                      Quantidade de Meses do Contrato *
-                    </Label>
-                    <span className="text-[11px] font-semibold text-blue-700">
-                      Término: {formatarDataBr(calcularDataFinal(dataInicio, quantidadeMeses))}
-                    </span>
-                  </div>
-
-                  <Input
-                    id="contrato-meses"
-                    type="number"
-                    min={1}
-                    max={120}
-                    placeholder="12"
-                    value={quantidadeMeses}
-                    onChange={(e) => {
-                      const v = parseInt(e.target.value, 10)
-                      setQuantidadeMeses(isNaN(v) ? ('' as any) : v)
-                      if (formErrors.quantidadeMeses) {
-                        setFormErrors((prev) => ({ ...prev, quantidadeMeses: '' }))
-                      }
-                    }}
-                    className="h-9 text-xs bg-white font-mono font-bold"
-                  />
-                  {formErrors.quantidadeMeses && (
-                    <p className="text-[11px] text-red-600 font-medium">
-                      {formErrors.quantidadeMeses}
-                    </p>
-                  )}
-
-                  {/* Atalhos Rápidos */}
-                  <div className="flex items-center gap-1.5 pt-1">
-                    <span className="text-[10px] text-slate-400 font-semibold uppercase">
-                      Atalhos:
-                    </span>
-                    {[6, 12, 24, 36].map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        onClick={() => setQuantidadeMeses(m)}
-                        className={`text-[11px] px-2.5 py-0.5 rounded-md font-semibold transition-colors border ${
-                          quantidadeMeses === m
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {m} meses
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 5. Valor da Parcela (R$) e Dia de Vencimento */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Valor da Parcela */}
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="contrato-valor"
-                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
-                      <DollarSign className="w-3.5 h-3.5 text-blue-600" />
-                      Valor da Parcela (R$) *
-                    </Label>
-                    <div className="relative">
-                      <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                      <Input
-                        id="contrato-valor"
-                        type="text"
-                        placeholder="R$ 0,00"
-                        value={valorInput}
-                        onChange={handleValorChange}
-                        className="h-9 text-xs pl-8 font-mono font-bold text-slate-900"
-                      />
-                    </div>
-                    {formErrors.valor && (
-                      <p className="text-[11px] text-red-600 font-medium">{formErrors.valor}</p>
-                    )}
-                  </div>
-
-                  {/* Dia de Vencimento (Select 1 a 28) */}
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="contrato-dia-vencimento"
-                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                    >
-                      <Clock className="w-3.5 h-3.5 text-blue-600" />
-                      Dia de Vencimento *
-                    </Label>
-                    <Select
-                      value={String(diaVencimento)}
-                      onValueChange={(val) => {
-                        setDiaVencimento(Number(val))
-                        if (formErrors.diaVencimento) {
-                          setFormErrors((prev) => ({ ...prev, diaVencimento: '' }))
-                        }
-                      }}
-                    >
-                      <SelectTrigger id="contrato-dia-vencimento" className="h-9 text-xs bg-white">
-                        <SelectValue placeholder="Selecione o dia" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-56">
-                        {Array.from({ length: 28 }, (_, i) => i + 1).map((dia) => (
-                          <SelectItem key={dia} value={String(dia)} className="text-xs">
-                            Dia {dia} de cada mês
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {formErrors.diaVencimento && (
-                      <p className="text-[11px] text-red-600 font-medium">
-                        {formErrors.diaVencimento}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Botão Gerar Contrato */}
-                <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
-                  <Button
-                    type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-10 shadow-sm gap-2"
-                    disabled={loadingEmpresas || empresas.length === 0}
+                {/* 3. Filtro por Status (Vigente / Encerrado) */}
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                    <Filter className="w-3 h-3 text-blue-600" />
+                    Status do Contrato
+                  </Label>
+                  <Select
+                    value={filtroHistoricoStatus}
+                    onValueChange={(val: any) => setFiltroHistoricoStatus(val)}
                   >
-                    <Sparkles className="w-4 h-4" />
-                    Gerar Contrato
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* LADO DIREITO: Pré-visualização do Contrato (Card simulando folha A4) */}
-        <div className="lg:col-span-7 space-y-4">
-          {/* Barra de Ações Superior (Apenas se o contrato estiver gerado) */}
-          {contratoGerado && (
-            <div className="no-print bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-xs font-bold px-2.5 py-1">
-                  Contrato Pronto
-                </Badge>
-                {contratoSalvoId && (
-                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-xs font-bold px-2.5 py-1 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Salvo no Banco
-                  </Badge>
-                )}
-                {financeiroGerado && (
-                  <Badge className="bg-purple-100 text-purple-800 border-purple-200 text-xs font-bold px-2.5 py-1 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Recebíveis Criados
-                  </Badge>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                {/* 1. Imprimir / Salvar PDF */}
-                <Button
-                  type="button"
-                  onClick={handleImprimir}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs font-semibold text-slate-700 bg-white border-slate-300 hover:bg-slate-50 gap-1.5 shadow-2xs"
-                >
-                  <Printer className="w-3.5 h-3.5 text-blue-600" />
-                  Imprimir / Salvar PDF
-                </Button>
-
-                {/* 2. Salvar Contrato */}
-                <Button
-                  type="button"
-                  onClick={handleSalvarContrato}
-                  disabled={salvandoContrato || !!contratoSalvoId}
-                  size="sm"
-                  className="h-8 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-2xs"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {salvandoContrato
-                    ? 'Salvando...'
-                    : contratoSalvoId
-                      ? 'Contrato Salvo'
-                      : 'Salvar Contrato'}
-                </Button>
-
-                {/* 3. Gerar Parcelas no Financeiro */}
-                <Button
-                  type="button"
-                  onClick={handleGerarParcelasNoFinanceiro}
-                  disabled={gerandoFinanceiro || financeiroGerado}
-                  size="sm"
-                  className="h-8 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-2xs"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {gerandoFinanceiro
-                    ? 'Gerando...'
-                    : financeiroGerado
-                      ? 'Parcelas Geradas'
-                      : 'Gerar Parcelas no Financeiro'}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Folha A4 Simulada */}
-          {!contratoGerado ? (
-            <Card className="no-print bg-white border-slate-200 shadow-xs">
-              <CardContent className="py-24 flex flex-col items-center justify-center text-center px-4">
-                <div className="w-16 h-16 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
-                  <FileSignature className="w-8 h-8" />
-                </div>
-                <h3 className="text-base font-bold text-[#0B1F3A]">Pré-visualização do Contrato</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-md">
-                  Preencha os campos do formulário à esquerda e clique no botão{' '}
-                  <strong className="text-blue-700">"Gerar Contrato"</strong> para visualizar o
-                  documento redigido com as cláusulas jurídicas e a tabela de parcelas.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div
-              id="contrato-folha-a4"
-              className="bg-white rounded-2xl border border-slate-200 shadow-lg p-8 sm:p-12 text-slate-800 text-xs sm:text-sm leading-relaxed space-y-6 font-serif"
-              style={{ minHeight: '1050px' }}
-            >
-              {/* Cabeçalho do Contrato */}
-              <div className="text-center border-b-2 border-slate-900 pb-5 space-y-1">
-                <h2 className="text-base sm:text-lg font-bold tracking-tight uppercase text-slate-950 font-sans">
-                  CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE CONSULTORIA
-                </h2>
-                <p className="text-[11px] sm:text-xs text-slate-500 uppercase tracking-widest font-sans font-semibold">
-                  Assessoria, Diagnóstico e Planejamento Financeiro
-                </p>
-              </div>
-
-              {/* Qualificação das Partes */}
-              <div className="space-y-3 text-justify">
-                <p>
-                  Por este instrumento particular de contrato de prestação de serviços, de um lado:
-                </p>
-
-                {/* CONTRATADA */}
-                <div className="pl-4 border-l-2 border-blue-600 space-y-1 bg-slate-50/70 p-3 rounded-r-lg font-sans text-xs">
-                  <p className="font-bold text-slate-900 uppercase">
-                    CONTRATADA:{' '}
-                    <span className="font-normal text-slate-800">
-                      {contratoGerado.contratada.razao_social || 'CONTRATADA NÃO IDENTIFICADA'}
-                    </span>
-                  </p>
-                  <p className="text-slate-700">
-                    <strong>CNPJ:</strong>{' '}
-                    <span className="font-mono">{contratoGerado.contratada.cnpj || '—'}</span>
-                    {contratoGerado.contratada.crc &&
-                      ` | Responsável Técnico: ${contratoGerado.contratada.crc}`}
-                  </p>
-                  <p className="text-slate-700">
-                    <strong>Endereço:</strong>{' '}
-                    {contratoGerado.contratada.endereco || 'Endereço não informado'}
-                  </p>
+                    <SelectTrigger className="h-8 text-xs bg-white">
+                      <SelectValue placeholder="Todos os status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos" className="text-xs">
+                        Todos os status
+                      </SelectItem>
+                      <SelectItem
+                        value="vigente"
+                        className="text-xs text-emerald-700 font-semibold"
+                      >
+                        🟢 Vigente (data final &gt; hoje)
+                      </SelectItem>
+                      <SelectItem
+                        value="encerrado"
+                        className="text-xs text-slate-600 font-semibold"
+                      >
+                        ⚪ Encerrado (já passou)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <p>E, de outro lado:</p>
-
-                {/* CONTRATANTE */}
-                <div className="pl-4 border-l-2 border-slate-600 space-y-1 bg-slate-50/70 p-3 rounded-r-lg font-sans text-xs">
-                  <p className="font-bold text-slate-900 uppercase">
-                    CONTRATANTE:{' '}
-                    <span className="font-normal text-slate-800">
-                      {contratoGerado.contratante.razao_social}
-                    </span>
-                    {contratoGerado.contratante.nome_fantasia && (
-                      <span className="text-slate-600 font-normal">
-                        {' '}
-                        (Nome Fantasia: {contratoGerado.contratante.nome_fantasia})
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-slate-700">
-                    <strong>CNPJ:</strong>{' '}
-                    <span className="font-mono">{contratoGerado.contratante.cnpj || '—'}</span>
-                  </p>
-                  <p className="text-slate-700">
-                    <strong>Endereço:</strong>{' '}
-                    {contratoGerado.contratante.endereco || 'Endereço não informado'}
-                  </p>
-                </div>
-
-                <p>
-                  Têm entre si, justo e acordado, o presente Contrato de Prestação de Serviços de
-                  Consultoria Financeira, que se regerá pelas seguintes cláusulas e condições:
-                </p>
-              </div>
-
-              {/* Cláusulas do Contrato */}
-              <div className="space-y-4 text-justify">
-                {/* CLÁUSULA 1 - DO OBJETO */}
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
-                    CLÁUSULA PRIMEIRA – DO OBJETO
-                  </h3>
-                  <p>
-                    O presente instrumento tem por objeto a prestação, pela{' '}
-                    <strong>CONTRATADA</strong> à <strong>CONTRATANTE</strong>, de serviços
-                    especializados de consultoria, diagnóstico financeiro, análise de balanços
-                    patrimoniais, estruturação de planos de contas, controle orçamentário e emissão
-                    de relatórios periódicos de desempenho econômico-financeiro.
-                  </p>
-                </div>
-
-                {/* CLÁUSULA 2 - DO PRAZO */}
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
-                    CLÁUSULA SEGUNDA – DO PRAZO E VIGÊNCIA
-                  </h3>
-                  <p>
-                    O presente contrato vigorará pelo prazo total de{' '}
-                    <strong>
-                      {contratoGerado.quantidade_meses} ({contratoGerado.quantidade_meses} meses)
-                    </strong>
-                    , com início em <strong>{formatarDataBr(contratoGerado.data_inicio)}</strong> e
-                    término previsto para{' '}
-                    <strong>{formatarDataBr(contratoGerado.data_final)}</strong>.
-                  </p>
-                  <p>
-                    Fica estipulado um prazo inicial de carência/implantação de{' '}
-                    <strong>
-                      {contratoGerado.prazo_inicial}{' '}
-                      {contratoGerado.prazo_inicial === 1 ? 'mês' : 'meses'}
-                    </strong>{' '}
-                    para estruturação e parametrização dos relatórios contábeis e financeiros.
-                  </p>
-                </div>
-
-                {/* CLÁUSULA 3 - DO VALOR E FORMA DE PAGAMENTO */}
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
-                    CLÁUSULA TERCEIRA – DO VALOR E DA FORMA DE PAGAMENTO
-                  </h3>
-                  <p>
-                    Pelos serviços prestados, a <strong>CONTRATANTE</strong> pagará à{' '}
-                    <strong>CONTRATADA</strong> a quantia mensal de{' '}
-                    <strong>{formatarMoeda(contratoGerado.valor_parcela)}</strong>, totalizando o
-                    valor global de <strong>{formatarMoeda(totalGeralCalculado)}</strong> ao longo
-                    da vigência contratual de {contratoGerado.quantidade_meses} parcelas.
-                  </p>
-                  <p>
-                    As parcelas vencerão impreterivelmente no{' '}
-                    <strong>dia {contratoGerado.dia_vencimento}</strong> de cada mês subsequente,
-                    mediante emissão de boleto bancário, transferência ou chave PIX informada pela{' '}
-                    <strong>CONTRATADA</strong>.
-                  </p>
-                </div>
-
-                {/* CLÁUSULA 4 - DO REAJUSTE */}
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
-                    CLÁUSULA QUARTA – DO REAJUSTE ANUAL
-                  </h3>
-                  <p>
-                    O valor estipulado na Cláusula Terceira será reajustado anualmente a cada 12
-                    (doze) meses de vigência, aplicando-se a variação positiva acumulada do{' '}
-                    <strong>IGP-M/FGV</strong> (Índice Geral de Preços do Mercado) ou, na sua
-                    ausência ou extinção, pelo <strong>IPCA/IBGE</strong> acumulado no período.
-                  </p>
-                </div>
-
-                {/* CLÁUSULA 5 - DAS OBRIGAÇÕES */}
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
-                    CLÁUSULA QUINTA – DAS OBRIGAÇÕES DAS PARTES
-                  </h3>
-                  <p>
-                    <strong>I – Da CONTRATADA:</strong> Prestar os serviços acordados com zelo,
-                    ética e técnica profissional, guardando sigilo irrestrito de todas as
-                    informações comerciais, fiscais e estratégicas a que tiver acesso.
-                  </p>
-                  <p>
-                    <strong>II – Da CONTRATANTE:</strong> Fornecer em tempo hábil todos os
-                    documentos contábeis, extratos, demonstrativos e dados necessários para a
-                    correta elaboração dos diagnósticos e relatórios.
-                  </p>
-                </div>
-
-                {/* CLÁUSULA 6 - DO FORO */}
-                <div className="space-y-1.5">
-                  <h3 className="font-bold text-slate-950 font-sans uppercase text-xs sm:text-sm">
-                    CLÁUSULA SEXTA – DO FORO
-                  </h3>
-                  <p>
-                    Para dirimir quaisquer controvérsias oriundas do presente contrato, as partes
-                    elegem o Foro da comarca de{' '}
-                    <strong>
-                      {contratoGerado.contratada.cidade ||
-                        contratoGerado.contratante.cidade ||
-                        'São Paulo'}
-                      /
-                      {contratoGerado.contratada.estado ||
-                        contratoGerado.contratante.estado ||
-                        'SP'}
-                    </strong>
-                    , com renúncia expressa a qualquer outro, por mais privilegiado que seja.
-                  </p>
-                </div>
-              </div>
-
-              {/* Data e Local */}
-              <div className="pt-4 text-right font-sans text-xs sm:text-sm text-slate-800">
-                <p>
-                  {contratoGerado.contratada.cidade || 'Local'},{' '}
-                  {formatarDataExtenso(contratoGerado.data_inicio)}
-                </p>
-              </div>
-
-              {/* Espaço de Assinatura */}
-              <div className="pt-8 sm:pt-12 grid grid-cols-1 sm:grid-cols-2 gap-8 font-sans text-xs text-center">
+                {/* 4. Filtro por Data de Início */}
                 <div className="space-y-1">
-                  <div className="border-t border-slate-900 mx-auto w-4/5 pt-1" />
-                  <p className="font-bold text-slate-900 uppercase">
-                    {contratoGerado.contratada.razao_social || 'CONTRATADA'}
+                  <Label className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                    <CalendarIcon className="w-3 h-3 text-blue-600" />
+                    A partir de (Início)
+                  </Label>
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="date"
+                      value={filtroHistoricoDataInicio}
+                      onChange={(e) => setFiltroHistoricoDataInicio(e.target.value)}
+                      className="h-8 text-xs bg-white"
+                    />
+                    {filtroHistoricoDataInicio && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setFiltroHistoricoDataInicio('')}
+                        className="h-8 px-2 text-[11px] text-slate-500 hover:text-red-600"
+                        title="Limpar data"
+                      >
+                        Limpar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabela de Contratos */}
+              {loadingContratos ? (
+                <div className="py-16 text-center text-xs text-slate-500">
+                  <div className="w-7 h-7 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  Carregando histórico de contratos...
+                </div>
+              ) : contratosFiltradosHistorico.length === 0 ? (
+                <div className="py-16 flex flex-col items-center justify-center text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center mb-3">
+                    <FileSignature className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhum contrato encontrado</h3>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mb-4">
+                    {contratosSalvos.length === 0
+                      ? 'Nenhum contrato foi registrado até o momento. Preencha os dados na aba "Novo Contrato" para gerar o primeiro.'
+                      : 'Nenhum contrato corresponde aos filtros aplicados.'}
                   </p>
-                  <p className="text-slate-600 text-[11px]">CONTRATADA (Minha Empresa)</p>
-                  {contratoGerado.contratada.crc && (
-                    <p className="text-slate-500 text-[10px]">{contratoGerado.contratada.crc}</p>
+                  {contratosSalvos.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setFiltroHistoricoBusca('')
+                        setFiltroHistoricoCliente('todos')
+                        setFiltroHistoricoStatus('todos')
+                        setFiltroHistoricoDataInicio('')
+                      }}
+                      className="text-xs font-semibold text-blue-700"
+                    >
+                      Limpar Filtros
+                    </Button>
                   )}
                 </div>
-
-                <div className="space-y-1">
-                  <div className="border-t border-slate-900 mx-auto w-4/5 pt-1" />
-                  <p className="font-bold text-slate-900 uppercase">
-                    {contratoGerado.contratante.razao_social}
-                  </p>
-                  <p className="text-slate-600 text-[11px]">CONTRATANTE (Cliente)</p>
-                  <p className="text-slate-500 text-[10px] font-mono">
-                    CNPJ: {contratoGerado.contratante.cnpj || '—'}
-                  </p>
-                </div>
-              </div>
-
-              {/* 4. Cronograma de Parcelas */}
-              <div className="pt-8 border-t border-slate-200 font-sans space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase flex items-center gap-2">
-                    <CalendarIcon className="w-4 h-4 text-blue-600" />
-                    Anexo I – Cronograma Financeiro de Parcelas
-                  </h4>
-                  <Badge variant="outline" className="text-[10px] font-bold font-mono">
-                    {contratoGerado.parcelas.length} parcelas
-                  </Badge>
-                </div>
-
-                <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                        <th className="py-2 px-3 text-center w-16">Nº</th>
-                        <th className="py-2 px-3">Data de Vencimento</th>
-                        <th className="py-2 px-3 text-right">Valor da Parcela</th>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 font-semibold">
+                        <th className="py-3 px-3">Contratante</th>
+                        <th className="py-3 px-3">Data Início</th>
+                        <th className="py-3 px-3">Data Final</th>
+                        <th className="py-3 px-3 text-right">Valor Parcela</th>
+                        <th className="py-3 px-3 text-center">Total Parcelas</th>
+                        <th className="py-3 px-3 text-right">Total Contrato</th>
+                        <th className="py-3 px-3 text-center">Status</th>
+                        <th className="py-3 px-3 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {contratoGerado.parcelas.map((p) => (
-                        <tr key={p.parcela} className="hover:bg-slate-50/50">
-                          <td className="py-1.5 px-3 text-center font-mono font-bold text-blue-800">
-                            {String(p.parcela).padStart(2, '0')}
-                          </td>
-                          <td className="py-1.5 px-3 font-medium text-slate-700">
-                            {formatarDataBr(p.vencimento)}
-                          </td>
-                          <td className="py-1.5 px-3 text-right font-mono font-bold text-slate-900">
-                            {formatarMoeda(p.valor)}
-                          </td>
-                        </tr>
-                      ))}
+                      {contratosFiltradosHistorico.map((c) => {
+                        const valorNum = Number(c.valor_parcela) || 0
+                        const mesesNum = Number(c.quantidade_meses) || 1
+                        const totalContrato = valorNum * mesesNum
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                            {/* Contratante */}
+                            <td className="py-3 px-3">
+                              <div>
+                                <span className="font-bold text-slate-900 block truncate max-w-[200px]">
+                                  {c.empresaNome}
+                                </span>
+                                <span className="text-[11px] text-slate-400 font-mono">
+                                  {c.empresaCnpj || 'CNPJ não informado'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Data Início */}
+                            <td className="py-3 px-3 font-medium text-slate-700">
+                              {formatarDataBr(c.data_inicio)}
+                            </td>
+
+                            {/* Data Final */}
+                            <td className="py-3 px-3 font-medium text-slate-700">
+                              <div>
+                                <span>{formatarDataBr(c.dataFinalReal)}</span>
+                                {c.isVigente && (
+                                  <span className="block text-[10px] text-emerald-600 font-semibold">
+                                    {c.diasRestantes === 0
+                                      ? 'vence hoje'
+                                      : `vence em ${c.diasRestantes}d`}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Valor Parcela */}
+                            <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                              {formatarMoeda(valorNum)}
+                            </td>
+
+                            {/* Total de Parcelas */}
+                            <td className="py-3 px-3 text-center">
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 font-mono font-bold"
+                              >
+                                {mesesNum} parcelas
+                              </Badge>
+                            </td>
+
+                            {/* Total Contrato */}
+                            <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
+                              {formatarMoeda(totalContrato)}
+                            </td>
+
+                            {/* Status: Badge Verde "Vigente" vs Badge Cinza "Encerrado" */}
+                            <td className="py-3 px-3 text-center">
+                              {c.isVigente ? (
+                                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-300 text-[10px] font-bold px-2 py-0.5">
+                                  🟢 Vigente
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-slate-100 text-slate-600 border-slate-300 text-[10px] font-bold px-2 py-0.5">
+                                  ⚪ Encerrado
+                                </Badge>
+                              )}
+                            </td>
+
+                            {/* Botões de Ação */}
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {/* Botão Visualizar (Abre Pré-visualização A4) */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleCarregarContratoSalvo(c)}
+                                  className="h-7 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2"
+                                  title="Carregar para edição e impressão"
+                                >
+                                  <Eye className="w-3.5 h-3.5 mr-1" />
+                                  Visualizar
+                                </Button>
+
+                                {/* Botão Renovar (se for vigente ou expirando) */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRenovarContrato(c)}
+                                  className="h-7 text-xs text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 px-2"
+                                  title="Renovar contrato"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                                  Renovar
+                                </Button>
+
+                                {/* Botão Excluir */}
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(e) => handleExcluirContratoSalvo(c.id, e)}
+                                  className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  title="Excluir contrato"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
-                    <tfoot>
-                      <tr className="bg-slate-100/80 font-bold border-t border-slate-300 text-slate-900">
-                        <td colSpan={2} className="py-2.5 px-3 text-xs uppercase">
-                          Total Geral do Contrato
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-xs sm:text-sm font-mono text-emerald-700">
-                          {formatarMoeda(totalGeralCalculado)}
-                        </td>
-                      </tr>
-                    </tfoot>
                   </table>
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
-      {/* Modal de Histórico de Contratos Salvos */}
-      <Dialog open={modalContratosOpen} onOpenChange={setModalContratosOpen}>
+      {/* ========================================================================= */}
+      {/* 2.1 MODAL DE PERSONALIZAÇÃO DAS 6 CLÁUSULAS */}
+      {/* ========================================================================= */}
+      <Dialog open={modalClausulasOpen} onOpenChange={setModalClausulasOpen}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-              <History className="w-5 h-5 text-blue-600" />
-              Contratos Salvos no Sistema
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Histórico de contratos registrados. Clique para carregar na tela e gerar impressões ou
-              parcelas.
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <SlidersHorizontal className="w-5 h-5 text-blue-600" />
+                  Personalizar Cláusulas do Contrato
+                </DialogTitle>
+                <DialogDescription className="text-xs mt-0.5">
+                  Edite o texto das 6 cláusulas antes de gerar o contrato. As alterações são
+                  mantidas na sua sessão.
+                </DialogDescription>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRestaurarClausulasPadrao}
+                className="text-xs border-slate-200 text-slate-700 hover:bg-slate-100 gap-1.5 shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                Restaurar padrão
+              </Button>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
-            {loadingContratos ? (
-              <div className="py-12 text-center text-xs text-slate-500">
-                Carregando contratos...
+          <div className="space-y-4 py-2">
+            {/* Cláusula 1 */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <Label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                Cláusula Primeira – Do Objeto
+              </Label>
+              <Textarea
+                rows={3}
+                value={clausulasEdit.objeto}
+                onChange={(e) => setClausulasEdit((prev) => ({ ...prev, objeto: e.target.value }))}
+                className="text-xs bg-white resize-y font-sans leading-relaxed"
+                placeholder="Texto da Cláusula do Objeto..."
+              />
+            </div>
+
+            {/* Cláusula 2 */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                  Cláusula Segunda – Do Prazo e Vigência
+                </Label>
+                <span className="text-[10px] text-slate-400">
+                  Variáveis: {'{MESES}'}, {'{DATA_INICIO}'}, {'{DATA_FINAL}'}, {'{PRAZO_INICIAL}'}
+                </span>
               </div>
-            ) : contratosSalvos.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-500">
-                Nenhum contrato salvo encontrado.
+              <Textarea
+                rows={4}
+                value={clausulasEdit.prazo}
+                onChange={(e) => setClausulasEdit((prev) => ({ ...prev, prazo: e.target.value }))}
+                className="text-xs bg-white resize-y font-sans leading-relaxed"
+                placeholder="Texto da Cláusula de Prazo..."
+              />
+            </div>
+
+            {/* Cláusula 3 */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                  Cláusula Terceira – Do Valor e da Forma de Pagamento
+                </Label>
+                <span className="text-[10px] text-slate-400">
+                  Variáveis: {'{VALOR_PARCELA}'}, {'{VALOR_TOTAL}'}, {'{DIA_VENCIMENTO}'}
+                </span>
               </div>
-            ) : (
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-                {contratosSalvos.map((c) => {
-                  const emp = c.expand?.contratante || empresas.find((e) => e.id === c.contratante)
-                  const total = (Number(c.valor_parcela) || 0) * (Number(c.quantidade_meses) || 1)
+              <Textarea
+                rows={4}
+                value={clausulasEdit.valor}
+                onChange={(e) => setClausulasEdit((prev) => ({ ...prev, valor: e.target.value }))}
+                className="text-xs bg-white resize-y font-sans leading-relaxed"
+                placeholder="Texto da Cláusula de Pagamento..."
+              />
+            </div>
 
-                  return (
-                    <div
-                      key={c.id}
-                      onClick={() => handleCarregarContratoSalvo(c)}
-                      className="p-3.5 hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer transition-colors"
-                    >
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-xs sm:text-sm text-slate-900 truncate">
-                            {emp?.nome || 'Empresa'}
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] bg-blue-50 text-blue-700 border-blue-200 font-bold"
-                          >
-                            {c.quantidade_meses} meses
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-slate-500">
-                          Início: <strong>{formatarDataBr(c.data_inicio)}</strong> · Vencimento:
-                          todo dia <strong>{c.dia_vencimento}</strong> · Parcela:{' '}
-                          <strong className="text-slate-800">
-                            {formatarMoeda(c.valor_parcela)}
-                          </strong>
-                        </p>
-                      </div>
+            {/* Cláusula 4 */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <Label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                Cláusula Quarta – Do Reajuste Anual
+              </Label>
+              <Textarea
+                rows={3}
+                value={clausulasEdit.reajuste}
+                onChange={(e) =>
+                  setClausulasEdit((prev) => ({ ...prev, reajuste: e.target.value }))
+                }
+                className="text-xs bg-white resize-y font-sans leading-relaxed"
+                placeholder="Texto da Cláusula de Reajuste..."
+              />
+            </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <span className="text-[10px] text-slate-400 block font-semibold uppercase">
-                            Total
-                          </span>
-                          <span className="text-xs sm:text-sm font-bold font-mono text-emerald-700">
-                            {formatarMoeda(total)}
-                          </span>
-                        </div>
+            {/* Cláusula 5 */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <Label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                Cláusula Quinta – Das Obrigações das Partes
+              </Label>
+              <Textarea
+                rows={4}
+                value={clausulasEdit.obrigacoes}
+                onChange={(e) =>
+                  setClausulasEdit((prev) => ({ ...prev, obrigacoes: e.target.value }))
+                }
+                className="text-xs bg-white resize-y font-sans leading-relaxed"
+                placeholder="Texto da Cláusula de Obrigações..."
+              />
+            </div>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCarregarContratoSalvo(c)
-                          }}
-                          className="h-8 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50"
-                        >
-                          <Eye className="w-3.5 h-3.5 mr-1" />
-                          Visualizar
-                        </Button>
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => handleExcluirContratoSalvo(c.id, e)}
-                          className="h-8 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  )
-                })}
+            {/* Cláusula 6 */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                  Cláusula Sexta – Do Foro
+                </Label>
+                <span className="text-[10px] text-slate-400">Variável: {'{CIDADE_ESTADO}'}</span>
               </div>
-            )}
+              <Textarea
+                rows={3}
+                value={clausulasEdit.foro}
+                onChange={(e) => setClausulasEdit((prev) => ({ ...prev, foro: e.target.value }))}
+                className="text-xs bg-white resize-y font-sans leading-relaxed"
+                placeholder="Texto da Cláusula de Foro..."
+              />
+            </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setModalContratosOpen(false)}
+              onClick={() => setModalClausulasOpen(false)}
               className="text-xs"
             >
-              Fechar
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleSalvarClausulasPersonalizadas}
+              className="text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+            >
+              Salvar Alterações
             </Button>
           </DialogFooter>
         </DialogContent>

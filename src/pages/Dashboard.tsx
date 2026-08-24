@@ -12,6 +12,7 @@ import {
   planoContasService,
   tiposDespesaService,
 } from '@/services/financeService'
+import { contratosService } from '@/services/contratosService'
 import type {
   BalancoRecord,
   CentroRecord,
@@ -22,6 +23,7 @@ import type {
   MetaLancamentoRecord,
   PlanoContaRecord,
   TipoDespesaRecord,
+  ContratoRecord,
 } from '@/types/finance'
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import {
@@ -91,24 +93,36 @@ export default function Dashboard() {
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
   const [metas, setMetas] = useState<MetaLancamentoRecord[]>([])
+  const [contratos, setContratos] = useState<ContratoRecord[]>([])
   const [modalMetasOpen, setModalMetasOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
   const loadData = async () => {
     try {
       setLoadingData(true)
-      const [allB, allD, allL, allTd, allC, allContas, allPlano, allLancFin, allMetas] =
-        await Promise.all([
-          balancosService.getAll(),
-          dreService.getAll(),
-          lancamentosCentroService.getAll(),
-          tiposDespesaService.getAll(),
-          centrosService.getAll(),
-          contasService.getAll(),
-          planoContasService.getAll(),
-          lancamentosService.getAll({ expandRelations: true }),
-          metasLancamentosService.getAll({ expandRelations: true }),
-        ])
+      const [
+        allB,
+        allD,
+        allL,
+        allTd,
+        allC,
+        allContas,
+        allPlano,
+        allLancFin,
+        allMetas,
+        allContratos,
+      ] = await Promise.all([
+        balancosService.getAll(),
+        dreService.getAll(),
+        lancamentosCentroService.getAll(),
+        tiposDespesaService.getAll(),
+        centrosService.getAll(),
+        contasService.getAll(),
+        planoContasService.getAll(),
+        lancamentosService.getAll({ expandRelations: true }),
+        metasLancamentosService.getAll({ expandRelations: true }),
+        contratosService.listar().catch(() => [] as ContratoRecord[]),
+      ])
       setAllBalancos(allB)
       setDres(allD)
       setLancamentosCentro(allL)
@@ -118,9 +132,12 @@ export default function Dashboard() {
       setPlanoContas(allPlano)
       setLancamentosFinanceiros(allLancFin)
       setMetas(allMetas)
+      setContratos(allContratos)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
+      } else {
+        setBalancos(allB)
       }
     } catch (err) {
       console.error('Erro ao carregar dados do dashboard:', err)
@@ -129,9 +146,20 @@ export default function Dashboard() {
     }
   }
 
+  // Atualiza balancos filtrados quando selectedEmpresaId muda sem precisar recarregar tudo
+  useEffect(() => {
+    if (allBalancos.length > 0) {
+      if (selectedEmpresaId) {
+        setBalancos(allBalancos.filter((b) => b.empresa === selectedEmpresaId))
+      } else {
+        setBalancos(allBalancos)
+      }
+    }
+  }, [selectedEmpresaId, allBalancos])
+
   useEffect(() => {
     loadData()
-  }, [selectedEmpresaId])
+  }, [])
 
   useRealtime<BalancoRecord>('balancos', () => {
     loadData()
@@ -158,6 +186,9 @@ export default function Dashboard() {
     loadData()
   })
   useRealtime<MetaLancamentoRecord>('metas_lancamentos', () => {
+    loadData()
+  })
+  useRealtime<ContratoRecord>('contratos', () => {
     loadData()
   })
 
@@ -762,10 +793,66 @@ export default function Dashboard() {
     id: string
     titulo: string
     descricao: string
-    severidade: 'amber' | 'red' // amber = laranja, red = vermelho
-    atingimentoPct: number
+    severidade: 'amber' | 'red' | 'blue' // amber = laranja, red = vermelho, blue = renovação contrato
+    atingimentoPct?: number
     diasRestantes: number
+    tipoAlerta?: 'meta' | 'contrato'
+    contratoId?: string
+    contratanteId?: string
   }
+
+  // Alertas de Renovação de Contratos (vencendo em 30 dias ou menos)
+  const alertasContratosRenovacao = useMemo<AlertaMetaRiscoItem[]>(() => {
+    const lista: AlertaMetaRiscoItem[] = []
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+
+    for (const c of contratos) {
+      if (selectedEmpresaId && c.contratante !== selectedEmpresaId) continue
+
+      let dataFimStr = c.data_final ? c.data_final.slice(0, 10) : ''
+      if (!dataFimStr && c.data_inicio) {
+        const [sy, sm, sd] = c.data_inicio.slice(0, 10).split('-').map(Number)
+        const tDate = new Date(
+          sy || hoje.getFullYear(),
+          (sm || 1) - 1 + Number(c.quantidade_meses || 12),
+          sd || 1,
+        )
+        dataFimStr = `${tDate.getFullYear()}-${String(tDate.getMonth() + 1).padStart(2, '0')}-${String(tDate.getDate()).padStart(2, '0')}`
+      }
+
+      if (!dataFimStr) continue
+
+      const [ano, mes, dia] = dataFimStr.split('-').map(Number)
+      const dataFim = new Date(ano, mes - 1, dia)
+      dataFim.setHours(0, 0, 0, 0)
+
+      const diffTime = dataFim.getTime() - hoje.getTime()
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+      // Notificar se for vigente e faltar 30 dias ou menos
+      if (diffDays >= 0 && diffDays <= 30) {
+        const emp = c.expand?.contratante || empresas.find((e) => e.id === c.contratante)
+        const empNome = emp?.nome || 'Empresa'
+        const partes = dataFimStr.split('-')
+        const dataBr = partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : dataFimStr
+        const diasTexto = diffDays === 0 ? 'hoje' : diffDays === 1 ? '1 dia' : `${diffDays} dias`
+
+        lista.push({
+          id: `contrato-renovacao-${c.id}`,
+          titulo: `Contrato com ${empNome} vence em ${diasTexto} (${dataBr})`,
+          descricao: `O contrato de prestação de serviços com ${empNome} está próximo da vigência final. Clique em Renovar para abrir o formulário pré-preenchido.`,
+          severidade: 'amber',
+          diasRestantes: diffDays,
+          tipoAlerta: 'contrato',
+          contratoId: c.id,
+          contratanteId: c.contratante,
+        })
+      }
+    }
+
+    return lista
+  }, [contratos, selectedEmpresaId, empresas])
 
   // Alertas de Metas em Risco (Critérios específicos do requisito 1)
   const alertasMetasEmRisco = useMemo<AlertaMetaRiscoItem[]>(() => {
@@ -943,10 +1030,15 @@ export default function Dashboard() {
     contasMap,
   ])
 
+  // Combina alertas de metas em risco e contratos vencendo
+  const todosAlertasInteligentes = useMemo(() => {
+    return [...alertasContratosRenovacao, ...alertasMetasEmRisco]
+  }, [alertasContratosRenovacao, alertasMetasEmRisco])
+
   const [mostrarTodosAlertas, setMostrarTodosAlertas] = useState(false)
   const alertasVisiveis = mostrarTodosAlertas
-    ? alertasMetasEmRisco
-    : alertasMetasEmRisco.slice(0, 4)
+    ? todosAlertasInteligentes
+    : todosAlertasInteligentes.slice(0, 4)
 
   const scrollToMetas = () => {
     const el = document.getElementById('secao-metas-dashboard')
@@ -1207,27 +1299,27 @@ export default function Dashboard() {
       </div>
 
       {/* ========================================================================= */}
-      {/* SEÇÃO 1: ALERTAS DE METAS EM RISCO (LOGO ABAIXO DOS KPIS) */}
+      {/* SEÇÃO 1: ALERTAS INTELIGENTES (CONTRATOS A VENCER E METAS EM RISCO) */}
       {/* ========================================================================= */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
             <ShieldAlert className="w-4 h-4 text-amber-500" />
-            Alertas de Metas em Risco
-            {alertasMetasEmRisco.length > 0 && (
+            Alertas Inteligentes
+            {todosAlertasInteligentes.length > 0 && (
               <Badge
                 className={`text-[10px] font-semibold ${
-                  alertasMetasEmRisco.some((a) => a.severidade === 'red')
+                  todosAlertasInteligentes.some((a) => a.severidade === 'red')
                     ? 'bg-red-50 text-red-700 border-red-200'
                     : 'bg-amber-50 text-amber-700 border-amber-200'
                 }`}
               >
-                {alertasMetasEmRisco.length} meta(s) em risco
+                {todosAlertasInteligentes.length} alerta(s) ativo(s)
               </Badge>
             )}
           </h2>
 
-          {alertasMetasEmRisco.length > 4 && (
+          {todosAlertasInteligentes.length > 4 && (
             <Button
               type="button"
               variant="ghost"
@@ -1235,21 +1327,25 @@ export default function Dashboard() {
               onClick={() => setMostrarTodosAlertas((prev) => !prev)}
               className="text-xs font-semibold text-blue-600 hover:text-blue-700 h-7 px-2"
             >
-              {mostrarTodosAlertas ? 'Mostrar menos' : `Ver todos (${alertasMetasEmRisco.length})`}
+              {mostrarTodosAlertas
+                ? 'Mostrar menos'
+                : `Ver todos (${todosAlertasInteligentes.length})`}
             </Button>
           )}
         </div>
 
-        {alertasMetasEmRisco.length === 0 ? (
+        {todosAlertasInteligentes.length === 0 ? (
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3.5 flex items-center gap-3 shadow-2xs">
             <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
               <CheckCircle2 className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-xs font-bold text-emerald-900">Todas as metas estão em dia ✓</p>
+              <p className="text-xs font-bold text-emerald-900">
+                Tudo em dia com metas e contratos ✓
+              </p>
               <p className="text-[11px] text-emerald-700">
-                Nenhuma meta com risco de não atingimento ou sem lançamentos identificada no
-                período.
+                Nenhuma meta com risco de não atingimento e nenhum contrato próximo do vencimento
+                nos próximos 30 dias.
               </p>
             </div>
           </div>
@@ -1267,12 +1363,61 @@ export default function Dashboard() {
           >
             {alertasVisiveis.map((alerta) => {
               const isRed = alerta.severidade === 'red'
+              const isContrato = alerta.tipoAlerta === 'contrato'
+
               const cardBg = isRed
                 ? 'bg-red-50/80 border-red-300 hover:bg-red-100/70'
                 : 'bg-amber-50/80 border-amber-300 hover:bg-amber-100/70'
               const iconBoxBg = isRed ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
               const titleColor = isRed ? 'text-red-950' : 'text-amber-950'
               const descColor = isRed ? 'text-red-800' : 'text-amber-800'
+
+              if (isContrato) {
+                return (
+                  <div
+                    key={alerta.id}
+                    className={`text-left p-3.5 rounded-xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-2.5 ${cardBg}`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${iconBoxBg}`}
+                      >
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Badge className="text-[9px] bg-amber-200/60 text-amber-900 border-amber-300 font-bold px-1.5 py-0">
+                            Contrato a Vencer
+                          </Badge>
+                        </div>
+                        <p className={`text-xs font-bold leading-snug line-clamp-2 ${titleColor}`}>
+                          {alerta.titulo}
+                        </p>
+                        <p className={`text-[11px] mt-1 line-clamp-2 ${descColor}`}>
+                          {alerta.descricao}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-black/5 text-[10px] font-semibold">
+                      <span className="text-amber-800 font-bold">
+                        {alerta.diasRestantes === 0
+                          ? 'Vence hoje'
+                          : `${alerta.diasRestantes}d restantes`}
+                      </span>
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 shadow-xs"
+                      >
+                        <Link to="/contratos">
+                          Renovar <ArrowRight className="w-3 h-3 ml-1" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
 
               return (
                 <button
@@ -1288,6 +1433,17 @@ export default function Dashboard() {
                       <AlertTriangle className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <Badge
+                          className={`text-[9px] font-bold px-1.5 py-0 ${
+                            isRed
+                              ? 'bg-red-200/60 text-red-900 border-red-300'
+                              : 'bg-amber-200/60 text-amber-900 border-amber-300'
+                          }`}
+                        >
+                          Meta em Risco
+                        </Badge>
+                      </div>
                       <p className={`text-xs font-bold leading-snug line-clamp-2 ${titleColor}`}>
                         {alerta.titulo}
                       </p>
@@ -1302,7 +1458,9 @@ export default function Dashboard() {
                       Ver meta na seção abaixo <ArrowRight className="w-3 h-3" />
                     </span>
                     <span className={isRed ? 'text-red-700 font-bold' : 'text-amber-700 font-bold'}>
-                      {isRed ? '0% Realizado' : `${alerta.atingimentoPct.toFixed(0)}% Atingido`}
+                      {isRed
+                        ? '0% Realizado'
+                        : `${(alerta.atingimentoPct ?? 0).toFixed(0)}% Atingido`}
                     </span>
                   </div>
                 </button>
