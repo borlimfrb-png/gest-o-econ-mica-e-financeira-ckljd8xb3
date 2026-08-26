@@ -25,6 +25,7 @@ import IndicadoresLiquidez from './pages/IndicadoresLiquidez'
 import IndicadoresEndividamento from './pages/IndicadoresEndividamento'
 import IndicadoresRentabilidade from './pages/IndicadoresRentabilidade'
 import IndicadoresEstruturaCapital from './pages/IndicadoresEstruturaCapital'
+import IndicadoresEbitda from './pages/IndicadoresEbitda'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
@@ -92,6 +93,7 @@ const App = () => (
                   path="/indicadores/estrutura-capital"
                   element={<IndicadoresEstruturaCapital />}
                 />
+                <Route path="/indicadores/ebitda" element={<IndicadoresEbitda />} />
                 <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />

@@ -102,6 +102,11 @@ export default function Layout() {
       path: '/indicadores/estrutura-capital',
       icon: Building2,
     },
+    {
+      name: 'EBITDA',
+      path: '/indicadores/ebitda',
+      icon: TrendingUp,
+    },
   ]
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
