@@ -71,6 +71,7 @@ import {
   ShieldAlert,
   CheckCircle2,
   AlertTriangle,
+  Calendar,
   CalendarClock,
   Target,
   FolderTree,

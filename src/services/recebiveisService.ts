@@ -95,7 +95,8 @@ export const recebiveisService = {
         {
           expand: 'empresa',
         },
-      )      createdRecords.push(record)
+      )
+      createdRecords.push(record)
     }
 
     return createdRecords

@@ -25,6 +25,8 @@ import {
   DollarSign,
   CheckCircle2,
   Calculator,
+  Gauge,
+  Activity,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -84,12 +86,22 @@ export default function Layout() {
     location.pathname === '/baixa-recebiveis' ||
     location.pathname === '/contratos'
 
+  // Itens do submenu Indicadores
+  const indicadoresSubItems = [
+    { name: 'Indicadores de Liquidez', path: '/indicadores/liquidez', icon: Activity },
+  ]
+
+  const isIndicadoresActive = location.pathname.startsWith('/indicadores')
+
   // Grupo "Cadastros" expansível/colapsável
   // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente
   const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
 
   // Grupo "Financeiro" expansível/colapsável
   const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroActive)
+
+  // Grupo "Indicadores" expansível/colapsável
+  const [indicadoresOpen, setIndicadoresOpen] = useState<boolean>(isIndicadoresActive || true)
 
   React.useEffect(() => {
     if (isCadastroActive) {
@@ -102,6 +114,12 @@ export default function Layout() {
       setFinanceiroOpen(true)
     }
   }, [isFinanceiroActive])
+
+  React.useEffect(() => {
+    if (isIndicadoresActive) {
+      setIndicadoresOpen(true)
+    }
+  }, [isIndicadoresActive])
 
   // Redirect to login if not authenticated
   React.useEffect(() => {
@@ -397,6 +415,75 @@ export default function Layout() {
                               <SubIcon
                                 className={`w-3.5 h-3.5 ${
                                   isSubActive ? 'text-emerald-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Novo Grupo: Indicadores (Abaixo de Financeiro) */}
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setIndicadoresOpen((prev) => !prev)}
+                    style={
+                      isIndicadoresActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isIndicadoresActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Gauge
+                        className={`w-4 h-4 ${isIndicadoresActive ? 'text-blue-300' : 'text-blue-400'}`}
+                      />
+                      <span>Indicadores</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                        indicadoresOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu Indicadores com transição suave */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      indicadoresOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
+                        {indicadoresSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive = location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              onClick={() => setMobileDrawerOpen(false)}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-3.5 h-3.5 ${
+                                  isSubActive ? 'text-blue-300' : 'text-slate-400'
                                 }`}
                               />
                               <span className="truncate">{sub.name}</span>
@@ -833,6 +920,105 @@ export default function Layout() {
                               <SubIcon
                                 className={`w-4 h-4 shrink-0 ${
                                   isSubActive ? 'text-emerald-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Novo Grupo: Indicadores - Abaixo de Financeiro */}
+              <div className="space-y-1">
+                {/* Visualização Tablet */}
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/indicadores/liquidez"
+                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          isIndicadoresActive
+                            ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Gauge
+                          className={`w-5 h-5 ${isIndicadoresActive ? 'text-blue-300' : 'text-slate-400'}`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Indicadores (Liquidez)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                <div className="hidden lg:block">
+                  <button
+                    type="button"
+                    onClick={() => setIndicadoresOpen((prev) => !prev)}
+                    style={
+                      isIndicadoresActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isIndicadoresActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Gauge
+                        className={`w-5 h-5 shrink-0 ${
+                          isIndicadoresActive ? 'text-blue-300' : 'text-blue-400'
+                        }`}
+                      />
+                      <span className="truncate font-medium">Indicadores</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                        indicadoresOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu com animação suave via grid template rows */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      indicadoresOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
+                        {indicadoresSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive = location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-4 h-4 shrink-0 ${
+                                  isSubActive ? 'text-blue-300' : 'text-slate-400'
                                 }`}
                               />
                               <span className="truncate">{sub.name}</span>
