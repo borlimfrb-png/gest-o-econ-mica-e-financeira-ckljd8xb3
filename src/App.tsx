@@ -22,6 +22,7 @@ import Contratos from './pages/Contratos'
 import Relatorios from './pages/Relatorios'
 import RelatorioAnual from './pages/RelatorioAnual'
 import Importacao from './pages/Importacao'
+import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
 import DashboardEmpresa from './pages/DashboardEmpresa'
 import MinhaEmpresa from './pages/MinhaEmpresa'
@@ -80,6 +81,7 @@ const App = () => (
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/contratos" element={<Contratos />} />
+                <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />
                 <Route path="/importacao" element={<Importacao />} />

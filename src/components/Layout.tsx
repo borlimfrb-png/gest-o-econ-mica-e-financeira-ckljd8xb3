@@ -24,6 +24,7 @@ import {
   Settings,
   DollarSign,
   CheckCircle2,
+  Calculator,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -132,6 +133,7 @@ export default function Layout() {
     location.pathname === '/dashboard' ||
     location.pathname === '/relatorios' ||
     location.pathname === '/relatorio-anual' ||
+    location.pathname === '/analise-tributaria' ||
     location.pathname.startsWith('/empresas/')
 
   return (
@@ -406,7 +408,21 @@ export default function Layout() {
                   </div>
                 </div>
 
-                {/* 5. Importação */}
+                {/* 5. Análise Tributária */}
+                <NavLink
+                  to="/analise-tributaria"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/analise-tributaria'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <Calculator className="w-4 h-4 text-emerald-400" />
+                  Análise Tributária
+                </NavLink>
+
+                {/* 6. Importação */}
                 <NavLink
                   to="/importacao"
                   onClick={() => setMobileDrawerOpen(false)}
@@ -419,7 +435,6 @@ export default function Layout() {
                   <Upload className="w-4 h-4 text-blue-400" />
                   Importação
                 </NavLink>
-
                 {/* 5. Relatório Anual */}
                 <NavLink
                   to="/relatorio-anual"
@@ -830,7 +845,58 @@ export default function Layout() {
                 </div>
               </div>
 
-              {/* 5. Importação */}
+              {/* 5. Análise Tributária (Nível Superior entre Financeiro e Importação) */}
+              <div>
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/analise-tributaria"
+                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          location.pathname === '/analise-tributaria'
+                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Calculator
+                          className={`w-5 h-5 ${
+                            location.pathname === '/analise-tributaria'
+                              ? 'text-emerald-300'
+                              : 'text-slate-400'
+                          }`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Análise Tributária
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div className="hidden lg:block">
+                  <NavLink
+                    to="/analise-tributaria"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/analise-tributaria'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <Calculator
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/analise-tributaria'
+                          ? 'text-emerald-300'
+                          : 'text-slate-400'
+                      }`}
+                    />
+                    <span className="truncate">Análise Tributária</span>
+                  </NavLink>
+                </div>
+              </div>
+
+              {/* 6. Importação */}
               <div>
                 <div className="lg:hidden">
                   <Tooltip>
@@ -876,7 +942,6 @@ export default function Layout() {
                   </NavLink>
                 </div>
               </div>
-
               {/* 5. Relatório Anual */}
               <div>
                 <div className="lg:hidden">
@@ -1083,6 +1148,8 @@ export default function Layout() {
                   {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
                   {location.pathname === '/relatorios' && 'Relatórios e Pareceres'}
                   {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
+                  {location.pathname === '/analise-tributaria' &&
+                    'Análise Tributária e Planejamento'}
                   {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
                 </h1>
                 <p className="text-xs text-[#5B6B7F]">
@@ -1092,9 +1159,11 @@ export default function Layout() {
                     'Gere relatórios executivos para impressão ou exportação'}
                   {location.pathname === '/relatorio-anual' &&
                     'Visão consolidada de 12 meses por tipo de conta com exportação CSV'}
+                  {location.pathname === '/analise-tributaria' &&
+                    'Comparativo entre Simples Nacional, Lucro Presumido e Lucro Real'}
                   {location.pathname.startsWith('/empresas/') &&
                     'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
-                </p>
+                </p>{' '}
               </div>
 
               {/* Seletores Globais Empresa e Ano */}
