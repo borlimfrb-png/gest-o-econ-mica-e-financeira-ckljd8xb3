@@ -91,6 +91,7 @@ export default function Layout() {
 
   // Itens do submenu Indicadores
   const indicadoresSubItems = [
+    { name: 'Painel & Benchmarks', path: '/indicadores/painel', icon: Gauge },
     { name: 'Indicadores de Liquidez', path: '/indicadores/liquidez', icon: Activity },
     {
       name: 'Indicadores de Endividamento',
@@ -968,7 +969,7 @@ export default function Layout() {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <NavLink
-                        to="/indicadores/liquidez"
+                        to="/indicadores/painel"
                         className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
                           isIndicadoresActive
                             ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
@@ -984,7 +985,7 @@ export default function Layout() {
                       side="right"
                       className="bg-[#0B1F3A] text-white border-blue-900"
                     >
-                      Indicadores (Liquidez)
+                      Painel de Indicadores & Benchmarks
                     </TooltipContent>
                   </Tooltip>
                 </div>

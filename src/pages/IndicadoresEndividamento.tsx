@@ -87,14 +87,16 @@ export default function IndicadoresEndividamento() {
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [loading, setLoading] = useState<boolean>(true)
 
+  // Toggle de evolução 3 anos
+  const [verEvolucao, setVerEvolucao] = useState<boolean>(false)
+
   // Estado de detalhes expandidos por card
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({
-    pct: false,
+    eg: false,
     ce: false,
+    pct: false,
     ipl: false,
-    irnc: false,
   })
-
   const toggleDetails = (id: string) => {
     setExpandedDetails((prev) => ({
       ...prev,
@@ -701,6 +703,21 @@ export default function IndicadoresEndividamento() {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Toggle Ver Evolução 3 anos */}
+          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+            <Switch
+              id="evolucao-endividamento"
+              checked={verEvolucao}
+              onCheckedChange={setVerEvolucao}
+            />
+            <Label
+              htmlFor="evolucao-endividamento"
+              className="text-xs font-bold text-slate-700 cursor-pointer"
+            >
+              Ver evolução (3 anos)
+            </Label>
           </div>
 
           <Button

@@ -27,6 +27,7 @@ import IndicadoresRentabilidade from './pages/IndicadoresRentabilidade'
 import IndicadoresEstruturaCapital from './pages/IndicadoresEstruturaCapital'
 import IndicadoresEbitda from './pages/IndicadoresEbitda'
 import IndicadoresEficienciaOperacional from './pages/IndicadoresEficienciaOperacional'
+import PainelIndicadores from './pages/PainelIndicadores'
 import IndicadoresEconomicos from './pages/IndicadoresEconomicos'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
@@ -88,6 +89,11 @@ const App = () => (
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/contratos" element={<Contratos />} />
+                <Route path="/indicadores/painel" element={<PainelIndicadores />} />
+                <Route
+                  path="/indicadores"
+                  element={<Navigate to="/indicadores/painel" replace />}
+                />
                 <Route path="/indicadores/liquidez" element={<IndicadoresLiquidez />} />
                 <Route path="/indicadores/endividamento" element={<IndicadoresEndividamento />} />
                 <Route path="/indicadores/rentabilidade" element={<IndicadoresRentabilidade />} />

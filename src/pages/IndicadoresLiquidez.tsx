@@ -25,6 +25,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { SparklineEvolucao } from '@/components/SparklineEvolucao'
+import { getBenchmarkParaSegmento } from '@/lib/benchmarks'
 import {
   ResponsiveContainer,
   BarChart,
@@ -96,6 +100,9 @@ export default function IndicadoresLiquidez() {
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+
+  // Toggle de evolução 3 anos
+  const [verEvolucao, setVerEvolucao] = useState<boolean>(false)
 
   // Estado de detalhes expandidos por card
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({
@@ -282,6 +289,96 @@ export default function IndicadoresLiquidez() {
     }
     return `O índice de ${formatNumber(val, 2)} revela que as dívidas totais (circulantes e de longo prazo) superam os ativos realizáveis da empresa. Há vulnerabilidade estrutural e elevada dependência de receitas operacionais futuras para evitar insolvência. É fundamental implementar um plano de desalavancagem e reestruturação de passivos.`
   }
+
+  const benchmarkSetor = useMemo(
+    () => getBenchmarkParaSegmento(selectedEmpresa?.segmento),
+    [selectedEmpresa?.segmento],
+  )
+
+  // Balanço e DRE do ano anterior 2 (selectedAno - 2)
+  const ano2 = selectedAno - 2
+  const balancoAno2 = useMemo(() => balancos.find((b) => b.ano === ano2) || null, [balancos, ano2])
+
+  // Histórico de valores para os 4 indicadores
+  const historicoLC = useMemo(() => {
+    const calcB2 = calcularBalanco(balancoAno2)
+    const pc2 = calcB2.passivoCirculante
+    const ac2 = calcB2.ativoCirculante
+    const lc2 = pc2 > 0 ? ac2 / pc2 : null
+
+    const calcB1 = calcularBalanco(balancoAnterior)
+    const pc1 = calcB1.passivoCirculante
+    const ac1 = calcB1.ativoCirculante
+    const lc1 = pc1 > 0 ? ac1 / pc1 : null
+
+    return [
+      { ano: ano2, valor: lc2 },
+      { ano: anoAnterior, valor: lc1 },
+      { ano: selectedAno, valor: lcValor },
+    ]
+  }, [balancoAno2, balancoAnterior, ano2, anoAnterior, selectedAno, lcValor])
+
+  const historicoLS = useMemo(() => {
+    const calcB2 = calcularBalanco(balancoAno2)
+    const pc2 = calcB2.passivoCirculante
+    const ac2 = calcB2.ativoCirculante
+    const est2 = balancoAno2?.estoques || 0
+    const ls2 = pc2 > 0 ? (ac2 - est2) / pc2 : null
+
+    const calcB1 = calcularBalanco(balancoAnterior)
+    const pc1 = calcB1.passivoCirculante
+    const ac1 = calcB1.ativoCirculante
+    const est1 = balancoAnterior?.estoques || 0
+    const ls1 = pc1 > 0 ? (ac1 - est1) / pc1 : null
+
+    return [
+      { ano: ano2, valor: ls2 },
+      { ano: anoAnterior, valor: ls1 },
+      { ano: selectedAno, valor: lsValor },
+    ]
+  }, [balancoAno2, balancoAnterior, ano2, anoAnterior, selectedAno, lsValor])
+
+  const historicoLI = useMemo(() => {
+    const calcB2 = calcularBalanco(balancoAno2)
+    const pc2 = calcB2.passivoCirculante
+    const disp2 =
+      (balancoAno2?.caixa_equivalentes || 0) + (balancoAno2?.aplicacoes_financeiras || 0)
+    const li2 = pc2 > 0 ? disp2 / pc2 : null
+
+    const calcB1 = calcularBalanco(balancoAnterior)
+    const pc1 = calcB1.passivoCirculante
+    const disp1 =
+      (balancoAnterior?.caixa_equivalentes || 0) + (balancoAnterior?.aplicacoes_financeiras || 0)
+    const li1 = pc1 > 0 ? disp1 / pc1 : null
+
+    return [
+      { ano: ano2, valor: li2 },
+      { ano: anoAnterior, valor: li1 },
+      { ano: selectedAno, valor: liValor },
+    ]
+  }, [balancoAno2, balancoAnterior, ano2, anoAnterior, selectedAno, liValor])
+
+  const historicoLG = useMemo(() => {
+    const calcB2 = calcularBalanco(balancoAno2)
+    const pc2 = calcB2.passivoCirculante
+    const pnc2 = calcB2.passivoNaoCirculante
+    const ac2 = calcB2.ativoCirculante
+    const arlp2 = balancoAno2?.realizavel_longo_prazo || 0
+    const lg2 = pc2 + pnc2 > 0 ? (ac2 + arlp2) / (pc2 + pnc2) : null
+
+    const calcB1 = calcularBalanco(balancoAnterior)
+    const pc1 = calcB1.passivoCirculante
+    const pnc1 = calcB1.passivoNaoCirculante
+    const ac1 = calcB1.ativoCirculante
+    const arlp1 = balancoAnterior?.realizavel_longo_prazo || 0
+    const lg1 = pc1 + pnc1 > 0 ? (ac1 + arlp1) / (pc1 + pnc1) : null
+
+    return [
+      { ano: ano2, valor: lg2 },
+      { ano: anoAnterior, valor: lg1 },
+      { ano: selectedAno, valor: lgValor },
+    ]
+  }, [balancoAno2, balancoAnterior, ano2, anoAnterior, selectedAno, lgValor])
 
   // Lista estruturada dos 4 indicadores
   const indicadores: IndicadorLiquidezInfo[] = [
@@ -733,6 +830,17 @@ export default function IndicadoresLiquidez() {
             </Select>
           </div>
 
+          {/* Toggle Ver Evolução 3 anos */}
+          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+            <Switch id="evolucao-liquidez" checked={verEvolucao} onCheckedChange={setVerEvolucao} />
+            <Label
+              htmlFor="evolucao-liquidez"
+              className="text-xs font-bold text-slate-700 cursor-pointer"
+            >
+              Ver evolução (3 anos)
+            </Label>
+          </div>
+
           {/* Botão Exportar CSV */}
           <Button
             onClick={handleExportCsv}
@@ -932,6 +1040,34 @@ export default function IndicadoresLiquidez() {
                           </div>
                         </div>
                       </div>
+
+                      {/* Evolução Histórica (3 Anos vs Benchmark) quando toggle ativo */}
+                      {verEvolucao && (
+                        <div className="pt-1">
+                          <SparklineEvolucao
+                            pontos={
+                              ind.id === 'lc'
+                                ? historicoLC
+                                : ind.id === 'ls'
+                                  ? historicoLS
+                                  : ind.id === 'li'
+                                    ? historicoLI
+                                    : historicoLG
+                            }
+                            benchmarkValor={
+                              ind.id === 'lc'
+                                ? benchmarkSetor.liquidezCorrente
+                                : ind.id === 'ls'
+                                  ? benchmarkSetor.liquidezSeca
+                                  : ind.id === 'li'
+                                    ? benchmarkSetor.liquidezImediata
+                                    : benchmarkSetor.liquidezGeral
+                            }
+                            unidade=""
+                            isLowerBetter={false}
+                          />
+                        </div>
+                      )}
 
                       {/* Interpretação Textual Explicativa */}
                       <div className="space-y-1.5">
