@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { balancosService, dreService } from '@/services/financeService'
@@ -13,8 +13,9 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Slider } from '@/components/ui/slider'
 import {
   Select,
   SelectContent,
@@ -46,7 +47,6 @@ import {
   Printer,
   FileSpreadsheet,
   CheckCircle2,
-  HelpCircle,
   Percent,
   ArrowRight,
   ShieldAlert,
@@ -55,8 +55,12 @@ import {
   DollarSign,
   AlertCircle,
   RotateCcw,
+  SlidersHorizontal,
+  History,
+  FileText,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { ModalParecerExecutivo } from '@/components/ModalParecerExecutivo'
 
 export default function AnaliseTributaria() {
   const {
@@ -69,7 +73,7 @@ export default function AnaliseTributaria() {
     selectedEmpresa,
   } = useFilter()
 
-  const { minhaEmpresa, logoUrl, corPrimaria, corSecundaria } = useMinhaEmpresa()
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
   const { toast } = useToast()
 
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
@@ -79,7 +83,17 @@ export default function AnaliseTributaria() {
   // Configuração interativa do usuário
   const [aliquotaIss, setAliquotaIss] = useState<number>(5.0)
   const [folhaPercentual, setFolhaPercentual] = useState<number>(25.0) // 25% da receita bruta
-  const [mostrarBreakdownCompleto, setMostrarBreakdownCompleto] = useState<boolean>(false)
+
+  // 1. Estados da Simulação de Cenários
+  const [varReceitaPercent, setVarReceitaPercent] = useState<number>(0)
+  const [varLucroPercent, setVarLucroPercent] = useState<number>(0)
+
+  // 2. Estado do Comparativo com Ano Anterior
+  const [compararAnoAnterior, setCompararAnoAnterior] = useState<boolean>(false)
+  const anoAnterior = selectedAno - 1
+
+  // 3. Estado do Modal de Parecer Executivo
+  const [modalParecerOpen, setModalParecerOpen] = useState<boolean>(false)
 
   // Carregar dados de Balanço e DRE
   const loadData = async () => {
@@ -116,68 +130,152 @@ export default function AnaliseTributaria() {
     if (selectedEmpresaId) loadData()
   })
 
-  // DRE e Balanço do ano selecionado
-  const balancoAtual = useMemo(() => {
-    return balancos.find((b) => b.ano === selectedAno) || null
-  }, [balancos, selectedAno])
-
+  // DRE e Balanço do ano selecionado (Atual)
   const dreAtual = useMemo(() => {
     return dres.find((d) => d.ano === selectedAno) || null
   }, [dres, selectedAno])
 
-  // Cálculo financeiro base
-  const dreCalculado = useMemo(() => {
+  const dreCalculadoAtual = useMemo(() => {
     return calcularDre(dreAtual)
   }, [dreAtual])
 
-  const receitaBruta = dreAtual?.receita_bruta || 0
-  const lucroLiquido = dreCalculado.lucroLiquido || 0
-  const folhaEstimada = receitaBruta * (folhaPercentual / 100)
+  const receitaBrutaAtual = dreAtual?.receita_bruta || 0
+  const lucroLiquidoAtual = dreCalculadoAtual.lucroLiquido || 0
+  const folhaEstimadaAtual = receitaBrutaAtual * (folhaPercentual / 100)
+  const temDadosAno = !!dreAtual && receitaBrutaAtual > 0
 
-  // Comparativo dos regimes
-  const analise: AnaliseTributariaResultado = useMemo(() => {
+  // DRE e Balanço do ano anterior (Comparativo)
+  const dreAnterior = useMemo(() => {
+    return dres.find((d) => d.ano === anoAnterior) || null
+  }, [dres, anoAnterior])
+
+  const dreCalculadoAnterior = useMemo(() => {
+    return calcularDre(dreAnterior)
+  }, [dreAnterior])
+
+  const receitaBrutaAnterior = dreAnterior?.receita_bruta || 0
+  const lucroLiquidoAnterior = dreCalculadoAnterior.lucroLiquido || 0
+  const folhaEstimadaAnterior = receitaBrutaAnterior * (folhaPercentual / 100)
+  const temDadosAnoAnterior = !!dreAnterior && receitaBrutaAnterior > 0
+
+  // Análise Base Real (Sem simulação)
+  const analiseReal: AnaliseTributariaResultado = useMemo(() => {
     return compararRegimesTributarios({
       ano: selectedAno,
-      receitaBruta,
-      lucroLiquido,
-      folhaPagamento: folhaEstimada,
+      receitaBruta: receitaBrutaAtual,
+      lucroLiquido: lucroLiquidoAtual,
+      folhaPagamento: folhaEstimadaAtual,
       aliquotaIssPercent: aliquotaIss,
     })
-  }, [selectedAno, receitaBruta, lucroLiquido, folhaEstimada, aliquotaIss])
+  }, [selectedAno, receitaBrutaAtual, lucroLiquidoAtual, folhaEstimadaAtual, aliquotaIss])
 
-  const temDadosAno = !!dreAtual && receitaBruta > 0
+  // Análise Simulada (com variação % de receita e lucro)
+  const receitaSimulada = useMemo(() => {
+    return Math.max(0, receitaBrutaAtual * (1 + varReceitaPercent / 100))
+  }, [receitaBrutaAtual, varReceitaPercent])
 
-  // Dados para o Gráfico de Barras do Recharts
+  const lucroSimulado = useMemo(() => {
+    return lucroLiquidoAtual * (1 + varLucroPercent / 100)
+  }, [lucroLiquidoAtual, varLucroPercent])
+
+  const folhaSimulada = useMemo(() => {
+    return receitaSimulada * (folhaPercentual / 100)
+  }, [receitaSimulada, folhaPercentual])
+
+  const isSimulando = varReceitaPercent !== 0 || varLucroPercent !== 0
+
+  const analiseSimulada: AnaliseTributariaResultado = useMemo(() => {
+    return compararRegimesTributarios({
+      ano: selectedAno,
+      receitaBruta: receitaSimulada,
+      lucroLiquido: lucroSimulado,
+      folhaPagamento: folhaSimulada,
+      aliquotaIssPercent: aliquotaIss,
+    })
+  }, [selectedAno, receitaSimulada, lucroSimulado, folhaSimulada, aliquotaIss])
+
+  // Análise do Ano Anterior
+  const analiseAnterior: AnaliseTributariaResultado = useMemo(() => {
+    return compararRegimesTributarios({
+      ano: anoAnterior,
+      receitaBruta: receitaBrutaAnterior,
+      lucroLiquido: lucroLiquidoAnterior,
+      folhaPagamento: folhaEstimadaAnterior,
+      aliquotaIssPercent: aliquotaIss,
+    })
+  }, [anoAnterior, receitaBrutaAnterior, lucroLiquidoAnterior, folhaEstimadaAnterior, aliquotaIss])
+
+  // Checagem se o regime recomendado mudou com a simulação
+  const regimeMudouNaSimulacao = useMemo(() => {
+    if (!isSimulando || !temDadosAno) return false
+    return analiseSimulada.regimeRecomendado?.id !== analiseReal.regimeRecomendado?.id
+  }, [
+    isSimulando,
+    temDadosAno,
+    analiseSimulada.regimeRecomendado?.id,
+    analiseReal.regimeRecomendado?.id,
+  ])
+
+  const handleResetSimulacao = () => {
+    setVarReceitaPercent(0)
+    setVarLucroPercent(0)
+  }
+
+  // Dados para o Gráfico de Barras Principal (Ano Atual)
   const chartData = useMemo(() => {
     return [
       {
         regime: 'Simples Nacional',
-        imposto: analise.regimes.simples.impostoTotal,
-        aliquota: analise.regimes.simples.aliquotaEfetiva,
-        cor: analise.regimes.simples.isRecomendado ? '#10b981' : '#3b82f6',
-        isRecomendado: analise.regimes.simples.isRecomendado,
+        imposto: analiseReal.regimes.simples.impostoTotal,
+        aliquota: analiseReal.regimes.simples.aliquotaEfetiva,
+        cor: analiseReal.regimes.simples.isRecomendado ? '#10b981' : '#3b82f6',
+        isRecomendado: analiseReal.regimes.simples.isRecomendado,
       },
       {
         regime: 'Lucro Presumido',
-        imposto: analise.regimes.presumido.impostoTotal,
-        aliquota: analise.regimes.presumido.aliquotaEfetiva,
-        cor: analise.regimes.presumido.isRecomendado ? '#10b981' : '#6366f1',
-        isRecomendado: analise.regimes.presumido.isRecomendado,
+        imposto: analiseReal.regimes.presumido.impostoTotal,
+        aliquota: analiseReal.regimes.presumido.aliquotaEfetiva,
+        cor: analiseReal.regimes.presumido.isRecomendado ? '#10b981' : '#6366f1',
+        isRecomendado: analiseReal.regimes.presumido.isRecomendado,
       },
       {
         regime: 'Lucro Real',
-        imposto: analise.regimes.real.impostoTotal,
-        aliquota: analise.regimes.real.aliquotaEfetiva,
-        cor: analise.regimes.real.isRecomendado ? '#10b981' : '#f59e0b',
-        isRecomendado: analise.regimes.real.isRecomendado,
+        imposto: analiseReal.regimes.real.impostoTotal,
+        aliquota: analiseReal.regimes.real.aliquotaEfetiva,
+        cor: analiseReal.regimes.real.isRecomendado ? '#10b981' : '#f59e0b',
+        isRecomendado: analiseReal.regimes.real.isRecomendado,
       },
     ]
-  }, [analise])
+  }, [analiseReal])
 
-  // Exportar / Imprimir PDF da Análise
-  const handlePrint = () => {
-    window.print()
-  }
+  // Dados para o Gráfico de Barras Agrupado (Ano Atual vs Ano Anterior)
+  const chartDataComparativo = useMemo(() => {
+    return [
+      {
+        regime: 'Simples Nacional',
+        impostoAtual: analiseReal.regimes.simples.impostoTotal,
+        aliquotaAtual: analiseReal.regimes.simples.aliquotaEfetiva,
+        impostoAnterior: temDadosAnoAnterior ? analiseAnterior.regimes.simples.impostoTotal : 0,
+        aliquotaAnterior: temDadosAnoAnterior ? analiseAnterior.regimes.simples.aliquotaEfetiva : 0,
+      },
+      {
+        regime: 'Lucro Presumido',
+        impostoAtual: analiseReal.regimes.presumido.impostoTotal,
+        aliquotaAtual: analiseReal.regimes.presumido.aliquotaEfetiva,
+        impostoAnterior: temDadosAnoAnterior ? analiseAnterior.regimes.presumido.impostoTotal : 0,
+        aliquotaAnterior: temDadosAnoAnterior
+          ? analiseAnterior.regimes.presumido.aliquotaEfetiva
+          : 0,
+      },
+      {
+        regime: 'Lucro Real',
+        impostoAtual: analiseReal.regimes.real.impostoTotal,
+        aliquotaAtual: analiseReal.regimes.real.aliquotaEfetiva,
+        impostoAnterior: temDadosAnoAnterior ? analiseAnterior.regimes.real.impostoTotal : 0,
+        aliquotaAnterior: temDadosAnoAnterior ? analiseAnterior.regimes.real.aliquotaEfetiva : 0,
+      },
+    ]
+  }, [analiseReal, analiseAnterior, temDadosAnoAnterior])
 
   // Exportar CSV
   const handleExportCsv = () => {
@@ -188,26 +286,48 @@ export default function AnaliseTributaria() {
     csv += `Empresa;${selectedEmpresa.nome}\n`
     csv += `CNPJ;${formatCnpj(selectedEmpresa.cnpj)}\n`
     csv += `Exercício Analisado;${selectedAno}\n`
+    if (compararAnoAnterior) {
+      csv += `Exercício Anterior;${anoAnterior}\n`
+    }
     csv += `Data de Emissão;${new Date().toLocaleDateString('pt-BR')}\n`
     csv += `Alíquota ISS Aplicada;${aliquotaIss.toFixed(2)}%\n`
-    csv += `Receita Bruta Anual;${formatCurrency(receitaBruta)}\n`
-    csv += `Lucro Líquido Contábil;${formatCurrency(lucroLiquido)}\n\n`
+    csv += `Receita Bruta Anual;${formatCurrency(receitaBrutaAtual)}\n`
+    csv += `Lucro Líquido Contábil;${formatCurrency(lucroLiquidoAtual)}\n\n`
 
-    csv += `COMPARATIVO DOS REGIMES TRIBUTÁRIOS\n`
+    csv += `COMPARATIVO DOS REGIMES TRIBUTÁRIOS (${selectedAno})\n`
     csv += `Regime;Alíquota Efetiva;Imposto Total Estimado;Economia vs Pior;Recomendado?\n`
-    csv += `Simples Nacional;${formatPercent(analise.regimes.simples.aliquotaEfetiva, 2)};${formatCurrency(analise.regimes.simples.impostoTotal)};${formatCurrency(analise.regimes.simples.economiaVsPior)};${analise.regimes.simples.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n`
-    csv += `Lucro Presumido;${formatPercent(analise.regimes.presumido.aliquotaEfetiva, 2)};${formatCurrency(analise.regimes.presumido.impostoTotal)};${formatCurrency(analise.regimes.presumido.economiaVsPior)};${analise.regimes.presumido.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n`
-    csv += `Lucro Real;${formatPercent(analise.regimes.real.aliquotaEfetiva, 2)};${formatCurrency(analise.regimes.real.impostoTotal)};${formatCurrency(analise.regimes.real.economiaVsPior)};${analise.regimes.real.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n\n`
+    csv += `Simples Nacional;${formatPercent(analiseReal.regimes.simples.aliquotaEfetiva, 2)};${formatCurrency(analiseReal.regimes.simples.impostoTotal)};${formatCurrency(analiseReal.regimes.simples.economiaVsPior)};${analiseReal.regimes.simples.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n`
+    csv += `Lucro Presumido;${formatPercent(analiseReal.regimes.presumido.aliquotaEfetiva, 2)};${formatCurrency(analiseReal.regimes.presumido.impostoTotal)};${formatCurrency(analiseReal.regimes.presumido.economiaVsPior)};${analiseReal.regimes.presumido.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n`
+    csv += `Lucro Real;${formatPercent(analiseReal.regimes.real.aliquotaEfetiva, 2)};${formatCurrency(analiseReal.regimes.real.impostoTotal)};${formatCurrency(analiseReal.regimes.real.economiaVsPior)};${analiseReal.regimes.real.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n\n`
 
-    csv += `BREAKDOWN DETALHADO POR REGIME\n`
-    const regimesList = [analise.regimes.simples, analise.regimes.presumido, analise.regimes.real]
-    for (const r of regimesList) {
-      csv += `\n--- ${r.nome.toUpperCase()} ---\n`
-      csv += `Tributo;Base de Cálculo (R$);Alíquota Nominal (%);Valor Estimado (R$);Descrição\n`
-      r.breakdown.forEach((item) => {
-        csv += `${item.nome} (${item.sigla});${formatCurrency(item.baseCalculo)};${formatPercent(item.aliquotaNominal, 2)};${formatCurrency(item.valor)};"${item.descricao || ''}"\n`
-      })
-      csv += `TOTAL DO REGIME;;;${formatCurrency(r.impostoTotal)};\n`
+    if (compararAnoAnterior && temDadosAnoAnterior) {
+      csv += `EVOLUÇÃO DA CARGA TRIBUTÁRIA (${selectedAno} vs ${anoAnterior})\n`
+      csv += `Regime / Tributo;Valor ${selectedAno};Valor ${anoAnterior};Variação R$;Variação %\n`
+
+      const regimesNomes = [
+        { id: 'simples', nome: 'Simples Nacional' },
+        { id: 'presumido', nome: 'Lucro Presumido' },
+        { id: 'real', nome: 'Lucro Real' },
+      ] as const
+
+      for (const r of regimesNomes) {
+        const at = analiseReal.regimes[r.id]
+        const ant = analiseAnterior.regimes[r.id]
+        const diffTotal = at.impostoTotal - ant.impostoTotal
+        const varTotalPct = ant.impostoTotal > 0 ? (diffTotal / ant.impostoTotal) * 100 : 0
+
+        csv += `\n--- ${r.nome.toUpperCase()} ---\n`
+        csv += `TOTAL DO REGIME;${formatCurrency(at.impostoTotal)};${formatCurrency(ant.impostoTotal)};${formatCurrency(diffTotal)};${formatPercent(varTotalPct, 1)}\n`
+
+        at.breakdown.forEach((itemAt, idx) => {
+          const itemAnt = ant.breakdown[idx]
+          const vAnt = itemAnt ? itemAnt.valor : 0
+          const diff = itemAt.valor - vAnt
+          const varPct = vAnt > 0 ? (diff / vAnt) * 100 : 0
+          csv += `${itemAt.sigla} - ${itemAt.nome};${formatCurrency(itemAt.valor)};${formatCurrency(vAnt)};${formatCurrency(diff)};${formatPercent(varPct, 1)}\n`
+        })
+      }
+      csv += `\n`
     }
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -227,25 +347,35 @@ export default function AnaliseTributaria() {
     })
   }
 
-  // Helper para renderizar card individual de regime
-  const renderCardRegime = (regime: RegimeResultado) => {
+  // Helper para renderizar card individual de regime (Normal ou Simulado)
+  const renderCardRegime = (regime: RegimeResultado, isSimuladoView: boolean = false) => {
     const isRec = regime.isRecomendado && temDadosAno
-    const isSimplesAcimaDoTeto = regime.id === 'simples' && receitaBruta > 4800000
+    const isSimplesAcimaDoTeto =
+      regime.id === 'simples' && (isSimuladoView ? receitaSimulada : receitaBrutaAtual) > 4800000
 
     return (
       <div
         key={regime.id}
         className={`relative rounded-2xl transition-all duration-200 flex flex-col justify-between ${
           isRec
-            ? 'bg-emerald-50/60 border-2 border-emerald-500 shadow-md ring-4 ring-emerald-500/10'
+            ? isSimuladoView && regimeMudouNaSimulacao
+              ? 'bg-amber-50/70 border-2 border-amber-500 shadow-md ring-4 ring-amber-500/10'
+              : 'bg-emerald-50/60 border-2 border-emerald-500 shadow-md ring-4 ring-emerald-500/10'
             : 'bg-white border border-slate-200 shadow-xs hover:border-slate-300'
         }`}
       >
         {/* Badge Flutuante de Recomendado */}
         {isRec && (
           <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-            <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold bg-emerald-600 text-white shadow-md uppercase tracking-wider">
-              <Award className="w-3.5 h-3.5" />🏆 Regime Recomendado
+            <span
+              className={`inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full text-xs font-bold text-white shadow-md uppercase tracking-wider ${
+                isSimuladoView && regimeMudouNaSimulacao ? 'bg-amber-600' : 'bg-emerald-600'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              {isSimuladoView && regimeMudouNaSimulacao
+                ? '🏆 Recomendado (Simulado)'
+                : '🏆 Regime Recomendado'}
             </span>
           </div>
         )}
@@ -261,7 +391,11 @@ export default function AnaliseTributaria() {
             </div>
             <div
               className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                isRec ? 'bg-emerald-500 text-white shadow-xs' : 'bg-slate-100 text-slate-600'
+                isRec
+                  ? isSimuladoView && regimeMudouNaSimulacao
+                    ? 'bg-amber-500 text-white shadow-xs'
+                    : 'bg-emerald-500 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600'
               }`}
             >
               <Calculator className="w-4 h-4" />
@@ -290,7 +424,11 @@ export default function AnaliseTributaria() {
             <div className="flex items-baseline gap-2">
               <span
                 className={`text-3xl sm:text-4xl font-extrabold tracking-tight ${
-                  isRec ? 'text-emerald-700' : 'text-slate-800'
+                  isRec
+                    ? isSimuladoView && regimeMudouNaSimulacao
+                      ? 'text-amber-800'
+                      : 'text-emerald-700'
+                    : 'text-slate-800'
                 }`}
               >
                 {temDadosAno ? formatPercent(regime.aliquotaEfetiva, 2) : '0,00%'}
@@ -298,7 +436,11 @@ export default function AnaliseTributaria() {
               {isRec && (
                 <Badge
                   variant="outline"
-                  className="bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-[11px]"
+                  className={`font-bold text-[11px] ${
+                    isSimuladoView && regimeMudouNaSimulacao
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  }`}
                 >
                   Menor Carga
                 </Badge>
@@ -311,7 +453,15 @@ export default function AnaliseTributaria() {
             <div className="text-[11px] font-semibold text-slate-500 mb-0.5">
               Imposto Estimado Anual
             </div>
-            <div className={`text-xl font-bold ${isRec ? 'text-emerald-700' : 'text-[#0B1F3A]'}`}>
+            <div
+              className={`text-xl font-bold ${
+                isRec
+                  ? isSimuladoView && regimeMudouNaSimulacao
+                    ? 'text-amber-800'
+                    : 'text-emerald-700'
+                  : 'text-[#0B1F3A]'
+              }`}
+            >
               {temDadosAno ? formatCurrency(regime.impostoTotal) : 'R$ 0,00'}
             </div>
             <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
@@ -326,11 +476,29 @@ export default function AnaliseTributaria() {
           {temDadosAno && (
             <div className="mb-4 space-y-1.5">
               {regime.economiaVsPior > 0 ? (
-                <div className="p-2.5 rounded-lg bg-emerald-100/70 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2">
-                  <TrendingDown className="w-4 h-4 text-emerald-700 shrink-0" />
+                <div
+                  className={`p-2.5 rounded-lg border text-xs flex items-center gap-2 ${
+                    isSimuladoView && regimeMudouNaSimulacao && isRec
+                      ? 'bg-amber-100/80 border-amber-300 text-amber-950'
+                      : 'bg-emerald-100/70 border-emerald-200 text-emerald-900'
+                  }`}
+                >
+                  <TrendingDown
+                    className={`w-4 h-4 shrink-0 ${
+                      isSimuladoView && regimeMudouNaSimulacao && isRec
+                        ? 'text-amber-700'
+                        : 'text-emerald-700'
+                    }`}
+                  />
                   <div>
                     <span className="font-semibold">Economia vs Pior Regime:</span>{' '}
-                    <span className="font-bold text-emerald-800">
+                    <span
+                      className={`font-bold ${
+                        isSimuladoView && regimeMudouNaSimulacao && isRec
+                          ? 'text-amber-900'
+                          : 'text-emerald-800'
+                      }`}
+                    >
                       {formatCurrency(regime.economiaVsPior)}/ano
                     </span>
                   </div>
@@ -427,7 +595,7 @@ export default function AnaliseTributaria() {
           </div>
         </div>
 
-        {/* Controles de Empresa, Ano, ISS e Ações */}
+        {/* Controles de Empresa, Ano, Toggle Comparar Ano, ISS e Ações */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Seletor Empresa */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-2xs">
@@ -472,6 +640,21 @@ export default function AnaliseTributaria() {
             </div>
           </div>
 
+          {/* Toggle Comparar com Ano Anterior */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-2xs">
+            <Switch
+              id="toggle-comparar-ano-tributario"
+              checked={compararAnoAnterior}
+              onCheckedChange={setCompararAnoAnterior}
+            />
+            <Label
+              htmlFor="toggle-comparar-ano-tributario"
+              className="text-xs font-semibold text-slate-700 cursor-pointer select-none"
+            >
+              Comparar com ano anterior ({anoAnterior})
+            </Label>
+          </div>
+
           {/* Campo Alíquota ISS configurável */}
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs shadow-2xs">
             <Percent className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -498,7 +681,7 @@ export default function AnaliseTributaria() {
             </div>
           </div>
 
-          {/* Botões de Ação: Exportar CSV e Imprimir/PDF */}
+          {/* Botões de Ação: Exportar CSV e Gerar Parecer Executivo */}
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -512,12 +695,12 @@ export default function AnaliseTributaria() {
             </Button>
             <Button
               size="sm"
-              onClick={handlePrint}
+              onClick={() => setModalParecerOpen(true)}
               disabled={!temDadosAno}
-              className="h-10 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs gap-1.5"
+              className="h-10 text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs gap-1.5"
             >
-              <Printer className="w-4 h-4" />
-              Exportar Análise (PDF)
+              <FileText className="w-4 h-4" />
+              Gerar Parecer Executivo
             </Button>
           </div>
         </div>
@@ -531,7 +714,7 @@ export default function AnaliseTributaria() {
             <DollarSign className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-xl font-extrabold text-[#0B1F3A]">
-            {temDadosAno ? formatCurrency(receitaBruta) : 'R$ 0,00'}
+            {temDadosAno ? formatCurrency(receitaBrutaAtual) : 'R$ 0,00'}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">Base anual para faturamento</div>
         </div>
@@ -543,14 +726,16 @@ export default function AnaliseTributaria() {
           </div>
           <div
             className={`text-xl font-extrabold ${
-              lucroLiquido >= 0 ? 'text-emerald-700' : 'text-red-600'
+              lucroLiquidoAtual >= 0 ? 'text-emerald-700' : 'text-red-600'
             }`}
           >
-            {temDadosAno ? formatCurrency(lucroLiquido) : 'R$ 0,00'}
+            {temDadosAno ? formatCurrency(lucroLiquidoAtual) : 'R$ 0,00'}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             Margem Líquida:{' '}
-            {receitaBruta > 0 ? formatPercent((lucroLiquido / receitaBruta) * 100, 1) : '—'}
+            {receitaBrutaAtual > 0
+              ? formatPercent((lucroLiquidoAtual / receitaBrutaAtual) * 100, 1)
+              : '—'}
           </div>
         </div>
 
@@ -560,7 +745,7 @@ export default function AnaliseTributaria() {
             <Layers className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="text-xl font-extrabold text-[#0B1F3A]">
-            {temDadosAno ? formatCurrency(folhaEstimada) : 'R$ 0,00'}
+            {temDadosAno ? formatCurrency(folhaEstimadaAtual) : 'R$ 0,00'}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
             Estimada em {folhaPercentual}% da receita
@@ -573,11 +758,11 @@ export default function AnaliseTributaria() {
             <Sparkles className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-xl font-extrabold text-emerald-700">
-            {temDadosAno ? formatCurrency(analise.economiaMaximaAnual) : 'R$ 0,00'}
+            {temDadosAno ? formatCurrency(analiseReal.economiaMaximaAnual) : 'R$ 0,00'}
           </div>
           <div className="text-[11px] text-emerald-700 mt-1">
-            {temDadosAno && analise.regimeRecomendado
-              ? `Optando por ${analise.regimeRecomendado.nome}`
+            {temDadosAno && analiseReal.regimeRecomendado
+              ? `Optando por ${analiseReal.regimeRecomendado.nome}`
               : 'Sem dados calculados'}
           </div>
         </div>
@@ -622,7 +807,7 @@ export default function AnaliseTributaria() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-bold text-[#0B1F3A]">
-                Comparativo Detalhado dos Três Regimes Tributários
+                Comparativo Detalhado dos Três Regimes Tributários ({selectedAno})
               </h2>
               <p className="text-xs text-slate-500">
                 Avaliação direta entre Simples Nacional (Anexo III), Lucro Presumido e Lucro Real
@@ -637,14 +822,14 @@ export default function AnaliseTributaria() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {renderCardRegime(analise.regimes.simples)}
-            {renderCardRegime(analise.regimes.presumido)}
-            {renderCardRegime(analise.regimes.real)}
+            {renderCardRegime(analiseReal.regimes.simples)}
+            {renderCardRegime(analiseReal.regimes.presumido)}
+            {renderCardRegime(analiseReal.regimes.real)}
           </div>
         </div>
       )}
 
-      {/* 5. Gráfico de Barras Comparativo com Recharts */}
+      {/* 5. Gráfico de Barras Comparativo com Recharts (Ano Atual) */}
       {temDadosAno && (
         <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
           <CardHeader className="pb-3 border-b border-slate-100">
@@ -652,7 +837,7 @@ export default function AnaliseTributaria() {
               <div>
                 <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
                   <Scale className="w-4 h-4 text-blue-600" />
-                  Carga Tributária por Regime (R$ no Ano)
+                  Carga Tributária por Regime (R$ no Ano {selectedAno})
                 </CardTitle>
                 <CardDescription className="text-xs">
                   Comparação gráfica do montante total de tributos devidos no exercício{' '}
@@ -744,22 +929,678 @@ export default function AnaliseTributaria() {
                     Para o perfil operacional de{' '}
                     <strong className="text-slate-800">{selectedEmpresa?.nome}</strong> em{' '}
                     {selectedAno}, com faturamento de{' '}
-                    <strong>{formatCurrency(receitaBruta)}</strong> e lucro contábil de{' '}
-                    <strong>{formatCurrency(lucroLiquido)}</strong>, a opção pelo{' '}
-                    <strong className="text-emerald-700">{analise.regimeRecomendado?.nome}</strong>{' '}
+                    <strong>{formatCurrency(receitaBrutaAtual)}</strong> e lucro contábil de{' '}
+                    <strong>{formatCurrency(lucroLiquidoAtual)}</strong>, a opção pelo{' '}
+                    <strong className="text-emerald-700">
+                      {analiseReal.regimeRecomendado?.nome}
+                    </strong>{' '}
                     proporciona uma alíquota efetiva de{' '}
                     <strong className="text-emerald-700">
-                      {formatPercent(analise.regimeRecomendado?.aliquotaEfetiva, 2)}
+                      {formatPercent(analiseReal.regimeRecomendado?.aliquotaEfetiva, 2)}
                     </strong>
                     , gerando economia anual estimada de{' '}
                     <strong className="text-emerald-700">
-                      {formatCurrency(analise.economiaMaximaAnual)}
+                      {formatCurrency(analiseReal.economiaMaximaAnual)}
                     </strong>{' '}
-                    frente ao pior cenário ({analise.maiorCustoRegime?.nome}).
+                    frente ao pior cenário ({analiseReal.maiorCustoRegime?.nome}).
                   </p>
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 1. SEÇÃO DE SIMULAÇÃO DE CENÁRIOS (SLIDERS, RECÁLCULO INSTANTÂNEO & RESUMO) */}
+      {/* ========================================================================= */}
+      {temDadosAno && (
+        <Card className="rounded-2xl border-slate-200 bg-white shadow-xs overflow-hidden">
+          <CardHeader className="pb-4 bg-slate-50/70 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
+                  <SlidersHorizontal className="w-5 h-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                    Simulação de Cenários (Sensibilidade Financeira)
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Varie o faturamento e a lucratividade para avaliar a resiliência e mudanças no
+                    enquadramento tributário
+                  </CardDescription>
+                </div>
+              </div>
+
+              {isSimulando && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetSimulacao}
+                  className="h-8 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 gap-1.5 self-start sm:self-auto"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                  Resetar Simulação
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-6 space-y-6">
+            {/* Controles de Sliders */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-5 rounded-xl bg-slate-50/80 border border-slate-200">
+              {/* Slider 1: Variação na Receita */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="slider-receita"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <DollarSign className="w-4 h-4 text-blue-600" />
+                    Variação na Receita (%)
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs font-extrabold px-2 py-0.5 rounded-md ${
+                        varReceitaPercent > 0
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : varReceitaPercent < 0
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {varReceitaPercent > 0 ? `+${varReceitaPercent}%` : `${varReceitaPercent}%`}
+                    </span>
+                    <input
+                      id="input-receita-percent"
+                      type="number"
+                      min="-50"
+                      max="100"
+                      step="5"
+                      value={varReceitaPercent}
+                      onChange={(e) =>
+                        setVarReceitaPercent(
+                          Math.min(100, Math.max(-50, Number(e.target.value) || 0)),
+                        )
+                      }
+                      className="w-16 h-7 text-xs font-bold text-right px-2 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <Slider
+                  id="slider-receita"
+                  min={-50}
+                  max={100}
+                  step={5}
+                  value={[varReceitaPercent]}
+                  onValueChange={(val) => setVarReceitaPercent(val[0])}
+                  className="py-1 cursor-pointer"
+                />
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>-50% (Risco/Queda)</span>
+                  <span className="font-semibold text-slate-700">
+                    Simulado: {formatCurrency(receitaSimulada)}
+                  </span>
+                  <span>+100% (Crescimento)</span>
+                </div>
+              </div>
+
+              {/* Slider 2: Variação no Lucro */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="slider-lucro"
+                    className="text-xs font-bold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <TrendingUp className="w-4 h-4 text-emerald-600" />
+                    Variação no Lucro Contábil (%)
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xs font-extrabold px-2 py-0.5 rounded-md ${
+                        varLucroPercent > 0
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : varLucroPercent < 0
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {varLucroPercent > 0 ? `+${varLucroPercent}%` : `${varLucroPercent}%`}
+                    </span>
+                    <input
+                      id="input-lucro-percent"
+                      type="number"
+                      min="-50"
+                      max="100"
+                      step="5"
+                      value={varLucroPercent}
+                      onChange={(e) =>
+                        setVarLucroPercent(
+                          Math.min(100, Math.max(-50, Number(e.target.value) || 0)),
+                        )
+                      }
+                      className="w-16 h-7 text-xs font-bold text-right px-2 rounded-lg border border-slate-300 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <Slider
+                  id="slider-lucro"
+                  min={-50}
+                  max={100}
+                  step={5}
+                  value={[varLucroPercent]}
+                  onValueChange={(val) => setVarLucroPercent(val[0])}
+                  className="py-1 cursor-pointer"
+                />
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>-50% (Compressão)</span>
+                  <span className="font-semibold text-slate-700">
+                    Simulado: {formatCurrency(lucroSimulado)}
+                  </span>
+                  <span>+100% (Expansão)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Resumo Textual e Alerta de Mudança de Regime */}
+            <div className="space-y-3">
+              {regimeMudouNaSimulacao ? (
+                <div className="p-4 rounded-xl bg-amber-50 border-2 border-amber-400 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs animate-fadeIn">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-amber-600 text-white font-bold text-xs">
+                          ⚠️ O regime recomendado muda para{' '}
+                          {analiseSimulada.regimeRecomendado?.nome}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-amber-900 mt-1.5 leading-relaxed">
+                        Com{' '}
+                        <strong>
+                          {varReceitaPercent > 0
+                            ? `+${varReceitaPercent}%`
+                            : `${varReceitaPercent}%`}
+                        </strong>{' '}
+                        na receita e{' '}
+                        <strong>
+                          {varLucroPercent > 0 ? `+${varLucroPercent}%` : `${varLucroPercent}%`}
+                        </strong>{' '}
+                        no lucro, o enquadramento original (
+                        <em>{analiseReal.regimeRecomendado?.nome}</em>) deixa de ser o mais
+                        vantajoso. A melhor opção passa a ser{' '}
+                        <strong>{analiseSimulada.regimeRecomendado?.nome}</strong>, com alíquota
+                        efetiva de{' '}
+                        <strong>
+                          {formatPercent(analiseSimulada.regimeRecomendado?.aliquotaEfetiva, 2)}
+                        </strong>{' '}
+                        e economia anual de{' '}
+                        <strong>{formatCurrency(analiseSimulada.economiaMaximaAnual)}</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-blue-950 flex items-start gap-3 shadow-2xs">
+                  <Sparkles className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-900 leading-relaxed">
+                    Com{' '}
+                    <strong>
+                      {varReceitaPercent > 0 ? `+${varReceitaPercent}%` : `${varReceitaPercent}%`}
+                    </strong>{' '}
+                    de variação na receita e{' '}
+                    <strong>
+                      {varLucroPercent > 0 ? `+${varLucroPercent}%` : `${varLucroPercent}%`}
+                    </strong>{' '}
+                    no lucro, o regime recomendado continua sendo{' '}
+                    <strong className="text-blue-950">
+                      {analiseSimulada.regimeRecomendado?.nome}
+                    </strong>{' '}
+                    com economia estimada de{' '}
+                    <strong className="text-emerald-700">
+                      {formatCurrency(analiseSimulada.economiaMaximaAnual)}
+                    </strong>{' '}
+                    frente ao pior cenário ({analiseSimulada.maiorCustoRegime?.nome}).
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Três Cards Simulados se houver variação ativa */}
+            {isSimulando && (
+              <div className="pt-2">
+                <div className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center justify-between">
+                  <span>Resultado dos 3 Regimes no Cenário Simulado:</span>
+                  <span className="text-[11px] text-slate-400 font-normal">
+                    Receita: {formatCurrency(receitaSimulada)} · Lucro:{' '}
+                    {formatCurrency(lucroSimulado)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+                  {renderCardRegime(analiseSimulada.regimes.simples, true)}
+                  {renderCardRegime(analiseSimulada.regimes.presumido, true)}
+                  {renderCardRegime(analiseSimulada.regimes.real, true)}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. COMPARAÇÃO COM ANO ANTERIOR (CARDS COMPARATIVOS, GRÁFICO & EVOLUÇÃO) */}
+      {/* ========================================================================= */}
+      {compararAnoAnterior && (
+        <Card className="rounded-2xl border-blue-200 bg-linear-to-b from-blue-50/40 via-white to-slate-50/60 shadow-xs">
+          <CardHeader className="pb-3 border-b border-blue-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                  <History className="w-5 h-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                    Comparativo Histórico de Regimes ({selectedAno} vs {anoAnterior})
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Evolução da carga tributária e comportamento da empresa em relação ao ano fiscal
+                    anterior
+                  </CardDescription>
+                </div>
+              </div>
+              <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-bold self-start sm:self-auto">
+                Exercícios: {selectedAno} vs {anoAnterior}
+              </Badge>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-6 space-y-6">
+            {!temDadosAnoAnterior ? (
+              <div className="p-8 rounded-xl bg-amber-50 border border-amber-200 text-center space-y-2">
+                <AlertTriangle className="w-8 h-8 text-amber-600 mx-auto" />
+                <h4 className="text-sm font-bold text-amber-900">
+                  Sem dados de {anoAnterior} para comparação
+                </h4>
+                <p className="text-xs text-amber-800 max-w-md mx-auto">
+                  Não foram localizados lançamentos de DRE ou faturamento para o exercício de{' '}
+                  {anoAnterior}. Cadastre ou importe os demonstrativos do ano anterior para
+                  habilitar a análise histórica completa.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* 3 Cards Comparativos: Alíquota Efetiva, Imposto Total, Regime Recomendado */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Card 1: Alíquota Efetiva */}
+                  <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+                      <span>Alíquota Efetiva (Regime Recomendado)</span>
+                      <Percent className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <div>
+                        <div className="text-2xl font-black text-[#0B1F3A]">
+                          {formatPercent(analiseReal.regimeRecomendado?.aliquotaEfetiva, 2)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Ano {selectedAno}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-base font-bold text-slate-600">
+                          {formatPercent(analiseAnterior.regimeRecomendado?.aliquotaEfetiva, 2)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Ano {anoAnterior}</div>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Variação:</span>
+                      {(() => {
+                        const diff =
+                          (analiseReal.regimeRecomendado?.aliquotaEfetiva || 0) -
+                          (analiseAnterior.regimeRecomendado?.aliquotaEfetiva || 0)
+                        return (
+                          <span
+                            className={`font-bold ${
+                              diff < 0
+                                ? 'text-emerald-700'
+                                : diff > 0
+                                  ? 'text-red-600'
+                                  : 'text-slate-600'
+                            }`}
+                          >
+                            {diff > 0 ? `+${diff.toFixed(2)} p.p.` : `${diff.toFixed(2)} p.p.`}
+                          </span>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Card 2: Imposto Total */}
+                  <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+                      <span>Imposto Total Anual (Recomendado)</span>
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <div>
+                        <div className="text-2xl font-black text-[#0B1F3A]">
+                          {formatCurrency(analiseReal.regimeRecomendado?.impostoTotal)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Ano {selectedAno}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-base font-bold text-slate-600">
+                          {formatCurrency(analiseAnterior.regimeRecomendado?.impostoTotal)}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Ano {anoAnterior}</div>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Variação R$:</span>
+                      {(() => {
+                        const diff =
+                          (analiseReal.regimeRecomendado?.impostoTotal || 0) -
+                          (analiseAnterior.regimeRecomendado?.impostoTotal || 0)
+                        return (
+                          <span
+                            className={`font-bold ${
+                              diff < 0
+                                ? 'text-emerald-700'
+                                : diff > 0
+                                  ? 'text-red-600'
+                                  : 'text-slate-600'
+                            }`}
+                          >
+                            {diff > 0 ? `+${formatCurrency(diff)}` : formatCurrency(diff)}
+                          </span>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Card 3: Regime Recomendado */}
+                  <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
+                      <span>Regime Recomendado</span>
+                      <Award className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-base font-extrabold text-emerald-700">
+                          {analiseReal.regimeRecomendado?.nome}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Exercício {selectedAno}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-bold text-slate-700">
+                          {analiseAnterior.regimeRecomendado?.nome}
+                        </div>
+                        <div className="text-[11px] text-slate-400">Exercício {anoAnterior}</div>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Status da Opção:</span>
+                      <span
+                        className={`font-bold ${
+                          analiseReal.regimeRecomendado?.id ===
+                          analiseAnterior.regimeRecomendado?.id
+                            ? 'text-emerald-700'
+                            : 'text-amber-600'
+                        }`}
+                      >
+                        {analiseReal.regimeRecomendado?.id === analiseAnterior.regimeRecomendado?.id
+                          ? '✓ Mantido o mesmo regime'
+                          : '⚠️ Alteração de regime recomendada'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Gráfico de Barras Agrupadas (3 regimes x 2 anos lado a lado) */}
+                <div className="p-5 rounded-xl bg-white border border-slate-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-[#0B1F3A]">
+                        Comparativo Gráfico por Regime ({selectedAno} vs {anoAnterior})
+                      </h4>
+                      <p className="text-xs text-slate-500">
+                        Carga tributária total anual estimada lado a lado para cada regime
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={chartDataComparativo}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="regime"
+                          tick={{ fill: '#475569', fontSize: 12, fontWeight: 600 }}
+                          axisLine={{ stroke: '#CBD5E1' }}
+                          tickLine={false}
+                        />
+                        <YAxis
+                          tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                          tick={{ fill: '#64748B', fontSize: 11 }}
+                          axisLine={false}
+                          tickLine={false}
+                        />
+                        <RechartsTooltip
+                          content={({ active, payload, label }) => {
+                            if (active && payload && payload.length) {
+                              const item = payload[0].payload
+                              return (
+                                <div className="bg-[#0B1F3A] text-white p-3.5 rounded-xl shadow-xl text-xs space-y-2 border border-blue-900 min-w-[220px]">
+                                  <p className="font-bold text-sm text-blue-200">{label}</p>
+                                  <div className="space-y-1">
+                                    <div className="flex justify-between gap-4 text-blue-300">
+                                      <span>Ano {selectedAno}:</span>
+                                      <span className="font-bold text-white">
+                                        {formatCurrency(item.impostoAtual)} (
+                                        {formatPercent(item.aliquotaAtual, 2)})
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between gap-4 text-slate-300">
+                                      <span>Ano {anoAnterior}:</span>
+                                      <span className="font-bold text-white">
+                                        {formatCurrency(item.impostoAnterior)} (
+                                        {formatPercent(item.aliquotaAnterior, 2)})
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between gap-4 pt-1 border-t border-white/10 text-xs">
+                                      <span>Diferença:</span>
+                                      <span
+                                        className={`font-bold ${
+                                          item.impostoAtual < item.impostoAnterior
+                                            ? 'text-emerald-300'
+                                            : 'text-amber-300'
+                                        }`}
+                                      >
+                                        {formatCurrency(item.impostoAtual - item.impostoAnterior)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            }
+                            return null
+                          }}
+                        />
+                        <Legend
+                          wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
+                          formatter={(value) => (
+                            <span className="text-slate-700 font-semibold">{value}</span>
+                          )}
+                        />
+                        <Bar
+                          dataKey="impostoAtual"
+                          name={`Imposto ${selectedAno}`}
+                          fill="#2563EB"
+                          radius={[6, 6, 0, 0]}
+                          maxBarSize={50}
+                        />
+                        <Bar
+                          dataKey="impostoAnterior"
+                          name={`Imposto ${anoAnterior}`}
+                          fill="#94A3B8"
+                          radius={[6, 6, 0, 0]}
+                          maxBarSize={50}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabela Resumo: "Evolução da Carga Tributária" com Tributos Discriminados */}
+                <div className="p-5 rounded-xl bg-white border border-slate-200 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-[#0B1F3A]">
+                      Evolução da Carga Tributária Detalhada por Tributo
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Comparativo de cada tributo apurado nos exercícios de {selectedAno} e{' '}
+                      {anoAnterior}
+                    </p>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-xs text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 font-bold text-slate-800 border-b border-slate-300">
+                          <th className="py-2.5 px-3">Regime / Tributo</th>
+                          <th className="py-2.5 px-3 text-right">Valor {selectedAno} (R$)</th>
+                          <th className="py-2.5 px-3 text-right">Valor {anoAnterior} (R$)</th>
+                          <th className="py-2.5 px-3 text-right">Variação (R$)</th>
+                          <th className="py-2.5 px-3 text-right">Variação (%)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {(
+                          [
+                            { key: 'simples', nome: 'Simples Nacional' },
+                            { key: 'presumido', nome: 'Lucro Presumido' },
+                            { key: 'real', nome: 'Lucro Real' },
+                          ] as const
+                        ).map(({ key, nome }) => {
+                          const rAtual = analiseReal.regimes[key]
+                          const rAnt = analiseAnterior.regimes[key]
+                          const diffTotal = rAtual.impostoTotal - rAnt.impostoTotal
+                          const varPctTotal =
+                            rAnt.impostoTotal > 0 ? (diffTotal / rAnt.impostoTotal) * 100 : 0
+
+                          return (
+                            <React.Fragment key={key}>
+                              {/* Linha do Total do Regime */}
+                              <tr className="bg-slate-50/90 font-bold text-slate-900 border-t-2 border-slate-200">
+                                <td className="py-2 px-3 flex items-center gap-2">
+                                  <span>{nome}</span>
+                                  {rAtual.isRecomendado && (
+                                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] py-0">
+                                      Recomendado {selectedAno}
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3 text-right">
+                                  {formatCurrency(rAtual.impostoTotal)}
+                                </td>
+                                <td className="py-2 px-3 text-right text-slate-600">
+                                  {formatCurrency(rAnt.impostoTotal)}
+                                </td>
+                                <td
+                                  className={`py-2 px-3 text-right ${
+                                    diffTotal < 0
+                                      ? 'text-emerald-700'
+                                      : diffTotal > 0
+                                        ? 'text-red-600'
+                                        : 'text-slate-600'
+                                  }`}
+                                >
+                                  {diffTotal > 0
+                                    ? `+${formatCurrency(diffTotal)}`
+                                    : formatCurrency(diffTotal)}
+                                </td>
+                                <td
+                                  className={`py-2 px-3 text-right ${
+                                    varPctTotal < 0
+                                      ? 'text-emerald-700'
+                                      : varPctTotal > 0
+                                        ? 'text-red-600'
+                                        : 'text-slate-600'
+                                  }`}
+                                >
+                                  {varPctTotal > 0
+                                    ? `+${varPctTotal.toFixed(1)}%`
+                                    : `${varPctTotal.toFixed(1)}%`}
+                                </td>
+                              </tr>
+
+                              {/* Linhas dos Tributos Individuais */}
+                              {rAtual.breakdown.map((itemAtual, idx) => {
+                                const itemAnt = rAnt.breakdown[idx]
+                                const vAnt = itemAnt ? itemAnt.valor : 0
+                                const diff = itemAtual.valor - vAnt
+                                const varPct = vAnt > 0 ? (diff / vAnt) * 100 : 0
+
+                                return (
+                                  <tr key={idx} className="hover:bg-slate-50/50">
+                                    <td className="py-1.5 px-6 text-slate-600">
+                                      <span className="font-semibold text-slate-800">
+                                        {itemAtual.sigla}
+                                      </span>{' '}
+                                      -{' '}
+                                      <span className="text-[11px] text-slate-400">
+                                        {itemAtual.nome}
+                                      </span>
+                                    </td>
+                                    <td className="py-1.5 px-3 text-right font-medium text-slate-800">
+                                      {formatCurrency(itemAtual.valor)}
+                                    </td>
+                                    <td className="py-1.5 px-3 text-right text-slate-500">
+                                      {formatCurrency(vAnt)}
+                                    </td>
+                                    <td
+                                      className={`py-1.5 px-3 text-right font-medium ${
+                                        diff < 0
+                                          ? 'text-emerald-700'
+                                          : diff > 0
+                                            ? 'text-red-600'
+                                            : 'text-slate-500'
+                                      }`}
+                                    >
+                                      {diff > 0 ? `+${formatCurrency(diff)}` : formatCurrency(diff)}
+                                    </td>
+                                    <td
+                                      className={`py-1.5 px-3 text-right ${
+                                        varPct < 0
+                                          ? 'text-emerald-700'
+                                          : varPct > 0
+                                            ? 'text-red-600'
+                                            : 'text-slate-500'
+                                      }`}
+                                    >
+                                      {varPct > 0
+                                        ? `+${varPct.toFixed(1)}%`
+                                        : `${varPct.toFixed(1)}%`}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -835,114 +1676,19 @@ export default function AnaliseTributaria() {
         </CardContent>
       </Card>
 
-      {/* 7. Impressão / PDF Container Oculto em Tela, Ativo na Impressão */}
-      <div className="hidden print:block font-sans text-slate-900 p-4 space-y-6">
-        <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold uppercase tracking-tight">
-              Relatório Executivo de Análise Tributária
-            </h1>
-            <p className="text-xs text-slate-600">
-              Planejamento e Comparativo de Regimes Fiscais · Exercício {selectedAno}
-            </p>
-          </div>
-          <div className="text-right text-xs">
-            <p className="font-bold">
-              {minhaEmpresa?.nome_fantasia ||
-                minhaEmpresa?.razao_social ||
-                'Consultoria Financeira'}
-            </p>
-            <p className="text-slate-500">Emissão: {new Date().toLocaleDateString('pt-BR')}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-xs border p-3 rounded-md bg-slate-50">
-          <div>
-            <p>
-              <strong>Empresa Cliente:</strong> {selectedEmpresa?.nome}
-            </p>
-            <p>
-              <strong>CNPJ:</strong> {formatCnpj(selectedEmpresa?.cnpj || '')}
-            </p>
-            <p>
-              <strong>Segmento:</strong> {selectedEmpresa?.segmento}
-            </p>
-          </div>
-          <div>
-            <p>
-              <strong>Receita Bruta:</strong> {formatCurrency(receitaBruta)}
-            </p>
-            <p>
-              <strong>Lucro Líquido Contábil:</strong> {formatCurrency(lucroLiquido)}
-            </p>
-            <p>
-              <strong>Alíquota ISS Aplicada:</strong> {aliquotaIss.toFixed(2)}%
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <h2 className="text-sm font-bold uppercase mb-2 border-b pb-1">
-            Resumo Comparativo dos Regimes
-          </h2>
-          <table className="w-full text-xs text-left border border-collapse">
-            <thead>
-              <tr className="bg-slate-100 border-b">
-                <th className="p-2 border">Regime</th>
-                <th className="p-2 border">Base de Cálculo</th>
-                <th className="p-2 border">Alíquota Efetiva</th>
-                <th className="p-2 border">Imposto Estimado (Ano)</th>
-                <th className="p-2 border">Economia vs Pior</th>
-                <th className="p-2 border">Situação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[analise.regimes.simples, analise.regimes.presumido, analise.regimes.real].map(
-                (r) => (
-                  <tr
-                    key={r.id}
-                    className={`border-b ${r.isRecomendado ? 'bg-emerald-50 font-bold' : ''}`}
-                  >
-                    <td className="p-2 border">{r.nome}</td>
-                    <td className="p-2 border">{formatCurrency(r.baseCalculoPrincipal)}</td>
-                    <td className="p-2 border">{formatPercent(r.aliquotaEfetiva, 2)}</td>
-                    <td className="p-2 border">{formatCurrency(r.impostoTotal)}</td>
-                    <td className="p-2 border">{formatCurrency(r.economiaVsPior)}</td>
-                    <td className="p-2 border">
-                      {r.isRecomendado ? '🏆 RECOMENDADO' : 'Opção alternativa'}
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="border p-4 rounded-md bg-slate-50 text-xs space-y-2">
-          <h3 className="font-bold uppercase text-slate-800">Conclusão e Parecer Técnico:</h3>
-          <p className="leading-relaxed">
-            Com base nos dados fornecidos do DRE e Balanço do exercício de {selectedAno},
-            recomendamos a adoção do regime <strong>{analise.regimeRecomendado?.nome}</strong> para
-            a empresa <strong>{selectedEmpresa?.nome}</strong>. Esta escolha resulta em uma carga
-            tributária efetiva de{' '}
-            <strong>{formatPercent(analise.regimeRecomendado?.aliquotaEfetiva, 2)}</strong> sobre a
-            receita bruta, gerando uma economia estimada de{' '}
-            <strong>{formatCurrency(analise.economiaMaximaAnual)}</strong> ao longo do ano quando
-            comparada ao regime menos favorável.
-          </p>
-        </div>
-
-        <div className="pt-12 flex justify-between items-end text-xs">
-          <div className="text-center w-64 border-t border-slate-400 pt-1">
-            <p className="font-bold">{minhaEmpresa?.contador_nome || 'Consultor Tributário'}</p>
-            <p className="text-slate-500">CRC {minhaEmpresa?.contador_crc || 'Ativo'}</p>
-          </div>
-          <div className="text-center w-64 border-t border-slate-400 pt-1">
-            <p className="font-bold">{selectedEmpresa?.nome}</p>
-            <p className="text-slate-500">Representante Legal</p>
-          </div>
-        </div>
-      </div>
+      {/* 3. Modal do Parecer Executivo em PDF */}
+      <ModalParecerExecutivo
+        open={modalParecerOpen}
+        onOpenChange={setModalParecerOpen}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        receitaBruta={receitaBrutaAtual}
+        lucroLiquido={lucroLiquidoAtual}
+        aliquotaIss={aliquotaIss}
+        analise={analiseReal}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+      />
     </div>
   )
 }
