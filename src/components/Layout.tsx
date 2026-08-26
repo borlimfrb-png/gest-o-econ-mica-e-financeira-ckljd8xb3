@@ -113,6 +113,11 @@ export default function Layout() {
       path: '/indicadores/eficiencia-operacional',
       icon: Clock,
     },
+    {
+      name: 'Econômicos (análise mais avançada)',
+      path: '/indicadores/economicos',
+      icon: TrendingUp,
+    },
   ]
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')

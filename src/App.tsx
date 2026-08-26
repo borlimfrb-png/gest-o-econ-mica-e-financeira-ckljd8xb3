@@ -27,6 +27,7 @@ import IndicadoresRentabilidade from './pages/IndicadoresRentabilidade'
 import IndicadoresEstruturaCapital from './pages/IndicadoresEstruturaCapital'
 import IndicadoresEbitda from './pages/IndicadoresEbitda'
 import IndicadoresEficienciaOperacional from './pages/IndicadoresEficienciaOperacional'
+import IndicadoresEconomicos from './pages/IndicadoresEconomicos'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
@@ -99,6 +100,7 @@ const App = () => (
                   path="/indicadores/eficiencia-operacional"
                   element={<IndicadoresEficienciaOperacional />}
                 />
+                <Route path="/indicadores/economicos" element={<IndicadoresEconomicos />} />
                 <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />
