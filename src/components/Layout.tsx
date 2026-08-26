@@ -29,6 +29,7 @@ import {
   Activity,
   TrendingDown,
   TrendingUp,
+  Clock,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -106,6 +107,11 @@ export default function Layout() {
       name: 'EBITDA',
       path: '/indicadores/ebitda',
       icon: TrendingUp,
+    },
+    {
+      name: 'Eficiência Operacional',
+      path: '/indicadores/eficiencia-operacional',
+      icon: Clock,
     },
   ]
 
