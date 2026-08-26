@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T16:28:53.999Z",
+  "generatedAt": "2026-08-26T16:40:08.792Z",
   "collections": [
     {
       "name": "users",
@@ -40,6 +40,12 @@
         },
         {
           "name": "receber_alertas_email",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "notificacoes_vencimento",
           "type": "bool",
           "required": false,
           "system": false
@@ -1464,6 +1470,12 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "notificacoes_vencimento",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

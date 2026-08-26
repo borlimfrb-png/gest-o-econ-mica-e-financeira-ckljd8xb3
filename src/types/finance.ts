@@ -298,6 +298,8 @@ export interface MinhaEmpresaRecord extends RecordModel {
   agencia?: string
   conta_corrente?: string
   chave_pix?: string
+  // Preferências
+  notificacoes_vencimento?: boolean
 }
 
 export type StatusRecebivel = 'Pendente' | 'Pago'

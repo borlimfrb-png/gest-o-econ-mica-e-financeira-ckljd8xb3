@@ -50,6 +50,7 @@ import {
   TrendingUp,
   Receipt,
   FileSpreadsheet,
+  AlertTriangle,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -163,75 +164,6 @@ export default function BaixaRecebiveis() {
     return m
   }, [empresas])
 
-  const handleAtalhoMesAtual = () => {
-    const p = periodoMesCorrenteIso()
-    setDataInicio(p.inicio)
-    setDataFim(p.fim)
-    setApenasPendentes(false)
-  }
-
-  const handleAtalhoMesAnterior = () => {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = now.getMonth() - 1
-    const inicio = new Date(y, m, 1).toISOString().slice(0, 10)
-    const fim = new Date(y, m + 1, 0).toISOString().slice(0, 10)
-    setDataInicio(inicio)
-    setDataFim(fim)
-    setApenasPendentes(false)
-  }
-
-  const handleAtalhoProximos30Dias = () => {
-    const now = new Date()
-    const inicio = now.toISOString().slice(0, 10)
-    const next30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-    const fim = next30.toISOString().slice(0, 10)
-    setDataInicio(inicio)
-    setDataFim(fim)
-    setApenasPendentes(false)
-  }
-
-  const handleAtalhoTodosPendentes = () => {
-    setDataInicio('')
-    setDataFim('')
-    setApenasPendentes(true)
-  }
-
-  const handleLimparFiltros = () => {
-    setFiltroEmpresa('todas')
-    setDataInicio('')
-    setDataFim('')
-    setApenasPendentes(false)
-    setTermoBusca('')
-  }
-
-  // ================== FILTRAGEM ==================
-  const recebiveisFiltrados = useMemo(() => {
-    return recebiveis.filter((r) => {
-      // Filtro empresa
-      if (filtroEmpresa !== 'todas' && r.empresa !== filtroEmpresa) return false
-
-      // Filtro apenas pendentes
-      if (apenasPendentes && r.status !== 'Pendente') return false
-
-      // Filtro de data vencimento
-      const vencStr = (r.vencimento || '').slice(0, 10)
-      if (dataInicio && vencStr < dataInicio) return false
-      if (dataFim && vencStr > dataFim) return false
-
-      // Busca textual por nome da empresa
-      if (termoBusca.trim()) {
-        const termo = termoBusca.toLowerCase().trim()
-        const emp = r.expand?.empresa || empresaMap.get(r.empresa)
-        const nomeEmp = (emp?.nome || '').toLowerCase()
-        const parcelaStr = `parcela ${r.parcela}`
-        if (!nomeEmp.includes(termo) && !parcelaStr.includes(termo)) return false
-      }
-
-      return true
-    })
-  }, [recebiveis, filtroEmpresa, apenasPendentes, dataInicio, dataFim, termoBusca, empresaMap])
-=======
   // Helper para verificar se o título está atrasado (vencimento anterior a hoje e status Pendente)
   const hojeYMD = useMemo(() => dataHojeIso(), [])
 
@@ -347,100 +279,8 @@ export default function BaixaRecebiveis() {
     termoBusca,
     empresaMap,
     hojeYMD,
-  ])==================
-  const handleAtalhoMesAtual = () => {
-    const p = periodoMesCorrenteIso()
-    setDataInicio(p.inicio)
-    setDataFim(p.fim)
-    setApenasPendentes(false)
-  }
+  ])
 
-  const handleAtalhoMesAnterior = () => {
-    const now = new Date()
-    const y = now.getFullYear()
-    const m = now.getMonth() - 1
-    const inicio = new Date(y, m, 1).toISOString().slice(0, 10)
-    const fim = new Date(y, m + 1, 0).toISOString().slice(0, 10)
-    setDataInicio(inicio)
-    setDataFim(fim)
-    setApenasPendentes(false)
-  }
-
-  const handleAtalhoProximos30Dias = () => {
-    const now = new Date()
-    const inicio = now.toISOString().slice(0, 10)
-    const next30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-    const fim = next30.toISOString().slice(0, 10)
-    setDataInicio(inicio)
-    setDataFim(fim)
-    setApenasPendentes(false)
-  }
-
-  const handleAtalhoTodosPendentes = () => {
-    setDataInicio('')
-    setDataFim('')
-    setApenasPendentes(true)
-  }
-
-  const handleLimparFiltros = () => {
-    setFiltroEmpresa('todas')
-    setDataInicio('')
-    setDataFim('')
-    setApenasPendentes(false)
-    setTermoBusca('')
-  }
-
-  // ================== FILTRAGEM ==================
-  const recebiveisFiltrados = useMemo(() => {
-    return recebiveis.filter((r) => {
-      // Filtro empresa
-      if (filtroEmpresa !== 'todas' && r.empresa !== filtroEmpresa) return false
-
-      // Filtro apenas pendentes
-      if (apenasPendentes && r.status !== 'Pendente') return false
-
-      // Filtro de data vencimento
-      const vencStr = (r.vencimento || '').slice(0, 10)
-      if (dataInicio && vencStr < dataInicio) return false
-      if (dataFim && vencStr > dataFim) return false
-
-      // Busca textual por nome da empresa
-      if (termoBusca.trim()) {
-        const termo = termoBusca.toLowerCase().trim()
-        const emp = r.expand?.empresa || empresaMap.get(r.empresa)
-        const nomeEmp = (emp?.nome || '').toLowerCase()
-        const parcelaStr = `parcela ${r.parcela}`
-        if (!nomeEmp.includes(termo) && !parcelaStr.includes(termo)) return false
-      }
-
-      return true
-    })
-  }, [recebiveis, filtroEmpresa, apenasPendentes, dataInicio, dataFim, termoBusca, empresaMap])
-
-  const totalizadores = useMemo(() => {
-    let totalTitulos = recebiveisFiltrados.length
-    let totalPendente = 0
-    let totalPago = 0
-
-    for (const r of recebiveisFiltrados) {
-      const v = Number(r.valor) || 0
-      if (r.status === 'Pago') {
-        totalPago += v
-      } else {
-        totalPendente += v
-      }
-    }
-
-    const saldoAReceber = totalPendente // saldo a receber é o valor que ainda está pendente
-
-    return {
-      totalTitulos,
-      totalPendente,
-      totalPago,
-      saldoAReceber,
-    }
-  }, [recebiveisFiltrados])
-=======
   // ================== TOTALIZADORES ==================
   const totalizadores = useMemo(() => {
     let totalTitulos = recebiveisFiltrados.length
@@ -472,30 +312,7 @@ export default function BaixaRecebiveis() {
       totalAtrasado,
       qtdAtrasados,
     }
-  }, [recebiveisFiltrados, hojeYMD])==================
-  const totalizadores = useMemo(() => {
-    let totalTitulos = recebiveisFiltrados.length
-    let totalPendente = 0
-    let totalPago = 0
-
-    for (const r of recebiveisFiltrados) {
-      const v = Number(r.valor) || 0
-      if (r.status === 'Pago') {
-        totalPago += v
-      } else {
-        totalPendente += v
-      }
-    }
-
-    const saldoAReceber = totalPendente // saldo a receber é o valor que ainda está pendente
-
-    return {
-      totalTitulos,
-      totalPendente,
-      totalPago,
-      saldoAReceber,
-    }
-  }, [recebiveisFiltrados])
+  }, [recebiveisFiltrados, hojeYMD])
 
   // ================== AÇÕES DE BAIXA / DESFAZER / EXCLUIR ==================
   const handleAbrirBaixa = (r: RecebivelRecord) => {
@@ -1121,8 +938,7 @@ export default function BaixaRecebiveis() {
                             </Badge>
                           ) : isAtrasado ? (
                             <Badge className="bg-red-600 hover:bg-red-600 text-white border-red-700 font-bold text-[10px] px-2.5 py-0.5 inline-flex items-center gap-1 shadow-2xs">
-                              <AlertTriangle className="w-3 h-3 text-white" />
-                              🔴 Atrasado
+                              <AlertTriangle className="w-3 h-3 text-white" />🔴 Atrasado
                             </Badge>
                           ) : (
                             <Badge className="bg-amber-100 hover:bg-amber-100 text-amber-800 border-amber-300 font-bold text-[10px] px-2 py-0.5 inline-flex items-center gap-1">

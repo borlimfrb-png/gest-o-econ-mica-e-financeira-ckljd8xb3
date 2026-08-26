@@ -1,183 +1,196 @@
-// Cron job diário às 7h (0 7 * * *) para verificar parcelas com vencimento em 3 dias
-// e enviar lembrete de vencimento por e-mail para a empresa (cliente contratante).
+/**
+ * Cron Job Diário de Lembretes de Vencimento de Recebíveis
+ * Executa todos os dias às 08:00 (America/Sao_Paulo / UTC 11:00)
+ *
+ * Envia e-mail de lembrete para clientes que possuem títulos a vencer em 3 dias
+ * com lembrete_agendado = true e lembrete_enviado = false, caso o usuário tenha
+ * a preferência global notificacoes_vencimento ativa (padrão true).
+ */
 
-cronAdd('enviar_lembretes_vencimento', '0 7 * * *', () => {
+cronAdd('lembretes_vencimento_diario', '0 8 * * *', () => {
   try {
-    function formatarDataExtenso(dataStr) {
-      if (!dataStr) return ''
-      const partes = dataStr.slice(0, 10).split('-')
-      if (partes.length !== 3) return dataStr
+    const hoje = new Date()
+    // Data alvo: exatamente 3 dias à frente
+    const dataAlvo = new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000)
+    const targetDateStr = dataAlvo.toISOString().slice(0, 10)
 
-      const ano = partes[0]
-      const mesNum = parseInt(partes[1], 10)
-      const dia = parseInt(partes[2], 10)
+    console.log(`[Cron Lembretes] Buscando recebíveis com vencimento em ${targetDateStr}...`)
 
-      const meses = [
-        'Janeiro',
-        'Fevereiro',
-        'Março',
-        'Abril',
-        'Maio',
-        'Junho',
-        'Julho',
-        'Agosto',
-        'Setembro',
-        'Outubro',
-        'Novembro',
-        'Dezembro',
-      ]
+    // Busca recebíveis pendentes, agendados e com vencimento na data alvo
+    const filter = `status = 'Pendente' && lembrete_agendado = true && lembrete_enviado = false && vencimento >= '${targetDateStr} 00:00:00' && vencimento <= '${targetDateStr} 23:59:59'`
+    const recebiveis = $app.findRecordsByFilter('recebiveis', filter, '-created', 100)
 
-      const nomeMes = meses[mesNum - 1] || partes[1]
-      return `${dia} de ${nomeMes} de ${ano}`
-    }
-
-    function formatarValorBrl(val) {
-      const num = Number(val) || 0
-      return num.toLocaleString('pt-BR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      })
-    }
-
-    console.log('[CRON] Iniciando rotina de envio de lembretes de vencimento de parcelas (7h)...')
-
-    // Calcular data alvo exatamente daqui a 3 dias (YYYY-MM-DD)
-    const agora = new Date()
-    const dataAlvoObj = new Date(agora.getTime() + 3 * 24 * 60 * 60 * 1000)
-    const y = dataAlvoObj.getFullYear()
-    const m = String(dataAlvoObj.getMonth() + 1).padStart(2, '0')
-    const d = String(dataAlvoObj.getDate()).padStart(2, '0')
-    const dataAlvoIso = `${y}-${m}-${d}`
-
-    console.log(`[CRON] Buscando parcelas com vencimento em 3 dias (${dataAlvoIso})...`)
-
-    // Buscar parcelas pendentes com lembrete_agendado = true, lembrete_enviado != true
-    // e vencimento que comece com a data alvo
-    const parcelas = $app.findRecordsByFilter(
-      'recebiveis',
-      `status = 'Pendente' && lembrete_agendado = true && (lembrete_enviado = false || lembrete_enviado = null) && vencimento ~ '${dataAlvoIso}'`,
-      'created',
-      500,
-      0,
-    )
-
-    if (!parcelas || parcelas.length === 0) {
-      console.log(`[CRON] Nenhuma parcela com vencimento em ${dataAlvoIso} pendente de lembrete.`)
+    if (!recebiveis || recebiveis.length === 0) {
+      console.log(
+        '[Cron Lembretes] Nenhum recebível pendente elegível encontrado para a data alvo.',
+      )
       return
     }
 
     console.log(
-      `[CRON] ${parcelas.length} parcela(s) encontrada(s) para processamento de lembrete.`,
+      `[Cron Lembretes] ${recebiveis.length} recebível(eis) encontrado(s) para processamento.`,
     )
 
-    for (const parcela of parcelas) {
+    for (const r of recebiveis) {
       try {
-        const userId = parcela.getString('user')
+        const userId = r.get('user')
         if (!userId) continue
 
-        // Verificar configuração do usuário (notificações ativas)
-        const user = $app.findRecordById('users', userId)
-        if (!user) continue
+        // 1. Verifica se o usuário tem a flag notificacoes_vencimento desativada (em users ou minha_empresa)
+        let notificacoesAtivas = true
 
-        const notificacoesAtivas = user.getBool('receber_alertas_email')
-        // Se explicitamente false (toggle desativado nas Configurações), ignora
-        if (notificacoesAtivas === false) {
+        try {
+          // Checa em minha_empresa
+          const empresaConfigs = $app.findRecordsByFilter(
+            'minha_empresa',
+            `user = '${userId}'`,
+            '-created',
+            1,
+          )
+          if (empresaConfigs && empresaConfigs.length > 0) {
+            const empRec = empresaConfigs[0]
+            const notifVal = empRec.get('notificacoes_vencimento')
+            // Se foi explicitamente desligado (false)
+            if (notifVal === false) {
+              notificacoesAtivas = false
+            }
+          }
+        } catch (_) {}
+
+        try {
+          // Checa em users
+          const userRec = $app.findRecordById('users', userId)
+          if (userRec) {
+            const userNotif = userRec.get('notificacoes_vencimento')
+            if (userNotif === false) {
+              notificacoesAtivas = false
+            }
+          }
+        } catch (_) {}
+
+        if (!notificacoesAtivas) {
           console.log(
-            `[CRON] Usuário ${userId} desativou notificações por e-mail. Pulando parcela ${parcela.id}.`,
+            `[Cron Lembretes] Notificações desativadas globalmente pelo usuário ${userId}. Pulando recebível ${r.id}.`,
           )
           continue
         }
 
-        // Buscar empresa contratante
-        const empresaId = parcela.getString('empresa')
-        let empresa = null
+        // 2. Busca dados da empresa cliente (destinatário)
+        const empresaId = r.get('empresa')
+        if (!empresaId) continue
+
+        let empresaRec = null
         try {
-          empresa = $app.findRecordById('empresas', empresaId)
+          empresaRec = $app.findRecordById('empresas', empresaId)
         } catch (_) {}
 
-        if (!empresa) {
-          console.log(`[CRON] Empresa ${empresaId} não encontrada para parcela ${parcela.id}.`)
-          continue
-        }
+        if (!empresaRec) continue
 
-        // Buscar dados da Contratada (Minha Empresa) do usuário
-        let minhaEmpresa = null
-        try {
-          minhaEmpresa = $app.findFirstRecordByData('minha_empresa', 'user', userId)
-        } catch (_) {}
+        const emailDestino = empresaRec.get('email') || empresaRec.get('contato_email')
+        const nomeEmpresa = empresaRec.get('nome') || empresaRec.get('razao_social') || 'Cliente'
 
-        const nomeContratada = minhaEmpresa
-          ? minhaEmpresa.getString('nome_fantasia') ||
-            minhaEmpresa.getString('razao_social') ||
-            'Assessoria Financeira'
-          : 'Assessoria Financeira'
-
-        const nomeContratante =
-          empresa.getString('nome_fantasia') || empresa.getString('nome') || 'Cliente'
-
-        // E-mail do destinatário: e-mail da empresa contratante (ou e-mail comercial/financeiro) ou fallback
-        const emailDestino =
-          empresa.getString('email') ||
-          empresa.getString('contato_principal') ||
-          user.getString('email')
-
-        if (!emailDestino || !emailDestino.includes('@')) {
+        if (!emailDestino) {
           console.log(
-            `[CRON] Destinatário sem e-mail válido para parcela ${parcela.id} (empresa: ${empresa.id}).`,
+            `[Cron Lembretes] Empresa ${nomeEmpresa} (ID: ${empresaId}) não possui e-mail cadastrado.`,
           )
           continue
         }
 
-        const numParcela = parcela.getInt('parcela') || 1
-        const vencimentoStr = parcela.getString('vencimento')
-        const vencimentoExtenso = formatarDataExtenso(vencimentoStr)
-        const valorFormatado = formatarValorBrl(parcela.getFloat('valor'))
+        // 3. Busca dados bancários da Minha Empresa (consultoria/emissor)
+        let dadosBancarios = ''
+        let pixChave = ''
+        let nomeConsultoria = 'Nossa Consultoria'
+        try {
+          const minhaEmpresaList = $app.findRecordsByFilter(
+            'minha_empresa',
+            `user = '${userId}'`,
+            '-created',
+            1,
+          )
+          if (minhaEmpresaList && minhaEmpresaList.length > 0) {
+            const m = minhaEmpresaList[0]
+            nomeConsultoria = m.get('razao_social') || m.get('nome_fantasia') || nomeConsultoria
+            pixChave = m.get('chave_pix') || ''
+            const banco = m.get('banco') || ''
+            const agencia = m.get('agencia') || ''
+            const conta = m.get('conta_corrente') || ''
+            if (banco || pixChave) {
+              dadosBancarios = `
+                <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+                  <h4 style="margin: 0 0 10px 0; color: #0f172a; font-size: 14px;">Dados para Pagamento:</h4>
+                  ${pixChave ? `<p style="margin: 4px 0; color: #334155; font-size: 13px;"><strong>Chave PIX:</strong> <code style="background: #e2e8f0; padding: 2px 6px; border-radius: 4px;">${pixChave}</code></p>` : ''}
+                  ${banco ? `<p style="margin: 4px 0; color: #334155; font-size: 13px;"><strong>Banco:</strong> ${banco} | <strong>Agência:</strong> ${agencia} | <strong>Conta:</strong> ${conta}</p>` : ''}
+                </div>
+              `
+            }
+          }
+        } catch (_) {}
 
-        // Dados bancários da contratada
-        const banco = minhaEmpresa ? minhaEmpresa.getString('banco') || 'Banco' : 'Banco a informar'
-        const agencia = minhaEmpresa ? minhaEmpresa.getString('agencia') || '—' : '—'
-        const conta = minhaEmpresa ? minhaEmpresa.getString('conta_corrente') || '—' : '—'
-        const chavePix = minhaEmpresa ? minhaEmpresa.getString('chave_pix') || '—' : '—'
+        const valor = Number(r.get('valor')) || 0
+        const valorFormatado = new Intl.NumberFormat('pt-BR', {
+          style: 'currency',
+          currency: 'BRL',
+        }).format(valor)
+        const parcela = r.get('parcela') || 1
+        const partesData = targetDateStr.split('-')
+        const dataFormatada =
+          partesData.length === 3
+            ? `${partesData[2]}/${partesData[1]}/${partesData[0]}`
+            : targetDateStr
 
-        const assunto = `Lembrete de Vencimento - ${nomeContratada}`
+        // 4. Monta e envia e-mail
+        const subject = `Lembrete de Vencimento · Parcela ${parcela} · ${nomeConsultoria}`
+        const htmlBody = `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; color: #1e293b; line-height: 1.6;">
+            <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
+              <h2 style="color: #ffffff; margin: 0; font-size: 20px;">Lembrete de Vencimento de Parcela</h2>
+              <p style="color: #93c5fd; margin: 6px 0 0 0; font-size: 13px;">${nomeConsultoria}</p>
+            </div>
+            
+            <div style="background-color: #ffffff; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+              <p style="font-size: 14px;">Olá, <strong>${nomeEmpresa}</strong>,</p>
+              
+              <p style="font-size: 14px; color: #475569;">
+                Este é um lembrete automático de que a parcela descrita abaixo vencerá em <strong>3 dias</strong>:
+              </p>
+              
+              <div style="background-color: #f1f5f9; border-left: 4px solid #2563eb; padding: 14px 16px; border-radius: 6px; margin: 16px 0;">
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Nº da Parcela:</strong> Parcela ${parcela}</p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Data de Vencimento:</strong> <span style="color: #b91c1c; font-weight: bold;">${dataFormatada}</span></p>
+                <p style="margin: 4px 0; font-size: 13px;"><strong>Valor:</strong> <span style="font-size: 16px; font-weight: bold; color: #047857;">${valorFormatado}</span></p>
+              </div>
 
-        const corpo = `Prezado(a) ${nomeContratante},
+              ${dadosBancarios}
 
-Informamos que a parcela ${numParcela} do contrato de consultoria vence em ${vencimentoExtenso}, no valor de R$ ${valorFormatado}.
+              <p style="font-size: 12px; color: #64748b; margin-top: 24px; border-top: 1px solid #e2e8f0; pt: 16px;">
+                Caso o pagamento já tenha sido efetuado ou agendado, por favor desconsidere esta mensagem.
+              </p>
+            </div>
+          </div>
+        `
 
-Dados para pagamento:
-${banco} - Agência ${agencia} - Conta ${conta}
-PIX: ${chavePix}
-
-Atenciosamente,
-${nomeContratada}`
-
-        // Disparo do e-mail
-        const message = new MailerMessage({
+        $app.newMailClient().send({
           from: {
-            address: $app.settings().meta.senderAddress || 'noreply@gestao.local',
-            name: nomeContratada,
+            address: $app.settings().meta.senderAddress || 'no-reply@gestao.app',
+            name: nomeConsultoria,
           },
-          to: [{ address: emailDestino, name: nomeContratante }],
-          subject: assunto,
-          text: corpo,
+          to: [{ address: emailDestino, name: nomeEmpresa }],
+          subject: subject,
+          html: htmlBody,
         })
 
-        $app.newMailClient().send(message)
-        console.log(
-          `[CRON] Lembrete enviado com sucesso para ${emailDestino} (Parcela ${numParcela} - R$ ${valorFormatado}).`,
-        )
+        // 5. Marca lembrete_enviado = true
+        r.set('lembrete_enviado', true)
+        $app.save(r)
 
-        // Marcar parcela como lembrete_enviado = true
-        parcela.set('lembrete_enviado', true)
-        $app.save(parcela)
-      } catch (errParc) {
-        console.error(`[CRON] Erro ao processar lembrete da parcela ${parcela.id}:`, errParc)
+        console.log(
+          `[Cron Lembretes] E-mail enviado com sucesso para ${emailDestino} (Recebível ${r.id}).`,
+        )
+      } catch (errInner) {
+        console.log(`[Cron Lembretes] Erro ao processar recebível ${r.id}:`, errInner)
       }
     }
-
-    console.log('[CRON] Rotina de envio de lembretes finalizada.')
   } catch (err) {
-    console.error('[CRON] Erro geral na rotina de lembretes de vencimento:', err)
+    console.log('[Cron Lembretes] Erro geral no cron:', err)
   }
 })

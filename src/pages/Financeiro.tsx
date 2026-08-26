@@ -529,7 +529,8 @@ export default function Financeiro() {
 
           {/* Card Resumo do Contrato */}
           {parcelasGeradas.length > 0 && (
-            <Card className="bg-linear-to-br from-blue-900 to-[#0B1F3A] text-white border-blue-800 shadow-md">
+            <Card className="bg-gradient-to-br from-blue-900 to-[#0B1F3A] text-white border-blue-800 shadow-md">
+              {' '}
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
                   <div className="flex items-center gap-2">

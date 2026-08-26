@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import pb from '@/lib/pocketbase/client'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -20,10 +21,12 @@ import {
   UploadCloud,
   Trash2,
   RefreshCw,
+  CalendarCheck,
 } from 'lucide-react'
 
 export default function Configuracoes() {
   const { user } = useAuth()
+  const { minhaEmpresa } = useMinhaEmpresa()
   const { toast } = useToast()
 
   // Estado Foto de Perfil
@@ -46,11 +49,23 @@ export default function Configuracoes() {
   const [receberAlertasEmail, setReceberAlertasEmail] = useState(true)
   const [savingAlertas, setSavingAlertas] = useState(false)
 
-  // Atualizar estado inicial a partir do usuário autenticado
+  // Estado Lembretes de Vencimento
+  const [notificacoesVencimento, setNotificacoesVencimento] = useState(true)
+  const [savingNotificacoesVencimento, setSavingNotificacoesVencimento] = useState(false)
+
+  // Atualizar estado inicial a partir do usuário autenticado e da minhaEmpresa
   useEffect(() => {
     if (user) {
       setNome(user.name || '')
       setReceberAlertasEmail(user.receber_alertas_email ?? true)
+
+      if (user.notificacoes_vencimento !== undefined) {
+        setNotificacoesVencimento(user.notificacoes_vencimento)
+      } else if (minhaEmpresa?.notificacoes_vencimento !== undefined) {
+        setNotificacoesVencimento(minhaEmpresa.notificacoes_vencimento)
+      } else {
+        setNotificacoesVencimento(true)
+      }
 
       if (user.avatar) {
         const url = pb.files.getURL(user, user.avatar)
@@ -59,7 +74,7 @@ export default function Configuracoes() {
         setAvatarPreview(null)
       }
     }
-  }, [user])
+  }, [user, minhaEmpresa])
 
   // Handlers para Foto de Perfil
   const handleSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -249,7 +264,7 @@ export default function Configuracoes() {
     }
   }
 
-  // Handler para Preferências de Notificação
+  // Handler para Preferências de Notificação (Alertas de Metas)
   const handleToggleAlertas = async (checked: boolean) => {
     if (!user) return
     setReceberAlertasEmail(checked)
@@ -274,6 +289,50 @@ export default function Configuracoes() {
       })
     } finally {
       setSavingAlertas(false)
+    }
+  }
+
+  // Handler para Toggle Global de Lembretes de Vencimento
+  const handleToggleNotificacoesVencimento = async (checked: boolean) => {
+    if (!user) return
+    setNotificacoesVencimento(checked)
+    setSavingNotificacoesVencimento(true)
+    try {
+      // Atualiza no usuário
+      await pb.collection('users').update(user.id, {
+        notificacoes_vencimento: checked,
+      })
+
+      // Atualiza também em minha_empresa se existir registro
+      if (minhaEmpresa?.id) {
+        try {
+          await pb.collection('minha_empresa').update(minhaEmpresa.id, {
+            notificacoes_vencimento: checked,
+          })
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+
+      toast({
+        title: checked
+          ? 'Notificações de vencimento ativadas'
+          : 'Notificações de vencimento desativadas',
+        description: checked
+          ? 'Os lembretes automáticos de vencimento agendados serão enviados aos clientes 3 dias antes do prazo.'
+          : 'O envio automático de lembretes de vencimento aos clientes foi desativado globalmente.',
+      })
+    } catch (err: any) {
+      console.error('Erro ao atualizar preferência de vencimento:', err)
+      setNotificacoesVencimento(!checked) // reverte
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar preferência',
+        description:
+          err?.message || 'Não foi possível atualizar o status de notificações de vencimento.',
+      })
+    } finally {
+      setSavingNotificacoesVencimento(false)
     }
   }
 
@@ -571,19 +630,59 @@ export default function Configuracoes() {
               Preferências de Notificações
             </CardTitle>
             <CardDescription className="text-xs">
-              Defina como você deseja receber avisos automáticos e monitoramento de metas.
+              Defina como você deseja receber avisos automáticos, lembretes aos clientes e
+              monitoramento de metas.
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-5">
+          <CardContent className="pt-5 space-y-4">
+            {/* Toggle 1: Notificações de Vencimento Ativas */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-blue-50/50 border border-blue-200/70">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#0B1F3A] flex items-center gap-1.5">
+                    <CalendarCheck className="w-3.5 h-3.5 text-blue-600" />
+                    Notificações de vencimento ativas
+                  </span>
+                  {notificacoesVencimento ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Ativo
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                      Desativado
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 max-w-xl">
+                  Controla o disparo do robô de lembretes diários por e-mail aos clientes. Quando
+                  ativo, o sistema envia aviso 3 dias antes do vencimento para todas as parcelas
+                  marcadas com lembrete agendado.
+                </p>
+              </div>
+
+              <Switch
+                checked={notificacoesVencimento}
+                onCheckedChange={handleToggleNotificacoesVencimento}
+                disabled={savingNotificacoesVencimento}
+                className="data-[state=checked]:bg-blue-600"
+              />
+            </div>
+
+            {/* Toggle 2: Alertas de Metas */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
               <div className="space-y-0.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#0B1F3A]">
+                  <span className="text-xs font-bold text-[#0B1F3A] flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-blue-600" />
                     Receber alertas de metas por e-mail
                   </span>
-                  {receberAlertasEmail && (
+                  {receberAlertasEmail ? (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       Ativo
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                      Desativado
                     </span>
                   )}
                 </div>

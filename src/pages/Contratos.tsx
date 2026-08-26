@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -56,6 +57,7 @@ import {
   RefreshCw,
   PlusCircle,
   ArrowRight,
+  Mail,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -238,6 +240,7 @@ export default function Contratos() {
   const [quantidadeMeses, setQuantidadeMeses] = useState<number>(12)
   const [valorInput, setValorInput] = useState<string>('')
   const [diaVencimento, setDiaVencimento] = useState<number>(10)
+  const [enviarLembretesContrato, setEnviarLembretesContrato] = useState<boolean>(true)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   // Cláusulas personalizadas (em memória da sessão)
@@ -505,13 +508,19 @@ export default function Contratos() {
     const dataFimCalculada = calcularDataFinal(dataInicio, quantidadeMeses)
 
     // Calcula parcelas
-    const parcelasPreview = recebiveisService.calcularPreviewParcelas({
-      empresa: contratanteSelecionada.id,
-      data_inicio_servicos: dataInicio,
-      dia_vencimento: diaVencimento,
-      valor: valorNumerico,
-      meses: Number(quantidadeMeses),
-    })
+    const parcelasPreview = recebiveisService
+      .calcularPreviewParcelas({
+        empresa: contratanteSelecionada.id,
+        data_inicio_servicos: dataInicio,
+        dia_vencimento: diaVencimento,
+        valor: valorNumerico,
+        meses: Number(quantidadeMeses),
+        lembrete_agendado: enviarLembretesContrato,
+      })
+      .map((p) => ({
+        ...p,
+        lembrete_agendado: enviarLembretesContrato,
+      }))
 
     setContratoGerado({
       contratada: {
@@ -612,8 +621,13 @@ export default function Contratos() {
           dia_vencimento: contratoGerado.dia_vencimento,
           valor: contratoGerado.valor_parcela,
           meses: contratoGerado.quantidade_meses,
+          lembrete_agendado: enviarLembretesContrato,
         },
-        contratoGerado.parcelas,
+        contratoGerado.parcelas.map((p) => ({
+          ...p,
+          lembrete_agendado:
+            p.lembrete_agendado !== undefined ? p.lembrete_agendado : enviarLembretesContrato,
+        })),
       )
 
       setFinanceiroGerado(true)
@@ -669,13 +683,19 @@ export default function Contratos() {
       ? c.data_final.slice(0, 10)
       : calcularDataFinal(dataInicioStr, c.quantidade_meses)
 
-    const parcelasPreview = recebiveisService.calcularPreviewParcelas({
-      empresa: c.contratante,
-      data_inicio_servicos: dataInicioStr,
-      dia_vencimento: c.dia_vencimento,
-      valor: valorNum,
-      meses: c.quantidade_meses,
-    })
+    const parcelasPreview = recebiveisService
+      .calcularPreviewParcelas({
+        empresa: c.contratante,
+        data_inicio_servicos: dataInicioStr,
+        dia_vencimento: c.dia_vencimento,
+        valor: valorNum,
+        meses: c.quantidade_meses,
+        lembrete_agendado: enviarLembretesContrato,
+      })
+      .map((p) => ({
+        ...p,
+        lembrete_agendado: enviarLembretesContrato,
+      }))
 
     setContratanteId(c.contratante)
     setDataInicio(dataInicioStr)
@@ -1292,6 +1312,45 @@ export default function Contratos() {
                             {formErrors.diaVencimento}
                           </p>
                         )}
+                      </div>
+                    </div>
+
+                    {/* Checkbox de Lembrete de Vencimento ao Contratante */}
+                    <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/70 flex items-start gap-2.5">
+                      <Checkbox
+                        id="contrato-lembrete-checkbox"
+                        checked={enviarLembretesContrato}
+                        onCheckedChange={(checked) => {
+                          const val = Boolean(checked)
+                          setEnviarLembretesContrato(val)
+                          if (contratoGerado) {
+                            setContratoGerado((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    parcelas: prev.parcelas.map((p) => ({
+                                      ...p,
+                                      lembrete_agendado: val,
+                                    })),
+                                  }
+                                : null,
+                            )
+                          }
+                        }}
+                        className="mt-0.5 border-blue-400 data-[state=checked]:bg-blue-600"
+                      />
+                      <div className="space-y-0.5">
+                        <label
+                          htmlFor="contrato-lembrete-checkbox"
+                          className="text-xs font-bold text-blue-950 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-blue-600" />
+                          Enviar lembretes de vencimento ao contratante
+                        </label>
+                        <p className="text-[11px] text-slate-600 leading-relaxed">
+                          Ao salvar e gerar recebíveis no Financeiro, programa e-mails automáticos
+                          de lembrete de vencimento com chave PIX e dados de pagamento ao cliente.
+                        </p>
                       </div>
                     </div>
 
