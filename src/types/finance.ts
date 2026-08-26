@@ -311,6 +311,8 @@ export interface RecebivelRecord extends RecordModel {
   status: StatusRecebivel
   data_pagamento?: string | null
   data_inicio_servicos: string
+  lembrete_agendado?: boolean
+  lembrete_enviado?: boolean
   expand?: {
     empresa?: EmpresaRecord
   }

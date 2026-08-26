@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-26T14:20:37.870Z",
+  "generatedAt": "2026-08-26T16:28:53.999Z",
   "collections": [
     {
       "name": "users",
@@ -1546,6 +1546,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "lembrete_agendado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "lembrete_enviado",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

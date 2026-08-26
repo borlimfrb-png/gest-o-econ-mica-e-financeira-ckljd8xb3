@@ -13,15 +13,16 @@ export interface GerarParcelasInput {
   dia_vencimento: number // 1 a 28
   valor: number
   meses: number
+  lembrete_agendado?: boolean
 }
 
 export interface ParcelaPreview {
   parcela: number
   vencimento: string // YYYY-MM-DD
   valor: number
-  status: StatusRecebivel
+  status?: 'Pendente' | 'Pago'
+  lembrete_agendado?: boolean
 }
-
 export const recebiveisService = {
   /**
    * Calcula as datas de vencimento e gera a lista em memória (preview) antes de salvar.
@@ -88,12 +89,13 @@ export const recebiveisService = {
           valor: Number(p.valor) || 0,
           status: p.status || 'Pendente',
           data_inicio_servicos: dateInicioFormatted,
-        } as any,
+          lembrete_agendado: p.lembrete_agendado ?? input.lembrete_agendado ?? false,
+          lembrete_enviado: false,
+        },
         {
           expand: 'empresa',
         },
-      )
-      createdRecords.push(record)
+      )      createdRecords.push(record)
     }
 
     return createdRecords

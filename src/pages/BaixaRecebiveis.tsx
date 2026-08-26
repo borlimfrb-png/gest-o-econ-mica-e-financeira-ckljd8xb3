@@ -104,6 +104,7 @@ export default function BaixaRecebiveis() {
   const [dataInicio, setDataInicio] = useState<string>('')
   const [dataFim, setDataFim] = useState<string>('')
   const [apenasPendentes, setApenasPendentes] = useState<boolean>(false)
+  const [apenasAtrasados, setApenasAtrasados] = useState<boolean>(false)
   const [termoBusca, setTermoBusca] = useState<string>('')
 
   // Modal Dar Baixa
@@ -162,7 +163,191 @@ export default function BaixaRecebiveis() {
     return m
   }, [empresas])
 
+  const handleAtalhoMesAtual = () => {
+    const p = periodoMesCorrenteIso()
+    setDataInicio(p.inicio)
+    setDataFim(p.fim)
+    setApenasPendentes(false)
+  }
+
+  const handleAtalhoMesAnterior = () => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth() - 1
+    const inicio = new Date(y, m, 1).toISOString().slice(0, 10)
+    const fim = new Date(y, m + 1, 0).toISOString().slice(0, 10)
+    setDataInicio(inicio)
+    setDataFim(fim)
+    setApenasPendentes(false)
+  }
+
+  const handleAtalhoProximos30Dias = () => {
+    const now = new Date()
+    const inicio = now.toISOString().slice(0, 10)
+    const next30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const fim = next30.toISOString().slice(0, 10)
+    setDataInicio(inicio)
+    setDataFim(fim)
+    setApenasPendentes(false)
+  }
+
+  const handleAtalhoTodosPendentes = () => {
+    setDataInicio('')
+    setDataFim('')
+    setApenasPendentes(true)
+  }
+
+  const handleLimparFiltros = () => {
+    setFiltroEmpresa('todas')
+    setDataInicio('')
+    setDataFim('')
+    setApenasPendentes(false)
+    setTermoBusca('')
+  }
+
+  // ================== FILTRAGEM ==================
+  const recebiveisFiltrados = useMemo(() => {
+    return recebiveis.filter((r) => {
+      // Filtro empresa
+      if (filtroEmpresa !== 'todas' && r.empresa !== filtroEmpresa) return false
+
+      // Filtro apenas pendentes
+      if (apenasPendentes && r.status !== 'Pendente') return false
+
+      // Filtro de data vencimento
+      const vencStr = (r.vencimento || '').slice(0, 10)
+      if (dataInicio && vencStr < dataInicio) return false
+      if (dataFim && vencStr > dataFim) return false
+
+      // Busca textual por nome da empresa
+      if (termoBusca.trim()) {
+        const termo = termoBusca.toLowerCase().trim()
+        const emp = r.expand?.empresa || empresaMap.get(r.empresa)
+        const nomeEmp = (emp?.nome || '').toLowerCase()
+        const parcelaStr = `parcela ${r.parcela}`
+        if (!nomeEmp.includes(termo) && !parcelaStr.includes(termo)) return false
+      }
+
+      return true
+    })
+  }, [recebiveis, filtroEmpresa, apenasPendentes, dataInicio, dataFim, termoBusca, empresaMap])
+=======
+  // Helper para verificar se o título está atrasado (vencimento anterior a hoje e status Pendente)
+  const hojeYMD = useMemo(() => dataHojeIso(), [])
+
+  const isTituloAtrasado = (r: RecebivelRecord) => {
+    if (r.status !== 'Pendente') return false
+    const vStr = (r.vencimento || '').slice(0, 10)
+    return Boolean(vStr && vStr < hojeYMD)
+  }
+
   // ================== ATALHOS DE PERÍODO ==================
+  const handleAtalhoMesAtual = () => {
+    const p = periodoMesCorrenteIso()
+    setDataInicio(p.inicio)
+    setDataFim(p.fim)
+    setApenasPendentes(false)
+    setApenasAtrasados(false)
+  }
+
+  const handleAtalhoMesAnterior = () => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const m = now.getMonth() - 1
+    const inicio = new Date(y, m, 1).toISOString().slice(0, 10)
+    const fim = new Date(y, m + 1, 0).toISOString().slice(0, 10)
+    setDataInicio(inicio)
+    setDataFim(fim)
+    setApenasPendentes(false)
+    setApenasAtrasados(false)
+  }
+
+  const handleAtalhoProximos30Dias = () => {
+    const now = new Date()
+    const inicio = now.toISOString().slice(0, 10)
+    const next30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const fim = next30.toISOString().slice(0, 10)
+    setDataInicio(inicio)
+    setDataFim(fim)
+    setApenasPendentes(false)
+    setApenasAtrasados(false)
+  }
+
+  const handleAtalhoTodosPendentes = () => {
+    setDataInicio('')
+    setDataFim('')
+    setApenasPendentes(true)
+    setApenasAtrasados(false)
+  }
+
+  const handleAtalhoAtrasados = () => {
+    setDataInicio('')
+    setDataFim('')
+    setApenasPendentes(false)
+    setApenasAtrasados(true)
+  }
+
+  const handleLimparFiltros = () => {
+    setFiltroEmpresa('todas')
+    setDataInicio('')
+    setDataFim('')
+    setApenasPendentes(false)
+    setApenasAtrasados(false)
+    setTermoBusca('')
+  }
+
+  // ================== FILTRAGEM ==================
+  const recebiveisFiltrados = useMemo(() => {
+    const filtered = recebiveis.filter((r) => {
+      // Filtro empresa
+      if (filtroEmpresa !== 'todas' && r.empresa !== filtroEmpresa) return false
+
+      // Filtro apenas atrasados
+      if (apenasAtrasados) {
+        if (!isTituloAtrasado(r)) return false
+      } else if (apenasPendentes && r.status !== 'Pendente') {
+        // Filtro apenas pendentes
+        return false
+      }
+
+      // Filtro de data vencimento
+      const vencStr = (r.vencimento || '').slice(0, 10)
+      if (dataInicio && vencStr < dataInicio) return false
+      if (dataFim && vencStr > dataFim) return false
+
+      // Busca textual por nome da empresa
+      if (termoBusca.trim()) {
+        const termo = termoBusca.toLowerCase().trim()
+        const emp = r.expand?.empresa || empresaMap.get(r.empresa)
+        const nomeEmp = (emp?.nome || '').toLowerCase()
+        const parcelaStr = `parcela ${r.parcela}`
+        if (!nomeEmp.includes(termo) && !parcelaStr.includes(termo)) return false
+      }
+
+      return true
+    })
+
+    // Ao filtrar por "Atrasados", a tabela ordena por data de vencimento (mais antigo primeiro)
+    if (apenasAtrasados) {
+      return [...filtered].sort((a, b) => {
+        const vA = (a.vencimento || '').slice(0, 10)
+        const vB = (b.vencimento || '').slice(0, 10)
+        return vA.localeCompare(vB)
+      })
+    }
+
+    return filtered
+  }, [
+    recebiveis,
+    filtroEmpresa,
+    apenasPendentes,
+    apenasAtrasados,
+    dataInicio,
+    dataFim,
+    termoBusca,
+    empresaMap,
+    hojeYMD,
+  ])==================
   const handleAtalhoMesAtual = () => {
     const p = periodoMesCorrenteIso()
     setDataInicio(p.inicio)
@@ -232,7 +417,62 @@ export default function BaixaRecebiveis() {
     })
   }, [recebiveis, filtroEmpresa, apenasPendentes, dataInicio, dataFim, termoBusca, empresaMap])
 
+  const totalizadores = useMemo(() => {
+    let totalTitulos = recebiveisFiltrados.length
+    let totalPendente = 0
+    let totalPago = 0
+
+    for (const r of recebiveisFiltrados) {
+      const v = Number(r.valor) || 0
+      if (r.status === 'Pago') {
+        totalPago += v
+      } else {
+        totalPendente += v
+      }
+    }
+
+    const saldoAReceber = totalPendente // saldo a receber é o valor que ainda está pendente
+
+    return {
+      totalTitulos,
+      totalPendente,
+      totalPago,
+      saldoAReceber,
+    }
+  }, [recebiveisFiltrados])
+=======
   // ================== TOTALIZADORES ==================
+  const totalizadores = useMemo(() => {
+    let totalTitulos = recebiveisFiltrados.length
+    let totalPendente = 0
+    let totalPago = 0
+    let totalAtrasado = 0
+    let qtdAtrasados = 0
+
+    for (const r of recebiveisFiltrados) {
+      const v = Number(r.valor) || 0
+      if (r.status === 'Pago') {
+        totalPago += v
+      } else {
+        totalPendente += v
+        if (isTituloAtrasado(r)) {
+          totalAtrasado += v
+          qtdAtrasados += 1
+        }
+      }
+    }
+
+    const saldoAReceber = totalPendente
+
+    return {
+      totalTitulos,
+      totalPendente,
+      totalPago,
+      saldoAReceber,
+      totalAtrasado,
+      qtdAtrasados,
+    }
+  }, [recebiveisFiltrados, hojeYMD])==================
   const totalizadores = useMemo(() => {
     let totalTitulos = recebiveisFiltrados.length
     let totalPendente = 0
@@ -374,6 +614,7 @@ export default function BaixaRecebiveis() {
       'Data de Vencimento',
       'Valor (R$)',
       'Status',
+      'Atrasado',
       'Data de Pagamento',
     ]
 
@@ -388,10 +629,11 @@ export default function BaixaRecebiveis() {
       const vencimento = formatarDataBr(r.vencimento)
       const valorStr = (Number(r.valor) || 0).toFixed(2).replace('.', ',')
       const status = r.status
+      const atrasadoStr = isTituloAtrasado(r) ? 'Sim' : 'Não'
       const pagamento = r.data_pagamento ? formatarDataBr(r.data_pagamento) : ''
 
       linhas.push(
-        [empNome, parcela, inicio, vencimento, valorStr, status, pagamento]
+        [empNome, parcela, inicio, vencimento, valorStr, status, atrasadoStr, pagamento]
           .map(escapeCsv)
           .join(';'),
       )
@@ -458,8 +700,8 @@ export default function BaixaRecebiveis() {
         </div>
       </div>
 
-      {/* 4 Cards de Totalizadores no Topo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* 5 Cards de Totalizadores no Topo */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Total de Títulos */}
         <Card className="bg-white border-slate-200 shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
@@ -472,6 +714,26 @@ export default function BaixaRecebiveis() {
             </div>
             <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
               <Receipt className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Total Atrasados - Card Vermelho */}
+        <Card className="bg-red-50/70 border-red-200 shadow-xs border-l-4 border-l-red-600">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider flex items-center gap-1">
+                <span>🔴</span> Atrasados
+              </p>
+              <p className="text-2xl font-bold text-red-700 font-mono">
+                {formatarMoeda(totalizadores.totalAtrasado)}
+              </p>
+              <p className="text-[11px] text-red-600 font-semibold">
+                {totalizadores.qtdAtrasados} título(s) vencido(s)
+              </p>
+            </div>
+            <div className="w-11 h-11 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-red-600" />
             </div>
           </CardContent>
         </Card>
@@ -548,6 +810,7 @@ export default function BaixaRecebiveis() {
                 dataInicio ||
                 dataFim ||
                 apenasPendentes ||
+                apenasAtrasados ||
                 termoBusca) && (
                 <Button
                   type="button"
@@ -608,6 +871,7 @@ export default function BaixaRecebiveis() {
                 onChange={(e) => {
                   setDataInicio(e.target.value)
                   setApenasPendentes(false)
+                  setApenasAtrasados(false)
                 }}
                 className="h-9 text-xs bg-white"
               />
@@ -629,6 +893,7 @@ export default function BaixaRecebiveis() {
                 onChange={(e) => {
                   setDataFim(e.target.value)
                   setApenasPendentes(false)
+                  setApenasAtrasados(false)
                 }}
                 className="h-9 text-xs bg-white"
               />
@@ -700,6 +965,20 @@ export default function BaixaRecebiveis() {
               >
                 Todos Pendentes
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleAtalhoAtrasados}
+                className={`h-7 text-[11px] px-2.5 font-semibold transition-colors flex items-center gap-1 ${
+                  apenasAtrasados
+                    ? 'bg-red-600 text-white border-red-600 hover:bg-red-700 shadow-xs'
+                    : 'bg-red-50 text-red-800 border-red-200 hover:bg-red-100'
+                }`}
+              >
+                <span>🔴</span>
+                Atrasados
+              </Button>
             </div>
           </div>
         </CardContent>
@@ -761,16 +1040,33 @@ export default function BaixaRecebiveis() {
                   {recebiveisFiltrados.map((r) => {
                     const emp = r.expand?.empresa || empresaMap.get(r.empresa)
                     const isPago = r.status === 'Pago'
+                    const isAtrasado = isTituloAtrasado(r)
 
                     return (
-                      <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr
+                        key={r.id}
+                        className={`transition-colors ${
+                          isAtrasado
+                            ? 'bg-[#FEE2E2] hover:bg-[#FECACA]/80 text-red-950 font-medium'
+                            : 'hover:bg-slate-50/80'
+                        }`}
+                      >
                         {/* Empresa */}
-                        <td className="py-3 px-3.5 font-medium text-slate-900 max-w-[200px]">
+                        <td className="py-3 px-3.5 font-medium max-w-[200px]">
                           <div className="flex flex-col">
-                            <span className="font-bold text-slate-900 truncate" title={emp?.nome}>
+                            <span
+                              className={`font-bold truncate ${
+                                isAtrasado ? 'text-red-950' : 'text-slate-900'
+                              }`}
+                              title={emp?.nome}
+                            >
                               {emp?.nome || 'Empresa não encontrada'}
                             </span>
-                            <span className="text-[10px] text-slate-400">
+                            <span
+                              className={`text-[10px] ${
+                                isAtrasado ? 'text-red-700/80' : 'text-slate-400'
+                              }`}
+                            >
                               Início:{' '}
                               {r.data_inicio_servicos
                                 ? formatarDataBr(r.data_inicio_servicos)
@@ -781,21 +1077,38 @@ export default function BaixaRecebiveis() {
 
                         {/* Nº Parcela */}
                         <td className="py-3 px-3 text-center">
-                          <span className="inline-flex items-center justify-center font-mono font-bold text-xs bg-slate-100 text-slate-800 rounded-md px-2 py-0.5 border border-slate-200">
+                          <span
+                            className={`inline-flex items-center justify-center font-mono font-bold text-xs rounded-md px-2 py-0.5 border ${
+                              isAtrasado
+                                ? 'bg-red-100 text-red-900 border-red-300'
+                                : 'bg-slate-100 text-slate-800 border-slate-200'
+                            }`}
+                          >
                             {String(r.parcela).padStart(2, '0')}
                           </span>
                         </td>
 
                         {/* Vencimento */}
-                        <td className="py-3 px-3 whitespace-nowrap font-medium text-slate-800">
-                          <span className="flex items-center gap-1.5">
-                            <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
-                            {formatarDataBr(r.vencimento)}
-                          </span>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          {isAtrasado ? (
+                            <span className="flex items-center gap-1.5 font-bold text-[#B91C1C]">
+                              <CalendarIcon className="w-3.5 h-3.5 text-[#B91C1C]" />
+                              {formatarDataBr(r.vencimento)}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 font-medium text-slate-800">
+                              <CalendarIcon className="w-3.5 h-3.5 text-slate-400" />
+                              {formatarDataBr(r.vencimento)}
+                            </span>
+                          )}
                         </td>
 
                         {/* Valor */}
-                        <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                        <td
+                          className={`py-3 px-3 text-right font-mono font-bold whitespace-nowrap ${
+                            isAtrasado ? 'text-red-950' : 'text-slate-900'
+                          }`}
+                        >
                           {formatarMoeda(r.valor)}
                         </td>
 
@@ -805,6 +1118,11 @@ export default function BaixaRecebiveis() {
                             <Badge className="bg-emerald-100 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-[10px] px-2 py-0.5 inline-flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                               Pago
+                            </Badge>
+                          ) : isAtrasado ? (
+                            <Badge className="bg-red-600 hover:bg-red-600 text-white border-red-700 font-bold text-[10px] px-2.5 py-0.5 inline-flex items-center gap-1 shadow-2xs">
+                              <AlertTriangle className="w-3 h-3 text-white" />
+                              🔴 Atrasado
                             </Badge>
                           ) : (
                             <Badge className="bg-amber-100 hover:bg-amber-100 text-amber-800 border-amber-300 font-bold text-[10px] px-2 py-0.5 inline-flex items-center gap-1">

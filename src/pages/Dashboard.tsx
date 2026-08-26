@@ -13,6 +13,7 @@ import {
   tiposDespesaService,
 } from '@/services/financeService'
 import { contratosService } from '@/services/contratosService'
+import { recebiveisService } from '@/services/recebiveisService'
 import type {
   BalancoRecord,
   CentroRecord,
@@ -24,6 +25,7 @@ import type {
   PlanoContaRecord,
   TipoDespesaRecord,
   ContratoRecord,
+  RecebivelRecord,
 } from '@/types/finance'
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import {
@@ -94,6 +96,7 @@ export default function Dashboard() {
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
   const [metas, setMetas] = useState<MetaLancamentoRecord[]>([])
   const [contratos, setContratos] = useState<ContratoRecord[]>([])
+  const [recebiveis, setRecebiveis] = useState<RecebivelRecord[]>([])
   const [modalMetasOpen, setModalMetasOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
@@ -111,6 +114,7 @@ export default function Dashboard() {
         allLancFin,
         allMetas,
         allContratos,
+        allRecebiveis,
       ] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
@@ -122,6 +126,7 @@ export default function Dashboard() {
         lancamentosService.getAll({ expandRelations: true }),
         metasLancamentosService.getAll({ expandRelations: true }),
         contratosService.listar().catch(() => [] as ContratoRecord[]),
+        recebiveisService.listarPorPeriodo().catch(() => [] as RecebivelRecord[]),
       ])
       setAllBalancos(allB)
       setDres(allD)
@@ -133,6 +138,7 @@ export default function Dashboard() {
       setLancamentosFinanceiros(allLancFin)
       setMetas(allMetas)
       setContratos(allContratos)
+      setRecebiveis(allRecebiveis)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -189,6 +195,12 @@ export default function Dashboard() {
     loadData()
   })
   useRealtime<ContratoRecord>('contratos', () => {
+    loadData()
+  })
+  useRealtime<RecebivelRecord>('recebiveis', () => {
+    loadData()
+  })
+  useRealtime<RecebivelRecord>('financeiro', () => {
     loadData()
   })
 
@@ -555,6 +567,100 @@ export default function Dashboard() {
       totalGeral,
     }
   }, [empresas, lancamentosFinanceiros])
+
+  // CURVA DE RECEBIMENTO PREVISTO (Próximos 6 meses a partir do mês atual)
+  const dadosCurvaRecebimento = useMemo(() => {
+    const hoje = new Date()
+    const anoAtual = hoje.getFullYear()
+    const mesAtual = hoje.getMonth() // 0-11
+
+    const nomesMesesAbrev = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ]
+
+    const mesesProximos6: {
+      key: string // YYYY-MM
+      label: string // Mês/Ano (ex: Jan/25 ou Jan/2025)
+      labelCompleto: string // Mês/Ano completo (ex: Janeiro/2025)
+      totalPrevisto: number
+      quantidade: number
+    }[] = []
+
+    const nomesMesesCompletos = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ]
+
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(anoAtual, mesAtual + i, 1)
+      const y = d.getFullYear()
+      const m = d.getMonth()
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`
+      const label = `${nomesMesesAbrev[m]}/${String(y).slice(2)}`
+      const labelCompleto = `${nomesMesesCompletos[m]}/${y}`
+      mesesProximos6.push({
+        key,
+        label,
+        labelCompleto,
+        totalPrevisto: 0,
+        quantidade: 0,
+      })
+    }
+
+    const mapMeses = new Map<string, (typeof mesesProximos6)[0]>()
+    for (const mObj of mesesProximos6) {
+      mapMeses.set(mObj.key, mObj)
+    }
+
+    // Filtrar recebíveis: Pendentes e respeitando seletor de empresa
+    const recebiveisFiltrados = recebiveis.filter((r) => {
+      if (r.status !== 'Pendente') return false
+      if (selectedEmpresaId && r.empresa !== selectedEmpresaId) return false
+      return true
+    })
+
+    for (const r of recebiveisFiltrados) {
+      const dStr = (r.vencimento || '').slice(0, 7)
+      const mesObj = mapMeses.get(dStr)
+      if (mesObj) {
+        const val = Number(r.valor) || 0
+        mesObj.totalPrevisto += val
+        mesObj.quantidade += 1
+      }
+    }
+
+    const totalPrevisto6Meses = mesesProximos6.reduce((acc, m) => acc + m.totalPrevisto, 0)
+    const totalTitulosPrevistos = mesesProximos6.reduce((acc, m) => acc + m.quantidade, 0)
+    const temDados = totalPrevisto6Meses > 0
+
+    return {
+      meses: mesesProximos6,
+      totalPrevisto6Meses,
+      totalTitulosPrevistos,
+      temDados,
+    }
+  }, [recebiveis, selectedEmpresaId])
 
   // Distribuição de gastos por tipo de despesa (todos os lançamentos do usuário)
   const dataGastosPorTipo = useMemo(() => {
@@ -2040,6 +2146,168 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ========================================================================= */}
+      {/* SEÇÃO: CURVA DE RECEBIMENTO PREVISTO (PRÓXIMOS 6 MESES - FINANCEIRO)     */}
+      {/* ========================================================================= */}
+      <Card className="bg-white border-slate-200 shadow-2xs">
+        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
+              Curva de Recebimento Previsto
+              {selectedEmpresa && (
+                <Badge
+                  variant="outline"
+                  className="ml-1 bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold"
+                >
+                  {selectedEmpresa.nome}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Previsão de entrada mensal para os próximos 6 meses com base nas parcelas pendentes do
+              módulo financeiro.
+            </CardDescription>
+          </div>
+
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className="text-xs border-emerald-200 hover:bg-emerald-50 text-emerald-700 self-start sm:self-auto font-medium gap-1 shrink-0"
+          >
+            <Link to="/baixa-recebiveis">
+              Ver Títulos & Baixa <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </Button>
+        </CardHeader>
+
+        <CardContent className="pt-4 space-y-4">
+          {/* Card acima do gráfico com o total previsto para os próximos 6 meses */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50/80 to-teal-50/50 border border-emerald-200/80 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
+                  Total Previsto (6 Meses)
+                </span>
+                <div className="text-2xl font-black text-emerald-950 tracking-tight mt-0.5">
+                  <AnimatedCounter
+                    value={dadosCurvaRecebimento.totalPrevisto6Meses}
+                    formatter={(v) => formatBrlMil(v)}
+                  />
+                </div>
+                <p className="text-[11px] text-emerald-700 mt-0.5">
+                  {dadosCurvaRecebimento.totalTitulosPrevistos} parcela(s) pendente(s) no período
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <DollarSign className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Escopo de Análise
+                </span>
+                <div className="text-base font-bold text-[#0B1F3A] mt-1 truncate">
+                  {selectedEmpresa ? selectedEmpresa.nome : 'Todas as Empresas'}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Sincronização em tempo real ativa
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <Building2 className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 sm:col-span-2 lg:col-span-1 flex items-center justify-between">
+              <div>
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Média Mensal Prevista
+                </span>
+                <div className="text-xl font-bold text-slate-800 tracking-tight mt-1">
+                  <AnimatedCounter
+                    value={dadosCurvaRecebimento.totalPrevisto6Meses / 6}
+                    formatter={(v) => formatBrlMil(v)}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Projeção linear para os próximos 180 dias
+                </p>
+              </div>
+              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Calendar className="w-6 h-6" />
+              </div>
+            </div>
+          </div>
+
+          {/* Gráfico de Barras Recharts ou Estado Vazio */}
+          {!dadosCurvaRecebimento.temDados ? (
+            <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+              <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-[#0B1F3A]">
+                Nenhum recebimento previsto para os próximos meses
+              </h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mb-4">
+                Não constam parcelas com status "Pendente" com vencimento nos próximos 6 meses para
+                o filtro selecionado.
+              </p>
+              <Button
+                asChild
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+              >
+                <Link to="/financeiro">Gerar Cronograma de Parcelas</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs text-slate-500 px-1">
+                <span>Evolução mensal da curva de caixa previsto</span>
+                <span>Valores em Reais (R$)</span>
+              </div>
+              <div className="h-72 w-full bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={dadosCurvaRecebimento.meses}
+                    margin={{ top: 15, right: 15, left: 0, bottom: 10 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#64748B' }}
+                      tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: any) => [formatBrlMil(Number(val)), 'Total Previsto']}
+                      labelFormatter={(_label, payload) => {
+                        if (payload && payload[0]) {
+                          return `Período: ${payload[0].payload.labelCompleto}`
+                        }
+                        return ''
+                      }}
+                    />
+                    <Bar
+                      dataKey="totalPrevisto"
+                      name="Recebimento Previsto (R$)"
+                      fill="#10B981"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ========================================================================= */}
       {/* SEÇÃO: RESUMO DE LANÇAMENTOS POR EMPRESA (COMPARATIVO E GRÁFICO 6 MESES) */}

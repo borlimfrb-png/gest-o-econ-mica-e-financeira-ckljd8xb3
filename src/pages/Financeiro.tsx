@@ -28,7 +28,9 @@ import {
   RefreshCw,
   Clock,
   Layers,
+  Mail,
 } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useNavigate } from 'react-router-dom'
 
@@ -86,6 +88,8 @@ export default function Financeiro() {
   const [valorInput, setValorInput] = useState<string>('')
   const [meses, setMeses] = useState<number>(12)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
+
+  const [enviarLembreteGlobal, setEnviarLembreteGlobal] = useState<boolean>(false)
 
   // Parcelas Calculadas (Preview em memória)
   const [parcelasGeradas, setParcelasGeradas] = useState<ParcelaPreview[]>([])
@@ -163,13 +167,19 @@ export default function Financeiro() {
     if (!validateGerador()) return
 
     const valorNumerico = parseValorMonetario(valorInput)
-    const preview = recebiveisService.calcularPreviewParcelas({
-      empresa: empresaId,
-      data_inicio_servicos: dataInicio,
-      dia_vencimento: diaVencimento,
-      valor: valorNumerico,
-      meses: Number(meses),
-    })
+    const preview = recebiveisService
+      .calcularPreviewParcelas({
+        empresa: empresaId,
+        data_inicio_servicos: dataInicio,
+        dia_vencimento: diaVencimento,
+        valor: valorNumerico,
+        meses: Number(meses),
+        lembrete_agendado: enviarLembreteGlobal,
+      })
+      .map((p) => ({
+        ...p,
+        lembrete_agendado: enviarLembreteGlobal,
+      }))
 
     setParcelasGeradas(preview)
 
@@ -218,6 +228,17 @@ export default function Financeiro() {
     }
   }
 
+  const handleToggleLembreteParcela = (index: number, checked: boolean) => {
+    setParcelasGeradas((prev) =>
+      prev.map((p, i) => (i === index ? { ...p, lembrete_agendado: checked } : p)),
+    )
+  }
+
+  const handleToggleTodosLembretes = (checked: boolean) => {
+    setEnviarLembreteGlobal(checked)
+    setParcelasGeradas((prev) => prev.map((p) => ({ ...p, lembrete_agendado: checked })))
+  }
+
   // Limpar formulário e visualização
   const handleLimpar = () => {
     setParcelasGeradas([])
@@ -225,6 +246,7 @@ export default function Financeiro() {
     setMeses(12)
     setDiaVencimento(10)
     setDataInicio(dataHojeIso())
+    setEnviarLembreteGlobal(false)
     setFormErrors({})
   }
 
@@ -456,6 +478,29 @@ export default function Financeiro() {
                   )}
                 </div>
 
+                {/* Checkbox Geral de Lembrete por E-mail */}
+                <div className="p-3 bg-blue-50/60 rounded-xl border border-blue-200/70 flex items-start gap-2.5">
+                  <Checkbox
+                    id="fin-lembrete-global"
+                    checked={enviarLembreteGlobal}
+                    onCheckedChange={(checked) => handleToggleTodosLembretes(Boolean(checked))}
+                    className="mt-0.5 border-blue-400 data-[state=checked]:bg-blue-600"
+                  />
+                  <div className="space-y-0.5">
+                    <label
+                      htmlFor="fin-lembrete-global"
+                      className="text-xs font-bold text-blue-950 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Mail className="w-3.5 h-3.5 text-blue-600" />
+                      Enviar lembretes de vencimento por e-mail
+                    </label>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Envia e-mail automático para o cliente 3 dias antes de cada vencimento com os
+                      dados bancários e PIX para pagamento.
+                    </p>
+                  </div>
+                </div>
+
                 {/* Ações */}
                 <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-100">
                   <Button
@@ -595,10 +640,11 @@ export default function Financeiro() {
                         <th className="py-3 px-3.5">Data de Vencimento</th>
                         <th className="py-3 px-3.5 text-right">Valor da Parcela (R$)</th>
                         <th className="py-3 px-3.5 text-center">Status</th>
+                        <th className="py-3 px-3 text-center">Lembrete por E-mail</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {parcelasGeradas.map((p) => (
+                      {parcelasGeradas.map((p, index) => (
                         <tr key={p.parcela} className="hover:bg-slate-50/80 transition-colors">
                           {/* Nº Parcela */}
                           <td className="py-2.5 px-3.5 text-center font-mono font-bold text-blue-700">
@@ -626,6 +672,22 @@ export default function Financeiro() {
                               Pendente
                             </Badge>
                           </td>
+
+                          {/* Checkbox Lembrete por E-mail */}
+                          <td className="py-2.5 px-3 text-center">
+                            <label className="inline-flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer select-none">
+                              <Checkbox
+                                checked={p.lembrete_agendado || false}
+                                onCheckedChange={(checked) =>
+                                  handleToggleLembreteParcela(index, Boolean(checked))
+                                }
+                                className="border-slate-300 data-[state=checked]:bg-blue-600"
+                              />
+                              <span className="text-[11px] text-slate-600">
+                                {p.lembrete_agendado ? 'Agendado (3 dias)' : 'Sem lembrete'}
+                              </span>
+                            </label>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -640,7 +702,7 @@ export default function Financeiro() {
                         <td className="py-3.5 px-3.5 text-right text-sm font-mono text-emerald-700 font-bold">
                           {formatarMoeda(totalGeralCalculado)}
                         </td>
-                        <td className="py-3.5 px-3.5 text-center">
+                        <td colSpan={2} className="py-3.5 px-3.5 text-center">
                           <Button
                             onClick={handleConfirmarESalvar}
                             disabled={saving}
