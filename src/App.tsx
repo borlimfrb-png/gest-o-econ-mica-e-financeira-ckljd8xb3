@@ -22,6 +22,9 @@ import Contratos from './pages/Contratos'
 import Relatorios from './pages/Relatorios'
 import RelatorioAnual from './pages/RelatorioAnual'
 import IndicadoresLiquidez from './pages/IndicadoresLiquidez'
+import IndicadoresEndividamento from './pages/IndicadoresEndividamento'
+import IndicadoresRentabilidade from './pages/IndicadoresRentabilidade'
+import IndicadoresEstruturaCapital from './pages/IndicadoresEstruturaCapital'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
@@ -83,6 +86,12 @@ const App = () => (
                 <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/contratos" element={<Contratos />} />
                 <Route path="/indicadores/liquidez" element={<IndicadoresLiquidez />} />
+                <Route path="/indicadores/endividamento" element={<IndicadoresEndividamento />} />
+                <Route path="/indicadores/rentabilidade" element={<IndicadoresRentabilidade />} />
+                <Route
+                  path="/indicadores/estrutura-capital"
+                  element={<IndicadoresEstruturaCapital />}
+                />
                 <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />

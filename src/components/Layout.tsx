@@ -27,6 +27,8 @@ import {
   Calculator,
   Gauge,
   Activity,
+  TrendingDown,
+  TrendingUp,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -89,6 +91,17 @@ export default function Layout() {
   // Itens do submenu Indicadores
   const indicadoresSubItems = [
     { name: 'Indicadores de Liquidez', path: '/indicadores/liquidez', icon: Activity },
+    {
+      name: 'Indicadores de Endividamento',
+      path: '/indicadores/endividamento',
+      icon: TrendingDown,
+    },
+    { name: 'Indicadores de Rentabilidade', path: '/indicadores/rentabilidade', icon: TrendingUp },
+    {
+      name: 'Indicadores de Estrutura de Capital',
+      path: '/indicadores/estrutura-capital',
+      icon: Building2,
+    },
   ]
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
