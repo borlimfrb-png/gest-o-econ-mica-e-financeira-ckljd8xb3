@@ -124,6 +124,11 @@ export default function Layout() {
       path: '/indicadores/valuation',
       icon: TrendingUp,
     },
+    {
+      name: 'Ponto de Equilíbrio',
+      path: '/indicadores/ponto-equilibrio',
+      icon: Scale,
+    },
   ]
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
