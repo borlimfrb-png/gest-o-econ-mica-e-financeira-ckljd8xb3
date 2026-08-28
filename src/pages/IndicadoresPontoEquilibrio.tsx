@@ -10,6 +10,7 @@ import {
   formatCurrency,
   formatNumber,
   formatPercent,
+  formatInteger,
   formatCnpj,
 } from '@/lib/financeCalculations'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -59,6 +60,10 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronUp,
+  Boxes,
+  TableProperties,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -85,6 +90,7 @@ export default function IndicadoresPontoEquilibrio() {
   const [custosVariaveisEdit, setCustosVariaveisEdit] = useState<string>('')
   const [depreciacaoEdit, setDepreciacaoEdit] = useState<string>('')
   const [lucroDesejadoEdit, setLucroDesejadoEdit] = useState<string>('')
+  const [precoMedioEdit, setPrecoMedioEdit] = useState<string>('100')
   const [isManualOverride, setIsManualOverride] = useState<boolean>(false)
   const [expandDetails, setExpandDetails] = useState<boolean>(false)
 
@@ -204,6 +210,7 @@ export default function IndicadoresPontoEquilibrio() {
       setCustosVariaveisEdit(defaultCustosVariaveis.toString())
       setDepreciacaoEdit(defaultDepreciacao > 0 ? defaultDepreciacao.toFixed(2) : '0')
       setLucroDesejadoEdit(defaultLucroDesejado > 0 ? defaultLucroDesejado.toFixed(2) : '0')
+      setPrecoMedioEdit('100')
     }
   }, [
     selectedEmpresaId,
@@ -222,6 +229,7 @@ export default function IndicadoresPontoEquilibrio() {
     : defaultCustosVariaveis
   const depreciacao = isManualOverride ? Number(depreciacaoEdit) || 0 : defaultDepreciacao
   const lucroDesejado = isManualOverride ? Number(lucroDesejadoEdit) || 0 : defaultLucroDesejado
+  const precoMedioUnitario = Math.max(0.01, Number(precoMedioEdit) || 100)
 
   // Handler de Reset para valores automáticos do DRE
   const handleResetDefaults = () => {
@@ -230,13 +238,18 @@ export default function IndicadoresPontoEquilibrio() {
     setCustosVariaveisEdit(defaultCustosVariaveis.toString())
     setDepreciacaoEdit(defaultDepreciacao > 0 ? defaultDepreciacao.toFixed(2) : '0')
     setLucroDesejadoEdit(defaultLucroDesejado > 0 ? defaultLucroDesejado.toFixed(2) : '0')
+    setPrecoMedioEdit('100')
     toast({
       title: 'Parâmetros Restaurados',
       description: 'Os valores foram redefinidos a partir dos dados do DRE e Balanço.',
     })
   }
 
-  // ================= CÁLCULOS PRINCIPAIS DE PONTO DE EQUILÍBRIO =================
+  // ================= MATRIZ DE SENSIBILIDADE =================
+  // Variações de Custos Fixos (linhas): -20%, -10%, 0%, +10%, +20%
+  // Variações de Margem de Contribuição % (colunas): -10%, -5%, 0%, +5%, +10%
+  const variacoesFixos = [-0.2, -0.1, 0, 0.1, 0.2]
+  const variacoesMC = [-0.1, -0.05, 0, 0.05, 0.1]
   // 1. Margem de Contribuição em R$ = Receita Líquida − Custos e Despesas Variáveis
   const margemContribuicaoReais = receitaLiquida - custosVariaveis
 
@@ -269,6 +282,37 @@ export default function IndicadoresPontoEquilibrio() {
     }
     return 0
   }, [custosFixos, depreciacao, mcDecimal])
+
+  // ================= PONTOS DE EQUILÍBRIO EM UNIDADES =================
+  // Ponto em Unidades = Ponto em R$ ÷ Preço Médio Unitário
+  const pecUnidades = useMemo(() => {
+    if (precoMedioUnitario > 0 && pec > 0) {
+      return Math.ceil(pec / precoMedioUnitario)
+    }
+    return 0
+  }, [pec, precoMedioUnitario])
+
+  const peeUnidades = useMemo(() => {
+    if (precoMedioUnitario > 0 && pee > 0) {
+      return Math.ceil(pee / precoMedioUnitario)
+    }
+    return 0
+  }, [pee, precoMedioUnitario])
+
+  const pefUnidades = useMemo(() => {
+    if (precoMedioUnitario > 0 && pef > 0) {
+      return Math.ceil(pef / precoMedioUnitario)
+    }
+    return 0
+  }, [pef, precoMedioUnitario])
+
+  // Quantidade estimada vendida na receita atual
+  const unidadesVendidasAtual = useMemo(() => {
+    if (precoMedioUnitario > 0 && receitaLiquida > 0) {
+      return Math.round(receitaLiquida / precoMedioUnitario)
+    }
+    return 0
+  }, [receitaLiquida, precoMedioUnitario])
 
   // Margem de Segurança = (Receita Atual − Ponto de Equilíbrio Contábil) ÷ Receita Atual
   const margemSeguranca = useMemo(() => {
@@ -355,11 +399,11 @@ export default function IndicadoresPontoEquilibrio() {
       titulo = 'Operação Saudável com Ampla Margem de Segurança Operacional'
       diagnosticoPEC = `A empresa opera com Receita Líquida de ${formatCurrency(
         receitaLiquida,
-      )}, superando o Ponto de Equilíbrio Contábil (${formatCurrency(
+      )} (~${formatInteger(unidadesVendidasAtual)} un a ${formatCurrency(precoMedioUnitario)}/un), superando o Ponto de Equilíbrio Contábil (${formatCurrency(
         pec,
-      )}) com folga de ${formatCurrency(
+      )} ou ${formatInteger(pecUnidades)} un) com folga de ${formatCurrency(
         margemSegurancaReais,
-      )} e Margem de Segurança de ${formatPercent(
+      )} (+${formatInteger(unidadesVendidasAtual - pecUnidades)} un) e Margem de Segurança de ${formatPercent(
         margemSeguranca,
         1,
       )}. A cada R$ 100 faturados, R$ ${formatNumber(
@@ -370,15 +414,15 @@ export default function IndicadoresPontoEquilibrio() {
         receitaLiquida >= pee
           ? `A receita atual também supera o Ponto de Equilíbrio Econômico (${formatCurrency(
               pee,
-            )}), remunerando integralmente o lucro almejado de ${formatCurrency(lucroDesejado)}.`
+            )} ou ${formatInteger(peeUnidades)} un), remunerando integralmente o lucro almejado de ${formatCurrency(lucroDesejado)}.`
           : `A receita cobre o equilíbrio contábil, porém está próxima do Ponto de Equilíbrio Econômico (${formatCurrency(
               pee,
-            )}), indicando que o lucro desejado de ${formatCurrency(
+            )} ou ${formatInteger(peeUnidades)} un), indicando que a meta de lucro de ${formatCurrency(
               lucroDesejado,
-            )} é atingido parcialmente.`
+            )} é atingida parcialmente.`
       diagnosticoPEF = `O Ponto de Equilíbrio Financeiro é de ${formatCurrency(
         pef,
-      )}. Como a receita atual supera amplamente o PEF, a operação gera caixa líquido positivo robusto, sem risco de descumprimento de desembolsos imediatos.`
+      )} (${formatInteger(pefUnidades)} un). Como a receita atual supera amplamente o PEF, a operação gera caixa líquido positivo robusto, sem risco de descumprimento de desembolsos imediatos.`
       recomendacao =
         '1) Manter o controle dos custos variáveis para preservar a Margem de Contribuição em patamar elevado; 2) Aproveitar a margem de segurança para realizar investimentos graduais em expansão de mercado; 3) Monitorar o ponto de equilíbrio econômico para sustentar a remuneração planejada aos acionistas.'
     } else if (situacaoOperacao === 'atencao') {
@@ -386,22 +430,22 @@ export default function IndicadoresPontoEquilibrio() {
       titulo = 'Operação Próxima ao Ponto de Equilíbrio: Alerta para Margem de Segurança Reduzida'
       diagnosticoPEC = `A empresa fatura ${formatCurrency(
         receitaLiquida,
-      )}, operando muito próxima ao Ponto de Equilíbrio Contábil (${formatCurrency(
+      )} (~${formatInteger(unidadesVendidasAtual)} un), operando muito próxima ao Ponto de Equilíbrio Contábil (${formatCurrency(
         pec,
-      )}). A Margem de Segurança é de apenas ${formatPercent(margemSeguranca, 1)} (${formatCurrency(
+      )} ou ${formatInteger(pecUnidades)} un). A Margem de Segurança é de apenas ${formatPercent(margemSeguranca, 1)} (${formatCurrency(
         margemSegurancaReais,
-      )}). Qualquer oscilação negativa de demanda ou aumento inesperado de custos pode empurrar a empresa para o prejuízo operacional.`
+      )} ou ${formatInteger(unidadesVendidasAtual - pecUnidades)} un). Qualquer oscilação negativa de demanda ou aumento inesperado de custos pode empurrar a empresa para o prejuízo operacional.`
       diagnosticoPEE = `Para atingir o Ponto de Equilíbrio Econômico (${formatCurrency(
         pee,
-      )}) e garantir o lucro desejado de ${formatCurrency(
+      )} ou ${formatInteger(peeUnidades)} un) e garantir o lucro desejado de ${formatCurrency(
         lucroDesejado,
-      )}, a empresa precisaria expandir seu faturamento em ${formatPercent(
+      )}, a empresa precisaria vender ${formatInteger(Math.max(0, peeUnidades - unidadesVendidasAtual))} unidades adicionais (+${formatPercent(
         receitaLiquida > 0 ? ((pee - receitaLiquida) / receitaLiquida) * 100 : 0,
         1,
-      )}.`
+      )} em faturamento).`
       diagnosticoPEF = `O Ponto de Equilíbrio Financeiro (${formatCurrency(
         pef,
-      )}) está coberto, permitindo que as contas de caixa do dia a dia sejam honradas, mas a geração de excedente econômico é limitada.`
+      )} ou ${formatInteger(pefUnidades)} un) está coberto, permitindo que as contas de caixa do dia a dia sejam honradas, mas a geração de excedente econômico é limitada.`
       recomendacao =
         '1) Realizar revisão detalhada das despesas fixas para rebaixar o Ponto de Equilíbrio Contábil; 2) Analisar a precificação de vendas buscando elevar a Margem de Contribuição unitária; 3) Conter a contratação de novas despesas fixas recorrentes.'
     } else {
@@ -409,27 +453,27 @@ export default function IndicadoresPontoEquilibrio() {
       titulo = 'Operação Deficitária: Receita Abaixo do Ponto de Equilíbrio Contábil'
       diagnosticoPEC = `Com Receita Líquida de ${formatCurrency(
         receitaLiquida,
-      )}, a empresa opera ${formatCurrency(
+      )} (~${formatInteger(unidadesVendidasAtual)} un), a empresa opera ${formatCurrency(
         Math.abs(margemSegurancaReais),
       )} abaixo do Ponto de Equilíbrio Contábil de ${formatCurrency(
         pec,
-      )} (Margem de Segurança negativa de ${formatPercent(
+      )} ou ${formatInteger(pecUnidades)} un (déficit de ${formatInteger(Math.abs(pecUnidades - unidadesVendidasAtual))} unidades e Margem de Segurança negativa de ${formatPercent(
         margemSeguranca,
         1,
       )}). A receita gerada não é suficiente para cobrir os custos fixos da operação, resultando em prejuízo contábil.`
       diagnosticoPEE = `O Ponto de Equilíbrio Econômico de ${formatCurrency(
         pee,
-      )} está distante da realidade atual de faturamento, exigindo um salto substancial de vendas ou reestruturação drástica da estrutura de despesas.`
+      )} (${formatInteger(peeUnidades)} un) está distante da realidade atual de faturamento, exigindo um salto substancial de vendas ou reestruturação drástica da estrutura de despesas.`
       diagnosticoPEF =
         receitaLiquida < pef
           ? `Situação de alto risco: a receita (${formatCurrency(
               receitaLiquida,
             )}) está abaixo até mesmo do Ponto de Equilíbrio Financeiro (${formatCurrency(
               pef,
-            )}), gerando queima direta de caixa operacional e necessidade de aporte de capital de giro.`
+            )} ou ${formatInteger(pefUnidades)} un), gerando queima direta de caixa operacional e necessidade de aporte de capital de giro.`
           : `A receita cobre estritamente o Ponto de Equilíbrio Financeiro (${formatCurrency(
               pef,
-            )}), mantendo a solvência imediata do caixa apenas porque as despesas não desembolsáveis (como depreciação) absorvem o impacto contábil.`
+            )} ou ${formatInteger(pefUnidades)} un), mantendo a solvência imediata do caixa apenas porque as despesas não desembolsáveis (como depreciação) absorvem o impacto contábil.`
       recomendacao =
         '1) Cortar imediatamente despesas fixas não essenciais para reduzir o valor do PEC; 2) Renegociar custos de mercadorias e insumos para expandir a Margem de Contribuição; 3) Implementar campanha comercial focada nos produtos/serviços de maior margem unitária; 4) Monitorar diariamente o fluxo de caixa.'
     }
@@ -454,6 +498,11 @@ export default function IndicadoresPontoEquilibrio() {
     margemSegurancaReais,
     margemContribuicaoPercentual,
     lucroDesejado,
+    precoMedioUnitario,
+    pecUnidades,
+    peeUnidades,
+    pefUnidades,
+    unidadesVendidasAtual,
   ])
 
   // Exportação CSV
@@ -485,10 +534,12 @@ export default function IndicadoresPontoEquilibrio() {
     csvContent += `Margem de Contribuição (%);${margemContribuicaoPercentual.toFixed(2).replace('.', ',')}%\n`
     csvContent += `Custos e Despesas Fixas;${custosFixos.toFixed(2).replace('.', ',')}\n`
     csvContent += `Despesas Não Desembolsáveis (Depreciação/Amortização);${depreciacao.toFixed(2).replace('.', ',')}\n`
-    csvContent += `Lucro Desejado (Meta de Remuneração);${lucroDesejado.toFixed(2).replace('.', ',')}\n\n`
+    csvContent += `Lucro Desejado (Meta de Remuneração);${lucroDesejado.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Preço Médio Unitário (R$);${precoMedioUnitario.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Volume Atual Estimado (un);${unidadesVendidasAtual}\n\n`
 
     csvContent += `PONTOS DE EQUILÍBRIO E INDICADORES CALCULADOS\n`
-    csvContent += `Indicador;Fórmula;Valor em R$;Status vs Receita Atual;Margem de Segurança;Interpretação\n`
+    csvContent += `Indicador;Fórmula;Valor em R$;Valor em Unidades (un);Status vs Receita Atual;Margem de Segurança;Interpretação\n`
 
     // PEC
     const pecStatusStr =
@@ -497,19 +548,19 @@ export default function IndicadoresPontoEquilibrio() {
         : receitaLiquida >= pec
           ? 'Atenção (Próximo)'
           : 'Deficitário (Prejuízo)'
-    csvContent += `Ponto de Equilíbrio Contábil (PEC);Custos Fixos / Margem Contribuição (%);${pec.toFixed(2).replace('.', ',')};${pecStatusStr};${margemSeguranca.toFixed(1).replace('.', ',')}%;Faturamento necessário para cobrir todos os custos e despesas fixas (Lucro Operacional Zero)\n`
+    csvContent += `Ponto de Equilíbrio Contábil (PEC);Custos Fixos / Margem Contribuição (%);${pec.toFixed(2).replace('.', ',')};${pecUnidades};${pecStatusStr};${margemSeguranca.toFixed(1).replace('.', ',')}%;Volume necessário para cobrir todos os custos e despesas fixas (Lucro Zero)\n`
 
     // PEE
     const peeStatusStr = receitaLiquida >= pee ? 'Meta Atingida' : 'Abaixo da Meta'
-    csvContent += `Ponto de Equilíbrio Econômico (PEE);(Custos Fixos + Lucro Desejado) / Margem Contribuição (%);${pee.toFixed(2).replace('.', ',')};${peeStatusStr};—;Faturamento necessário para cobrir custos fixos e entregar o lucro desejado de ${formatCurrency(lucroDesejado)}\n`
+    csvContent += `Ponto de Equilíbrio Econômico (PEE);(Custos Fixos + Lucro Desejado) / Margem Contribuição (%);${pee.toFixed(2).replace('.', ',')};${peeUnidades};${peeStatusStr};—;Volume necessário para cobrir custos fixos e entregar o lucro desejado de ${formatCurrency(lucroDesejado)}\n`
 
     // PEF
     const pefStatusStr = receitaLiquida >= pef ? 'Caixa Seguro' : 'Queima de Caixa'
-    csvContent += `Ponto de Equilíbrio Financeiro (PEF);(Custos Fixos - Depreciação) / Margem Contribuição (%);${pef.toFixed(2).replace('.', ',')};${pefStatusStr};—;Faturamento estritamente necessário para honrar todas as saídas de caixa operacionais\n`
+    csvContent += `Ponto de Equilíbrio Financeiro (PEF);(Custos Fixos - Depreciação) / Margem Contribuição (%);${pef.toFixed(2).replace('.', ',')};${pefUnidades};${pefStatusStr};—;Volume estritamente necessário para honrar todas as saídas de caixa operacionais\n`
 
     // Margens
-    csvContent += `Margem de Contribuição;RL − Custos Variáveis;${margemContribuicaoReais.toFixed(2).replace('.', ',')};${margemContribuicaoPercentual >= 30 ? 'Forte' : 'Moderada'};${margemContribuicaoPercentual.toFixed(1).replace('.', ',')}%;Percentual de cada real que sobra para cobrir a estrutura fixa\n`
-    csvContent += `Margem de Segurança;(Receita Atual − PEC) / Receita Atual;${margemSegurancaReais.toFixed(2).replace('.', ',')};${situacaoOperacao === 'lucro' ? 'Confortável' : situacaoOperacao === 'atencao' ? 'Atenção' : 'Crítico'};${margemSeguranca.toFixed(1).replace('.', ',')}%;Percentual de queda de vendas que a empresa suporta antes de entrar em prejuízo\n\n`
+    csvContent += `Margem de Contribuição;RL − Custos Variáveis;${margemContribuicaoReais.toFixed(2).replace('.', ',')};—;${margemContribuicaoPercentual >= 30 ? 'Forte' : 'Moderada'};${margemContribuicaoPercentual.toFixed(1).replace('.', ',')}%;Percentual de cada real que sobra para cobrir a estrutura fixa\n`
+    csvContent += `Margem de Segurança;(Receita Atual − PEC) / Receita Atual;${margemSegurancaReais.toFixed(2).replace('.', ',')};${unidadesVendidasAtual - pecUnidades} un;${situacaoOperacao === 'lucro' ? 'Confortável' : situacaoOperacao === 'atencao' ? 'Atenção' : 'Crítico'};${margemSeguranca.toFixed(1).replace('.', ',')}%;Percentual de queda de vendas que a empresa suporta antes de entrar em prejuízo\n\n`
 
     if (parecerConsolidado) {
       csvContent += `DIAGNÓSTICO CONSOLIDADO E RECOMENDAÇÕES DO CONSULTOR\n`
@@ -693,14 +744,14 @@ export default function IndicadoresPontoEquilibrio() {
             </CardHeader>
 
             <CardContent className="p-4 pt-3 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                 {/* 1. Custos e Despesas Fixas */}
                 <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                   <div className="flex items-center justify-between">
                     <Label className="text-[10px] font-bold text-slate-700 uppercase">
-                      Custos e Despesas Fixas (R$)
+                      Custos Fixos (R$)
                     </Label>
-                    <span className="text-[10px] text-slate-400">Desp. Operac. + Financ.</span>
+                    <span className="text-[10px] text-slate-400">Desp. Op + Fin</span>
                   </div>
                   <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                     <span className="text-xs font-bold text-slate-400 mr-1">R$</span>
@@ -725,7 +776,7 @@ export default function IndicadoresPontoEquilibrio() {
                 <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                   <div className="flex items-center justify-between">
                     <Label className="text-[10px] font-bold text-slate-700 uppercase">
-                      Custos e Despesas Variáveis (R$)
+                      Custos Variáveis (R$)
                     </Label>
                     <span className="text-[10px] text-slate-400">CMV / CPV</span>
                   </div>
@@ -752,9 +803,9 @@ export default function IndicadoresPontoEquilibrio() {
                 <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                   <div className="flex items-center justify-between">
                     <Label className="text-[10px] font-bold text-slate-700 uppercase">
-                      Depreciação/Amortização (R$)
+                      Depreciação (R$)
                     </Label>
-                    <span className="text-[10px] text-slate-400">Não Desembolsável</span>
+                    <span className="text-[10px] text-slate-400">Não Desembols.</span>
                   </div>
                   <div className="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                     <span className="text-xs font-bold text-slate-400 mr-1">R$</span>
@@ -779,7 +830,7 @@ export default function IndicadoresPontoEquilibrio() {
                 <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                   <div className="flex items-center justify-between">
                     <Label className="text-[10px] font-bold text-slate-700 uppercase">
-                      Lucro Desejado (R$)
+                      Lucro Meta (R$)
                     </Label>
                     <span className="text-[10px] text-slate-400">Meta do Sócio</span>
                   </div>
@@ -799,6 +850,33 @@ export default function IndicadoresPontoEquilibrio() {
                   </div>
                   <span className="text-[10px] text-slate-500 block truncate">
                     Base: {formatCurrency(defaultLucroDesejado)}
+                  </span>
+                </div>
+
+                {/* 5. Preço Médio Unitário (R$) */}
+                <div className="space-y-1 bg-blue-50/70 p-2.5 rounded-xl border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-bold text-blue-900 uppercase">
+                      Preço Médio Unitário (R$)
+                    </Label>
+                    <span className="text-[10px] text-blue-600 font-semibold">Base Unidades</span>
+                  </div>
+                  <div className="flex items-center bg-white border border-blue-300 rounded-lg px-2 py-1 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+                    <span className="text-xs font-bold text-blue-500 mr-1">R$</span>
+                    <Input
+                      type="number"
+                      step="1"
+                      min="0.01"
+                      value={precoMedioEdit}
+                      onChange={(e) => {
+                        setIsManualOverride(true)
+                        setPrecoMedioEdit(e.target.value)
+                      }}
+                      className="h-6 text-xs font-bold text-blue-950 border-none p-0 focus-visible:ring-0 text-right"
+                    />
+                  </div>
+                  <span className="text-[10px] text-blue-700 block truncate">
+                    Calcula pontos em unidades
                   </span>
                 </div>
               </div>
@@ -870,12 +948,22 @@ export default function IndicadoresPontoEquilibrio() {
                       <code className="text-xs font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 mt-0.5 inline-block">
                         Custos Fixos ÷ Margem de Contribuição (%)
                       </code>
-                      <div className="text-right mt-2">
-                        <span className="text-[10px] font-semibold text-slate-400 block uppercase">
-                          PEC Necessário
-                        </span>
-                        <div className="text-2xl font-black text-emerald-700 tracking-tight">
-                          {formatCurrency(pec)}
+                      <div className="flex items-end justify-between mt-2 pt-1 border-t border-slate-200/60">
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                            Em Unidades
+                          </span>
+                          <span className="text-base font-black text-emerald-800">
+                            {formatInteger(pecUnidades)} un
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                            PEC Necessário (R$)
+                          </span>
+                          <div className="text-2xl font-black text-emerald-700 tracking-tight">
+                            {formatCurrency(pec)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -948,12 +1036,22 @@ export default function IndicadoresPontoEquilibrio() {
                       <code className="text-xs font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 mt-0.5 inline-block">
                         (Custos Fixos + Lucro Desejado) ÷ MC (%)
                       </code>
-                      <div className="text-right mt-2">
-                        <span className="text-[10px] font-semibold text-slate-400 block uppercase">
-                          PEE Necessário
-                        </span>
-                        <div className="text-2xl font-black text-purple-700 tracking-tight">
-                          {formatCurrency(pee)}
+                      <div className="flex items-end justify-between mt-2 pt-1 border-t border-slate-200/60">
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                            Em Unidades
+                          </span>
+                          <span className="text-base font-black text-purple-800">
+                            {formatInteger(peeUnidades)} un
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                            PEE Necessário (R$)
+                          </span>
+                          <div className="text-2xl font-black text-purple-700 tracking-tight">
+                            {formatCurrency(pee)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1024,12 +1122,22 @@ export default function IndicadoresPontoEquilibrio() {
                       <code className="text-xs font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 mt-0.5 inline-block">
                         (Custos Fixos − Depreciação) ÷ MC (%)
                       </code>
-                      <div className="text-right mt-2">
-                        <span className="text-[10px] font-semibold text-slate-400 block uppercase">
-                          PEF Necessário
-                        </span>
-                        <div className="text-2xl font-black text-amber-700 tracking-tight">
-                          {formatCurrency(pef)}
+                      <div className="flex items-end justify-between mt-2 pt-1 border-t border-slate-200/60">
+                        <div>
+                          <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                            Em Unidades
+                          </span>
+                          <span className="text-base font-black text-amber-800">
+                            {formatInteger(pefUnidades)} un
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                            PEF Necessário (R$)
+                          </span>
+                          <div className="text-2xl font-black text-amber-700 tracking-tight">
+                            {formatCurrency(pef)}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1227,6 +1335,436 @@ export default function IndicadoresPontoEquilibrio() {
               </Card>
             </div>
           </div>
+
+          {/* ================= SEÇÃO: PONTO DE EQUILÍBRIO EM UNIDADES ================= */}
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                <Boxes className="w-4 h-4 text-blue-600" />
+                Seção 2 — Ponto de Equilíbrio em Unidades / Serviços
+              </h2>
+              <Badge className="bg-blue-50 text-blue-800 border-blue-200 font-semibold text-xs">
+                Preço Médio: {formatCurrency(precoMedioUnitario)}/un
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {/* Card 1: PEC em Unidades */}
+              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden">
+                <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
+                  <div>
+                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                      Volume Contábil
+                    </span>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
+                      PEC em Unidades (un)
+                    </CardTitle>
+                  </div>
+                  <Badge
+                    className={`text-xs font-bold ${
+                      unidadesVendidasAtual >= pecUnidades
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
+                        : 'bg-red-50 text-red-700 border-red-300'
+                    }`}
+                  >
+                    {unidadesVendidasAtual >= pecUnidades ? '🟢 Meta Atingida' : '🔴 Déficit'}
+                  </Badge>
+                </CardHeader>
+
+                <CardContent className="p-4 space-y-3">
+                  <div className="p-3 bg-gradient-to-r from-slate-50 to-emerald-50/40 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-semibold uppercase text-slate-500 block">
+                      Fórmula
+                    </span>
+                    <code className="text-xs font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 mt-0.5 inline-block">
+                      PEC (R$) ÷ Preço Médio ({formatCurrency(precoMedioUnitario)})
+                    </code>
+                    <div className="text-right mt-2">
+                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                        Unidades Mínimas
+                      </span>
+                      <div className="text-2xl font-black text-emerald-700 tracking-tight">
+                        {formatInteger(pecUnidades)}{' '}
+                        <span className="text-sm font-semibold text-emerald-900">unidades</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                    A empresa precisa comercializar no mínimo{' '}
+                    <strong>{formatInteger(pecUnidades)} unidades/serviços</strong> no ano para
+                    zerar seus custos fixos e operacionais.
+                  </p>
+
+                  <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-2 flex justify-between items-center">
+                    <span>
+                      Volume Atual:{' '}
+                      <strong className="text-slate-800">
+                        {formatInteger(unidadesVendidasAtual)} un
+                      </strong>
+                    </span>
+                    <span
+                      className={`font-bold ${
+                        unidadesVendidasAtual >= pecUnidades ? 'text-emerald-700' : 'text-red-600'
+                      }`}
+                    >
+                      {unidadesVendidasAtual >= pecUnidades
+                        ? `+${formatInteger(unidadesVendidasAtual - pecUnidades)} un (folga)`
+                        : `-${formatInteger(pecUnidades - unidadesVendidasAtual)} un (faltam)`}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card 2: PEE em Unidades */}
+              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden">
+                <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
+                  <div>
+                    <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                      Volume Econômico
+                    </span>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
+                      PEE em Unidades (un)
+                    </CardTitle>
+                  </div>
+                  <Badge
+                    className={`text-xs font-bold ${
+                      unidadesVendidasAtual >= peeUnidades
+                        ? 'bg-purple-50 text-purple-700 border-purple-300'
+                        : 'bg-amber-50 text-amber-700 border-amber-300'
+                    }`}
+                  >
+                    {unidadesVendidasAtual >= peeUnidades ? '🟢 Lucro Batido' : '🟠 Meta Pendente'}
+                  </Badge>
+                </CardHeader>
+
+                <CardContent className="p-4 space-y-3">
+                  <div className="p-3 bg-gradient-to-r from-slate-50 to-purple-50/40 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-semibold uppercase text-slate-500 block">
+                      Fórmula
+                    </span>
+                    <code className="text-xs font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 mt-0.5 inline-block">
+                      PEE (R$) ÷ Preço Médio ({formatCurrency(precoMedioUnitario)})
+                    </code>
+                    <div className="text-right mt-2">
+                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                        Unidades c/ Lucro
+                      </span>
+                      <div className="text-2xl font-black text-purple-700 tracking-tight">
+                        {formatInteger(peeUnidades)}{' '}
+                        <span className="text-sm font-semibold text-purple-900">unidades</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                    Volume necessário de{' '}
+                    <strong>{formatInteger(peeUnidades)} unidades/serviços</strong> para cobrir a
+                    estrutura fixa e atingir o lucro meta planejado de{' '}
+                    <strong>{formatCurrency(lucroDesejado)}</strong>.
+                  </p>
+
+                  <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-2 flex justify-between items-center">
+                    <span>
+                      Meta de Lucro: <strong>{formatCurrency(lucroDesejado)}</strong>
+                    </span>
+                    <span
+                      className={`font-bold ${
+                        unidadesVendidasAtual >= peeUnidades ? 'text-purple-700' : 'text-amber-700'
+                      }`}
+                    >
+                      {unidadesVendidasAtual >= peeUnidades
+                        ? `+${formatInteger(unidadesVendidasAtual - peeUnidades)} un acima`
+                        : `Faltam ${formatInteger(peeUnidades - unidadesVendidasAtual)} un`}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card 3: PEF em Unidades */}
+              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden">
+                <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider bg-amber-50 px-2 py-0.5 rounded border border-amber-100">
+                      Volume Financeiro
+                    </span>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
+                      PEF em Unidades (un)
+                    </CardTitle>
+                  </div>
+                  <Badge
+                    className={`text-xs font-bold ${
+                      unidadesVendidasAtual >= pefUnidades
+                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                        : 'bg-red-50 text-red-700 border-red-300'
+                    }`}
+                  >
+                    {unidadesVendidasAtual >= pefUnidades
+                      ? '🟢 Caixa Seguro'
+                      : '🔴 Queima de Caixa'}
+                  </Badge>
+                </CardHeader>
+
+                <CardContent className="p-4 space-y-3">
+                  <div className="p-3 bg-gradient-to-r from-slate-50 to-amber-50/40 rounded-xl border border-slate-100">
+                    <span className="text-[10px] font-semibold uppercase text-slate-500 block">
+                      Fórmula
+                    </span>
+                    <code className="text-xs font-mono font-bold text-slate-800 bg-white px-1.5 py-0.5 rounded border border-slate-200 mt-0.5 inline-block">
+                      PEF (R$) ÷ Preço Médio ({formatCurrency(precoMedioUnitario)})
+                    </code>
+                    <div className="text-right mt-2">
+                      <span className="text-[10px] font-semibold text-slate-400 block uppercase">
+                        Unidades p/ Caixa
+                      </span>
+                      <div className="text-2xl font-black text-amber-700 tracking-tight">
+                        {formatInteger(pefUnidades)}{' '}
+                        <span className="text-sm font-semibold text-amber-900">unidades</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                    A empresa precisa vender no mínimo{' '}
+                    <strong>{formatInteger(pefUnidades)} unidades/serviços</strong> para saldar
+                    todas as saídas efetivas de caixa do exercício.
+                  </p>
+
+                  <div className="text-[11px] text-slate-500 border-t border-slate-100 pt-2 flex justify-between items-center">
+                    <span>
+                      Fixos Desembolsáveis:{' '}
+                      <strong>{formatCurrency(Math.max(0, custosFixos - depreciacao))}</strong>
+                    </span>
+                    <span
+                      className={`font-bold ${
+                        unidadesVendidasAtual >= pefUnidades ? 'text-amber-800' : 'text-red-600'
+                      }`}
+                    >
+                      {unidadesVendidasAtual >= pefUnidades
+                        ? `✓ ${formatInteger(unidadesVendidasAtual - pefUnidades)} un folga caixa`
+                        : `Déficit de ${formatInteger(pefUnidades - unidadesVendidasAtual)} un`}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* ================= SEÇÃO: MATRIZ DE SENSIBILIDADE DO PEC ================= */}
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
+            <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg">
+                    <TableProperties className="w-4 h-4" />
+                  </div>
+                  <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                    Análise de Sensibilidade do Ponto de Equilíbrio Contábil (PEC)
+                  </CardTitle>
+                </div>
+                <CardDescription className="text-xs text-slate-500 mt-0.5">
+                  Cruzamento de variações de <strong>Custos Fixos (linhas)</strong> com variações de{' '}
+                  <strong>Margem de Contribuição % (colunas)</strong>. Célula destacada = cenário
+                  atual.
+                </CardDescription>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="flex items-center gap-1 text-emerald-700 font-semibold text-[11px]">
+                  <span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-400 inline-block" />
+                  Menor PEC (Melhor)
+                </span>
+                <span className="flex items-center gap-1 text-red-700 font-semibold text-[11px] ml-2">
+                  <span className="w-3 h-3 rounded bg-red-100 border border-red-400 inline-block" />
+                  Maior PEC (Pior)
+                </span>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 sm:p-6 space-y-4">
+              <div className="overflow-x-auto">
+                <table className="w-full text-center text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
+                      <th className="py-2.5 px-3 text-left font-bold text-[#0B1F3A] bg-slate-100 min-w-[170px]">
+                        Custos Fixos \ Margem MC
+                      </th>
+                      {variacoesMC.map((deltaMC) => {
+                        const mcCenario = margemContribuicaoPercentual * (1 + deltaMC)
+                        const isCurrentCol = deltaMC === 0
+                        return (
+                          <th
+                            key={deltaMC}
+                            className={`py-2.5 px-3 font-bold ${
+                              isCurrentCol
+                                ? 'bg-blue-100 text-blue-900 border-x-2 border-blue-400'
+                                : 'text-slate-700'
+                            }`}
+                          >
+                            <div>
+                              {deltaMC === 0
+                                ? 'Atual'
+                                : `${deltaMC > 0 ? '+' : ''}${deltaMC * 100}%`}
+                            </div>
+                            <div className="text-[10px] font-normal text-slate-500">
+                              {formatPercent(mcCenario, 1)}
+                            </div>
+                          </th>
+                        )
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {variacoesFixos.map((deltaFixo) => {
+                      const fixoCenario = custosFixos * (1 + deltaFixo)
+                      const isCurrentRow = deltaFixo === 0
+
+                      return (
+                        <tr
+                          key={deltaFixo}
+                          className={
+                            isCurrentRow ? 'bg-blue-50/40 font-semibold' : 'hover:bg-slate-50/80'
+                          }
+                        >
+                          {/* Coluna de Custos Fixos */}
+                          <td
+                            className={`py-2 px-3 text-left ${
+                              isCurrentRow
+                                ? 'font-bold text-blue-950 bg-blue-100/50 border-y-2 border-blue-400'
+                                : 'text-slate-800'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span>
+                                {deltaFixo === 0
+                                  ? 'Fixos Atuais (0%)'
+                                  : `Fixos ${deltaFixo > 0 ? '+' : ''}${deltaFixo * 100}%`}
+                              </span>
+                              <span className="font-mono text-[11px] text-slate-500 ml-2">
+                                {formatCurrency(fixoCenario)}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Células da matriz */}
+                          {variacoesMC.map((deltaMC) => {
+                            const mcCenario = (margemContribuicaoPercentual * (1 + deltaMC)) / 100
+                            const pecCenario = mcCenario > 0 ? fixoCenario / mcCenario : 0
+                            const isCurrentCell = deltaFixo === 0 && deltaMC === 0
+                            const diffVsAtual = pec > 0 ? ((pecCenario - pec) / pec) * 100 : 0
+
+                            // Escala de cor: menor PEC é melhor (verde), maior é pior (vermelho)
+                            let cellBg = 'bg-white'
+                            let textCol = 'text-slate-800'
+                            if (isCurrentCell) {
+                              cellBg =
+                                'bg-blue-500 text-white font-black ring-2 ring-blue-600 shadow-sm'
+                              textCol = 'text-white'
+                            } else if (diffVsAtual <= -15) {
+                              cellBg = 'bg-emerald-100/80 hover:bg-emerald-200/80'
+                              textCol = 'text-emerald-900 font-bold'
+                            } else if (diffVsAtual <= -5) {
+                              cellBg = 'bg-emerald-50 hover:bg-emerald-100'
+                              textCol = 'text-emerald-800 font-medium'
+                            } else if (diffVsAtual <= 5) {
+                              cellBg = 'bg-slate-50 hover:bg-slate-100'
+                              textCol = 'text-slate-700'
+                            } else if (diffVsAtual <= 15) {
+                              cellBg = 'bg-amber-50 hover:bg-amber-100'
+                              textCol = 'text-amber-900 font-medium'
+                            } else {
+                              cellBg = 'bg-red-100/80 hover:bg-red-200/80'
+                              textCol = 'text-red-900 font-bold'
+                            }
+
+                            return (
+                              <td
+                                key={`${deltaFixo}-${deltaMC}`}
+                                className={`py-2 px-2 text-center transition-colors ${cellBg} ${
+                                  deltaMC === 0 && !isCurrentCell ? 'border-x border-blue-200' : ''
+                                } ${isCurrentRow && !isCurrentCell ? 'border-y border-blue-200' : ''}`}
+                              >
+                                <div className={`font-mono text-xs ${textCol}`}>
+                                  {formatCurrency(pecCenario)}
+                                </div>
+                                <div
+                                  className={`text-[9px] ${
+                                    isCurrentCell
+                                      ? 'text-blue-100 font-bold'
+                                      : diffVsAtual < 0
+                                        ? 'text-emerald-700'
+                                        : diffVsAtual > 0
+                                          ? 'text-red-600'
+                                          : 'text-slate-400'
+                                  }`}
+                                >
+                                  {isCurrentCell
+                                    ? '★ Cenário Atual'
+                                    : `${diffVsAtual > 0 ? '+' : ''}${diffVsAtual.toFixed(1)}%`}
+                                </div>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Interpretação da Matriz de Sensibilidade */}
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 text-xs text-slate-700">
+                <span className="font-bold text-[#0B1F3A] uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-blue-600" />
+                  Interpretação Estratégica da Sensibilidade
+                </span>
+                <p className="leading-relaxed">
+                  • <strong>Melhor Cenário:</strong> Redução de 20% nos custos fixos combinada com
+                  aumento de 10% na Margem de Contribuição reduz o PEC para{' '}
+                  <strong className="text-emerald-700">
+                    {formatCurrency(
+                      margemContribuicaoPercentual * 1.1 > 0
+                        ? (custosFixos * 0.8) / ((margemContribuicaoPercentual * 1.1) / 100)
+                        : 0,
+                    )}
+                  </strong>{' '}
+                  (redução de{' '}
+                  {formatPercent(
+                    pec > 0
+                      ? ((pec -
+                          (custosFixos * 0.8) / ((margemContribuicaoPercentual * 1.1) / 100)) /
+                          pec) *
+                          100
+                      : 0,
+                    1,
+                  )}
+                  ), aumentando expressivamente a folga de segurança.
+                </p>
+                <p className="leading-relaxed">
+                  • <strong>Pior Cenário:</strong> Aumento de 20% nos custos fixos somado a perda de
+                  10% na Margem de Contribuição eleva o PEC para{' '}
+                  <strong className="text-red-600">
+                    {formatCurrency(
+                      margemContribuicaoPercentual * 0.9 > 0
+                        ? (custosFixos * 1.2) / ((margemContribuicaoPercentual * 0.9) / 100)
+                        : 0,
+                    )}
+                  </strong>
+                  , exigindo{' '}
+                  {formatPercent(
+                    pec > 0
+                      ? (((custosFixos * 1.2) / ((margemContribuicaoPercentual * 0.9) / 100) -
+                          pec) /
+                          pec) *
+                          100
+                      : 0,
+                    1,
+                  )}{' '}
+                  a mais de vendas para empatar as operações.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* ================= SEÇÃO 3: GRÁFICO RECHARTS COMPARATIVO ================= */}
           <Card className="bg-white border-slate-200 shadow-2xs">

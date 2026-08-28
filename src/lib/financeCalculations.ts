@@ -43,6 +43,134 @@ export function formatPercent(val: number | null | undefined, decimals = 1): str
   return `${formatted}%`
 }
 
+export function formatInteger(val: number | null | undefined): string {
+  if (val === null || val === undefined || isNaN(val)) return '—'
+  return new Intl.NumberFormat('pt-BR', {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  }).format(Math.round(val))
+}
+
+export interface PontoEquilibrioCalculado {
+  receitaLiquida: number
+  custosVariaveis: number
+  custosFixos: number
+  depreciacao: number
+  lucroDesejado: number
+  precoMedioUnitario: number
+  margemContribuicaoReais: number
+  margemContribuicaoPercentual: number
+  pec: number
+  pee: number
+  pef: number
+  pecUnidades: number | null
+  peeUnidades: number | null
+  pefUnidades: number | null
+  margemSeguranca: number
+  margemSegurancaReais: number
+  situacaoOperacao: 'lucro' | 'atencao' | 'prejuizo' | 'indefinido'
+}
+
+export function calcularPontoEquilibrio(
+  dre?: Partial<DreRecord> | null,
+  balanco?: Partial<BalancoRecord> | null,
+  customOverrides?: {
+    custosFixos?: number
+    custosVariaveis?: number
+    depreciacao?: number
+    lucroDesejado?: number
+    precoMedioUnitario?: number
+  },
+): PontoEquilibrioCalculado {
+  const calcD = calcularDre(dre)
+  const rl = calcD.receitaLiquida
+
+  // Heurísticas padrão
+  const defaultCustosVariaveis = dre?.custo_mercadorias || 0
+  const despOp = dre?.despesas_operacionais || 0
+  const despFin = dre?.despesas_financeiras || 0
+  const defaultCustosFixos = despOp + despFin
+
+  const imobilizado = balanco?.imobilizado || 0
+  const intangivel = balanco?.intangivel || 0
+  const baseAtivoNaoCirc = imobilizado + intangivel
+  let defaultDepreciacao = 0
+  if (baseAtivoNaoCirc > 0) {
+    const estimativa = imobilizado * 0.1
+    defaultDepreciacao = Math.min(estimativa, despOp > 0 ? despOp * 0.5 : estimativa)
+  }
+
+  let defaultLucroDesejado = 0
+  if (calcD.lucroLiquido > 0) {
+    defaultLucroDesejado = calcD.lucroLiquido
+  } else if (rl > 0) {
+    defaultLucroDesejado = rl * 0.1
+  }
+
+  // Preço médio sugerido padrão (R$ 100 ou heurística proporcional)
+  const defaultPrecoMedio = 100
+
+  const custosFixos = customOverrides?.custosFixos ?? defaultCustosFixos
+  const custosVariaveis = customOverrides?.custosVariaveis ?? defaultCustosVariaveis
+  const depreciacao = customOverrides?.depreciacao ?? defaultDepreciacao
+  const lucroDesejado = customOverrides?.lucroDesejado ?? defaultLucroDesejado
+  const precoMedioUnitario =
+    customOverrides?.precoMedioUnitario !== undefined
+      ? customOverrides.precoMedioUnitario
+      : defaultPrecoMedio
+
+  const margemContribuicaoReais = rl - custosVariaveis
+  const margemContribuicaoPercentual = rl > 0 ? (margemContribuicaoReais / rl) * 100 : 0
+  const mcDecimal = margemContribuicaoPercentual / 100
+
+  // Pontos em R$
+  const pec = mcDecimal > 0 && custosFixos >= 0 ? custosFixos / mcDecimal : 0
+  const pee = mcDecimal > 0 ? (custosFixos + Math.max(0, lucroDesejado)) / mcDecimal : 0
+  const fixosDesembolsaveis = Math.max(0, custosFixos - depreciacao)
+  const pef = mcDecimal > 0 ? fixosDesembolsaveis / mcDecimal : 0
+
+  // Pontos em unidades (Ponto em R$ ÷ Preço Médio Unitário)
+  const pecUnidades = precoMedioUnitario > 0 ? Math.ceil(pec / precoMedioUnitario) : null
+  const peeUnidades = precoMedioUnitario > 0 ? Math.ceil(pee / precoMedioUnitario) : null
+  const pefUnidades = precoMedioUnitario > 0 ? Math.ceil(pef / precoMedioUnitario) : null
+
+  // Margem de segurança
+  let margemSeguranca = 0
+  if (rl > 0 && pec > 0) {
+    margemSeguranca = ((rl - pec) / rl) * 100
+  } else if (rl > 0 && pec === 0) {
+    margemSeguranca = 100
+  }
+  const margemSegurancaReais = rl - pec
+
+  let situacaoOperacao: 'lucro' | 'atencao' | 'prejuizo' | 'indefinido' = 'indefinido'
+  if (dre && rl > 0) {
+    if (margemSeguranca >= 15) situacaoOperacao = 'lucro'
+    else if (margemSeguranca >= 0) situacaoOperacao = 'atencao'
+    else situacaoOperacao = 'prejuizo'
+  }
+
+  return {
+    receitaLiquida: rl,
+    custosVariaveis,
+    custosFixos,
+    depreciacao,
+    lucroDesejado,
+    precoMedioUnitario,
+    margemContribuicaoReais,
+    margemContribuicaoPercentual,
+    pec,
+    pee,
+    pef,
+    pecUnidades,
+    peeUnidades,
+    pefUnidades,
+    margemSeguranca,
+    margemSegurancaReais,
+    situacaoOperacao,
+  }
+}
+
 export function formatCnpj(cnpj: string): string {
   const digits = cnpj.replace(/\D/g, '')
   if (digits.length !== 14) return cnpj

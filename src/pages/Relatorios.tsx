@@ -7,11 +7,13 @@ import {
   calcularBalanco,
   calcularDre,
   calcularIndicadores,
+  calcularPontoEquilibrio,
   gerarAnaliseAutomatica,
   formatBrlMil,
   formatCurrency,
   formatNumber,
   formatPercent,
+  formatInteger,
   formatCnpj,
 } from '@/lib/financeCalculations'
 import { Link } from 'react-router-dom'
@@ -142,6 +144,10 @@ export default function Relatorios() {
   const indAtual = calcularIndicadores(balancoAtual, dreAtual)
   const indAnterior = balancoAnterior ? calcularIndicadores(balancoAnterior, dreAnterior) : null
 
+  const pontoEquilibrioAtual = useMemo(() => {
+    return calcularPontoEquilibrio(dreAtual, balancoAtual)
+  }, [dreAtual, balancoAtual])
+
   const analise = gerarAnaliseAutomatica(balancoAtual, dreAtual, balancoAnterior, dreAnterior)
 
   const hasAnoAnterior = !!balancoAnterior
@@ -219,7 +225,16 @@ export default function Relatorios() {
       csvContent += `Margem Bruta (%);${formatPercent(indAtual.margemBruta, 1)};${formatPercent(indAnterior?.margemBruta, 1)}\n`
       csvContent += `Margem Líquida (%);${formatPercent(indAtual.margemLiquida, 1)};${formatPercent(indAnterior?.margemLiquida, 1)}\n`
       csvContent += `ROA (%);${formatPercent(indAtual.roa, 1)};${formatPercent(indAnterior?.roa, 1)}\n`
-      csvContent += `ROE (%);${formatPercent(indAtual.roe, 1)};${formatPercent(indAnterior?.roe, 1)}\n`
+      csvContent += `ROE (%);${formatPercent(indAtual.roe, 1)};${formatPercent(indAnterior?.roe, 1)}\n\n`
+
+      csvContent += `PONTO DE EQUILÍBRIO E MARGEM DE SEGURANÇA\n`
+      csvContent += `Métrica;Valor em R$;Em Unidades (un);Detalhes\n`
+      csvContent += `Ponto de Equilíbrio Contábil (PEC);${pontoEquilibrioAtual.pec.toFixed(2).replace('.', ',')};${pontoEquilibrioAtual.pecUnidades || '—'};Custos Fixos / MC%\n`
+      csvContent += `Ponto de Equilíbrio Econômico (PEE);${pontoEquilibrioAtual.pee.toFixed(2).replace('.', ',')};${pontoEquilibrioAtual.peeUnidades || '—'};(Custos Fixos + Lucro Meta) / MC%\n`
+      csvContent += `Ponto de Equilíbrio Financeiro (PEF);${pontoEquilibrioAtual.pef.toFixed(2).replace('.', ',')};${pontoEquilibrioAtual.pefUnidades || '—'};(Custos Fixos - Depreciação) / MC%\n`
+      csvContent += `Margem de Contribuição (R$ e %);${pontoEquilibrioAtual.margemContribuicaoReais.toFixed(2).replace('.', ',')};—;${pontoEquilibrioAtual.margemContribuicaoPercentual.toFixed(1).replace('.', ',')}%\n`
+      csvContent += `Margem de Segurança (% e R$);${pontoEquilibrioAtual.margemSegurancaReais.toFixed(2).replace('.', ',')};—;${pontoEquilibrioAtual.margemSeguranca.toFixed(1).replace('.', ',')}%\n`
+      csvContent += `Preço Médio Unitário Sugerido;${pontoEquilibrioAtual.precoMedioUnitario.toFixed(2).replace('.', ',')};—;Base de cálculo para unidades\n`
     }
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -1199,12 +1214,142 @@ export default function Relatorios() {
           </div>
         )}
 
-        {/* 5. PARECER AUTOMÁTICO DO CONSULTOR (SE COMPLETO) */}
+        {/* 5. SEÇÃO: PONTO DE EQUILÍBRIO (SE COMPLETO OU INDICADORES) */}
+        {(tipoRelatorio === 'completo' || tipoRelatorio === 'indicadores') && (
+          <div className="mb-6 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[#0B1F3A] border-b border-slate-200 pb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Scale className="w-3.5 h-3.5 text-blue-600" />
+                {tipoRelatorio === 'completo'
+                  ? '5. Ponto de Equilíbrio & Margem de Segurança'
+                  : 'Ponto de Equilíbrio'}
+              </span>
+              <span className="text-[10px] font-normal text-slate-500 lowercase">
+                preço unitário sugerido: {formatCurrency(pontoEquilibrioAtual.precoMedioUnitario)}
+              </span>
+            </h4>
+
+            {/* Grid dos 3 Pontos de Equilíbrio */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[11px]">
+              {/* PEC */}
+              <div className="p-3 bg-emerald-50/50 rounded-lg border border-emerald-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-emerald-950 uppercase text-[10px]">
+                    PE Contábil (PEC)
+                  </span>
+                  <Badge className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0 border-0">
+                    Lucro Zero
+                  </Badge>
+                </div>
+                <div className="text-base font-black text-emerald-700">
+                  {formatCurrency(pontoEquilibrioAtual.pec)}
+                </div>
+                <div className="text-xs font-bold text-emerald-900">
+                  {formatInteger(pontoEquilibrioAtual.pecUnidades)} un
+                </div>
+                <p className="text-[10px] text-slate-600 leading-tight pt-1 border-t border-emerald-100">
+                  Volume e faturamento para cobrir custos e despesas fixas (
+                  {formatCurrency(pontoEquilibrioAtual.custosFixos)}).
+                </p>
+              </div>
+
+              {/* PEE */}
+              <div className="p-3 bg-purple-50/50 rounded-lg border border-purple-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-purple-950 uppercase text-[10px]">
+                    PE Econômico (PEE)
+                  </span>
+                  <Badge className="bg-purple-100 text-purple-800 text-[9px] px-1.5 py-0 border-0">
+                    Fixos + Lucro
+                  </Badge>
+                </div>
+                <div className="text-base font-black text-purple-700">
+                  {formatCurrency(pontoEquilibrioAtual.pee)}
+                </div>
+                <div className="text-xs font-bold text-purple-900">
+                  {formatInteger(pontoEquilibrioAtual.peeUnidades)} un
+                </div>
+                <p className="text-[10px] text-slate-600 leading-tight pt-1 border-t border-purple-100">
+                  Necessário para cobrir fixos e entregar o lucro desejado de{' '}
+                  {formatCurrency(pontoEquilibrioAtual.lucroDesejado)}.
+                </p>
+              </div>
+
+              {/* PEF */}
+              <div className="p-3 bg-amber-50/50 rounded-lg border border-amber-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-amber-950 uppercase text-[10px]">
+                    PE Financeiro (PEF)
+                  </span>
+                  <Badge className="bg-amber-100 text-amber-800 text-[9px] px-1.5 py-0 border-0">
+                    Caixa Efetivo
+                  </Badge>
+                </div>
+                <div className="text-base font-black text-amber-700">
+                  {formatCurrency(pontoEquilibrioAtual.pef)}
+                </div>
+                <div className="text-xs font-bold text-amber-900">
+                  {formatInteger(pontoEquilibrioAtual.pefUnidades)} un
+                </div>
+                <p className="text-[10px] text-slate-600 leading-tight pt-1 border-t border-amber-100">
+                  Necessário para honrar despesas desembolsáveis (desconsiderando depreciação de{' '}
+                  {formatCurrency(pontoEquilibrioAtual.depreciacao)}).
+                </p>
+              </div>
+            </div>
+
+            {/* Linha complementar de Margem de Contribuição e Segurança */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs pt-1">
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">
+                  Margem de Contribuição (R$)
+                </span>
+                <strong className="text-xs font-bold text-slate-900">
+                  {formatCurrency(pontoEquilibrioAtual.margemContribuicaoReais)}
+                </strong>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Margem de Contribuição (%)</span>
+                <strong className="text-xs font-bold text-blue-700">
+                  {formatPercent(pontoEquilibrioAtual.margemContribuicaoPercentual, 1)}
+                </strong>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Margem de Segurança (R$)</span>
+                <strong
+                  className={`text-xs font-bold ${
+                    pontoEquilibrioAtual.margemSegurancaReais >= 0
+                      ? 'text-emerald-700'
+                      : 'text-red-600'
+                  }`}
+                >
+                  {formatCurrency(pontoEquilibrioAtual.margemSegurancaReais)}
+                </strong>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Margem de Segurança (%)</span>
+                <strong
+                  className={`text-xs font-bold ${
+                    pontoEquilibrioAtual.margemSeguranca >= 15
+                      ? 'text-emerald-700'
+                      : pontoEquilibrioAtual.margemSeguranca >= 0
+                        ? 'text-amber-700'
+                        : 'text-red-600'
+                  }`}
+                >
+                  {formatPercent(pontoEquilibrioAtual.margemSeguranca, 1)}
+                </strong>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 6. PARECER AUTOMÁTICO DO CONSULTOR (SE COMPLETO) */}
         {tipoRelatorio === 'completo' && (
           <div className="mb-6 space-y-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[#0B1F3A] border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-              5. Parecer Técnico da Consultoria
+              6. Parecer Técnico da Consultoria
             </h4>
 
             <div className="space-y-2 text-[11px] leading-relaxed text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
