@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react'
-
 import {
   FileSpreadsheet,
   FileText,
@@ -15,11 +14,17 @@ import {
   Edit2,
   Check,
   Eye,
-  Building2,
-  Calendar,
   DollarSign,
-  HelpCircle,
   FileSearch,
+  Sparkles,
+  Key,
+  ArrowUp,
+  ArrowDown,
+  Columns,
+  SlidersHorizontal,
+  RotateCcw,
+  Pencil,
+  Bot,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,6 +51,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion'
+import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { financeService } from '@/services/financeService'
 import type {
@@ -54,7 +60,12 @@ import type {
   CentroRecord,
   TipoDespesaRecord,
 } from '@/types/finance'
-import { extractTextFromPdf, type PdfExtractionResult } from '@/lib/pdfParser'
+import {
+  extractTextFromPdf,
+  parseBrlNumber,
+  type PdfExtractionResult,
+  type ExtractedPageText,
+} from '@/lib/pdfParser'
 import {
   matchPdfCandidatesWithPlanoContas,
   formatPlanoContaDisplay,
@@ -64,7 +75,16 @@ import {
   convertPdfPagesToExcelRows,
   generateExcelWorkbookFromPdf,
   downloadExcelFile,
+  getSavedColumnMappings,
+  saveColumnMappings,
+  DEFAULT_COLUMN_MAPPINGS,
+  getSavedOcrConfig,
+  saveOcrConfig,
+  processPdfWithOcr,
   type PdfExcelRow,
+  type ColumnMappingConfig,
+  type OcrConfig,
+  type OcrProvider,
 } from '@/lib/pdfToExcel'
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
 import { useNavigate } from 'react-router-dom'
@@ -144,7 +164,7 @@ export default function Importacao() {
   const pdfInputRef = useRef<HTMLInputElement>(null)
 
   // ----------------------------------------------------
-  // Aba PDF para Excel (Estados)
+  // Aba PDF para Excel (Estados & Melhorias)
   // ----------------------------------------------------
   const [converterFile, setConverterFile] = useState<File | null>(null)
   const [converterExtracting, setConverterExtracting] = useState(false)
@@ -160,6 +180,121 @@ export default function Importacao() {
   const [converterIncludeSummarySheet, setConverterIncludeSummarySheet] = useState(true)
   const [isConverterDragOver, setIsConverterDragOver] = useState(false)
   const converterInputRef = useRef<HTMLInputElement>(null)
+
+  // 1. Edição Inline na Tabela de Pré-visualização
+  // Guarda temporariamente o valor sendo digitado no input ativo: { rowId, field, tempValue }
+  const [editingCell, setEditingCell] = useState<{
+    rowId: string
+    field: 'codigo' | 'descricao' | 'tipo' | 'natureza' | 'valor'
+  } | null>(null)
+  const [editingValue, setEditingValue] = useState<string>('')
+
+  // 2. Mapeamento de Colunas Personalizado
+  const [columnMappings, setColumnMappings] = useState<ColumnMappingConfig[]>(() =>
+    getSavedColumnMappings(),
+  )
+  const [showColumnMappingPanel, setShowColumnMappingPanel] = useState(false)
+
+  // 3. Suporte a OCR Externo
+  const [ocrModalOpen, setOcrModalOpen] = useState(false)
+  const [ocrConfig, setOcrConfig] = useState<OcrConfig>(() => getSavedOcrConfig())
+  const [ocrProcessing, setOcrProcessing] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
+  const [ocrCurrentPage, setOcrCurrentPage] = useState(0)
+  const [ocrTotalPages, setOcrTotalPages] = useState(0)
+  const [ocrError, setOcrError] = useState<string | null>(null)
+
+  // Salva mapeamento de colunas no localStorage quando for alterado
+  const handleToggleColumn = (colId: string) => {
+    setColumnMappings((prev) => {
+      const updated = prev.map((col) =>
+        col.id === colId ? { ...col, included: !col.included } : col,
+      )
+      saveColumnMappings(updated)
+      return updated
+    })
+  }
+
+  const handleMoveColumn = (index: number, direction: 'up' | 'down') => {
+    setColumnMappings((prev) => {
+      const targetIdx = direction === 'up' ? index - 1 : index + 1
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev
+      const updated = [...prev]
+      const temp = updated[index]
+      updated[index] = updated[targetIdx]
+      updated[targetIdx] = temp
+      saveColumnMappings(updated)
+      return updated
+    })
+  }
+
+  const handleResetColumnMappings = () => {
+    setColumnMappings(DEFAULT_COLUMN_MAPPINGS)
+    saveColumnMappings(DEFAULT_COLUMN_MAPPINGS)
+    toast({
+      title: 'Mapeamento redefinido',
+      description: 'O mapeamento de colunas voltou ao padrão original.',
+    })
+  }
+
+  // Início e conclusão da edição de célula
+  const handleStartCellEdit = (
+    row: PdfExcelRow,
+    field: 'codigo' | 'descricao' | 'tipo' | 'natureza' | 'valor',
+  ) => {
+    setEditingCell({ rowId: row.id, field })
+    if (field === 'valor') {
+      // Exibe valor formatado em PT-BR para edição amigável
+      setEditingValue(row.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 }))
+    } else {
+      setEditingValue(String(row[field] || ''))
+    }
+  }
+
+  const handleSaveCellEdit = (
+    rowId: string,
+    field: 'codigo' | 'descricao' | 'tipo' | 'natureza' | 'valor',
+  ) => {
+    setConverterRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== rowId) return row
+
+        const editedFields = { ...(row.editedFields || {}), [field]: true }
+
+        if (field === 'valor') {
+          const parsed = parseBrlNumber(editingValue)
+          return {
+            ...row,
+            valor: parsed,
+            editedFields,
+          }
+        }
+
+        if (field === 'natureza') {
+          const val = editingValue as 'Débito' | 'Crédito' | 'Saldo' | 'Geral'
+          return {
+            ...row,
+            natureza: val,
+            editedFields,
+          }
+        }
+
+        return {
+          ...row,
+          [field]: editingValue.trim(),
+          editedFields,
+        }
+      }),
+    )
+
+    setEditingCell(null)
+    setEditingValue('')
+  }
+
+  const handleCancelCellEdit = () => {
+    setEditingCell(null)
+    setEditingValue('')
+  }
 
   // ----------------------------------------------------
   // Handlers do Conversor PDF para Excel
@@ -212,7 +347,7 @@ export default function Importacao() {
         toast({
           title: 'Aviso: Pouco ou nenhum dado detectado',
           description:
-            'Não foi possível identificar tabelas ou textos selecionáveis com valores. Se for um PDF digitalizado/escaneado (imagem), aplique OCR antes.',
+            'Não foi possível identificar tabelas ou textos selecionáveis com valores. Utilize o botão "Enviar para OCR com IA" abaixo para processar PDFs escaneados.',
         })
       } else {
         toast({
@@ -250,6 +385,7 @@ export default function Importacao() {
     setConverterErrorDetail(null)
     setConverterSearchTerm('')
     setConverterFilterType('todos')
+    setEditingCell(null)
   }
 
   const handleDownloadConvertedExcel = () => {
@@ -272,13 +408,15 @@ export default function Importacao() {
       const wb = generateExcelWorkbookFromPdf(converterRows, converterResult, {
         includeRawTextSheet: converterIncludeRawSheet,
         includeSummarySheet: converterIncludeSummarySheet,
+        columnMappings,
       })
 
       downloadExcelFile(wb, suggestedFileName)
 
+      const activeColsCount = columnMappings.filter((c) => c.included).length
       toast({
         title: 'Download iniciado!',
-        description: `Arquivo "${suggestedFileName}" gerado com sucesso.`,
+        description: `Arquivo "${suggestedFileName}" gerado com sucesso com ${activeColsCount} colunas e ${converterRows.length} linhas.`,
       })
     } catch (err: unknown) {
       const error = err as Error
@@ -287,6 +425,95 @@ export default function Importacao() {
         description: error.message || 'Falha ao montar o arquivo .xlsx.',
         variant: 'destructive',
       })
+    }
+  }
+
+  // ----------------------------------------------------
+  // Handler do OCR Externo
+  // ----------------------------------------------------
+  const handleStartOcrProcess = async () => {
+    if (!converterFile) {
+      toast({
+        title: 'Nenhum arquivo selecionado',
+        description: 'Selecione um arquivo PDF antes de executar o OCR.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!ocrConfig.apiKey.trim()) {
+      setOcrError('Por favor, informe uma chave de API válida para o provedor selecionado.')
+      return
+    }
+
+    // Salva a chave e provedor no localStorage
+    saveOcrConfig(ocrConfig)
+    setOcrError(null)
+    setOcrProcessing(true)
+    setOcrProgress(0)
+    setOcrCurrentPage(0)
+    setOcrTotalPages(0)
+
+    try {
+      toast({
+        title: 'Iniciando OCR Inteligente',
+        description: `Enviando páginas para reconhecimento via ${
+          ocrConfig.provider === 'google-vision'
+            ? 'Google Cloud Vision'
+            : 'OpenAI ' + (ocrConfig.model || 'GPT-4o')
+        }...`,
+      })
+
+      const extractedPages: ExtractedPageText[] = await processPdfWithOcr(
+        converterFile,
+        ocrConfig,
+        (pct, current, total) => {
+          setOcrProgress(pct)
+          setOcrCurrentPage(current)
+          setOcrTotalPages(total)
+        },
+      )
+
+      // Transforma o texto do OCR nas linhas estruturadas de Excel
+      const convertedRows = convertPdfPagesToExcelRows(extractedPages)
+
+      const newPdfResult: PdfExtractionResult = {
+        fileName: converterFile.name,
+        totalPages: extractedPages.length,
+        pages: extractedPages,
+        candidates: [],
+        isScannedOrEmpty: convertedRows.length === 0,
+      }
+
+      setConverterResult(newPdfResult)
+      setConverterRows(convertedRows)
+      setConverterErrorDetail(null)
+      setOcrModalOpen(false)
+
+      if (convertedRows.length === 0) {
+        toast({
+          title: 'OCR Concluído com ressalvas',
+          description:
+            'O OCR extraiu o texto mas não foram identificadas linhas com formato de contas/valores contábeis. Você pode consultar o texto bruto.',
+        })
+      } else {
+        toast({
+          title: 'OCR Concluído com Sucesso! 🎉',
+          description: `${convertedRows.length} linhas de dados contábeis foram recuperadas pelo OCR e prontas para edição ou exportação.`,
+        })
+      }
+    } catch (err: unknown) {
+      const error = err as Error
+      const msg = error?.message || 'Ocorreu uma falha ao processar o OCR.'
+      console.error('[OCR Failure]', error)
+      setOcrError(msg)
+      toast({
+        title: 'Falha no OCR',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setOcrProcessing(false)
     }
   }
 
@@ -328,7 +555,7 @@ export default function Importacao() {
   }, [])
 
   // ----------------------------------------------------
-  // Handlers do PDF
+  // Handlers do PDF (Aba Importar PDF -> Lançamentos)
   // ----------------------------------------------------
   const handlePdfFileSelect = async (file: File) => {
     if (!file) return
@@ -381,7 +608,7 @@ export default function Importacao() {
         toast({
           title: 'Aviso: PDF Digitalizado/Escaneado',
           description:
-            'Pouco ou nenhum texto foi detectado no documento. Se for um PDF escaneado (imagem/foto), use OCR antes do upload para extrair os lançamentos.',
+            'Pouco ou nenhum texto foi detectado no documento. Se for um PDF escaneado (imagem/foto), você também pode usar a aba "PDF para Excel" com OCR.',
         })
       } else {
         toast({
@@ -476,7 +703,6 @@ export default function Importacao() {
 
   // Callback de sucesso ao cadastrar nova conta
   const handleQuickRegisterSuccess = async (newPlano: PlanoContaRecord) => {
-    // Recarrega os planos de contas para atualizar a lista geral
     const updatedPlanos = await financeService.getPlanoContas()
     setPlanoContas(updatedPlanos)
 
@@ -523,7 +749,6 @@ export default function Importacao() {
       return
     }
 
-    // Filtra itens matched com valor > 0 e planoConta válido
     const validItems = matchedItems.filter((i) => i.isMatched && i.planoContaId && i.valor > 0)
 
     if (validItems.length === 0) {
@@ -563,7 +788,6 @@ export default function Importacao() {
         empresas.find((e) => e.id === targetEmpresaId)?.nome_fantasia ||
         'Empresa'
 
-      // Formata data em pt-BR
       const [ano, mes, dia] = targetData.split('-')
       const dataFormatada = `${dia}/${mes}/${ano}`
 
@@ -597,7 +821,7 @@ export default function Importacao() {
   }
 
   // ----------------------------------------------------
-  // Handlers do Excel (Mantidos e Aprimorados)
+  // Handlers do Excel (Aba Importar Excel)
   // ----------------------------------------------------
   const handleExcelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -808,8 +1032,8 @@ export default function Importacao() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Importação de Dados</h1>
           <p className="text-slate-500 mt-1">
-            Importe seus demonstrativos contábeis via Excel ou diretamente através de arquivos PDF
-            inteligentes.
+            Importe seus demonstrativos contábeis via Excel, converta PDFs em planilhas customizadas
+            ou processe documentos com OCR inteligente.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -827,7 +1051,7 @@ export default function Importacao() {
       </div>
 
       {/* Abas Principais: Excel vs PDF */}
-      <Tabs defaultValue="pdf" className="space-y-6">
+      <Tabs defaultValue="pdf-to-excel" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3 max-w-xl bg-slate-100 p-1 rounded-xl">
           <TabsTrigger
             value="pdf-to-excel"
@@ -859,7 +1083,7 @@ export default function Importacao() {
         </TabsList>
 
         {/* ========================================================================= */}
-        {/* ABA 0: PDF PARA EXCEL (.xlsx) - NOVA FERRAMENTA                            */}
+        {/* ABA 0: PDF PARA EXCEL (.xlsx) - APRIMORADA                                 */}
         {/* ========================================================================= */}
         <TabsContent value="pdf-to-excel" className="space-y-6 focus:outline-none">
           {/* Card de Apresentação e Destaque da Ferramenta */}
@@ -869,37 +1093,52 @@ export default function Importacao() {
               <div className="space-y-2 max-w-2xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-semibold uppercase tracking-wider">
                   <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-400" />
-                  Conversor PDF ➔ XLSX
+                  Conversor PDF ➔ XLSX Inteligente
                 </div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">
                   Converter PDF para Planilha Excel (.xlsx)
                 </h2>
                 <p className="text-slate-300 text-sm leading-relaxed">
-                  Transforme balancetes, extratos e relatórios contábeis em formato PDF em uma
-                  planilha Excel limpa, estruturada e editável, processada instantaneamente com
-                  segurança no seu próprio navegador.
+                  Transforme balancetes, extratos e relatórios em planilhas editáveis. Edite células
+                  inline, configure o mapeamento de colunas ou acione OCR com IA para documentos
+                  escaneados.
                 </p>
               </div>
 
-              {converterRows.length > 0 && (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <Button
-                    onClick={handleDownloadConvertedExcel}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 gap-2 h-11 px-5"
-                  >
-                    <Download className="w-4 h-4" />
-                    Baixar Excel ({converterRows.length} linhas)
-                  </Button>
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                {converterFile && (
                   <Button
                     variant="outline"
-                    onClick={handleResetConverter}
-                    className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs h-11"
+                    onClick={() => {
+                      setOcrError(null)
+                      setOcrModalOpen(true)
+                    }}
+                    className="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-100 border-indigo-400/40 text-xs h-11 gap-1.5 shadow-sm"
                   >
-                    <Trash2 className="w-4 h-4 mr-1.5 text-rose-400" />
-                    Novo Arquivo
+                    <Sparkles className="w-4 h-4 text-indigo-300 animate-pulse" />
+                    OCR para Escaneados
                   </Button>
-                </div>
-              )}
+                )}
+                {converterRows.length > 0 && (
+                  <>
+                    <Button
+                      onClick={handleDownloadConvertedExcel}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 gap-2 h-11 px-5"
+                    >
+                      <Download className="w-4 h-4" />
+                      Baixar Excel ({converterRows.length})
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleResetConverter}
+                      className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs h-11"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1.5 text-rose-400" />
+                      Novo Arquivo
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -940,7 +1179,7 @@ export default function Importacao() {
                   </h3>
                   <p className="text-sm text-slate-500 mt-1 max-w-md">
                     O sistema extrai tabelas, contas, códigos e valores monetários organizando tudo
-                    em colunas no Excel (.xlsx).
+                    em colunas customizáveis no Excel (.xlsx).
                   </p>
 
                   <Button
@@ -962,10 +1201,20 @@ export default function Importacao() {
                       <p className="text-xs text-rose-800 leading-relaxed">
                         {converterErrorDetail}
                       </p>
-                      <p className="pt-1 text-xs text-rose-700">
-                        Dica: Certifique-se de que o PDF não está corrompido, protegido com senha ou
-                        seja uma foto sem texto selecionável (necessita de OCR).
-                      </p>
+                      <div className="pt-2 flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setOcrError(null)
+                            setOcrModalOpen(true)
+                          }}
+                          className="bg-white border-rose-300 text-rose-800 hover:bg-rose-100 text-xs font-semibold gap-1.5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                          Tentar com OCR Inteligente
+                        </Button>
+                      </div>
                     </div>
                     <Button
                       variant="ghost"
@@ -982,35 +1231,32 @@ export default function Importacao() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
                     <div className="text-indigo-600 mt-0.5">
-                      <CheckCircle className="w-4 h-4" />
+                      <Edit2 className="w-4 h-4" />
                     </div>
                     <div className="text-xs text-slate-600 leading-relaxed">
-                      <span className="font-semibold text-slate-800 block">
-                        Formatação Automática
-                      </span>
-                      Cria abas com dados organizados, resumo por categoria e formatação de moeda em
-                      R$.
+                      <span className="font-semibold text-slate-800 block">Edição Inline</span>
+                      Altere valores, códigos ou descrições direto na pré-visualização antes de
+                      gerar a planilha.
                     </div>
                   </div>
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
                     <div className="text-emerald-600 mt-0.5">
-                      <CheckCircle className="w-4 h-4" />
+                      <Columns className="w-4 h-4" />
                     </div>
                     <div className="text-xs text-slate-600 leading-relaxed">
                       <span className="font-semibold text-slate-800 block">
-                        Detecção Inteligente
+                        Mapeamento de Colunas
                       </span>
-                      Identifica código contábil, descrição da conta, natureza (débito/crédito) e
-                      valor.
+                      Escolha quais campos exportar e a ordem exata das colunas no Excel gerado.
                     </div>
                   </div>
                   <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
-                    <div className="text-amber-600 mt-0.5">
-                      <AlertTriangle className="w-4 h-4" />
+                    <div className="text-purple-600 mt-0.5">
+                      <Sparkles className="w-4 h-4" />
                     </div>
                     <div className="text-xs text-slate-600 leading-relaxed">
-                      <span className="font-semibold text-slate-800 block">Documentos Nativos</span>
-                      Compatível com PDFs digitais (exportados de sistemas contábeis e ERPs).
+                      <span className="font-semibold text-slate-800 block">Suporte a OCR</span>
+                      Documento escaneado como imagem? Use OCR via IA para recuperar os dados.
                     </div>
                   </div>
                 </div>
@@ -1044,7 +1290,7 @@ export default function Importacao() {
             </div>
           )}
 
-          {/* Área 2: Pré-visualização dos Dados e Download (Quando já processado) */}
+          {/* Área 2: Pré-visualização dos Dados, Mapeamento e Download (Quando já processado) */}
           {converterResult && (
             <div className="space-y-6">
               {/* Barra de Métricas e Ações do Arquivo */}
@@ -1065,6 +1311,13 @@ export default function Importacao() {
                       <span className="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-semibold">
                         {converterRows.length} linhas detectadas
                       </span>
+                      {converterRows.some(
+                        (r) => r.editedFields && Object.keys(r.editedFields).length > 0,
+                      ) && (
+                        <span className="text-xs bg-amber-100 text-amber-900 border border-amber-200 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+                          <Pencil className="w-3 h-3 text-amber-700" /> Células editadas
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-1">
                       Valor total acumulado:{' '}
@@ -1082,36 +1335,167 @@ export default function Importacao() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleResetConverter}
-                    className="text-slate-600 hover:text-rose-600 bg-white border-slate-300 gap-1.5"
+                    onClick={() => setShowColumnMappingPanel(!showColumnMappingPanel)}
+                    className={`gap-1.5 text-xs h-9 ${
+                      showColumnMappingPanel
+                        ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                        : 'bg-white border-slate-300 text-slate-700'
+                    }`}
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                    Mapeamento de Colunas ({columnMappings.filter((c) => c.included).length}/
+                    {columnMappings.length})
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setOcrError(null)
+                      setOcrModalOpen(true)
+                    }}
+                    className="gap-1.5 text-xs h-9 bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    Enviar para OCR
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetConverter}
+                    className="text-slate-600 hover:text-rose-600 bg-white border-slate-300 gap-1.5 h-9"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                     Trocar Arquivo
                   </Button>
                   <Button
                     onClick={handleDownloadConvertedExcel}
                     disabled={converterRows.length === 0}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-sm px-4"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-sm px-4 h-9 text-xs"
                   >
-                    <Download className="w-4 h-4" />
+                    <Download className="w-3.5 h-3.5" />
                     Baixar Excel (.xlsx)
                   </Button>
                 </div>
               </div>
 
-              {/* Aviso se PDF parecer digitalizado/vazio */}
+              {/* Aviso se PDF parecer digitalizado/vazio com botão de OCR destacado */}
               {converterResult.isScannedOrEmpty && (
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800">
-                    <p className="font-semibold">
-                      Documento sem texto selecionável (provável imagem escaneada)
-                    </p>
-                    <p className="mt-1 text-xs text-amber-700 leading-relaxed">
-                      Não encontramos caracteres de texto ou tabelas estruturadas no PDF. Se o
-                      documento foi criado a partir de fotos ou scanner, utilize uma ferramenta de
-                      OCR (reconhecimento óptico de caracteres) antes de converter.
-                    </p>
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-semibold">
+                        Documento sem texto selecionável (provável imagem escaneada)
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700 leading-relaxed">
+                        Não encontramos caracteres de texto ou tabelas no formato nativo. Deseja
+                        executar o reconhecimento óptico de caracteres (OCR) para extrair o texto
+                        automaticamente?
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      setOcrError(null)
+                      setOcrModalOpen(true)
+                    }}
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs gap-1.5 shrink-0 shadow-sm"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    Enviar para OCR
+                  </Button>
+                </div>
+              )}
+
+              {/* PAINEL: Mapeamento de Colunas do Excel */}
+              {showColumnMappingPanel && (
+                <div className="bg-slate-900 text-slate-100 rounded-xl p-5 border border-slate-800 space-y-4">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Columns className="w-5 h-5 text-indigo-400" />
+                      <div>
+                        <h4 className="text-sm font-bold text-white">
+                          Mapeamento de Colunas do Excel
+                        </h4>
+                        <p className="text-xs text-slate-400">
+                          Escolha quais campos do PDF serão gerados no Excel e ordene as colunas
+                          conforme a sua necessidade. A configuração é salva automaticamente no seu
+                          navegador.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetColumnMappings}
+                      className="text-xs text-slate-400 hover:text-white hover:bg-slate-800 gap-1"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Restaurar Padrão
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
+                    {columnMappings.map((col, idx) => (
+                      <div
+                        key={col.id}
+                        className={`p-3 rounded-lg border flex items-center justify-between transition-colors ${
+                          col.included
+                            ? 'bg-slate-800/90 border-slate-700 text-white'
+                            : 'bg-slate-950/40 border-slate-800/80 text-slate-500 opacity-60'
+                        }`}
+                      >
+                        <label className="flex items-center gap-2 cursor-pointer flex-1 min-w-0 pr-2">
+                          <input
+                            type="checkbox"
+                            checked={col.included}
+                            onChange={() => handleToggleColumn(col.id)}
+                            className="rounded border-slate-600 bg-slate-900 text-indigo-500 focus:ring-indigo-500 shrink-0"
+                          />
+                          <div className="truncate">
+                            <span className="text-xs font-semibold block truncate">
+                              {col.label}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block font-mono truncate">
+                              Cabeçalho: "{col.excelHeader}"
+                            </span>
+                          </div>
+                        </label>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={idx === 0}
+                            onClick={() => handleMoveColumn(idx, 'up')}
+                            className="h-6 w-6 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-20"
+                            title="Mover para esquerda/cima"
+                          >
+                            <ArrowUp className="w-3 h-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={idx === columnMappings.length - 1}
+                            onClick={() => handleMoveColumn(idx, 'down')}
+                            className="h-6 w-6 text-slate-400 hover:text-white hover:bg-slate-700 disabled:opacity-20"
+                            title="Mover para direita/baixo"
+                          >
+                            <ArrowDown className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="text-[11px] text-indigo-300 bg-indigo-950/40 border border-indigo-900/60 p-2.5 rounded-lg flex items-center justify-between">
+                    <span>
+                      ℹ️ O arquivo .xlsx gerado respeitará rigorosamente esta ordem e seleção.
+                    </span>
+                    <span className="font-mono font-semibold">
+                      {columnMappings.filter((c) => c.included).length} de {columnMappings.length}{' '}
+                      colunas ativas
+                    </span>
                   </div>
                 </div>
               )}
@@ -1156,7 +1540,7 @@ export default function Importacao() {
                         onChange={(e) => setConverterIncludeSummarySheet(e.target.checked)}
                         className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
-                      <span>Incluir aba de Resumo</span>
+                      <span>Aba de Resumo</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <input
@@ -1165,13 +1549,13 @@ export default function Importacao() {
                         onChange={(e) => setConverterIncludeRawSheet(e.target.checked)}
                         className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                       />
-                      <span>Incluir texto bruto</span>
+                      <span>Aba Texto Bruto</span>
                     </label>
                   </div>
                 </div>
               </div>
 
-              {/* Tabela de Pré-visualização do que será exportado para o Excel */}
+              {/* Tabela de Pré-visualização com EDIÇÃO INLINE */}
               {(() => {
                 const filteredRows = converterRows.filter((r) => {
                   const matchesSearch =
@@ -1190,14 +1574,22 @@ export default function Importacao() {
                 return (
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
                     <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
-                      <div>
-                        <h4 className="font-bold text-slate-800 text-sm">
-                          Pré-visualização da Planilha Excel (.xlsx)
-                        </h4>
-                        <p className="text-xs text-slate-500">
-                          Exibindo {filteredRows.length} de {converterRows.length} registros
-                          extraídos
-                        </p>
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                            Pré-visualização e Edição da Planilha
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-normal text-slate-500"
+                            >
+                              Clique no valor para editar inline
+                            </Badge>
+                          </h4>
+                          <p className="text-xs text-slate-500">
+                            Exibindo {filteredRows.length} de {converterRows.length} registros
+                            extraídos
+                          </p>
+                        </div>
                       </div>
                       <div className="text-xs text-slate-500">
                         Total Filtrado:{' '}
@@ -1221,16 +1613,16 @@ export default function Importacao() {
                         </p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto max-h-[500px]">
+                      <div className="overflow-x-auto max-h-[520px]">
                         <table className="w-full text-xs text-left">
-                          <thead className="bg-slate-100/80 text-slate-700 font-semibold uppercase tracking-wider sticky top-0 border-b border-slate-200 shadow-sm">
+                          <thead className="bg-slate-100/90 text-slate-700 font-semibold uppercase tracking-wider sticky top-0 border-b border-slate-200 shadow-sm z-10">
                             <tr>
-                              <th className="py-2.5 px-3 w-12 text-center">#</th>
-                              <th className="py-2.5 px-3 w-20">Pág</th>
+                              <th className="py-2.5 px-3 w-10 text-center">#</th>
+                              <th className="py-2.5 px-3 w-16">Pág</th>
                               <th className="py-2.5 px-3 w-28">Código</th>
                               <th className="py-2.5 px-3">Conta / Descrição</th>
                               <th className="py-2.5 px-3 w-36">Classificação</th>
-                              <th className="py-2.5 px-3 w-24">Natureza</th>
+                              <th className="py-2.5 px-3 w-28">Natureza</th>
                               <th className="py-2.5 px-3 text-right w-36">Valor (R$)</th>
                               <th className="py-2.5 px-3 max-w-xs truncate">
                                 Linha Original no PDF
@@ -1238,60 +1630,283 @@ export default function Importacao() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-sans">
-                            {filteredRows.map((row, idx) => (
-                              <tr key={row.id} className="hover:bg-slate-50/90 transition-colors">
-                                <td className="py-2 px-3 text-center text-slate-400 font-mono">
-                                  {idx + 1}
-                                </td>
-                                <td className="py-2 px-3 text-slate-500 font-mono">
-                                  p.{row.pageNumber}
-                                </td>
-                                <td className="py-2 px-3 font-mono font-medium text-slate-700">
-                                  {row.codigo !== '-' ? (
-                                    <span className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-[11px]">
-                                      {row.codigo}
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-300">-</span>
-                                  )}
-                                </td>
-                                <td className="py-2 px-3">
-                                  <div className="font-semibold text-slate-900">
-                                    {row.descricao}
-                                  </div>
-                                </td>
-                                <td className="py-2 px-3">
-                                  <span
-                                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                                      row.tipo.includes('Ativo')
-                                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                        : row.tipo.includes('Passivo')
-                                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                                          : row.tipo.includes('Receita')
-                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                            : row.tipo.includes('Despesa') ||
-                                                row.tipo.includes('Custo')
-                                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                              : 'bg-slate-100 text-slate-700'
-                                    }`}
-                                  >
-                                    {row.tipo}
-                                  </span>
-                                </td>
-                                <td className="py-2 px-3 text-slate-600 font-medium">
-                                  {row.natureza}
-                                </td>
-                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
-                                  {new Intl.NumberFormat('pt-BR', {
-                                    style: 'currency',
-                                    currency: 'BRL',
-                                  }).format(row.valor)}
-                                </td>
-                                <td className="py-2 px-3 text-slate-400 font-mono text-[11px] max-w-xs truncate">
-                                  {row.linhaOriginal}
-                                </td>
-                              </tr>
-                            ))}
+                            {filteredRows.map((row, idx) => {
+                              const isEditingThisRow = editingCell?.rowId === row.id
+                              const hasEditedField =
+                                row.editedFields && Object.keys(row.editedFields).length > 0
+
+                              return (
+                                <tr
+                                  key={row.id}
+                                  className={`hover:bg-slate-50/90 transition-colors group ${
+                                    hasEditedField ? 'bg-amber-50/20' : ''
+                                  }`}
+                                >
+                                  {/* # */}
+                                  <td className="py-2 px-3 text-center text-slate-400 font-mono">
+                                    {idx + 1}
+                                  </td>
+
+                                  {/* Pág */}
+                                  <td className="py-2 px-3 text-slate-500 font-mono">
+                                    p.{row.pageNumber}
+                                  </td>
+
+                                  {/* Código */}
+                                  <td className="py-1.5 px-3 font-mono font-medium text-slate-700">
+                                    {isEditingThisRow && editingCell?.field === 'codigo' ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          value={editingValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter')
+                                              handleSaveCellEdit(row.id, 'codigo')
+                                            if (e.key === 'Escape') handleCancelCellEdit()
+                                          }}
+                                          onBlur={() => handleSaveCellEdit(row.id, 'codigo')}
+                                          className="h-7 text-xs font-mono w-24 p-1 bg-white border-indigo-500 ring-1 ring-indigo-500"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => handleStartCellEdit(row, 'codigo')}
+                                        className={`cursor-pointer rounded px-1.5 py-0.5 flex items-center gap-1.5 transition-all ${
+                                          row.editedFields?.codigo
+                                            ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold'
+                                            : 'hover:bg-slate-200/70 text-slate-800'
+                                        }`}
+                                        title="Clique para editar código contábil"
+                                      >
+                                        <span>{row.codigo !== '-' ? row.codigo : '-'}</span>
+                                        {row.editedFields?.codigo ? (
+                                          <Pencil className="w-2.5 h-2.5 text-amber-600" />
+                                        ) : (
+                                          <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Descrição */}
+                                  <td className="py-1.5 px-3">
+                                    {isEditingThisRow && editingCell?.field === 'descricao' ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          value={editingValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter')
+                                              handleSaveCellEdit(row.id, 'descricao')
+                                            if (e.key === 'Escape') handleCancelCellEdit()
+                                          }}
+                                          onBlur={() => handleSaveCellEdit(row.id, 'descricao')}
+                                          className="h-7 text-xs w-full p-1 bg-white border-indigo-500 ring-1 ring-indigo-500"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => handleStartCellEdit(row, 'descricao')}
+                                        className={`cursor-pointer rounded px-1.5 py-0.5 flex items-center justify-between gap-2 transition-all ${
+                                          row.editedFields?.descricao
+                                            ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
+                                            : 'hover:bg-slate-100 text-slate-900 font-semibold'
+                                        }`}
+                                        title="Clique para editar nome da conta"
+                                      >
+                                        <span className="truncate">{row.descricao}</span>
+                                        {row.editedFields?.descricao ? (
+                                          <Pencil className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                        ) : (
+                                          <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 shrink-0" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Classificação */}
+                                  <td className="py-1.5 px-3">
+                                    {isEditingThisRow && editingCell?.field === 'tipo' ? (
+                                      <Select
+                                        value={editingValue}
+                                        onValueChange={(val) => {
+                                          setEditingValue(val)
+                                          // Salva imediatamente na seleção
+                                          setConverterRows((prev) =>
+                                            prev.map((r) =>
+                                              r.id === row.id
+                                                ? {
+                                                    ...r,
+                                                    tipo: val,
+                                                    editedFields: {
+                                                      ...(r.editedFields || {}),
+                                                      tipo: true,
+                                                    },
+                                                  }
+                                                : r,
+                                            ),
+                                          )
+                                          setEditingCell(null)
+                                        }}
+                                        defaultOpen
+                                      >
+                                        <SelectTrigger className="h-7 text-xs bg-white border-indigo-500">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Ativo">Ativo</SelectItem>
+                                          <SelectItem value="Passivo / PL">Passivo / PL</SelectItem>
+                                          <SelectItem value="Receita">Receita</SelectItem>
+                                          <SelectItem value="Despesa / Custo">
+                                            Despesa / Custo
+                                          </SelectItem>
+                                          <SelectItem value="Contábil / Geral">
+                                            Contábil / Geral
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <div
+                                        onClick={() => handleStartCellEdit(row, 'tipo')}
+                                        className="cursor-pointer flex items-center gap-1"
+                                        title="Clique para alterar classificação"
+                                      >
+                                        <span
+                                          className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold transition-all ${
+                                            row.editedFields?.tipo
+                                              ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                              : row.tipo.includes('Ativo')
+                                                ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                                : row.tipo.includes('Passivo')
+                                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                                  : row.tipo.includes('Receita')
+                                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                                    : row.tipo.includes('Despesa') ||
+                                                        row.tipo.includes('Custo')
+                                                      ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                                      : 'bg-slate-100 text-slate-700'
+                                          }`}
+                                        >
+                                          {row.tipo}
+                                        </span>
+                                        {row.editedFields?.tipo && (
+                                          <Pencil className="w-2.5 h-2.5 text-amber-600" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Natureza */}
+                                  <td className="py-1.5 px-3">
+                                    {isEditingThisRow && editingCell?.field === 'natureza' ? (
+                                      <Select
+                                        value={editingValue}
+                                        onValueChange={(val) => {
+                                          setEditingValue(val)
+                                          setConverterRows((prev) =>
+                                            prev.map((r) =>
+                                              r.id === row.id
+                                                ? {
+                                                    ...r,
+                                                    natureza: val as
+                                                      | 'Débito'
+                                                      | 'Crédito'
+                                                      | 'Saldo'
+                                                      | 'Geral',
+                                                    editedFields: {
+                                                      ...(r.editedFields || {}),
+                                                      natureza: true,
+                                                    },
+                                                  }
+                                                : r,
+                                            ),
+                                          )
+                                          setEditingCell(null)
+                                        }}
+                                        defaultOpen
+                                      >
+                                        <SelectTrigger className="h-7 text-xs bg-white border-indigo-500">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="Débito">Débito</SelectItem>
+                                          <SelectItem value="Crédito">Crédito</SelectItem>
+                                          <SelectItem value="Saldo">Saldo</SelectItem>
+                                          <SelectItem value="Geral">Geral</SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    ) : (
+                                      <div
+                                        onClick={() => handleStartCellEdit(row, 'natureza')}
+                                        className={`cursor-pointer rounded px-1.5 py-0.5 inline-flex items-center gap-1 font-medium transition-all ${
+                                          row.editedFields?.natureza
+                                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                                            : 'hover:bg-slate-100 text-slate-600'
+                                        }`}
+                                        title="Clique para alterar natureza"
+                                      >
+                                        <span>{row.natureza}</span>
+                                        {row.editedFields?.natureza ? (
+                                          <Pencil className="w-2.5 h-2.5 text-amber-600" />
+                                        ) : (
+                                          <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Valor (R$) */}
+                                  <td className="py-1.5 px-3 text-right">
+                                    {isEditingThisRow && editingCell?.field === 'valor' ? (
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Input
+                                          value={editingValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter')
+                                              handleSaveCellEdit(row.id, 'valor')
+                                            if (e.key === 'Escape') handleCancelCellEdit()
+                                          }}
+                                          onBlur={() => handleSaveCellEdit(row.id, 'valor')}
+                                          placeholder="0,00"
+                                          className="h-7 text-xs font-mono text-right w-28 p-1 bg-white border-indigo-500 ring-1 ring-indigo-500 font-bold"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => handleStartCellEdit(row, 'valor')}
+                                        className={`cursor-pointer rounded px-1.5 py-0.5 inline-flex items-center justify-end gap-1.5 font-mono font-bold transition-all ${
+                                          row.editedFields?.valor
+                                            ? 'bg-amber-100 text-amber-950 border border-amber-300 ring-1 ring-amber-300'
+                                            : 'hover:bg-slate-100 text-slate-900'
+                                        }`}
+                                        title="Clique para editar o valor (aceita padrão brasileiro com vírgula)"
+                                      >
+                                        <span>
+                                          {new Intl.NumberFormat('pt-BR', {
+                                            style: 'currency',
+                                            currency: 'BRL',
+                                          }).format(row.valor)}
+                                        </span>
+                                        {row.editedFields?.valor ? (
+                                          <Pencil className="w-2.5 h-2.5 text-amber-600" />
+                                        ) : (
+                                          <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Linha Original */}
+                                  <td className="py-2 px-3 text-slate-400 font-mono text-[11px] max-w-xs truncate">
+                                    {row.linhaOriginal}
+                                  </td>
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -1301,29 +1916,39 @@ export default function Importacao() {
               })()}
 
               {/* Botão Inferior de Download */}
-              <div className="flex justify-end gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  onClick={handleResetConverter}
-                  className="bg-white border-slate-300"
-                >
-                  Carregar Outro PDF
-                </Button>
-                <Button
-                  onClick={handleDownloadConvertedExcel}
-                  disabled={converterRows.length === 0}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-sm px-6"
-                >
-                  <Download className="w-4 h-4" />
-                  Baixar Planilha Excel ({converterRows.length} linhas)
-                </Button>
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                <div className="text-xs text-slate-500">
+                  {converterRows.some(
+                    (r) => r.editedFields && Object.keys(r.editedFields).length > 0,
+                  )
+                    ? '✨ Os valores editados na tabela acima serão incluídos diretamente no arquivo Excel baixado.'
+                    : '💡 Clique em qualquer célula de código, descrição, tipo ou valor para editar antes de exportar.'}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={handleResetConverter}
+                    className="bg-white border-slate-300"
+                  >
+                    Carregar Outro PDF
+                  </Button>
+                  <Button
+                    onClick={handleDownloadConvertedExcel}
+                    disabled={converterRows.length === 0}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-sm px-6"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Planilha Excel ({converterRows.length} linhas)
+                  </Button>
+                </div>
               </div>
             </div>
           )}
         </TabsContent>
 
         {/* ========================================================================= */}
-        {/* ABA 1: IMPORTAR PDF                                                      */}
+        {/* ABA 1: IMPORTAR PDF (Lançamentos para o Sistema)                          */}
         {/* ========================================================================= */}
         <TabsContent value="pdf" className="space-y-6 focus:outline-none">
           {/* Step Wizard visual */}
@@ -1542,6 +2167,7 @@ export default function Importacao() {
               )}
             </div>
           )}
+
           {/* SEÇÃO 2: Revisão dos dados e Matching (Passo 2) */}
           {pdfActiveStep === 2 && pdfResult && (
             <div className="space-y-6">
@@ -1609,8 +2235,8 @@ export default function Importacao() {
                     <p className="font-semibold">Possível PDF escaneado (sem texto digital)</p>
                     <p className="mt-1 text-xs text-amber-700 leading-relaxed">
                       Não conseguimos extrair texto selecionável deste PDF. Se ele foi gerado a
-                      partir de um scanner ou foto, use uma ferramenta de OCR (reconhecimento óptico
-                      de caracteres) antes de importar ou digite manualmente.
+                      partir de um scanner ou foto, use a aba <strong>PDF para Excel</strong> com a
+                      opção de OCR ou digite manualmente.
                     </p>
                   </div>
                 </div>
@@ -2150,6 +2776,162 @@ export default function Importacao() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* ========================================================================= */}
+      {/* MODAL: Configuração e Execução de OCR Externo                             */}
+      {/* ========================================================================= */}
+      <Dialog open={ocrModalOpen} onOpenChange={setOcrModalOpen}>
+        <DialogContent className="sm:max-w-lg bg-white">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
+                <Sparkles className="w-5 h-5 text-indigo-600" />
+              </div>
+              <div>
+                <DialogTitle className="text-xl text-slate-900">
+                  OCR para PDFs Escaneados
+                </DialogTitle>
+                <DialogDescription>
+                  Reconhecimento óptico de caracteres com IA para documentos fotocopiados ou sem
+                  texto digital.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            {ocrError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <span className="flex-1 leading-relaxed">{ocrError}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-slate-700">Provedor de OCR *</Label>
+              <Select
+                value={ocrConfig.provider}
+                onValueChange={(val: OcrProvider) =>
+                  setOcrConfig((prev) => ({ ...prev, provider: val }))
+                }
+                disabled={ocrProcessing}
+              >
+                <SelectTrigger className="bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-indigo-600" />
+                      <span>OpenAI (GPT-4o Vision) - Recomendado</span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="google-vision">
+                    <div className="flex items-center gap-2">
+                      <FileSearch className="w-4 h-4 text-emerald-600" />
+                      <span>Google Cloud Vision API</span>
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {ocrConfig.provider === 'openai' && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Modelo da OpenAI</Label>
+                <Select
+                  value={ocrConfig.model || 'gpt-4o'}
+                  onValueChange={(val) => setOcrConfig((prev) => ({ ...prev, model: val }))}
+                  disabled={ocrProcessing}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gpt-4o">gpt-4o (Alta precisão contábil)</SelectItem>
+                    <SelectItem value="gpt-4o-mini">
+                      gpt-4o-mini (Mais rápido e econômico)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label
+                  htmlFor="ocrApiKey"
+                  className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                >
+                  <Key className="w-3.5 h-3.5 text-slate-500" />
+                  Chave de API ({ocrConfig.provider === 'openai' ? 'OpenAI' : 'Google Cloud'}) *
+                </Label>
+              </div>
+              <Input
+                id="ocrApiKey"
+                type="password"
+                placeholder={ocrConfig.provider === 'openai' ? 'sk-proj-...' : 'AIzaSy...'}
+                value={ocrConfig.apiKey}
+                onChange={(e) => setOcrConfig((prev) => ({ ...prev, apiKey: e.target.value }))}
+                disabled={ocrProcessing}
+                className="bg-white font-mono text-xs"
+              />
+              <p className="text-[11px] text-slate-500">
+                Sua chave fica salva no armazenamento local do seu navegador (localStorage) para
+                futuras conversões e nunca é armazenada em servidores terceiros.
+              </p>
+            </div>
+
+            {ocrProcessing && (
+              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+                <div className="flex items-center justify-between text-xs font-semibold text-indigo-900">
+                  <span className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-indigo-600 animate-spin" />
+                    Processando página {ocrCurrentPage} de {ocrTotalPages}...
+                  </span>
+                  <span>{ocrProgress}%</span>
+                </div>
+                <div className="w-full bg-indigo-200 rounded-full h-2 overflow-hidden">
+                  <div
+                    className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${ocrProgress}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-indigo-700 text-center">
+                  Renderizando páginas em alta resolução e transcrevendo tabelas contábeis...
+                </p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setOcrModalOpen(false)}
+              disabled={ocrProcessing}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleStartOcrProcess}
+              disabled={ocrProcessing || !ocrConfig.apiKey.trim()}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold gap-2 shadow-sm"
+            >
+              {ocrProcessing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Executando OCR...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Iniciar Reconhecimento
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ========================================================================= */}
       {/* MODAL: Confirmação de Criação de Lançamentos do PDF                       */}

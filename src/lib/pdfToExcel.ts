@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx'
+import * as pdfjsLib from 'pdfjs-dist'
 import {
   extractTextFromPdf,
   parseBrlNumber,
@@ -6,6 +7,45 @@ import {
   type PdfExtractionResult,
   type ExtractedPageText,
 } from './pdfParser'
+
+export type OcrProvider = 'openai' | 'google-vision'
+
+export interface OcrConfig {
+  provider: OcrProvider
+  apiKey: string
+  model?: string
+}
+
+export const OCR_CONFIG_STORAGE_KEY = 'skip_pdf_ocr_config_v1'
+
+export function getSavedOcrConfig(): OcrConfig {
+  if (typeof window === 'undefined') {
+    return { provider: 'openai', apiKey: '', model: 'gpt-4o' }
+  }
+  try {
+    const raw = localStorage.getItem(OCR_CONFIG_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<OcrConfig>
+      return {
+        provider: parsed.provider === 'google-vision' ? 'google-vision' : 'openai',
+        apiKey: parsed.apiKey || '',
+        model: parsed.model || 'gpt-4o',
+      }
+    }
+  } catch (err) {
+    console.warn('[OCR Service] Erro ao ler config do localStorage:', err)
+  }
+  return { provider: 'openai', apiKey: '', model: 'gpt-4o' }
+}
+
+export function saveOcrConfig(config: OcrConfig): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(OCR_CONFIG_STORAGE_KEY, JSON.stringify(config))
+  } catch (err) {
+    console.warn('[OCR Service] Erro ao salvar config no localStorage:', err)
+  }
+}
 
 export interface PdfExcelRow {
   id: string
@@ -17,6 +57,348 @@ export interface PdfExcelRow {
   valor: number
   valoresAdicionais?: number[]
   linhaOriginal: string
+  editedFields?: Partial<Record<'codigo' | 'descricao' | 'tipo' | 'natureza' | 'valor', boolean>>
+}
+
+export type ColumnFieldKey =
+  | 'item'
+  | 'codigo'
+  | 'descricao'
+  | 'tipo'
+  | 'natureza'
+  | 'valor'
+  | 'pageNumber'
+  | 'linhaOriginal'
+
+export interface ColumnMappingConfig {
+  id: ColumnFieldKey
+  label: string
+  excelHeader: string
+  included: boolean
+  width: number
+}
+
+/**
+ * Converte uma página do PDF em imagem Base64 (data:image/jpeg;base64,...)
+ * renderizando via <canvas> com PDF.js
+ */
+export async function renderPdfPageToJpegBase64(
+  page: pdfjsLib.PDFPageProxy,
+  scale = 2.0,
+): Promise<string> {
+  const viewport = page.getViewport({ scale })
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('Não foi possível obter o contexto 2D do Canvas para renderizar a página.')
+  }
+
+  canvas.width = Math.floor(viewport.width)
+  canvas.height = Math.floor(viewport.height)
+
+  const renderContext = {
+    canvasContext: context,
+    viewport,
+  }
+
+  const renderTask = page.render(renderContext)
+  await renderTask.promise
+
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+/**
+ * Realiza OCR de uma imagem via OpenAI Chat Completions (GPT-4o Vision)
+ */
+async function performOpenAiOcr(
+  imageBase64: string,
+  apiKey: string,
+  model = 'gpt-4o',
+): Promise<string> {
+  const trimmedKey = apiKey.trim()
+  if (!trimmedKey) {
+    throw new Error(
+      'Chave de API da OpenAI não informada. Por favor, configure sua chave no modal de OCR.',
+    )
+  }
+
+  const prompt = `Você é um assistente especialista em transcrição e OCR contábil de alta precisão.
+Extraia TODO o texto contido nesta imagem de documento/relatório contábil linha a linha.
+REGRAS OBRIGATÓRIAS:
+1. Mantenha a ordem natural de leitura das linhas, preservando códigos contábeis (ex: 1.1.01.001), nomes das contas e valores numéricos em R$ (ex: 1.250,00 ou -500,00 ou (200,00)).
+2. Não invente dados e não resuma o documento.
+3. Se houver tabelas, mantenha em cada linha: código, descrição e valor(es).
+4. Retorne APENAS o texto puro extraído linha a linha, sem blocos de código markdown (\`\`\`) e sem comentários introdutórios.`
+
+  const requestBody = {
+    model: model || 'gpt-4o',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          {
+            type: 'image_url',
+            image_url: {
+              url: imageBase64,
+              detail: 'high',
+            },
+          },
+        ],
+      },
+    ],
+    max_tokens: 4000,
+    temperature: 0.1,
+  }
+
+  let response: Response
+  try {
+    response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${trimmedKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    })
+  } catch (err: unknown) {
+    const error = err as Error
+    throw new Error(
+      `Falha na conexão de rede com a API da OpenAI (${error.message || 'Erro de conexão'}). Verifique sua internet ou bloqueadores de requisição.`,
+    )
+  }
+
+  if (!response.ok) {
+    let errorDetail = ''
+    try {
+      const errJson = await response.json()
+      errorDetail = errJson?.error?.message || response.statusText
+    } catch {
+      errorDetail = response.statusText
+    }
+
+    if (response.status === 401) {
+      throw new Error(
+        'Chave de API da OpenAI inválida ou não autorizada (Erro 401). Verifique a chave inserida.',
+      )
+    }
+    if (response.status === 429) {
+      throw new Error(
+        'Limite de requisições ou cota da OpenAI excedida (Erro 429). Verifique seus créditos na plataforma OpenAI.',
+      )
+    }
+    throw new Error(`Erro na API da OpenAI (${response.status}): ${errorDetail}`)
+  }
+
+  const data = await response.json()
+  const content = data?.choices?.[0]?.message?.content || ''
+  return content.trim()
+}
+
+/**
+ * Realiza OCR de uma imagem via Google Cloud Vision API
+ */
+async function performGoogleVisionOcr(imageBase64: string, apiKey: string): Promise<string> {
+  const trimmedKey = apiKey.trim()
+  if (!trimmedKey) {
+    throw new Error(
+      'Chave de API do Google Cloud Vision não informada. Por favor, configure sua chave no modal de OCR.',
+    )
+  }
+
+  const pureBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '')
+
+  const requestBody = {
+    requests: [
+      {
+        image: {
+          content: pureBase64,
+        },
+        features: [
+          {
+            type: 'DOCUMENT_TEXT_DETECTION',
+          },
+        ],
+      },
+    ],
+  }
+
+  let response: Response
+  try {
+    response = await fetch(
+      `https://vision.googleapis.com/v1/images:annotate?key=${encodeURIComponent(trimmedKey)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody),
+      },
+    )
+  } catch (err: unknown) {
+    const error = err as Error
+    throw new Error(
+      `Falha de rede ao conectar com Google Cloud Vision API: ${error.message || 'Erro de conexão'}`,
+    )
+  }
+
+  if (!response.ok) {
+    let errorDetail = ''
+    try {
+      const errJson = await response.json()
+      errorDetail = errJson?.error?.message || response.statusText
+    } catch {
+      errorDetail = response.statusText
+    }
+
+    if (response.status === 400 || response.status === 403) {
+      throw new Error(
+        `Chave ou permissão do Google Vision inválida (${response.status}): ${errorDetail}`,
+      )
+    }
+    throw new Error(`Erro na API Google Cloud Vision (${response.status}): ${errorDetail}`)
+  }
+
+  const data = await response.json()
+  const textAnnotation = data?.responses?.[0]?.fullTextAnnotation?.text || ''
+  return textAnnotation.trim()
+}
+
+/**
+ * Processa um arquivo PDF inteiro através de OCR externo
+ */
+export async function processPdfWithOcr(
+  file: File,
+  config: OcrConfig,
+  onProgress?: (progress: number, currentPage: number, totalPages: number) => void,
+): Promise<ExtractedPageText[]> {
+  const { ensurePdfWorkerConfigured, CMAP_URL } = await import('./pdfParser')
+  await ensurePdfWorkerConfigured()
+
+  const pdfjsLibModule = await import('pdfjs-dist')
+
+  const arrayBuffer = await file.arrayBuffer()
+  const pdfData = new Uint8Array(arrayBuffer)
+
+  const loadingTask = pdfjsLibModule.getDocument({
+    data: pdfData,
+    cMapUrl: CMAP_URL,
+    cMapPacked: true,
+    useSystemFonts: true,
+  })
+
+  const pdfDoc = await loadingTask.promise
+  const totalPages = Math.min(pdfDoc.numPages || 1, 50)
+
+  const extractedPages: ExtractedPageText[] = []
+
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum)
+    const imageBase64 = await renderPdfPageToJpegBase64(page)
+
+    let pageText = ''
+    if (config.provider === 'google-vision') {
+      pageText = await performGoogleVisionOcr(imageBase64, config.apiKey)
+    } else {
+      pageText = await performOpenAiOcr(imageBase64, config.apiKey, config.model || 'gpt-4o')
+    }
+
+    const lines = pageText
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0)
+
+    extractedPages.push({
+      pageNumber: pageNum,
+      rawText: pageText,
+      lines,
+    })
+
+    if (onProgress) {
+      const pct = Math.round((pageNum / totalPages) * 100)
+      onProgress(pct, pageNum, totalPages)
+    }
+  }
+
+  return extractedPages
+}
+
+export const DEFAULT_COLUMN_MAPPINGS: ColumnMappingConfig[] = [
+  { id: 'item', label: 'Item / Número Linha', excelHeader: 'Item', included: true, width: 6 },
+  {
+    id: 'codigo',
+    label: 'Código Contábil',
+    excelHeader: 'Código Contábil',
+    included: true,
+    width: 18,
+  },
+  {
+    id: 'descricao',
+    label: 'Nome da Conta / Descrição',
+    excelHeader: 'Conta / Descrição',
+    included: true,
+    width: 45,
+  },
+  {
+    id: 'tipo',
+    label: 'Classificação / Tipo',
+    excelHeader: 'Tipo / Classificação',
+    included: true,
+    width: 22,
+  },
+  {
+    id: 'natureza',
+    label: 'Natureza (D/C/Saldo)',
+    excelHeader: 'Natureza',
+    included: true,
+    width: 12,
+  },
+  {
+    id: 'valor',
+    label: 'Valor (R$)',
+    excelHeader: 'Valor (R$)',
+    included: true,
+    width: 18,
+  },
+  { id: 'pageNumber', label: 'Página no PDF', excelHeader: 'Pág. PDF', included: true, width: 10 },
+  {
+    id: 'linhaOriginal',
+    label: 'Linha Original do PDF',
+    excelHeader: 'Linha Original do PDF',
+    included: true,
+    width: 60,
+  },
+]
+
+export const COLUMN_MAPPINGS_STORAGE_KEY = 'skip_pdf_to_excel_column_mappings_v1'
+
+export function getSavedColumnMappings(): ColumnMappingConfig[] {
+  if (typeof window === 'undefined') {
+    return DEFAULT_COLUMN_MAPPINGS
+  }
+  try {
+    const raw = localStorage.getItem(COLUMN_MAPPINGS_STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as ColumnMappingConfig[]
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const existingKeys = new Set(parsed.map((p) => p.id))
+        const missing = DEFAULT_COLUMN_MAPPINGS.filter((def) => !existingKeys.has(def.id))
+        return [...parsed, ...missing]
+      }
+    }
+  } catch (err) {
+    console.warn('[pdfToExcel] Erro ao recuperar mapeamento de colunas do localStorage:', err)
+  }
+  return DEFAULT_COLUMN_MAPPINGS
+}
+
+export function saveColumnMappings(mappings: ColumnMappingConfig[]): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(COLUMN_MAPPINGS_STORAGE_KEY, JSON.stringify(mappings))
+  } catch (err) {
+    console.warn('[pdfToExcel] Erro ao salvar mapeamento de colunas no localStorage:', err)
+  }
 }
 
 export interface PdfConversionOptions {
@@ -24,6 +406,7 @@ export interface PdfConversionOptions {
   includeSummarySheet?: boolean
   filterNoise?: boolean
   customFileName?: string
+  columnMappings?: ColumnMappingConfig[]
 }
 
 // Expressão regular aprimorada para valores monetários em formato PT-BR e internacional
@@ -229,38 +612,61 @@ export function generateExcelWorkbookFromPdf(
 ): XLSX.WorkBook {
   const wb = XLSX.utils.book_new()
 
-  // 1. Planilha Principal: Dados Estruturados
-  const dataForSheet = rows.map((r, index) => ({
-    Item: index + 1,
-    'Código Contábil': r.codigo !== '-' ? r.codigo : '',
-    'Conta / Descrição': r.descricao,
-    'Tipo / Classificação': r.tipo,
-    Natureza: r.natureza,
-    'Valor (R$)': Number(r.valor),
-    'Pág. PDF': r.pageNumber,
-    'Linha Original do PDF': r.linhaOriginal,
-  }))
+  const activeMappings = (options.columnMappings || DEFAULT_COLUMN_MAPPINGS).filter(
+    (m) => m.included,
+  )
+
+  // 1. Planilha Principal: Dados Estruturados com Colunas Selecionadas e Ordenadas
+  const dataForSheet = rows.map((r, index) => {
+    const rowObj: Record<string, string | number> = {}
+
+    for (const mapping of activeMappings) {
+      const header = mapping.excelHeader || mapping.label
+      switch (mapping.id) {
+        case 'item':
+          rowObj[header] = index + 1
+          break
+        case 'codigo':
+          rowObj[header] = r.codigo !== '-' ? r.codigo : ''
+          break
+        case 'descricao':
+          rowObj[header] = r.descricao
+          break
+        case 'tipo':
+          rowObj[header] = r.tipo
+          break
+        case 'natureza':
+          rowObj[header] = r.natureza
+          break
+        case 'valor':
+          rowObj[header] = Number(r.valor)
+          break
+        case 'pageNumber':
+          rowObj[header] = r.pageNumber
+          break
+        case 'linhaOriginal':
+          rowObj[header] = r.linhaOriginal
+          break
+      }
+    }
+
+    return rowObj
+  })
 
   const wsMain = XLSX.utils.json_to_sheet(dataForSheet)
 
-  // Ajusta larguras de colunas automaticamente
-  wsMain['!cols'] = [
-    { wch: 6 }, // Item
-    { wch: 18 }, // Código Contábil
-    { wch: 45 }, // Conta / Descrição
-    { wch: 22 }, // Tipo / Classificação
-    { wch: 12 }, // Natureza
-    { wch: 18 }, // Valor (R$)
-    { wch: 10 }, // Pág. PDF
-    { wch: 60 }, // Linha Original
-  ]
+  // Ajusta larguras de colunas conforme o mapeamento ativo
+  wsMain['!cols'] = activeMappings.map((m) => ({ wch: m.width || 15 }))
 
-  // Formatação de número monetário para a coluna de Valor (coluna F, índice 5)
-  const range = XLSX.utils.decode_range(wsMain['!ref'] || 'A1:H1')
-  for (let rowNum = range.s.r + 1; rowNum <= range.e.r; rowNum++) {
-    const cellAddress = XLSX.utils.encode_cell({ r: rowNum, c: 5 })
-    if (wsMain[cellAddress] && typeof wsMain[cellAddress].v === 'number') {
-      wsMain[cellAddress].z = '"R$" #,##0.00;[Red]("R$" #,##0.00);"-"'
+  // Identifica a coluna do Valor (R$) no mapeamento ativo para aplicar formato contábil
+  const valorColIndex = activeMappings.findIndex((m) => m.id === 'valor')
+  if (valorColIndex !== -1 && rows.length > 0) {
+    const range = XLSX.utils.decode_range(wsMain['!ref'] || 'A1:A1')
+    for (let rowNum = range.s.r + 1; rowNum <= range.e.r; rowNum++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: rowNum, c: valorColIndex })
+      if (wsMain[cellAddress] && typeof wsMain[cellAddress].v === 'number') {
+        wsMain[cellAddress].z = '"R$" #,##0.00;[Red]("R$" #,##0.00);"-"'
+      }
     }
   }
 
