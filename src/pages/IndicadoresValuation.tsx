@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { balancosService, dreService } from '@/services/financeService'
 import type { BalancoRecord, DreRecord } from '@/types/finance'
 import {
@@ -42,6 +43,7 @@ import {
   Tooltip as RechartsTooltip,
   Cell,
   ReferenceLine,
+  Legend,
 } from 'recharts'
 import {
   TrendingUp,
@@ -65,8 +67,122 @@ import {
   ArrowRight,
   Calculator,
   Briefcase,
+  Printer,
+  History,
+  Grid,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { ModalLaudoValuation } from '@/components/ModalLaudoValuation'
+
+// Função auxiliar de cálculo de Valuation para um ano específico
+function calcularValuationParaAno({
+  balanco,
+  dre,
+  taxaWacc,
+  taxaPerpetuidade,
+  anosProjecao,
+  crescimentoAnualFcf,
+  taxaRetornoEsperadoPL,
+  taxaCapitalizacaoGoodwill,
+}: {
+  balanco: BalancoRecord | null
+  dre: DreRecord | null
+  taxaWacc: number
+  taxaPerpetuidade: number
+  anosProjecao: number
+  crescimentoAnualFcf: number
+  taxaRetornoEsperadoPL: number
+  taxaCapitalizacaoGoodwill: number
+}) {
+  const calcB = calcularBalanco(balanco)
+  const calcD = calcularDre(dre)
+
+  const baseFcf = calcD.ebitda !== 0 ? calcD.ebitda : calcD.resultadoOperacional || 0
+  const waccDec = taxaWacc / 100
+  const gDec = taxaPerpetuidade / 100
+  const fcfGrowthDec = crescimentoAnualFcf / 100
+
+  // FCD
+  let somaVp = 0
+  let fcfAcum = baseFcf
+  const anosValidos = Math.max(3, Math.min(10, anosProjecao || 5))
+
+  for (let t = 1; t <= anosValidos; t++) {
+    fcfAcum = fcfAcum * (1 + fcfGrowthDec)
+    const fatorDesconto = Math.pow(1 + waccDec, t)
+    const vp = fatorDesconto > 0 ? fcfAcum / fatorDesconto : 0
+    somaVp += vp
+  }
+
+  let valorTerminalNominal = 0
+  let vpValorTerminal = 0
+  let valorFCD = 0
+
+  if (waccDec > gDec && waccDec > 0) {
+    valorTerminalNominal = (fcfAcum * (1 + gDec)) / (waccDec - gDec)
+    const fatorDescontoTerminal = Math.pow(1 + waccDec, anosValidos)
+    vpValorTerminal = fatorDescontoTerminal > 0 ? valorTerminalNominal / fatorDescontoTerminal : 0
+    valorFCD = somaVp + vpValorTerminal
+  }
+
+  // Goodwill
+  const pl = calcB.patrimonioLiquido
+  const ll = calcD.lucroLiquido
+  const taxaRetornoPLDec = taxaRetornoEsperadoPL / 100
+  const taxaCapGoodwillDec = taxaCapitalizacaoGoodwill / 100
+
+  const lucroNormal = pl * taxaRetornoPLDec
+  const superlucro = ll - lucroNormal
+  const goodwill = taxaCapGoodwillDec > 0 ? superlucro / taxaCapGoodwillDec : 0
+  const valorGoodwill = pl + goodwill
+
+  return {
+    hasData: !!(balanco || dre),
+    hasBalanco: !!balanco,
+    hasDre: !!dre,
+    baseFcf,
+    patrimonioLiquido: pl,
+    lucroLiquido: ll,
+    lucroNormal,
+    superlucro,
+    goodwill,
+    valorFCD: Number(valorFCD.toFixed(2)),
+    valorGoodwill: Number(valorGoodwill.toFixed(2)),
+    somaVp,
+    vpValorTerminal,
+    valorTerminalNominal,
+  }
+}
+
+// Função utilitária para colorir a escala de calor (Heatmap)
+function getHeatmapColorClass(
+  valor: number | null,
+  minVal: number,
+  maxVal: number,
+  isExactMatch: boolean,
+) {
+  if (valor === null) {
+    return 'bg-slate-50 text-slate-400 border-slate-200'
+  }
+
+  if (isExactMatch) {
+    return 'bg-blue-600 text-white font-black ring-2 ring-blue-700 shadow-md scale-102 z-10'
+  }
+
+  if (maxVal === minVal) {
+    return 'bg-emerald-100 text-emerald-950 font-semibold'
+  }
+
+  const ratio = Math.max(0, Math.min(1, (valor - minVal) / (maxVal - minVal)))
+
+  if (ratio >= 0.85) return 'bg-emerald-600 text-white font-bold'
+  if (ratio >= 0.7) return 'bg-emerald-500 text-white font-semibold'
+  if (ratio >= 0.55) return 'bg-emerald-400 text-slate-900 font-semibold'
+  if (ratio >= 0.4) return 'bg-emerald-200 text-emerald-950'
+  if (ratio >= 0.25) return 'bg-emerald-100 text-emerald-900'
+  if (ratio >= 0.15) return 'bg-amber-100 text-amber-950'
+  return 'bg-red-100 text-red-950'
+}
 
 export default function IndicadoresValuation() {
   const {
@@ -78,12 +194,14 @@ export default function IndicadoresValuation() {
     anosDisponiveis,
     selectedEmpresa,
   } = useFilter()
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
   const { toast } = useToast()
   const navigate = useNavigate()
 
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+  const [modalLaudoOpen, setModalLaudoOpen] = useState<boolean>(false)
 
   // ================= PARÂMETROS CONFIGURÁVEIS PELO USUÁRIO =================
   // Modelo FCD
@@ -165,7 +283,6 @@ export default function IndicadoresValuation() {
   }, [balancos, dres, anosDisponiveis, selectedAno])
 
   // ================= 1. MODELO FLUXO DE CAIXA DESCONTADO (FCD) =================
-  // Base de fluxo de caixa: EBITDA (ou Lucro Operacional caso EBITDA não esteja disponível / seja 0)
   const baseFluxoCaixa = useMemo(() => {
     if (calcD.ebitda !== 0) return calcD.ebitda
     return calcD.resultadoOperacional || 0
@@ -211,8 +328,6 @@ export default function IndicadoresValuation() {
   }, [baseFluxoCaixa, fcfGrowthDecimal, waccDecimal, anosProjecao, selectedAno])
 
   // Valor Terminal (Perpetuidade de Gordon)
-  // Terminal Value = FCF_final * (1 + g) / (WACC - g)
-  // VP do Terminal = Terminal Value / (1 + WACC)^n
   const { valorTerminalNominal, vpValorTerminal, valorEmpresaFCD } = useMemo(() => {
     if (isWaccMenorOuIgualG || waccDecimal <= 0) {
       return {
@@ -236,24 +351,15 @@ export default function IndicadoresValuation() {
   }, [isWaccMenorOuIgualG, waccDecimal, gDecimal, projecaoAnual])
 
   // ================= 2. MODELO GOODWILL (SUPERLUCRO) =================
-  // Valor Contábil = Patrimônio Líquido (PL)
   const patrimonioLiquido = calcB.patrimonioLiquido
   const lucroLiquido = calcD.lucroLiquido
 
   const taxaRetornoPLDecimal = taxaRetornoEsperadoPL / 100
   const taxaCapGoodwillDecimal = taxaCapitalizacaoGoodwill / 100
 
-  // Lucro Normal = PL * taxa de retorno esperado
   const lucroNormal = patrimonioLiquido * taxaRetornoPLDecimal
-
-  // Superlucro = Lucro Líquido - Lucro Normal
   const superlucro = lucroLiquido - lucroNormal
-
-  // Goodwill = Superlucro / taxa de capitalização
-  // Se superlucro < 0, goodwill é negativo (destruição de valor relativo)
   const goodwill = taxaCapGoodwillDecimal > 0 ? superlucro / taxaCapGoodwillDecimal : 0
-
-  // Valor da Empresa pelo Goodwill = PL + Goodwill
   const valorEmpresaGoodwill = patrimonioLiquido + goodwill
 
   // ================= 3. COMPARATIVO ENTRE OS DOIS MODELOS =================
@@ -268,19 +374,145 @@ export default function IndicadoresValuation() {
         sigla: 'FCD (Gordon)',
         valor: isWaccMenorOuIgualG ? 0 : Number(valorEmpresaFCD.toFixed(2)),
         descricao: 'Valor intrínseco pela capacidade futura de geração de caixa',
-        cor: '#2563EB', // blue-600
+        cor: '#2563EB',
       },
       {
         nome: 'Modelo Goodwill (Superlucro)',
         sigla: 'Goodwill (PL + Excedente)',
         valor: Number(valorEmpresaGoodwill.toFixed(2)),
         descricao: 'Valor contábil acrescido da capitalização de lucros anormais',
-        cor: '#059669', // emerald-600
+        cor: '#059669',
       },
     ]
   }, [isWaccMenorOuIgualG, valorEmpresaFCD, valorEmpresaGoodwill])
 
-  // ================= 4. PARECER EXECUTIVO E CONSOLIDADO =================
+  // ================= 4. MELHORIA 1: TABELA DE SENSIBILIDADE (HEATMAP) =================
+  const sensibilidadeGrid = useMemo(() => {
+    // Definir variações de WACC e g em torno dos valores configurados ou padrão fixo expandido
+    // WACC linhas (ex: 8%, 10%, 12%, 15%, 18% ou variações dinâmicas)
+    const baseWaccs = [8.0, 10.0, 12.0, 15.0, 18.0]
+    if (!baseWaccs.some((w) => Math.abs(w - taxaWacc) < 0.01)) {
+      baseWaccs.push(taxaWacc)
+    }
+    const waccValues = Array.from(new Set(baseWaccs)).sort((a, b) => a - b)
+
+    const baseGs = [1.0, 2.0, 3.0, 4.0, 5.0]
+    if (!baseGs.some((g) => Math.abs(g - taxaPerpetuidade) < 0.01)) {
+      baseGs.push(taxaPerpetuidade)
+    }
+    const gValues = Array.from(new Set(baseGs)).sort((a, b) => a - b)
+
+    const matrix: (number | null)[][] = []
+    let minVal = Number.MAX_VALUE
+    let maxVal = Number.MIN_VALUE
+
+    const anosValidos = Math.max(3, Math.min(10, anosProjecao || 5))
+
+    for (let r = 0; r < waccValues.length; r++) {
+      const wVal = waccValues[r]
+      const row: (number | null)[] = []
+
+      for (let c = 0; c < gValues.length; c++) {
+        const gVal = gValues[c]
+
+        // Regra de proteção: WACC <= g não calcula
+        if (wVal <= gVal || wVal <= 0) {
+          row.push(null)
+          continue
+        }
+
+        const wDec = wVal / 100
+        const gDec = gVal / 100
+        const fcfGrowthDec = crescimentoAnualFcf / 100
+
+        let somaVpCell = 0
+        let fcfAcumCell = baseFluxoCaixa
+
+        for (let t = 1; t <= anosValidos; t++) {
+          fcfAcumCell = fcfAcumCell * (1 + fcfGrowthDec)
+          const fator = Math.pow(1 + wDec, t)
+          somaVpCell += fator > 0 ? fcfAcumCell / fator : 0
+        }
+
+        const terminalNominal = (fcfAcumCell * (1 + gDec)) / (wDec - gDec)
+        const fatorTerminal = Math.pow(1 + wDec, anosValidos)
+        const vpTerminalCell = fatorTerminal > 0 ? terminalNominal / fatorTerminal : 0
+        const totalEV = somaVpCell + vpTerminalCell
+
+        row.push(totalEV)
+
+        if (totalEV < minVal) minVal = totalEV
+        if (totalEV > maxVal) maxVal = totalEV
+      }
+
+      matrix.push(row)
+    }
+
+    if (minVal === Number.MAX_VALUE) minVal = 0
+    if (maxVal === Number.MIN_VALUE) maxVal = 0
+
+    return {
+      waccValues,
+      gValues,
+      matrix,
+      minVal,
+      maxVal,
+    }
+  }, [taxaWacc, taxaPerpetuidade, anosProjecao, crescimentoAnualFcf, baseFluxoCaixa])
+
+  // ================= 5. MELHORIA 2: EVOLUÇÃO DO VALUATION ÚLTIMOS 3 ANOS =================
+  const evolucaoUltimosAnos = useMemo(() => {
+    // 3 anos: selectedAno, selectedAno - 1, selectedAno - 2
+    const anos = [selectedAno - 2, selectedAno - 1, selectedAno]
+
+    const dados = anos.map((ano) => {
+      const b = balancos.find((x) => x.ano === ano) || null
+      const d = dres.find((x) => x.ano === ano) || null
+
+      const res = calcularValuationParaAno({
+        balanco: b,
+        dre: d,
+        taxaWacc,
+        taxaPerpetuidade,
+        anosProjecao,
+        crescimentoAnualFcf,
+        taxaRetornoEsperadoPL,
+        taxaCapitalizacaoGoodwill,
+      })
+
+      return {
+        ano,
+        temDados: res.hasData,
+        fcd: res.hasData && !isWaccMenorOuIgualG ? res.valorFCD : 0,
+        goodwill: res.hasData ? res.valorGoodwill : 0,
+        patrimonioLiquido: res.patrimonioLiquido,
+        lucroLiquido: res.lucroLiquido,
+        baseFcf: res.baseFcf,
+      }
+    })
+
+    const anosComDados = dados.filter((d) => d.temDados)
+    const faltamAnos = anosComDados.length < 3
+
+    return {
+      dados,
+      anosComDados,
+      faltamAnos,
+    }
+  }, [
+    selectedAno,
+    balancos,
+    dres,
+    taxaWacc,
+    taxaPerpetuidade,
+    anosProjecao,
+    crescimentoAnualFcf,
+    taxaRetornoEsperadoPL,
+    taxaCapitalizacaoGoodwill,
+    isWaccMenorOuIgualG,
+  ])
+
+  // ================= 6. PARECER EXECUTIVO E CONSOLIDADO =================
   const parecerConsolidado = useMemo(() => {
     if (!balancoAtual && !dreAtual) return null
 
@@ -403,7 +635,7 @@ export default function IndicadoresValuation() {
     diferencaPercentual,
   ])
 
-  // ================= 5. EXPORTAÇÃO CSV COMPLETA =================
+  // ================= 7. EXPORTAÇÃO CSV COMPLETA =================
   const handleExportCsv = () => {
     if (!selectedEmpresa) {
       toast({
@@ -459,10 +691,22 @@ export default function IndicadoresValuation() {
     csvContent += `Goodwill;Superlucro / ${taxaCapitalizacaoGoodwill}%;${goodwill.toFixed(2).replace('.', ',')};Capitalização do Lucro Excedente\n`
     csvContent += `VALOR TOTAL DA EMPRESA (GOODWILL);PL + Goodwill;${valorEmpresaGoodwill.toFixed(2).replace('.', ',')};Valor Econômico pelo Goodwill\n\n`
 
-    csvContent += `COMPARATIVO DOS MODELOS DE VALUATION\n`
-    csvContent += `Modelo;Valor da Empresa (R$);Diferença Absoluta (R$);Diferença Percentual (%)\n`
-    csvContent += `Fluxo de Caixa Descontado (FCD);${valorEmpresaFCD.toFixed(2).replace('.', ',')};${diferencaValor.toFixed(2).replace('.', ',')};${diferencaPercentual.toFixed(2).replace('.', ',')}%\n`
-    csvContent += `Modelo Goodwill;${valorEmpresaGoodwill.toFixed(2).replace('.', ',')};0,00;0,00%\n\n`
+    csvContent += `ANÁLISE DE SENSIBILIDADE DO FCD (WACC vs g) (R$)\n`
+    csvContent += `WACC \\ g;` + sensibilidadeGrid.gValues.map((g) => `${g}%`).join(';') + `\n`
+    sensibilidadeGrid.waccValues.forEach((w, rIdx) => {
+      const rowVals = sensibilidadeGrid.matrix[rIdx].map((v) =>
+        v !== null ? v.toFixed(2).replace('.', ',') : '—',
+      )
+      csvContent += `${w}%;` + rowVals.join(';') + `\n`
+    })
+    csvContent += `\n`
+
+    csvContent += `EVOLUÇÃO HISTÓRICA DO VALUATION (ÚLTIMOS ANOS)\n`
+    csvContent += `Ano;FCD (R$);Goodwill (R$);Patrimônio Líquido (R$);Lucro Líquido (R$)\n`
+    evolucaoUltimosAnos.dados.forEach((ev) => {
+      csvContent += `${ev.ano};${ev.fcd.toFixed(2).replace('.', ',')};${ev.goodwill.toFixed(2).replace('.', ',')};${ev.patrimonioLiquido.toFixed(2).replace('.', ',')};${ev.lucroLiquido.toFixed(2).replace('.', ',')}\n`
+    })
+    csvContent += `\n`
 
     if (parecerConsolidado) {
       csvContent += `PARECER EXECUTIVO DO CONSULTOR FINANCEIRO\n`
@@ -500,7 +744,7 @@ export default function IndicadoresValuation() {
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
-      {/* 1. Header com Título, Seletores de Empresa/Ano e Botão Exportar CSV */}
+      {/* 1. Header com Título, Seletores de Empresa/Ano, Botão Laudo PDF e Botão Exportar CSV */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-600/20 shrink-0">
@@ -522,7 +766,7 @@ export default function IndicadoresValuation() {
           </div>
         </div>
 
-        {/* Seletores Globais de Empresa e Ano + Exportação CSV */}
+        {/* Seletores Globais de Empresa e Ano + Botão Laudo PDF + Exportação CSV */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Seletor Empresa */}
           <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
@@ -560,6 +804,16 @@ export default function IndicadoresValuation() {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Botão Gerar Laudo de Valuation (PDF) */}
+          <Button
+            onClick={() => setModalLaudoOpen(true)}
+            disabled={!balancoAtual && !dreAtual}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-9 shadow-xs"
+          >
+            <Printer className="w-3.5 h-3.5 mr-1.5" />
+            Gerar Laudo de Valuation
+          </Button>
 
           {/* Botão Exportar CSV */}
           <Button
@@ -1033,6 +1287,131 @@ export default function IndicadoresValuation() {
                 )}
               </CardContent>
             </Card>
+
+            {/* ================= MELHORIA 1: TABELA DE SENSIBILIDADE HEATMAP NO FCD ================= */}
+            <Card className="bg-white border-blue-200/90 shadow-2xs overflow-hidden">
+              <CardHeader className="p-4 pb-3 bg-gradient-to-r from-blue-50/50 via-slate-50 to-emerald-50/30 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                    <Grid className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                      Análise de Sensibilidade do Valuation FCD (Heatmap)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Valor Total da Empresa para diferentes combinações de WACC e Crescimento na
+                      Perpetuidade (g)
+                    </CardDescription>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] flex-wrap">
+                  <span className="flex items-center gap-1 font-semibold text-slate-600">
+                    <span className="w-3 h-3 rounded bg-blue-600 ring-1 ring-blue-700" />
+                    Cenário Atual ({taxaWacc}% / {taxaPerpetuidade}%)
+                  </span>
+                  <span className="flex items-center gap-1 text-slate-500">
+                    <span className="w-3 h-3 rounded bg-emerald-600" /> Maior Valor
+                  </span>
+                  <span className="flex items-center gap-1 text-slate-500">
+                    <span className="w-3 h-3 rounded bg-red-100 border border-red-300" /> Menor
+                    Valor
+                  </span>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-4 space-y-3">
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <Table className="text-xs">
+                    <TableHeader className="bg-slate-100">
+                      <TableRow>
+                        <TableHead className="font-extrabold text-[#0B1F3A] bg-slate-200/80 w-32">
+                          WACC \ g (%)
+                        </TableHead>
+                        {sensibilidadeGrid.gValues.map((g) => {
+                          const isColSelected = Math.abs(g - taxaPerpetuidade) < 0.01
+                          return (
+                            <TableHead
+                              key={g}
+                              className={`text-right font-bold ${
+                                isColSelected
+                                  ? 'bg-blue-100/90 text-blue-950 font-black border-x border-blue-200'
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              g = {g.toFixed(1)}%
+                            </TableHead>
+                          )
+                        })}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sensibilidadeGrid.waccValues.map((wVal, rIdx) => {
+                        const isRowSelected = Math.abs(wVal - taxaWacc) < 0.01
+
+                        return (
+                          <TableRow key={wVal} className="hover:bg-slate-50/50">
+                            <TableCell
+                              className={`font-bold ${
+                                isRowSelected
+                                  ? 'bg-blue-100/90 text-blue-950 font-black border-y border-blue-200'
+                                  : 'bg-slate-100/70 text-slate-800'
+                              }`}
+                            >
+                              WACC = {wVal.toFixed(1)}%
+                            </TableCell>
+
+                            {sensibilidadeGrid.gValues.map((gVal, cIdx) => {
+                              const cellVal = sensibilidadeGrid.matrix[rIdx]?.[cIdx]
+                              const isExactMatch =
+                                Math.abs(wVal - taxaWacc) < 0.01 &&
+                                Math.abs(gVal - taxaPerpetuidade) < 0.01
+
+                              const colorClass = getHeatmapColorClass(
+                                cellVal,
+                                sensibilidadeGrid.minVal,
+                                sensibilidadeGrid.maxVal,
+                                isExactMatch,
+                              )
+
+                              return (
+                                <TableCell
+                                  key={gVal}
+                                  className={`text-right font-mono transition-all py-2.5 px-3 border-b border-slate-100 ${colorClass} ${
+                                    isExactMatch ? 'font-extrabold shadow-sm' : ''
+                                  }`}
+                                >
+                                  {cellVal === null ? (
+                                    <span className="text-slate-400 font-sans text-xs select-none">
+                                      —
+                                    </span>
+                                  ) : (
+                                    <span>{formatCurrency(cellVal)}</span>
+                                  )}
+                                </TableCell>
+                              )
+                            })}
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 flex-wrap gap-2">
+                  <span>
+                    💡 <strong>Interpretação da Sensibilidade:</strong> O valor da empresa aumenta à
+                    medida que o custo de capital (WACC) diminui e a taxa de crescimento perpétuo
+                    (g) aumenta. Células com &ldquo;—&rdquo; indicam restrição matemática do modelo
+                    de Gordon (WACC ≤ g).
+                  </span>
+                  <span className="font-semibold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
+                    Cenário Atual Selecionado: {formatCurrency(valorEmpresaFCD)}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* ================= SEÇÃO B: MODELO GOODWILL (SUPERLUCRO) ================= */}
@@ -1266,7 +1645,7 @@ export default function IndicadoresValuation() {
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
                 <BarChart3 className="w-4 h-4 text-indigo-600" />
-                Seção 3 — Comparativo: Valor pela FCD vs Valor pelo Goodwill
+                Seção 3 — Comparativo: Valor pelo FCD vs Valor pelo Goodwill
               </h2>
               <span className="text-xs text-slate-500">
                 Diferença:{' '}
@@ -1377,6 +1756,189 @@ export default function IndicadoresValuation() {
             </Card>
           </div>
 
+          {/* ================= MELHORIA 2: GRÁFICO DE EVOLUÇÃO DOS ÚLTIMOS 3 ANOS ================= */}
+          <div className="space-y-4 pt-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                <History className="w-4 h-4 text-blue-600" />
+                Evolução do Valuation ao Longo dos Últimos 3 Anos
+              </h2>
+              <Badge className="bg-slate-100 text-slate-700 border-slate-200 font-semibold text-xs">
+                {selectedAno - 2} — {selectedAno}
+              </Badge>
+            </div>
+
+            <Card className="bg-white border-slate-200 shadow-2xs">
+              <CardHeader className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                    Trajetória Histórica do Enterprise Value ({selectedEmpresa?.nome || 'Empresa'})
+                  </CardTitle>
+                  <CardDescription className="text-xs mt-0.5">
+                    Comparativo dos modelos FCD e Goodwill para o exercício selecionado (
+                    {selectedAno}) e os dois anos anteriores
+                  </CardDescription>
+                </div>
+
+                <div className="flex items-center gap-3 text-[11px] font-semibold">
+                  <span className="flex items-center gap-1 text-blue-700">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
+                    FCD (Fluxo Descontado)
+                  </span>
+                  <span className="flex items-center gap-1 text-emerald-700">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" />
+                    Goodwill (Superlucro)
+                  </span>
+                </div>
+              </CardHeader>
+
+              <CardContent className="pt-6 space-y-4">
+                {evolucaoUltimosAnos.anosComDados.length === 0 ? (
+                  <div className="p-8 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    Não há demonstrações contábeis disponíveis para o período de {selectedAno - 2} a{' '}
+                    {selectedAno}.
+                  </div>
+                ) : (
+                  <>
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={evolucaoUltimosAnos.dados}
+                          margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
+                          <XAxis
+                            dataKey="ano"
+                            tick={{ fontSize: 12, fill: '#0B1F3A', fontWeight: 700 }}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 11, fill: '#64748B' }}
+                            tickFormatter={(v) =>
+                              Math.abs(v) >= 1000000
+                                ? `R$ ${(v / 1000000).toFixed(1)}M`
+                                : Math.abs(v) >= 1000
+                                  ? `R$ ${(v / 1000).toFixed(0)}k`
+                                  : `R$ ${v}`
+                            }
+                          />
+                          <RechartsTooltip
+                            formatter={(val: any, name: any) => [
+                              Number(val) > 0 ? formatCurrency(Number(val)) : 'Sem Dados / N/D',
+                              name === 'fcd' ? 'FCD (Fluxo Descontado)' : 'Goodwill (Superlucro)',
+                            ]}
+                            labelFormatter={(label) => `Exercício: ${label}`}
+                          />
+                          <Legend
+                            formatter={(value) =>
+                              value === 'fcd'
+                                ? 'Fluxo de Caixa Descontado (FCD)'
+                                : 'Modelo Goodwill (Superlucro)'
+                            }
+                            wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                          />
+                          <ReferenceLine y={0} stroke="#94A3B8" />
+                          <Bar
+                            dataKey="fcd"
+                            name="fcd"
+                            fill="#2563EB"
+                            radius={[4, 4, 0, 0]}
+                            barSize={32}
+                          />
+                          <Bar
+                            dataKey="goodwill"
+                            name="goodwill"
+                            fill="#059669"
+                            radius={[4, 4, 0, 0]}
+                            barSize={32}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Nota informativa quando faltam dados em algum dos anos */}
+                    {evolucaoUltimosAnos.faltamAnos && (
+                      <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-900">
+                        <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Nota sobre a série histórica:</strong> Exibindo apenas os
+                          exercícios com demonstrações contábeis (Balanço/DRE) cadastradas no
+                          sistema. Para uma série trienal completa ({selectedAno - 2},{' '}
+                          {selectedAno - 1} e {selectedAno}), realize o cadastro ou importação dos
+                          dados contábeis pendentes.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Resumo em tabela dos 3 anos */}
+                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                      <Table className="text-xs">
+                        <TableHeader className="bg-slate-50">
+                          <TableRow>
+                            <TableHead className="font-bold text-slate-700">Ano</TableHead>
+                            <TableHead className="text-right font-bold text-slate-700">
+                              FCD (Enterprise Value)
+                            </TableHead>
+                            <TableHead className="text-right font-bold text-slate-700">
+                              Goodwill (PL + Superlucro)
+                            </TableHead>
+                            <TableHead className="text-right font-bold text-slate-700">
+                              Patrimônio Líquido (PL)
+                            </TableHead>
+                            <TableHead className="text-right font-bold text-slate-700">
+                              Lucro Líquido
+                            </TableHead>
+                            <TableHead className="text-center font-bold text-slate-700">
+                              Status dos Dados
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {evolucaoUltimosAnos.dados.map((ev) => (
+                            <TableRow
+                              key={ev.ano}
+                              className={
+                                ev.ano === selectedAno
+                                  ? 'bg-blue-50/50 font-semibold'
+                                  : 'hover:bg-slate-50/50'
+                              }
+                            >
+                              <TableCell className="font-bold text-[#0B1F3A]">
+                                {ev.ano} {ev.ano === selectedAno && '(Atual)'}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-bold text-blue-700">
+                                {ev.temDados && !isWaccMenorOuIgualG ? formatCurrency(ev.fcd) : '—'}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-bold text-emerald-700">
+                                {ev.temDados ? formatCurrency(ev.goodwill) : '—'}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-slate-700">
+                                {ev.temDados ? formatCurrency(ev.patrimonioLiquido) : '—'}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-slate-700">
+                                {ev.temDados ? formatCurrency(ev.lucroLiquido) : '—'}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {ev.temDados ? (
+                                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[10px]">
+                                    ✓ Disponível
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-slate-100 text-slate-500 border-slate-200 font-normal text-[10px]">
+                                    Sem Demonstração
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
           {/* ================= SEÇÃO 4: ANÁLISE CONSOLIDADA E PARECER EXECUTIVO ================= */}
           {parecerConsolidado && (
             <Card
@@ -1473,6 +2035,40 @@ export default function IndicadoresValuation() {
           )}
         </>
       )}
+
+      {/* Modal Laudo de Valuation (A4 PDF) */}
+      <ModalLaudoValuation
+        open={modalLaudoOpen}
+        onOpenChange={setModalLaudoOpen}
+        selectedEmpresa={selectedEmpresa || null}
+        selectedAno={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+        taxaWacc={taxaWacc}
+        taxaPerpetuidade={taxaPerpetuidade}
+        anosProjecao={anosProjecao}
+        crescimentoAnualFcf={crescimentoAnualFcf}
+        baseFluxoCaixa={baseFluxoCaixa}
+        nomeBaseFluxo={nomeBaseFluxo}
+        valorEmpresaFCD={valorEmpresaFCD}
+        somaVpFluxos={projecaoAnual.somaVp}
+        vpValorTerminal={vpValorTerminal}
+        valorTerminalNominal={valorTerminalNominal}
+        taxaRetornoEsperadoPL={taxaRetornoEsperadoPL}
+        taxaCapitalizacaoGoodwill={taxaCapitalizacaoGoodwill}
+        patrimonioLiquido={patrimonioLiquido}
+        lucroLiquido={lucroLiquido}
+        lucroNormal={lucroNormal}
+        superlucro={superlucro}
+        goodwill={goodwill}
+        valorEmpresaGoodwill={valorEmpresaGoodwill}
+        sensibilidadeGrid={{
+          waccValues: sensibilidadeGrid.waccValues,
+          gValues: sensibilidadeGrid.gValues,
+          matrix: sensibilidadeGrid.matrix,
+        }}
+        parecerConsolidado={parecerConsolidado}
+      />
     </div>
   )
 }
