@@ -119,6 +119,11 @@ export default function Layout() {
       path: '/indicadores/economicos',
       icon: TrendingUp,
     },
+    {
+      name: 'Valuation',
+      path: '/indicadores/valuation',
+      icon: TrendingUp,
+    },
   ]
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
