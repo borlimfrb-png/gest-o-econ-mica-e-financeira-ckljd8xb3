@@ -185,7 +185,17 @@ export default function Importacao() {
   // Guarda temporariamente o valor sendo digitado no input ativo: { rowId, field, tempValue }
   const [editingCell, setEditingCell] = useState<{
     rowId: string
-    field: 'codigo' | 'conta' | 'descricao' | 'tipo' | 'natureza' | 'valor'
+    field:
+      | 'codigo'
+      | 'conta'
+      | 'codigoPai'
+      | 'contaPai'
+      | 'codigoFilha'
+      | 'contaFilha'
+      | 'descricao'
+      | 'tipo'
+      | 'natureza'
+      | 'valor'
   } | null>(null)
   const [editingValue, setEditingValue] = useState<string>('')
 
@@ -240,7 +250,17 @@ export default function Importacao() {
   // Início e conclusão da edição de célula
   const handleStartCellEdit = (
     row: PdfExcelRow,
-    field: 'codigo' | 'conta' | 'descricao' | 'tipo' | 'natureza' | 'valor',
+    field:
+      | 'codigo'
+      | 'conta'
+      | 'codigoPai'
+      | 'contaPai'
+      | 'codigoFilha'
+      | 'contaFilha'
+      | 'descricao'
+      | 'tipo'
+      | 'natureza'
+      | 'valor',
   ) => {
     setEditingCell({ rowId: row.id, field })
     if (field === 'valor') {
@@ -253,7 +273,17 @@ export default function Importacao() {
 
   const handleSaveCellEdit = (
     rowId: string,
-    field: 'codigo' | 'conta' | 'descricao' | 'tipo' | 'natureza' | 'valor',
+    field:
+      | 'codigo'
+      | 'conta'
+      | 'codigoPai'
+      | 'contaPai'
+      | 'codigoFilha'
+      | 'contaFilha'
+      | 'descricao'
+      | 'tipo'
+      | 'natureza'
+      | 'valor',
   ) => {
     setConverterRows((prev) =>
       prev.map((row) => {
@@ -1558,13 +1588,17 @@ export default function Importacao() {
               {/* Tabela de Pré-visualização com EDIÇÃO INLINE */}
               {(() => {
                 const filteredRows = converterRows.filter((r) => {
+                  const term = converterSearchTerm.toLowerCase()
                   const matchesSearch =
                     !converterSearchTerm ||
-                    r.descricao.toLowerCase().includes(converterSearchTerm.toLowerCase()) ||
-                    (r.conta &&
-                      r.conta.toLowerCase().includes(converterSearchTerm.toLowerCase())) ||
-                    r.codigo.toLowerCase().includes(converterSearchTerm.toLowerCase()) ||
-                    r.linhaOriginal.toLowerCase().includes(converterSearchTerm.toLowerCase())
+                    r.descricao.toLowerCase().includes(term) ||
+                    (r.conta && r.conta.toLowerCase().includes(term)) ||
+                    (r.contaPai && r.contaPai.toLowerCase().includes(term)) ||
+                    (r.contaFilha && r.contaFilha.toLowerCase().includes(term)) ||
+                    (r.codigoPai && r.codigoPai.toLowerCase().includes(term)) ||
+                    (r.codigoFilha && r.codigoFilha.toLowerCase().includes(term)) ||
+                    r.codigo.toLowerCase().includes(term) ||
+                    r.linhaOriginal.toLowerCase().includes(term)
 
                   const matchesType =
                     converterFilterType === 'todos' ||
@@ -1617,17 +1651,17 @@ export default function Importacao() {
                     ) : (
                       <div className="overflow-x-auto max-h-[520px]">
                         <table className="w-full text-xs text-left">
-                          <thead className="bg-slate-100/90 text-slate-700 font-semibold uppercase tracking-wider sticky top-0 border-b border-slate-200 shadow-sm z-10">
+                          <thead className="bg-slate-100/90 text-slate-700 font-semibold uppercase tracking-wider sticky top-0 border-b border-slate-200 shadow-sm z-10 text-[11px]">
                             <tr>
-                              <th className="py-2.5 px-3 w-10 text-center">#</th>
-                              <th className="py-2.5 px-3 w-14">Pág</th>
-                              <th className="py-2.5 px-3 w-24">Código</th>
-                              <th className="py-2.5 px-3 w-48">Conta (Cabeçalho)</th>
-                              <th className="py-2.5 px-3">Despesa / Lançamento</th>
-                              <th className="py-2.5 px-3 w-32">Classificação</th>
-                              <th className="py-2.5 px-3 w-24">Natureza</th>
-                              <th className="py-2.5 px-3 text-right w-32">Valor (R$)</th>
-                              <th className="py-2.5 px-3 max-w-xs truncate">Linha Original</th>
+                              <th className="py-2.5 px-2.5 w-10 text-center">#</th>
+                              <th className="py-2.5 px-2.5 w-12">Pág</th>
+                              <th className="py-2.5 px-2.5 min-w-[160px]">Conta Pai (5 díg.)</th>
+                              <th className="py-2.5 px-2.5 min-w-[160px]">Conta Filha (4 díg.)</th>
+                              <th className="py-2.5 px-2.5 min-w-[180px]">Lançamento / Despesa</th>
+                              <th className="py-2.5 px-2.5 w-28">Classificação</th>
+                              <th className="py-2.5 px-2.5 w-20">Natureza</th>
+                              <th className="py-2.5 px-2.5 text-right w-28">Valor (R$)</th>
+                              <th className="py-2.5 px-2.5 max-w-xs truncate">Linha Original</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-sans">
@@ -1644,18 +1678,18 @@ export default function Importacao() {
                                   }`}
                                 >
                                   {/* # */}
-                                  <td className="py-2 px-3 text-center text-slate-400 font-mono">
+                                  <td className="py-2 px-2.5 text-center text-slate-400 font-mono">
                                     {idx + 1}
                                   </td>
 
                                   {/* Pág */}
-                                  <td className="py-2 px-3 text-slate-500 font-mono">
+                                  <td className="py-2 px-2.5 text-slate-500 font-mono">
                                     p.{row.pageNumber}
                                   </td>
 
-                                  {/* Código */}
-                                  <td className="py-1.5 px-3 font-mono font-medium text-slate-700">
-                                    {isEditingThisRow && editingCell?.field === 'codigo' ? (
+                                  {/* Conta Pai (5 Dígitos) */}
+                                  <td className="py-1.5 px-2.5 font-medium text-slate-800">
+                                    {isEditingThisRow && editingCell?.field === 'contaPai' ? (
                                       <div className="flex items-center gap-1">
                                         <Input
                                           value={editingValue}
@@ -1663,64 +1697,36 @@ export default function Importacao() {
                                           onChange={(e) => setEditingValue(e.target.value)}
                                           onKeyDown={(e) => {
                                             if (e.key === 'Enter')
-                                              handleSaveCellEdit(row.id, 'codigo')
+                                              handleSaveCellEdit(row.id, 'contaPai')
                                             if (e.key === 'Escape') handleCancelCellEdit()
                                           }}
-                                          onBlur={() => handleSaveCellEdit(row.id, 'codigo')}
-                                          className="h-7 text-xs font-mono w-24 p-1 bg-white border-indigo-500 ring-1 ring-indigo-500"
-                                        />
-                                      </div>
-                                    ) : (
-                                      <div
-                                        onClick={() => handleStartCellEdit(row, 'codigo')}
-                                        className={`cursor-pointer rounded px-1.5 py-0.5 flex items-center gap-1.5 transition-all ${
-                                          row.editedFields?.codigo
-                                            ? 'bg-amber-100 text-amber-900 border border-amber-300 font-bold'
-                                            : 'hover:bg-slate-200/70 text-slate-800'
-                                        }`}
-                                        title="Clique para editar código contábil"
-                                      >
-                                        <span>{row.codigo !== '-' ? row.codigo : '-'}</span>
-                                        {row.editedFields?.codigo ? (
-                                          <Pencil className="w-2.5 h-2.5 text-amber-600" />
-                                        ) : (
-                                          <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100" />
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-
-                                  {/* Conta (Cabeçalho de cima) */}
-                                  <td className="py-1.5 px-3 font-medium text-slate-800">
-                                    {isEditingThisRow && editingCell?.field === 'conta' ? (
-                                      <div className="flex items-center gap-1">
-                                        <Input
-                                          value={editingValue}
-                                          autoFocus
-                                          onChange={(e) => setEditingValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter')
-                                              handleSaveCellEdit(row.id, 'conta')
-                                            if (e.key === 'Escape') handleCancelCellEdit()
-                                          }}
-                                          onBlur={() => handleSaveCellEdit(row.id, 'conta')}
+                                          onBlur={() => handleSaveCellEdit(row.id, 'contaPai')}
                                           className="h-7 text-xs w-full p-1 bg-white border-indigo-500 ring-1 ring-indigo-500 font-medium"
                                         />
                                       </div>
                                     ) : (
                                       <div
-                                        onClick={() => handleStartCellEdit(row, 'conta')}
-                                        className={`cursor-pointer rounded px-1.5 py-0.5 flex items-center justify-between gap-2 transition-all ${
-                                          row.editedFields?.conta
+                                        onClick={() => handleStartCellEdit(row, 'contaPai')}
+                                        className={`cursor-pointer rounded px-1.5 py-0.5 flex items-center justify-between gap-1.5 transition-all ${
+                                          row.editedFields?.contaPai
                                             ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
-                                            : 'hover:bg-slate-100 text-indigo-950 font-semibold bg-indigo-50/40 border border-indigo-100/60'
+                                            : 'hover:bg-slate-100 text-indigo-950 font-semibold bg-indigo-50/50 border border-indigo-100'
                                         }`}
-                                        title="Conta Contábil identificada no cabeçalho acima (clique para editar)"
+                                        title="Conta Pai (05 dígitos) identificada no cabeçalho acima (clique para editar)"
                                       >
-                                        <span className="truncate max-w-[170px]" title={row.conta}>
-                                          {row.conta || '-'}
-                                        </span>
-                                        {row.editedFields?.conta ? (
+                                        <div className="flex items-center gap-1.5 truncate">
+                                          {row.codigoPai && row.codigoPai !== '-' && (
+                                            <span className="font-mono text-[10px] bg-indigo-200/80 text-indigo-900 px-1 py-0.2 rounded font-bold shrink-0">
+                                              {row.codigoPai}
+                                            </span>
+                                          )}
+                                          <span className="truncate" title={row.contaPai}>
+                                            {row.contaPai && row.contaPai !== '-'
+                                              ? row.contaPai
+                                              : '-'}
+                                          </span>
+                                        </div>
+                                        {row.editedFields?.contaPai ? (
                                           <Pencil className="w-2.5 h-2.5 text-amber-600 shrink-0" />
                                         ) : (
                                           <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 shrink-0" />
@@ -1729,8 +1735,56 @@ export default function Importacao() {
                                     )}
                                   </td>
 
-                                  {/* Descrição da Despesa */}
-                                  <td className="py-1.5 px-3">
+                                  {/* Conta Filha (4 Dígitos) */}
+                                  <td className="py-1.5 px-2.5 font-medium text-slate-800">
+                                    {isEditingThisRow && editingCell?.field === 'contaFilha' ? (
+                                      <div className="flex items-center gap-1">
+                                        <Input
+                                          value={editingValue}
+                                          autoFocus
+                                          onChange={(e) => setEditingValue(e.target.value)}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter')
+                                              handleSaveCellEdit(row.id, 'contaFilha')
+                                            if (e.key === 'Escape') handleCancelCellEdit()
+                                          }}
+                                          onBlur={() => handleSaveCellEdit(row.id, 'contaFilha')}
+                                          className="h-7 text-xs w-full p-1 bg-white border-blue-500 ring-1 ring-blue-500 font-medium"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        onClick={() => handleStartCellEdit(row, 'contaFilha')}
+                                        className={`cursor-pointer rounded px-1.5 py-0.5 flex items-center justify-between gap-1.5 transition-all ${
+                                          row.editedFields?.contaFilha
+                                            ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
+                                            : 'hover:bg-slate-100 text-blue-950 font-semibold bg-blue-50/50 border border-blue-100'
+                                        }`}
+                                        title="Conta Filha (04 dígitos) identificada na subconta (clique para editar)"
+                                      >
+                                        <div className="flex items-center gap-1.5 truncate">
+                                          {row.codigoFilha && row.codigoFilha !== '-' && (
+                                            <span className="font-mono text-[10px] bg-blue-200/80 text-blue-900 px-1 py-0.2 rounded font-bold shrink-0">
+                                              {row.codigoFilha}
+                                            </span>
+                                          )}
+                                          <span className="truncate" title={row.contaFilha}>
+                                            {row.contaFilha && row.contaFilha !== '-'
+                                              ? row.contaFilha
+                                              : '-'}
+                                          </span>
+                                        </div>
+                                        {row.editedFields?.contaFilha ? (
+                                          <Pencil className="w-2.5 h-2.5 text-amber-600 shrink-0" />
+                                        ) : (
+                                          <Edit2 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 shrink-0" />
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  {/* Descrição do Lançamento / Despesa */}
+                                  <td className="py-1.5 px-2.5">
                                     {isEditingThisRow && editingCell?.field === 'descricao' ? (
                                       <div className="flex items-center gap-1">
                                         <Input
@@ -1754,7 +1808,7 @@ export default function Importacao() {
                                             ? 'bg-amber-100 text-amber-950 border border-amber-300 font-bold'
                                             : 'hover:bg-slate-100 text-slate-900 font-medium'
                                         }`}
-                                        title="Clique para editar descrição da despesa"
+                                        title="Clique para editar descrição do lançamento"
                                       >
                                         <span className="truncate">{row.descricao}</span>
                                         {row.editedFields?.descricao ? (
@@ -1767,13 +1821,12 @@ export default function Importacao() {
                                   </td>
 
                                   {/* Classificação */}
-                                  <td className="py-1.5 px-3">
+                                  <td className="py-1.5 px-2.5">
                                     {isEditingThisRow && editingCell?.field === 'tipo' ? (
                                       <Select
                                         value={editingValue}
                                         onValueChange={(val) => {
                                           setEditingValue(val)
-                                          // Salva imediatamente na seleção
                                           setConverterRows((prev) =>
                                             prev.map((r) =>
                                               r.id === row.id
@@ -1839,7 +1892,7 @@ export default function Importacao() {
                                   </td>
 
                                   {/* Natureza */}
-                                  <td className="py-1.5 px-3">
+                                  <td className="py-1.5 px-2.5">
                                     {isEditingThisRow && editingCell?.field === 'natureza' ? (
                                       <Select
                                         value={editingValue}
@@ -1898,7 +1951,7 @@ export default function Importacao() {
                                   </td>
 
                                   {/* Valor (R$) */}
-                                  <td className="py-1.5 px-3 text-right">
+                                  <td className="py-1.5 px-2.5 text-right">
                                     {isEditingThisRow && editingCell?.field === 'valor' ? (
                                       <div className="flex items-center justify-end gap-1">
                                         <Input
@@ -1941,7 +1994,7 @@ export default function Importacao() {
                                   </td>
 
                                   {/* Linha Original */}
-                                  <td className="py-2 px-3 text-slate-400 font-mono text-[11px] max-w-xs truncate">
+                                  <td className="py-2 px-2.5 text-slate-400 font-mono text-[11px] max-w-xs truncate">
                                     {row.linhaOriginal}
                                   </td>
                                 </tr>
