@@ -51,18 +51,23 @@ export interface PdfExcelRow {
   id: string
   pageNumber: number
   codigo: string
+  conta: string
   descricao: string
   tipo: string
   natureza: 'Débito' | 'Crédito' | 'Saldo' | 'Geral'
   valor: number
   valoresAdicionais?: number[]
   linhaOriginal: string
-  editedFields?: Partial<Record<'codigo' | 'descricao' | 'tipo' | 'natureza' | 'valor', boolean>>
+  linhaConta?: string
+  editedFields?: Partial<
+    Record<'codigo' | 'conta' | 'descricao' | 'tipo' | 'natureza' | 'valor', boolean>
+  >
 }
 
 export type ColumnFieldKey =
   | 'item'
   | 'codigo'
+  | 'conta'
   | 'descricao'
   | 'tipo'
   | 'natureza'
@@ -333,11 +338,18 @@ export const DEFAULT_COLUMN_MAPPINGS: ColumnMappingConfig[] = [
     width: 18,
   },
   {
-    id: 'descricao',
-    label: 'Nome da Conta / Descrição',
-    excelHeader: 'Conta / Descrição',
+    id: 'conta',
+    label: 'Conta Contábil (Cabeçalho)',
+    excelHeader: 'Conta Contábil',
     included: true,
-    width: 45,
+    width: 35,
+  },
+  {
+    id: 'descricao',
+    label: 'Despesa / Descrição',
+    excelHeader: 'Descrição da Despesa',
+    included: true,
+    width: 40,
   },
   {
     id: 'tipo',
@@ -355,7 +367,7 @@ export const DEFAULT_COLUMN_MAPPINGS: ColumnMappingConfig[] = [
   },
   {
     id: 'valor',
-    label: 'Valor (R$)',
+    label: 'Valor Pago (R$)',
     excelHeader: 'Valor (R$)',
     included: true,
     width: 18,
@@ -413,7 +425,7 @@ export interface PdfConversionOptions {
 const REGEX_MONETARY =
   /(?:R\$\s*)?(?:(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}|\b\d+\.\d{2}\b|\(\s*(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}\s*\))/gi
 
-// Expressão regular para identificar códigos contábeis estruturais (ex: 1.01.01.001 ou 1.1.1.01 ou 3.01.001)
+// Expressão regular para identificar códigos contábeis estruturais (ex: 1.01.01.001 ou 1.1.1.01 ou 3.01.001 ou 2.1.01)
 const REGEX_ACCOUNT_CODE = /\b([1-9]\.(?:\d{1,4}\.)*\d{1,4}|\d{3,6})\b/
 
 // Palavras-chave de cabeçalhos e ruídos descartáveis em relatórios contábeis
@@ -426,13 +438,137 @@ const NOISE_STARTS = [
   'cpf',
   'emissao',
   'periodo:',
+  'periodo de',
   'usuario:',
   'hora:',
   'data:',
+  'data/hora',
   'sistema:',
   'software',
   'versao',
 ]
+
+// Palavras-chave explícitas que indicam que a linha é um cabeçalho de CONTA
+const ACCOUNT_HEADER_PREFIXES = [
+  'conta:',
+  'conta contábil:',
+  'conta contabil:',
+  'conta corrente:',
+  'conta:',
+  'plano:',
+  'plano de contas:',
+  'cta:',
+  'cta.:',
+  'grupo:',
+  'subgrupo:',
+  'categoria:',
+  'centro de custo:',
+  'centro custo:',
+]
+
+/**
+ * Detecta se uma linha pura de texto (sem valor ou com valor de saldo/cabeçalho) é um cabeçalho de CONTA
+ */
+export function isAccountHeaderLine(line: string): {
+  isHeader: boolean
+  codigo: string
+  nomeConta: string
+} {
+  const raw = line.trim()
+  if (!raw || raw.length < 3) return { isHeader: false, codigo: '', nomeConta: '' }
+
+  const norm = normalizeText(raw)
+
+  // Ignora ruídos genéricos de cabeçalho de página
+  if (NOISE_STARTS.some((n) => norm.startsWith(n))) {
+    return { isHeader: false, codigo: '', nomeConta: '' }
+  }
+
+  // Ignora cabeçalhos de colunas comuns (ex: "Data Histórico Valor", "Código Descrição Debito Credito Saldo")
+  if (
+    norm.includes('data') &&
+    (norm.includes('historico') || norm.includes('descricao') || norm.includes('documento')) &&
+    (norm.includes('valor') ||
+      norm.includes('debito') ||
+      norm.includes('credito') ||
+      norm.includes('saldo'))
+  ) {
+    return { isHeader: false, codigo: '', nomeConta: '' }
+  }
+
+  // 1. Prefixo explícito como "Conta:", "Conta Contábil:", "Cta.:"
+  for (const prefix of ACCOUNT_HEADER_PREFIXES) {
+    if (norm.startsWith(prefix)) {
+      const rest = raw.substring(prefix.length).trim()
+      let codigo = ''
+      const codeMatch = rest.match(REGEX_ACCOUNT_CODE)
+      if (codeMatch && codeMatch.index !== undefined && codeMatch.index < 10) {
+        codigo = codeMatch[1]
+      }
+      const nomeConta =
+        rest
+          .replace(REGEX_ACCOUNT_CODE, '')
+          .replace(/^[.\-–—:;\s]+/, '')
+          .replace(/[.\-–—:;\s]+$/, '')
+          .replace(/\s+/g, ' ')
+          .trim() || rest
+
+      return { isHeader: true, codigo, nomeConta }
+    }
+  }
+
+  // 2. Linha que inicia com código contábil estrutural (ex: "3.1.01.001 Despesas Administrativas" ou "4.1.02 - Fornecedores")
+  const codeMatch = raw.match(REGEX_ACCOUNT_CODE)
+  if (codeMatch && codeMatch.index !== undefined && codeMatch.index <= 2) {
+    const code = codeMatch[1]
+    const rest = raw
+      .replace(REGEX_ACCOUNT_CODE, '')
+      .replace(/^[.\-–—:;\s]+/, '')
+      .replace(/[.\-–—:;\s]+$/, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+    // Se tiver nome textual relevante
+    if (rest.length >= 3) {
+      return { isHeader: true, codigo: code, nomeConta: rest }
+    }
+  }
+
+  // 3. Linha sem valor monetário que parece ser um título de conta/grupo contábil
+  const matchesMonetary = Array.from(raw.matchAll(REGEX_MONETARY))
+  if (matchesMonetary.length === 0) {
+    // Linha em maiúsculas ou destacada sem pontuação de frase
+    const isUpper = raw === raw.toUpperCase() && /[A-Z]/.test(raw)
+    const hasAccountKeywords =
+      norm.includes('despesa') ||
+      norm.includes('custo') ||
+      norm.includes('receita') ||
+      norm.includes('ativo') ||
+      norm.includes('passivo') ||
+      norm.includes('fornecedor') ||
+      norm.includes('imposto') ||
+      norm.includes('banco') ||
+      norm.includes('caixa') ||
+      norm.includes('pessoal') ||
+      norm.includes('folha') ||
+      norm.includes('tribut') ||
+      norm.includes('servico') ||
+      norm.includes('operacion')
+
+    if ((isUpper && raw.length >= 4 && raw.length <= 80) || hasAccountKeywords) {
+      const nomeConta = raw
+        .replace(/[.\-–—_]{2,}/g, ' ')
+        .replace(/^[.\-–—:;\s]+/, '')
+        .replace(/[.\-–—:;\s]+$/, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+
+      return { isHeader: true, codigo: '', nomeConta }
+    }
+  }
+
+  return { isHeader: false, codigo: '', nomeConta: '' }
+}
 
 /**
  * Classifica a natureza contábil com base no código ou descrição
@@ -503,10 +639,13 @@ export function inferNatureza(
   valorStr: string,
 ): 'Débito' | 'Crédito' | 'Saldo' | 'Geral' {
   const norm = normalizeText(line)
-  if (/\b(d|debito|deb)\b/i.test(line) && !/\b(c|credito|cred)\b/i.test(line)) {
+  if (
+    /\b(d|debito|deb|pago|pagamento)\b/i.test(line) &&
+    !/\b(c|credito|cred|recebido)\b/i.test(line)
+  ) {
     return 'Débito'
   }
-  if (/\b(c|credito|cred)\b/i.test(line) && !/\b(d|debito|deb)\b/i.test(line)) {
+  if (/\b(c|credito|cred|recebido)\b/i.test(line) && !/\b(d|debito|deb|pago)\b/i.test(line)) {
     return 'Crédito'
   }
   if (norm.includes('saldo') || norm.includes('total') || norm.includes('subtotal')) {
@@ -519,15 +658,23 @@ export function inferNatureza(
 }
 
 /**
- * Processa as páginas extraídas do PDF e transforma em linhas tabulares estruturadas para o Excel
+ * Processa as páginas extraídas do PDF e transforma em linhas tabulares estruturadas para o Excel.
+ * Heurística aprimorada de DUAS LINHAS (Hierarquia):
+ * Linha Superior = CONTA Contábil (cabeçalho)
+ * Linha Inferior = DESPESAS / LANÇAMENTOS PAGOS com seus respectivos VALORES (R$).
  */
 export function convertPdfPagesToExcelRows(pages: ExtractedPageText[]): PdfExcelRow[] {
   const rows: PdfExcelRow[] = []
 
+  // Mantém a última conta contábil identificada como contexto ativo para as despesas abaixo dela
+  let currentContaHeader = ''
+  let currentCodigoHeader = ''
+  let currentContaRawLine = ''
+
   pages.forEach((page) => {
     page.lines.forEach((line, lineIdx) => {
       const rawLine = line.trim()
-      if (!rawLine || rawLine.length < 3) return
+      if (!rawLine || rawLine.length < 2) return
 
       const normLine = normalizeText(rawLine)
       if (NOISE_STARTS.some((n) => normLine.startsWith(n))) {
@@ -536,29 +683,39 @@ export function convertPdfPagesToExcelRows(pages: ExtractedPageText[]): PdfExcel
 
       // Procura todas as ocorrências de valores monetários na linha
       const matches = Array.from(rawLine.matchAll(REGEX_MONETARY))
+
+      // 1. Linha SEM valores monetários: verificar se é cabeçalho de conta
       if (!matches || matches.length === 0) {
-        // Se a linha não tem números, ainda pode ser um cabeçalho ou seção relevante se não for ruído
+        const headerCheck = isAccountHeaderLine(rawLine)
+        if (headerCheck.isHeader) {
+          currentContaHeader = headerCheck.nomeConta
+          currentCodigoHeader = headerCheck.codigo
+          currentContaRawLine = rawLine
+        }
         return
       }
 
-      // Extrai todos os valores numéricos encontrados na linha
+      // 2. Linha COM valores monetários:
+      // Pode ser tanto:
+      // a) Uma linha de despesa paga que pertence à conta de cima (currentContaHeader)
+      // b) Uma linha de conta que já tem o valor embutido nela mesma
+      // c) Um cabeçalho de conta com saldo ou total
+
       const numericValues = matches.map((m) => parseBrlNumber(m[0]))
-      // O valor principal costuma ser o último (ex: saldo ou valor da linha)
       const primaryValue = numericValues[numericValues.length - 1]
       const primaryMatch = matches[matches.length - 1]
 
-      // Trecho antes dos valores para extrair código e descrição
       const textBefore = rawLine.substring(0, matches[0].index).trim()
 
-      // Tenta achar código contábil
-      let codigo = ''
+      // Tenta achar código contábil na própria linha
+      let inlineCodigo = ''
       const codeMatch = textBefore.match(REGEX_ACCOUNT_CODE) || rawLine.match(REGEX_ACCOUNT_CODE)
       if (codeMatch && codeMatch.index !== undefined && codeMatch.index < 20) {
-        codigo = codeMatch[1]
+        inlineCodigo = codeMatch[1]
       }
 
-      // Limpa a descrição removendo código inicial, pontuações repetidas (... ---), etc.
-      let descricao = textBefore
+      // Descrição limpa da linha de despesa
+      let inlineDescricao = textBefore
         .replace(REGEX_ACCOUNT_CODE, '')
         .replace(/[.\-–—_]{2,}/g, ' ')
         .replace(/^[.\-–—:;\s]+/, '')
@@ -566,35 +723,66 @@ export function convertPdfPagesToExcelRows(pages: ExtractedPageText[]): PdfExcel
         .replace(/\s+/g, ' ')
         .trim()
 
-      // Se a descrição ficou vazia mas temos texto antes do último match
-      if (!descricao && matches.length > 1) {
-        descricao = rawLine
+      if (!inlineDescricao && matches.length > 1) {
+        inlineDescricao = rawLine
           .substring(0, primaryMatch.index || 0)
           .replace(/[.\-–—_]{2,}/g, ' ')
           .trim()
       }
 
-      if (!descricao && codigo) {
-        descricao = `Conta Cód. ${codigo}`
-      } else if (!descricao) {
-        descricao = rawLine.replace(REGEX_MONETARY, '').trim()
+      // Se a linha começar com prefixo de conta explícito (ex: "Conta: 3.1.01 - Aluguel R$ 1.500"), atualiza conta ativa
+      const headerCheck = isAccountHeaderLine(rawLine)
+      if (headerCheck.isHeader && headerCheck.nomeConta) {
+        currentContaHeader = headerCheck.nomeConta
+        if (headerCheck.codigo) currentCodigoHeader = headerCheck.codigo
+        currentContaRawLine = rawLine
       }
 
-      if (descricao.length < 2) return
+      // Determina a CONTA associada e a DESCRIÇÃO DA DESPESA
+      let contaFinal = currentContaHeader
+      let codigoFinal = inlineCodigo || currentCodigoHeader || '-'
+      let descricaoFinal = inlineDescricao
 
-      const tipo = inferTipoClassificacao(codigo, descricao)
+      // Se não havia conta no cabeçalho acima, mas a linha possui descrição própria, usa a descrição
+      if (!contaFinal) {
+        if (inlineDescricao) {
+          contaFinal = inlineDescricao
+        } else if (inlineCodigo) {
+          contaFinal = `Conta ${inlineCodigo}`
+        } else {
+          contaFinal = 'Despesa Geral'
+        }
+      }
+
+      // Se a descrição da despesa ficou vazia, preenche com o texto ou com o nome da conta
+      if (!descricaoFinal) {
+        descricaoFinal = rawLine.replace(REGEX_MONETARY, '').trim() || contaFinal
+      }
+
+      // Se a linha for idêntica ao nome da conta, mantém coerente
+      if (
+        descricaoFinal === contaFinal &&
+        currentContaHeader &&
+        currentContaHeader !== inlineDescricao
+      ) {
+        descricaoFinal = inlineDescricao || currentContaHeader
+      }
+
+      const tipo = inferTipoClassificacao(codigoFinal, `${contaFinal} ${descricaoFinal}`)
       const natureza = inferNatureza(rawLine, primaryMatch[0])
 
       rows.push({
         id: `p${page.pageNumber}_l${lineIdx}_${Math.random().toString(36).substring(2, 7)}`,
         pageNumber: page.pageNumber,
-        codigo: codigo || '-',
-        descricao,
+        codigo: codigoFinal,
+        conta: contaFinal,
+        descricao: descricaoFinal,
         tipo,
         natureza,
         valor: primaryValue,
         valoresAdicionais: numericValues.length > 1 ? numericValues.slice(0, -1) : undefined,
         linhaOriginal: rawLine,
+        linhaConta: currentContaRawLine || undefined,
       })
     })
   })
@@ -628,6 +816,9 @@ export function generateExcelWorkbookFromPdf(
           break
         case 'codigo':
           rowObj[header] = r.codigo !== '-' ? r.codigo : ''
+          break
+        case 'conta':
+          rowObj[header] = r.conta || ''
           break
         case 'descricao':
           rowObj[header] = r.descricao
