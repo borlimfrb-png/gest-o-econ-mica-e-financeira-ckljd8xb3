@@ -60,6 +60,12 @@ import {
   formatPlanoContaDisplay,
   type MatchedItem,
 } from '@/lib/pdfMatching'
+import {
+  convertPdfPagesToExcelRows,
+  generateExcelWorkbookFromPdf,
+  downloadExcelFile,
+  type PdfExcelRow,
+} from '@/lib/pdfToExcel'
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
@@ -136,6 +142,153 @@ export default function Importacao() {
   // Drag & Drop visual states
   const [isPdfDragOver, setIsPdfDragOver] = useState(false)
   const pdfInputRef = useRef<HTMLInputElement>(null)
+
+  // ----------------------------------------------------
+  // Aba PDF para Excel (Estados)
+  // ----------------------------------------------------
+  const [converterFile, setConverterFile] = useState<File | null>(null)
+  const [converterExtracting, setConverterExtracting] = useState(false)
+  const [converterProgress, setConverterProgress] = useState(0)
+  const [converterCurrentPage, setConverterCurrentPage] = useState(0)
+  const [converterTotalPages, setConverterTotalPages] = useState(0)
+  const [converterResult, setConverterResult] = useState<PdfExtractionResult | null>(null)
+  const [converterRows, setConverterRows] = useState<PdfExcelRow[]>([])
+  const [converterErrorDetail, setConverterErrorDetail] = useState<string | null>(null)
+  const [converterSearchTerm, setConverterSearchTerm] = useState('')
+  const [converterFilterType, setConverterFilterType] = useState<string>('todos')
+  const [converterIncludeRawSheet, setConverterIncludeRawSheet] = useState(true)
+  const [converterIncludeSummarySheet, setConverterIncludeSummarySheet] = useState(true)
+  const [isConverterDragOver, setIsConverterDragOver] = useState(false)
+  const converterInputRef = useRef<HTMLInputElement>(null)
+
+  // ----------------------------------------------------
+  // Handlers do Conversor PDF para Excel
+  // ----------------------------------------------------
+  const handleConverterFileSelect = async (file: File) => {
+    if (!file) return
+
+    // Validação de tipo
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      toast({
+        title: 'Formato inválido',
+        description: 'Por favor, selecione um arquivo no formato PDF (.pdf).',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Validação de tamanho (máximo 50MB)
+    const MAX_SIZE_MB = 50
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: `O arquivo excede o limite de ${MAX_SIZE_MB}MB.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setConverterFile(file)
+    setConverterExtracting(true)
+    setConverterProgress(0)
+    setConverterCurrentPage(0)
+    setConverterTotalPages(0)
+    setConverterErrorDetail(null)
+
+    try {
+      const res = await extractTextFromPdf(file, (progress, current, total) => {
+        setConverterProgress(progress)
+        setConverterCurrentPage(current)
+        setConverterTotalPages(total)
+      })
+
+      setConverterResult(res)
+      setConverterErrorDetail(null)
+
+      const convertedRows = convertPdfPagesToExcelRows(res.pages)
+      setConverterRows(convertedRows)
+
+      if (res.isScannedOrEmpty || convertedRows.length === 0) {
+        toast({
+          title: 'Aviso: Pouco ou nenhum dado detectado',
+          description:
+            'Não foi possível identificar tabelas ou textos selecionáveis com valores. Se for um PDF digitalizado/escaneado (imagem), aplique OCR antes.',
+        })
+      } else {
+        toast({
+          title: 'Conversão concluída!',
+          description: `${convertedRows.length} linhas de dados extraídas e estruturadas em Excel.`,
+        })
+      }
+    } catch (err: unknown) {
+      const error = err as Error
+      const errorMessage = error?.message || 'Ocorreu um erro ao processar o PDF para conversão.'
+      console.error('Erro na conversão de PDF para Excel:', error)
+      setConverterErrorDetail(errorMessage)
+      toast({
+        title: 'Falha na conversão',
+        description: errorMessage,
+        variant: 'destructive',
+      })
+    } finally {
+      setConverterExtracting(false)
+    }
+  }
+
+  const handleConverterDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setIsConverterDragOver(false)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleConverterFileSelect(e.dataTransfer.files[0])
+    }
+  }
+
+  const handleResetConverter = () => {
+    setConverterFile(null)
+    setConverterResult(null)
+    setConverterRows([])
+    setConverterErrorDetail(null)
+    setConverterSearchTerm('')
+    setConverterFilterType('todos')
+  }
+
+  const handleDownloadConvertedExcel = () => {
+    if (!converterResult || converterRows.length === 0) {
+      toast({
+        title: 'Nenhum dado para exportar',
+        description: 'Faça o upload de um PDF com dados para gerar a planilha.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      const baseName = (converterFile?.name || 'documento')
+        .replace(/\.pdf$/i, '')
+        .replace(/[^\w\s-]/g, '')
+        .trim()
+      const suggestedFileName = `${baseName || 'dados'}-convertido.xlsx`
+
+      const wb = generateExcelWorkbookFromPdf(converterRows, converterResult, {
+        includeRawTextSheet: converterIncludeRawSheet,
+        includeSummarySheet: converterIncludeSummarySheet,
+      })
+
+      downloadExcelFile(wb, suggestedFileName)
+
+      toast({
+        title: 'Download iniciado!',
+        description: `Arquivo "${suggestedFileName}" gerado com sucesso.`,
+      })
+    } catch (err: unknown) {
+      const error = err as Error
+      toast({
+        title: 'Erro ao gerar arquivo Excel',
+        description: error.message || 'Falha ao montar o arquivo .xlsx.',
+        variant: 'destructive',
+      })
+    }
+  }
 
   // ----------------------------------------------------
   // Carrega Catálogos Iniciais
@@ -675,25 +828,499 @@ export default function Importacao() {
 
       {/* Abas Principais: Excel vs PDF */}
       <Tabs defaultValue="pdf" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 max-w-md bg-slate-100 p-1 rounded-xl">
+        <TabsList className="grid w-full grid-cols-3 max-w-xl bg-slate-100 p-1 rounded-xl">
+          <TabsTrigger
+            value="pdf-to-excel"
+            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
+            PDF para Excel
+            <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
+              XLSX
+            </span>
+          </TabsTrigger>
           <TabsTrigger
             value="pdf"
-            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg"
+            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
           >
             <FileText className="w-4 h-4 text-rose-500" />
             Importar PDF
-            <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-              Novo
+            <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
+              Lançamentos
             </span>
           </TabsTrigger>
           <TabsTrigger
             value="excel"
-            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg"
+            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             Importar Excel
           </TabsTrigger>
         </TabsList>
+
+        {/* ========================================================================= */}
+        {/* ABA 0: PDF PARA EXCEL (.xlsx) - NOVA FERRAMENTA                            */}
+        {/* ========================================================================= */}
+        <TabsContent value="pdf-to-excel" className="space-y-6 focus:outline-none">
+          {/* Card de Apresentação e Destaque da Ferramenta */}
+          <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-md relative overflow-hidden">
+            <div className="absolute right-0 top-0 -mt-8 -mr-8 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full text-xs font-semibold uppercase tracking-wider">
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-400" />
+                  Conversor PDF ➔ XLSX
+                </div>
+                <h2 className="text-2xl font-bold text-white tracking-tight">
+                  Converter PDF para Planilha Excel (.xlsx)
+                </h2>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Transforme balancetes, extratos e relatórios contábeis em formato PDF em uma
+                  planilha Excel limpa, estruturada e editável, processada instantaneamente com
+                  segurança no seu próprio navegador.
+                </p>
+              </div>
+
+              {converterRows.length > 0 && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                  <Button
+                    onClick={handleDownloadConvertedExcel}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold shadow-lg shadow-emerald-500/20 gap-2 h-11 px-5"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Excel ({converterRows.length} linhas)
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleResetConverter}
+                    className="bg-slate-800/80 hover:bg-slate-700 text-slate-200 border-slate-700 text-xs h-11"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5 text-rose-400" />
+                    Novo Arquivo
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Área 1: Upload de Arquivo (Quando não há dados processados ainda) */}
+          {!converterResult && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <div className="max-w-2xl mx-auto text-center space-y-6">
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    setIsConverterDragOver(true)
+                  }}
+                  onDragLeave={() => setIsConverterDragOver(false)}
+                  onDrop={handleConverterDrop}
+                  onClick={() => converterInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all ${
+                    isConverterDragOver
+                      ? 'border-indigo-500 bg-indigo-50/50 scale-[1.01]'
+                      : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50 hover:bg-indigo-50/20'
+                  }`}
+                >
+                  <input
+                    type="file"
+                    ref={converterInputRef}
+                    onChange={(e) =>
+                      e.target.files?.[0] && handleConverterFileSelect(e.target.files[0])
+                    }
+                    accept=".pdf,application/pdf"
+                    className="hidden"
+                  />
+
+                  <div className="w-16 h-16 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 flex items-center justify-center mb-4 shadow-sm">
+                    <FileSpreadsheet className="w-8 h-8" />
+                  </div>
+
+                  <h3 className="text-lg font-bold text-slate-800">
+                    Selecione ou arraste o seu arquivo PDF
+                  </h3>
+                  <p className="text-sm text-slate-500 mt-1 max-w-md">
+                    O sistema extrai tabelas, contas, códigos e valores monetários organizando tudo
+                    em colunas no Excel (.xlsx).
+                  </p>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-6 border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 shadow-sm font-medium"
+                  >
+                    <Upload className="w-4 h-4 mr-2 text-indigo-600" />
+                    Selecionar Arquivo PDF (.pdf)
+                  </Button>
+                </div>
+
+                {/* Alerta de erro detalhado */}
+                {converterErrorDetail && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-left flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1 text-sm text-rose-900 flex-1">
+                      <p className="font-semibold text-rose-950">Falha ao converter arquivo PDF</p>
+                      <p className="text-xs text-rose-800 leading-relaxed">
+                        {converterErrorDetail}
+                      </p>
+                      <p className="pt-1 text-xs text-rose-700">
+                        Dica: Certifique-se de que o PDF não está corrompido, protegido com senha ou
+                        seja uma foto sem texto selecionável (necessita de OCR).
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConverterErrorDetail(null)}
+                      className="text-rose-600 hover:text-rose-800 hover:bg-rose-100 h-7 px-2 text-xs"
+                    >
+                      Fechar
+                    </Button>
+                  </div>
+                )}
+
+                {/* Vantagens e Recursos do Conversor */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
+                    <div className="text-indigo-600 mt-0.5">
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs text-slate-600 leading-relaxed">
+                      <span className="font-semibold text-slate-800 block">
+                        Formatação Automática
+                      </span>
+                      Cria abas com dados organizados, resumo por categoria e formatação de moeda em
+                      R$.
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
+                    <div className="text-emerald-600 mt-0.5">
+                      <CheckCircle className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs text-slate-600 leading-relaxed">
+                      <span className="font-semibold text-slate-800 block">
+                        Detecção Inteligente
+                      </span>
+                      Identifica código contábil, descrição da conta, natureza (débito/crédito) e
+                      valor.
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex gap-3">
+                    <div className="text-amber-600 mt-0.5">
+                      <AlertTriangle className="w-4 h-4" />
+                    </div>
+                    <div className="text-xs text-slate-600 leading-relaxed">
+                      <span className="font-semibold text-slate-800 block">Documentos Nativos</span>
+                      Compatível com PDFs digitais (exportados de sistemas contábeis e ERPs).
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Barra de Progresso de Leitura */}
+              {converterExtracting && (
+                <div className="mt-8 p-6 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-4 max-w-xl mx-auto">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <RefreshCw className="w-5 h-5 text-indigo-600 animate-spin" />
+                      <div>
+                        <p className="text-sm font-semibold text-indigo-950">
+                          Processando páginas e gerando planilha...
+                        </p>
+                        <p className="text-xs text-indigo-700">
+                          Página {converterCurrentPage} de {converterTotalPages}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-indigo-800">{converterProgress}%</span>
+                  </div>
+                  <div className="w-full bg-indigo-200 rounded-full h-2.5 overflow-hidden">
+                    <div
+                      className="bg-indigo-600 h-2.5 rounded-full transition-all duration-300"
+                      style={{ width: `${converterProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Área 2: Pré-visualização dos Dados e Download (Quando já processado) */}
+          {converterResult && (
+            <div className="space-y-6">
+              {/* Barra de Métricas e Ações do Arquivo */}
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 shrink-0">
+                    <FileSpreadsheet className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg font-bold text-slate-900">
+                        {converterResult.fileName}
+                      </h3>
+                      <span className="text-xs bg-indigo-100 text-indigo-800 px-2.5 py-0.5 rounded-full font-semibold">
+                        {converterResult.totalPages} página
+                        {converterResult.totalPages > 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-semibold">
+                        {converterRows.length} linhas detectadas
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Valor total acumulado:{' '}
+                      <strong className="text-slate-800 font-mono">
+                        {new Intl.NumberFormat('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                        }).format(converterRows.reduce((acc, r) => acc + r.valor, 0))}
+                      </strong>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleResetConverter}
+                    className="text-slate-600 hover:text-rose-600 bg-white border-slate-300 gap-1.5"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Trocar Arquivo
+                  </Button>
+                  <Button
+                    onClick={handleDownloadConvertedExcel}
+                    disabled={converterRows.length === 0}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-sm px-4"
+                  >
+                    <Download className="w-4 h-4" />
+                    Baixar Excel (.xlsx)
+                  </Button>
+                </div>
+              </div>
+
+              {/* Aviso se PDF parecer digitalizado/vazio */}
+              {converterResult.isScannedOrEmpty && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-semibold">
+                      Documento sem texto selecionável (provável imagem escaneada)
+                    </p>
+                    <p className="mt-1 text-xs text-amber-700 leading-relaxed">
+                      Não encontramos caracteres de texto ou tabelas estruturadas no PDF. Se o
+                      documento foi criado a partir de fotos ou scanner, utilize uma ferramenta de
+                      OCR (reconhecimento óptico de caracteres) antes de converter.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Configurações da Exportação e Filtros de Pesquisa */}
+              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  {/* Busca textual */}
+                  <div className="flex-1 max-w-md">
+                    <Input
+                      placeholder="Pesquisar por conta, código ou linha..."
+                      value={converterSearchTerm}
+                      onChange={(e) => setConverterSearchTerm(e.target.value)}
+                      className="bg-white text-sm"
+                    />
+                  </div>
+
+                  {/* Filtro por tipo de classificação */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-medium text-slate-500">Filtrar Categoria:</span>
+                    <Select value={converterFilterType} onValueChange={setConverterFilterType}>
+                      <SelectTrigger className="w-48 h-9 text-xs bg-white">
+                        <SelectValue placeholder="Todas as categorias" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Todas as categorias</SelectItem>
+                        <SelectItem value="Ativo">Ativo</SelectItem>
+                        <SelectItem value="Passivo / PL">Passivo / PL</SelectItem>
+                        <SelectItem value="Receita">Receita</SelectItem>
+                        <SelectItem value="Despesa / Custo">Despesa / Custo</SelectItem>
+                        <SelectItem value="Contábil / Geral">Contábil / Geral</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Opções de abas no Excel */}
+                  <div className="flex items-center gap-4 text-xs text-slate-600">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={converterIncludeSummarySheet}
+                        onChange={(e) => setConverterIncludeSummarySheet(e.target.checked)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Incluir aba de Resumo</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={converterIncludeRawSheet}
+                        onChange={(e) => setConverterIncludeRawSheet(e.target.checked)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>Incluir texto bruto</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabela de Pré-visualização do que será exportado para o Excel */}
+              {(() => {
+                const filteredRows = converterRows.filter((r) => {
+                  const matchesSearch =
+                    !converterSearchTerm ||
+                    r.descricao.toLowerCase().includes(converterSearchTerm.toLowerCase()) ||
+                    r.codigo.toLowerCase().includes(converterSearchTerm.toLowerCase()) ||
+                    r.linhaOriginal.toLowerCase().includes(converterSearchTerm.toLowerCase())
+
+                  const matchesType =
+                    converterFilterType === 'todos' ||
+                    r.tipo.toLowerCase().includes(converterFilterType.toLowerCase())
+
+                  return matchesSearch && matchesType
+                })
+
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
+                    <div className="p-4 bg-slate-50/80 border-b border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <h4 className="font-bold text-slate-800 text-sm">
+                          Pré-visualização da Planilha Excel (.xlsx)
+                        </h4>
+                        <p className="text-xs text-slate-500">
+                          Exibindo {filteredRows.length} de {converterRows.length} registros
+                          extraídos
+                        </p>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        Total Filtrado:{' '}
+                        <span className="font-bold text-slate-900 font-mono">
+                          {new Intl.NumberFormat('pt-BR', {
+                            style: 'currency',
+                            currency: 'BRL',
+                          }).format(filteredRows.reduce((acc, r) => acc + r.valor, 0))}
+                        </span>
+                      </div>
+                    </div>
+
+                    {filteredRows.length === 0 ? (
+                      <div className="p-10 text-center text-slate-500 space-y-2">
+                        <FileSearch className="w-8 h-8 text-slate-300 mx-auto" />
+                        <p className="text-sm font-medium">
+                          Nenhum registro encontrado para os filtros atuais.
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Tente ajustar o termo de pesquisa ou a categoria.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto max-h-[500px]">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-100/80 text-slate-700 font-semibold uppercase tracking-wider sticky top-0 border-b border-slate-200 shadow-sm">
+                            <tr>
+                              <th className="py-2.5 px-3 w-12 text-center">#</th>
+                              <th className="py-2.5 px-3 w-20">Pág</th>
+                              <th className="py-2.5 px-3 w-28">Código</th>
+                              <th className="py-2.5 px-3">Conta / Descrição</th>
+                              <th className="py-2.5 px-3 w-36">Classificação</th>
+                              <th className="py-2.5 px-3 w-24">Natureza</th>
+                              <th className="py-2.5 px-3 text-right w-36">Valor (R$)</th>
+                              <th className="py-2.5 px-3 max-w-xs truncate">
+                                Linha Original no PDF
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-sans">
+                            {filteredRows.map((row, idx) => (
+                              <tr key={row.id} className="hover:bg-slate-50/90 transition-colors">
+                                <td className="py-2 px-3 text-center text-slate-400 font-mono">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-2 px-3 text-slate-500 font-mono">
+                                  p.{row.pageNumber}
+                                </td>
+                                <td className="py-2 px-3 font-mono font-medium text-slate-700">
+                                  {row.codigo !== '-' ? (
+                                    <span className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded text-[11px]">
+                                      {row.codigo}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="font-semibold text-slate-900">
+                                    {row.descricao}
+                                  </div>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      row.tipo.includes('Ativo')
+                                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                        : row.tipo.includes('Passivo')
+                                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                          : row.tipo.includes('Receita')
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                            : row.tipo.includes('Despesa') ||
+                                                row.tipo.includes('Custo')
+                                              ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                              : 'bg-slate-100 text-slate-700'
+                                    }`}
+                                  >
+                                    {row.tipo}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-slate-600 font-medium">
+                                  {row.natureza}
+                                </td>
+                                <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
+                                  {new Intl.NumberFormat('pt-BR', {
+                                    style: 'currency',
+                                    currency: 'BRL',
+                                  }).format(row.valor)}
+                                </td>
+                                <td className="py-2 px-3 text-slate-400 font-mono text-[11px] max-w-xs truncate">
+                                  {row.linhaOriginal}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+
+              {/* Botão Inferior de Download */}
+              <div className="flex justify-end gap-3 pt-2">
+                <Button
+                  variant="outline"
+                  onClick={handleResetConverter}
+                  className="bg-white border-slate-300"
+                >
+                  Carregar Outro PDF
+                </Button>
+                <Button
+                  onClick={handleDownloadConvertedExcel}
+                  disabled={converterRows.length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-2 shadow-sm px-6"
+                >
+                  <Download className="w-4 h-4" />
+                  Baixar Planilha Excel ({converterRows.length} linhas)
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
         {/* ========================================================================= */}
         {/* ABA 1: IMPORTAR PDF                                                      */}
