@@ -599,7 +599,7 @@ export function ImportarBalanceteMensal({
         if (onImportSuccess) {
           onImportSuccess(selectedEmpresaId, selectedAno, prontosParaGravar[0].mes)
         } else {
-          navigate(`/analise/${selectedEmpresaId}?aba=comparativo-mensal`)
+          navigate(`/empresas/${selectedEmpresaId}?aba=comparativo-mensal`)
         }
       } else {
         toast({
