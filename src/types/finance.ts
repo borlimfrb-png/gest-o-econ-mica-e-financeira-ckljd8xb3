@@ -339,6 +339,47 @@ export interface ContratoRecord extends RecordModel {
   }
 }
 
+export interface CapitalGiroCalculado {
+  // Decomposição Ativo Circulante
+  ativoCirculante: number
+  ativoCirculanteOperacional: number // Contas a Receber + Estoques + Impostos a Recuperar + Outros AC
+  ativoCirculanteFinanceiro: number // Caixa e Equivalentes + Aplicações Financeiras
+
+  // Decomposição Passivo Circulante
+  passivoCirculante: number
+  passivoCirculanteOperacional: number // Fornecedores + Obrigações Trabalhistas + Obrigações Tributárias + Outros PC
+  passivoCirculanteFinanceiro: number // Empréstimos e Financiamentos CP
+
+  // Indicadores de Capital de Giro
+  cgb: number // Capital de Giro Bruto = Ativo Circulante
+  cgl: number // Capital de Giro Líquido = AC - PC
+  ncg: number // Necessidade de Capital de Giro = ACO - PCO
+  saldoTesouraria: number // Saldo de Tesouraria = ACF - PCF (ou CGL - NCG)
+
+  // Relações e Indicadores Complementares
+  liquidezCorrente: number | null
+  coberturaNcgPorCgl: number | null // % (CGL / NCG) * 100 se NCG > 0
+
+  // Prazos e Ciclos (quando DRE fornecida)
+  pme: number | null // Prazo Médio de Estocagem
+  pmr: number | null // Prazo Médio de Recebimento
+  pmp: number | null // Prazo Médio de Pagamento
+  cicloOperacional: number | null // PME + PMR
+  cicloFinanceiro: number | null // CO - PMP
+
+  // Classificação da Estrutura Fleuriet
+  tipoFleuriet:
+    | 'excelente'
+    | 'solida'
+    | 'em_crescimento'
+    | 'arriscada'
+    | 'alto_risco'
+    | 'critica'
+    | 'indefinido'
+  tipoFleurietNome: string
+  tipoFleurietDescricao: string
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null

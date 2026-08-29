@@ -409,6 +409,26 @@ export function ModalPdfDashboardA4({
 
                 <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                   <span className="text-[10px] font-bold uppercase text-slate-500 block">
+                    Saldo de Tesouraria (ST)
+                  </span>
+                  <div className="flex items-baseline justify-between">
+                    <strong
+                      className={`text-base font-black font-mono ${
+                        indAtual.saldoTesouraria !== null && indAtual.saldoTesouraria >= 0
+                          ? 'text-emerald-700'
+                          : 'text-red-700'
+                      }`}
+                    >
+                      {indAtual.saldoTesouraria !== null
+                        ? formatCurrency(indAtual.saldoTesouraria)
+                        : '—'}
+                    </strong>
+                    <span className="text-[10px] text-slate-400">Ref: &gt; R$ 0</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                  <span className="text-[10px] font-bold uppercase text-slate-500 block">
                     ROE (Retorno PL)
                   </span>
                   <div className="flex items-baseline justify-between">
@@ -673,8 +693,11 @@ export function ModalPdfDashboardA4({
                       ? `${formatNumber(destaques.liquidezCorrente, 2)}x`
                       : '—'}
                   </strong>{' '}
-                  (benchmark setorial de {benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x) e
-                  Retorno sobre o Patrimônio Líquido (ROE) de{' '}
+                  (benchmark setorial de {benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x)
+                  {indAtual.saldoTesouraria !== null
+                    ? `, Capital de Giro Líquido (CGL) de ${formatCurrency(indAtual.cgl || 0)} e Saldo de Tesouraria de ${formatCurrency(indAtual.saldoTesouraria)}`
+                    : ''}
+                  , com Retorno sobre o Patrimônio Líquido (ROE) de{' '}
                   <strong>{destaques.roe ? `${formatNumber(destaques.roe, 1)}%` : '—'}</strong>.
                   Recomenda-se o acompanhamento contínuo dos indicadores operacionais e o
                   alinhamento periódico dos custos aos centros produtivos correspondentes.

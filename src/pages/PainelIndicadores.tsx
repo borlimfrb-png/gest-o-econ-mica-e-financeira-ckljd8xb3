@@ -38,6 +38,7 @@ import {
   type GrupoRadarItem,
   type IndicadoresConsolidadosEmpresa,
 } from '@/lib/benchmarks'
+import { Coins } from 'lucide-react'
 import { ModalPesosRelatorio } from '@/components/ModalPesosRelatorio'
 import { ModalPdfDashboardA4 } from '@/components/ModalPdfDashboardA4'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -146,6 +147,7 @@ export default function PainelIndicadores() {
   // Estado de expansão dos cards de grupo (todos abertos por padrão)
   const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({
     liquidez: true,
+    capitalGiro: true,
     endividamento: true,
     rentabilidade: true,
     estruturaCapital: true,
@@ -164,6 +166,7 @@ export default function PainelIndicadores() {
   const expandirTodos = () => {
     setGruposExpandidos({
       liquidez: true,
+      capitalGiro: true,
       endividamento: true,
       rentabilidade: true,
       estruturaCapital: true,
@@ -176,6 +179,7 @@ export default function PainelIndicadores() {
   const recolherTodos = () => {
     setGruposExpandidos({
       liquidez: false,
+      capitalGiro: false,
       endividamento: false,
       rentabilidade: false,
       estruturaCapital: false,
@@ -1009,6 +1013,89 @@ export default function PainelIndicadores() {
     ]
   }, [indAtual, indBAtual, benchmarkAtivo])
 
+  // 8. Grupo Capital de Giro (CGL, NCG, Saldo Tesouraria, Liquidez Corrente)
+  const chartCapitalGiroData = useMemo(() => {
+    return [
+      {
+        indicador: 'Cap. Giro Líquido (CGL)',
+        sigla: 'CGL',
+        empresa: indAtual.cgl !== null ? Number((indAtual.cgl / 1000).toFixed(1)) : null,
+        empresaB:
+          indBAtual?.cgl !== null && indBAtual?.cgl !== undefined
+            ? Number((indBAtual.cgl / 1000).toFixed(1))
+            : null,
+        benchmark: 50, // R$ 50k benchmark de referência
+        unidade: 'R$ mil',
+        realEmpresa: indAtual.cgl !== null ? formatCurrency(indAtual.cgl) : '—',
+        realEmpresaB:
+          indBAtual?.cgl !== null && indBAtual?.cgl !== undefined
+            ? formatCurrency(indBAtual.cgl)
+            : '—',
+        realBench: '> R$ 0',
+        metaDesc: '> R$ 0,00',
+      },
+      {
+        indicador: 'Nec. Cap. Giro (NCG)',
+        sigla: 'NCG',
+        empresa: indAtual.ncg !== null ? Number((indAtual.ncg / 1000).toFixed(1)) : null,
+        empresaB:
+          indBAtual?.ncg !== null && indBAtual?.ncg !== undefined
+            ? Number((indBAtual.ncg / 1000).toFixed(1))
+            : null,
+        benchmark: 30, // R$ 30k benchmark de referência
+        unidade: 'R$ mil',
+        realEmpresa: indAtual.ncg !== null ? formatCurrency(indAtual.ncg) : '—',
+        realEmpresaB:
+          indBAtual?.ncg !== null && indBAtual?.ncg !== undefined
+            ? formatCurrency(indBAtual.ncg)
+            : '—',
+        realBench: '≤ CGL',
+        metaDesc: 'Financiada por CGL',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'Saldo Tesouraria (ST)',
+        sigla: 'ST',
+        empresa:
+          indAtual.saldoTesouraria !== null
+            ? Number((indAtual.saldoTesouraria / 1000).toFixed(1))
+            : null,
+        empresaB:
+          indBAtual?.saldoTesouraria !== null && indBAtual?.saldoTesouraria !== undefined
+            ? Number((indBAtual.saldoTesouraria / 1000).toFixed(1))
+            : null,
+        benchmark: 20, // R$ 20k
+        unidade: 'R$ mil',
+        realEmpresa:
+          indAtual.saldoTesouraria !== null ? formatCurrency(indAtual.saldoTesouraria) : '—',
+        realEmpresaB:
+          indBAtual?.saldoTesouraria !== null && indBAtual?.saldoTesouraria !== undefined
+            ? formatCurrency(indBAtual.saldoTesouraria)
+            : '—',
+        realBench: '> R$ 0',
+        metaDesc: '> R$ 0 (Superávit)',
+      },
+      {
+        indicador: 'Liq. Corrente (x10)',
+        sigla: 'LC (x10)',
+        empresa: indAtual.lc !== null ? Number((indAtual.lc * 10).toFixed(1)) : null,
+        empresaB:
+          indBAtual?.lc !== null && indBAtual?.lc !== undefined
+            ? Number((indBAtual.lc * 10).toFixed(1))
+            : null,
+        benchmark: benchmarkAtivo ? Number((benchmarkAtivo.liquidezCorrente * 10).toFixed(1)) : 15,
+        unidade: 'x*10',
+        realEmpresa: indAtual.lc !== null ? `${indAtual.lc.toFixed(2)}x` : '—',
+        realEmpresaB:
+          indBAtual?.lc !== null && indBAtual?.lc !== undefined
+            ? `${indBAtual.lc.toFixed(2)}x`
+            : '—',
+        realBench: benchmarkAtivo ? `${benchmarkAtivo.liquidezCorrente.toFixed(2)}x` : '1.50x',
+        metaDesc: '≥ 1,20x',
+      },
+    ]
+  }, [indAtual, indBAtual, benchmarkAtivo])
+
   // Tabela completa de evolução vs Setor (3 Anos)
   const linhasEvolucao = useMemo(() => {
     if (!benchmarkAtivo) return []
@@ -1251,6 +1338,59 @@ export default function PainelIndicadores() {
         unidade: '%',
         tendencia: calcularTendencia(indAtual.spread, indAno1?.spread || null, false),
         peso: pesos.economicos,
+      },
+
+      // 8. Capital de Giro
+      {
+        grupo: 'Capital de Giro',
+        indicador: 'Capital de Giro Líquido (CGL)',
+        link: '/indicadores/capital-giro',
+        ano2:
+          indAno2?.cgl !== null && indAno2?.cgl !== undefined ? formatCurrency(indAno2.cgl) : '—',
+        ano1:
+          indAno1?.cgl !== null && indAno1?.cgl !== undefined ? formatCurrency(indAno1.cgl) : '—',
+        anoAtual: indAtual.cgl !== null ? formatCurrency(indAtual.cgl) : '—',
+        setor: '> R$ 0,00',
+        unidade: 'R$',
+        tendencia: calcularTendencia(indAtual.cgl, indAno1?.cgl || null, false),
+        peso: pesos.liquidez,
+      },
+      {
+        grupo: 'Capital de Giro',
+        indicador: 'Necessidade de Cap. Giro (NCG)',
+        link: '/indicadores/capital-giro',
+        ano2:
+          indAno2?.ncg !== null && indAno2?.ncg !== undefined ? formatCurrency(indAno2.ncg) : '—',
+        ano1:
+          indAno1?.ncg !== null && indAno1?.ncg !== undefined ? formatCurrency(indAno1.ncg) : '—',
+        anoAtual: indAtual.ncg !== null ? formatCurrency(indAtual.ncg) : '—',
+        setor: '≤ CGL',
+        unidade: 'R$',
+        tendencia: calcularTendencia(indAtual.ncg, indAno1?.ncg || null, true),
+        peso: pesos.liquidez,
+      },
+      {
+        grupo: 'Capital de Giro',
+        indicador: 'Saldo de Tesouraria (ST)',
+        link: '/indicadores/capital-giro',
+        ano2:
+          indAno2?.saldoTesouraria !== null && indAno2?.saldoTesouraria !== undefined
+            ? formatCurrency(indAno2.saldoTesouraria)
+            : '—',
+        ano1:
+          indAno1?.saldoTesouraria !== null && indAno1?.saldoTesouraria !== undefined
+            ? formatCurrency(indAno1.saldoTesouraria)
+            : '—',
+        anoAtual:
+          indAtual.saldoTesouraria !== null ? formatCurrency(indAtual.saldoTesouraria) : '—',
+        setor: '> R$ 0,00',
+        unidade: 'R$',
+        tendencia: calcularTendencia(
+          indAtual.saldoTesouraria,
+          indAno1?.saldoTesouraria || null,
+          false,
+        ),
+        peso: pesos.liquidez,
       },
     ]
   }, [indAtual, indAno1, indAno2, benchmarkAtivo, pesos])
@@ -2081,12 +2221,13 @@ export default function PainelIndicadores() {
             {[
               { id: 'todos', label: 'Todos os Grupos' },
               { id: 'liquidez', label: '1. Liquidez' },
-              { id: 'endividamento', label: '2. Endividamento' },
-              { id: 'rentabilidade', label: '3. Rentabilidade' },
-              { id: 'estruturaCapital', label: '4. Estrutura' },
-              { id: 'ebitda', label: '5. EBITDA' },
-              { id: 'eficienciaOperacional', label: '6. Eficiência' },
-              { id: 'economicos', label: '7. Econômicos' },
+              { id: 'capitalGiro', label: '2. Capital de Giro' },
+              { id: 'endividamento', label: '3. Endividamento' },
+              { id: 'rentabilidade', label: '4. Rentabilidade' },
+              { id: 'estruturaCapital', label: '5. Estrutura' },
+              { id: 'ebitda', label: '6. EBITDA' },
+              { id: 'eficienciaOperacional', label: '7. Eficiência' },
+              { id: 'economicos', label: '8. Econômicos' },
             ].map((g) => (
               <Button
                 key={g.id}
@@ -2299,6 +2440,174 @@ export default function PainelIndicadores() {
                           ? 'medio'
                           : 'ruim',
                       'Longo Prazo Total',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO NOVO: ANÁLISE DO CAPITAL DE GIRO (MODELO FLEURIET) */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'capitalGiro') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('capitalGiro')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <Coins className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      Análise do Capital de Giro (Modelo Fleuriet)
+                    </CardTitle>
+                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-bold">
+                      CGL • NCG • ST
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Equilíbrio dinâmico entre fontes permanentes, giro operacional e tesouraria
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
+                >
+                  <Link to="/indicadores/capital-giro">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.capitalGiro ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.capitalGiro && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        CGL, NCG, Saldo de Tesouraria (R$ mil) &amp; Liquidez (x10)
+                      </span>
+                      <span className="text-[10px] text-slate-500">Valores em R$ mil</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartCapitalGiroData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-blue-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.realEmpresa || '—'}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Referência:</span>
+                                  <span className="text-slate-300 font-mono">{d.realBench}</span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Meta: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#3B82F6"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name="Benchmark / Referência"
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'Cap. Giro Líquido',
+                      'CGL',
+                      indAtual.cgl !== null ? formatCurrency(indAtual.cgl) : '—',
+                      '> R$ 0',
+                      indAtual.cgl !== null && indAtual.cgl > 0
+                        ? 'bom'
+                        : indAtual.cgl === 0
+                          ? 'medio'
+                          : 'ruim',
+                      'AC − PC',
+                    )}
+                    {renderMiniCard(
+                      'Nec. Cap. Giro',
+                      'NCG',
+                      indAtual.ncg !== null ? formatCurrency(indAtual.ncg) : '—',
+                      '≤ CGL',
+                      indAtual.ncg !== null && indAtual.cgl !== null && indAtual.cgl >= indAtual.ncg
+                        ? 'bom'
+                        : 'medio',
+                      'ACO − PCO',
+                    )}
+                    {renderMiniCard(
+                      'Saldo Tesouraria',
+                      'ST',
+                      indAtual.saldoTesouraria !== null
+                        ? formatCurrency(indAtual.saldoTesouraria)
+                        : '—',
+                      '> R$ 0',
+                      indAtual.saldoTesouraria !== null && indAtual.saldoTesouraria > 0
+                        ? 'bom'
+                        : indAtual.saldoTesouraria === 0
+                          ? 'medio'
+                          : 'ruim',
+                      'ACF − PCF ou CGL − NCG',
+                    )}
+                    {renderMiniCard(
+                      'Liq. Corrente',
+                      'LC',
+                      indAtual.lc ? `${indAtual.lc.toFixed(2)}x` : '—',
+                      `${benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x`,
+                      indAtual.lc && indAtual.lc >= 1.2 ? 'bom' : 'medio',
+                      'AC / PC',
                     )}
                   </div>
                 </div>
@@ -3473,7 +3782,7 @@ export default function PainelIndicadores() {
             </p>
           </div>
           <Badge className="bg-slate-100 text-slate-700 font-bold text-xs">
-            7 Módulos Disponíveis
+            8 Módulos Disponíveis
           </Badge>
         </div>
 
@@ -3487,6 +3796,15 @@ export default function PainelIndicadores() {
               badge: 'Solvência',
               color: 'text-blue-600 bg-blue-50',
               destaque: `LC: ${indAtual.lc ? indAtual.lc.toFixed(2) : '—'}`,
+            },
+            {
+              title: 'Análise do Capital de Giro',
+              desc: 'Modelo Fleuriet: Capital de Giro Líquido, NCG e Saldo de Tesouraria',
+              path: '/indicadores/capital-giro',
+              icon: Coins,
+              badge: 'Fleuriet',
+              color: 'text-blue-600 bg-blue-50',
+              destaque: `ST: ${indAtual.saldoTesouraria !== null ? formatCurrency(indAtual.saldoTesouraria) : '—'}`,
             },
             {
               title: 'Indicadores de Endividamento',

@@ -29,6 +29,8 @@ import {
   Activity,
   TrendingDown,
   TrendingUp,
+  FileCheck2,
+  Coins,
   Clock,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -93,6 +95,7 @@ export default function Layout() {
   const indicadoresSubItems = [
     { name: 'Painel & Benchmarks', path: '/indicadores/painel', icon: Gauge },
     { name: 'Indicadores de Liquidez', path: '/indicadores/liquidez', icon: Activity },
+    { name: 'Análise do Capital de Giro', path: '/indicadores/capital-giro', icon: Coins },
     {
       name: 'Indicadores de Endividamento',
       path: '/indicadores/endividamento',

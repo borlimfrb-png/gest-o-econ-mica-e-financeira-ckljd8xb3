@@ -22,6 +22,7 @@ import Contratos from './pages/Contratos'
 import Relatorios from './pages/Relatorios'
 import RelatorioAnual from './pages/RelatorioAnual'
 import IndicadoresLiquidez from './pages/IndicadoresLiquidez'
+import IndicadoresCapitalGiro from './pages/IndicadoresCapitalGiro'
 import IndicadoresEndividamento from './pages/IndicadoresEndividamento'
 import IndicadoresRentabilidade from './pages/IndicadoresRentabilidade'
 import IndicadoresEstruturaCapital from './pages/IndicadoresEstruturaCapital'
@@ -97,6 +98,7 @@ const App = () => (
                   element={<Navigate to="/indicadores/painel" replace />}
                 />
                 <Route path="/indicadores/liquidez" element={<IndicadoresLiquidez />} />
+                <Route path="/indicadores/capital-giro" element={<IndicadoresCapitalGiro />} />
                 <Route path="/indicadores/endividamento" element={<IndicadoresEndividamento />} />
                 <Route path="/indicadores/rentabilidade" element={<IndicadoresRentabilidade />} />
                 <Route

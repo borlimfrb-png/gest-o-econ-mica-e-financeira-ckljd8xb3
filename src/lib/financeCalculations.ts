@@ -171,6 +171,135 @@ export function calcularPontoEquilibrio(
   }
 }
 
+export function calcularCapitalGiro(
+  b?: Partial<BalancoRecord> | null,
+  d?: Partial<DreRecord> | null,
+): import('@/types/finance').CapitalGiroCalculado {
+  const calcB = calcularBalanco(b)
+  const calcD = calcularDre(d)
+
+  const ac = calcB.ativoCirculante
+  const pc = calcB.passivoCirculante
+
+  // Ativo Circulante Financeiro (ACF) = Caixa e Equivalentes + Aplicações Financeiras
+  const caixa = b?.caixa_equivalentes || 0
+  const aplicacoes = b?.aplicacoes_financeiras || 0
+  const acf = caixa + aplicacoes
+
+  // Ativo Circulante Operacional (ACO) = Contas a Receber + Estoques + Impostos a Recuperar + Outros AC
+  const contasReceber = b?.contas_receber || 0
+  const estoques = b?.estoques || 0
+  const impostosRecuperar = b?.impostos_recuperar || 0
+  const outrosAc = b?.outros_ativo_circulante || 0
+  const aco = contasReceber + estoques + impostosRecuperar + outrosAc
+
+  // Passivo Circulante Financeiro (PCF) = Empréstimos e Financiamentos de Curto Prazo
+  const pcf = b?.emprestimos_curto_prazo || 0
+
+  // Passivo Circulante Operacional (PCO) = Fornecedores + Obrigações Trabalhistas + Obrigações Tributárias + Outros PC
+  const fornecedores = b?.fornecedores || 0
+  const obTrabalhistas = b?.obrigacoes_trabalhistas || 0
+  const obTributarias = b?.obrigacoes_tributarias || 0
+  const outrosPc = b?.outros_passivo_circulante || 0
+  const pco = fornecedores + obTrabalhistas + obTributarias + outrosPc
+
+  // Indicadores
+  const cgb = ac
+  const cgl = ac - pc
+  const ncg = aco - pco
+  const saldoTesouraria = acf - pcf // Equivalente matemático a: CGL - NCG
+
+  const liquidezCorrente = pc > 0 ? ac / pc : null
+  const coberturaNcgPorCgl = ncg > 0 ? (cgl / ncg) * 100 : null
+
+  // Prazos e Ciclos
+  const rb = d?.receita_bruta || 0
+  const rl = calcD.receitaLiquida
+  const baseVendas = rb > 0 ? rb : rl
+  const cmv = d?.custo_mercadorias || 0
+  const comprasProxy = cmv
+
+  const pme = cmv > 0 ? (estoques / cmv) * 360 : null
+  const pmr = baseVendas > 0 ? (contasReceber / baseVendas) * 360 : null
+  const pmp = comprasProxy > 0 ? (fornecedores / comprasProxy) * 360 : null
+  const cicloOperacional = pme !== null && pmr !== null ? pme + pmr : null
+  const cicloFinanceiro = cicloOperacional !== null && pmp !== null ? cicloOperacional - pmp : null
+
+  // Classificação Modelo Fleuriet (6 Estruturas Dinâmicas)
+  // 1. Excelente: CGL > 0, NCG > 0, ST > 0 (CGL > NCG)
+  // 2. Sólida / Equilibrada: CGL > 0, NCG <= 0, ST > 0
+  // 3. Em Crescimento / Alavancada Operacional: CGL > 0, NCG > 0, ST < 0 (NCG > CGL)
+  // 4. Arriscada / Insatisfeita: CGL < 0, NCG > 0, ST < 0
+  // 5. Alto Risco / Dependente: CGL < 0, NCG <= 0, ST < 0
+  // 6. Muito Crítica / Efeito Tesoura: CGL < 0, NCG > 0, ST < -Math.abs(cgl)
+  let tipoFleuriet: import('@/types/finance').CapitalGiroCalculado['tipoFleuriet'] = 'indefinido'
+  let tipoFleurietNome = 'Sem dados suficientes'
+  let tipoFleurietDescricao =
+    'Demonstrações contábeis incompletas para classificação dinâmica de Fleuriet.'
+
+  if (ac > 0 || pc > 0) {
+    if (cgl > 0 && ncg > 0 && saldoTesouraria > 0) {
+      tipoFleuriet = 'excelente'
+      tipoFleurietNome = 'Tipo I — Excelente (Muito Sólida)'
+      tipoFleurietDescricao =
+        'O Capital de Giro Líquido financia integralmente a Necessidade de Capital de Giro e ainda gera Saldo de Tesouraria positivo e folga financeira.'
+    } else if (cgl > 0 && ncg <= 0 && saldoTesouraria > 0) {
+      tipoFleuriet = 'solida'
+      tipoFleurietNome = 'Tipo II — Sólida com Financiamento Operacional'
+      tipoFleurietDescricao =
+        'A empresa opera com NCG negativa ou nula (financiada por fornecedores e clientes) e dispõe de CGL positivo, gerando tesouraria altamente superavitária.'
+    } else if (cgl > 0 && ncg > 0 && saldoTesouraria < 0) {
+      tipoFleuriet = 'em_crescimento'
+      tipoFleurietNome = 'Tipo III — Em Crescimento (Tesouraria Pressionada)'
+      tipoFleurietDescricao =
+        'A Necessidade de Capital de Giro supera o Capital de Giro Líquido gerado, forçando o uso de empréstimos bancários de curto prazo para financiar a expansão operacional.'
+    } else if (cgl <= 0 && ncg > 0 && saldoTesouraria < 0) {
+      tipoFleuriet = 'arriscada'
+      tipoFleurietNome = 'Tipo IV — Arriscada (Efeito Tesoura / Desequilíbrio)'
+      tipoFleurietDescricao =
+        'CGL negativo aliado a NCG positiva resulta em déficit expressivo de tesouraria. A empresa financia ativos de longo prazo e giro com dívidas bancárias onerosas de curto prazo.'
+    } else if (cgl <= 0 && ncg <= 0 && saldoTesouraria < 0) {
+      tipoFleuriet = 'alto_risco'
+      tipoFleurietNome = 'Tipo V — Alto Risco / Desbalanceada'
+      tipoFleurietDescricao =
+        'Recursos de longo prazo insuficientes (CGL < 0) e tesouraria deficitária, dependente de rolagem contínua de dívidas bancárias de curto prazo.'
+    } else if (cgl <= 0 && saldoTesouraria < 0) {
+      tipoFleuriet = 'critica'
+      tipoFleurietNome = 'Tipo VI — Crítica / Insolvência Iminente'
+      tipoFleurietDescricao =
+        'Passivo circulante muito superior ao ativo circulante com esgotamento das reservas de caixa e alto risco de descontinuidade operacional.'
+    } else {
+      tipoFleuriet = 'solida'
+      tipoFleurietNome = 'Equilibrada'
+      tipoFleurietDescricao =
+        'Estrutura de capital de giro em conformidade estável com as operações do exercício.'
+    }
+  }
+
+  return {
+    ativoCirculante: ac,
+    ativoCirculanteOperacional: aco,
+    ativoCirculanteFinanceiro: acf,
+    passivoCirculante: pc,
+    passivoCirculanteOperacional: pco,
+    passivoCirculanteFinanceiro: pcf,
+    cgb,
+    cgl,
+    ncg,
+    saldoTesouraria,
+    liquidezCorrente,
+    coberturaNcgPorCgl,
+    pme,
+    pmr,
+    pmp,
+    cicloOperacional,
+    cicloFinanceiro,
+    tipoFleuriet,
+    tipoFleurietNome,
+    tipoFleurietDescricao,
+  }
+}
+
 export function formatCnpj(cnpj: string): string {
   const digits = cnpj.replace(/\D/g, '')
   if (digits.length !== 14) return cnpj

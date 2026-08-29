@@ -11,6 +11,7 @@ export interface PesosGrupos {
   ebitda: number
   eficienciaOperacional: number
   economicos: number
+  capitalGiro?: number
 }
 
 export interface PerfilConfig {
@@ -628,6 +629,17 @@ export interface IndicadoresConsolidadosEmpresa {
   roic: number | null
   eva: number | null
   spread: number | null
+
+  // 8. Capital de Giro
+  cgb: number | null
+  cgl: number | null
+  ncg: number | null
+  saldoTesouraria: number | null
+  aco: number | null
+  acf: number | null
+  pco: number | null
+  pcf: number | null
+  tipoFleuriet: string | null
 }
 
 export function extrairIndicadoresCompletos(
@@ -695,6 +707,25 @@ export function extrairIndicadoresCompletos(
   const margemEbitda = rl > 0 ? (ebitda / rl) * 100 : null
   const coberturaJuros = despFin > 0 ? ebitda / despFin : null
 
+  // Capital de Giro
+  const acf = (balanco?.caixa_equivalentes || 0) + (balanco?.aplicacoes_financeiras || 0)
+  const aco =
+    (balanco?.contas_receber || 0) +
+    (balanco?.estoques || 0) +
+    (balanco?.impostos_recuperar || 0) +
+    (balanco?.outros_ativo_circulante || 0)
+  const pcf = balanco?.emprestimos_curto_prazo || 0
+  const pco =
+    (balanco?.fornecedores || 0) +
+    (balanco?.obrigacoes_trabalhistas || 0) +
+    (balanco?.obrigacoes_tributarias || 0) +
+    (balanco?.outros_passivo_circulante || 0)
+
+  const cgb = ac > 0 ? ac : null
+  const cgl = ac > 0 || pc > 0 ? ac - pc : null
+  const ncg = aco > 0 || pco > 0 ? aco - pco : null
+  const saldoTesouraria = acf > 0 || pcf > 0 || (cgl !== null && ncg !== null) ? acf - pcf : null
+
   return {
     lc: ind.liquidezCorrente,
     ls: ind.liquidezSeca,
@@ -731,6 +762,16 @@ export function extrairIndicadoresCompletos(
     roic,
     eva,
     spread,
+
+    cgb,
+    cgl,
+    ncg,
+    saldoTesouraria,
+    aco,
+    acf,
+    pco,
+    pcf,
+    tipoFleuriet: null,
   }
 }
 
