@@ -5,6 +5,8 @@ import {
   Bar,
   LineChart,
   Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -99,9 +101,9 @@ export function ComparativoMensal({
   const [executingReabertura, setExecutingReabertura] = useState(false)
 
   // Filtro de exibição no gráfico
-  const [metricaGrafico, setMetricaGrafico] = useState<'receita_lucro' | 'ativo_pl'>(
-    'receita_lucro',
-  )
+  const [metricaGrafico, setMetricaGrafico] = useState<
+    'receita_lucro' | 'ativo_pl' | 'pl_evolucao'
+  >('receita_lucro')
 
   // Gera a série mensal completa (Jan a Dez)
   const dadosMensais = useMemo(() => {
@@ -352,7 +354,7 @@ export function ComparativoMensal({
               Acompanhamento mensal de receitas, resultados e patrimônio de Janeiro a Dezembro
             </CardDescription>
           </div>
-          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
+          <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-lg flex-wrap">
             <button
               type="button"
               onClick={() => setMetricaGrafico('receita_lucro')}
@@ -363,6 +365,17 @@ export function ComparativoMensal({
               }`}
             >
               Receita vs Resultado
+            </button>
+            <button
+              type="button"
+              onClick={() => setMetricaGrafico('pl_evolucao')}
+              className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                metricaGrafico === 'pl_evolucao'
+                  ? 'bg-white text-blue-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Evolução Patrimônio Líquido (Jan-Dez)
             </button>
             <button
               type="button"
@@ -426,6 +439,52 @@ export function ComparativoMensal({
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
+              ) : metricaGrafico === 'pl_evolucao' ? (
+                <AreaChart data={chartData} margin={{ top: 15, right: 20, left: -15, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="colorPlEvolucao" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                  <XAxis dataKey="mesAbrev" tick={{ fontSize: 11, fill: '#64748B' }} />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                  />
+                  <RechartsTooltip
+                    formatter={(val: any) => [
+                      val !== null ? formatBrlMil(Number(val)) : 'Sem balanço lançado',
+                      'Patrimônio Líquido',
+                    ]}
+                    labelFormatter={(label, payload) => {
+                      const item = payload?.[0]?.payload
+                      return item
+                        ? `${item.mesNome}/${ano} ${item.fechado ? '🔒 [Fechado]' : item.temDados ? '📝 [Lançado]' : '⚠️ [Sem dados]'}`
+                        : label
+                    }}
+                  />
+                  <Legend
+                    formatter={() => (
+                      <span className="text-xs font-semibold text-emerald-800">
+                        Evolução Mensal do Patrimônio Líquido (Capital Próprio)
+                      </span>
+                    )}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="patrimonioLiquido"
+                    name="patrimonioLiquido"
+                    stroke="#10B981"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#colorPlEvolucao)"
+                    dot={{ r: 5, fill: '#10B981', stroke: '#ffffff', strokeWidth: 2 }}
+                    activeDot={{ r: 7, fill: '#047857' }}
+                    connectNulls
+                  />
+                </AreaChart>
               ) : (
                 <LineChart data={chartData} margin={{ top: 15, right: 20, left: -15, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />

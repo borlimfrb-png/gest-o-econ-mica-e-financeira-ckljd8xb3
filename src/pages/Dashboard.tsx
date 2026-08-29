@@ -1124,9 +1124,12 @@ export default function Dashboard() {
     severidade: 'amber' | 'red' | 'blue' // amber = laranja, red = vermelho, blue = renovação contrato
     atingimentoPct?: number
     diasRestantes: number
-    tipoAlerta?: 'meta' | 'contrato'
+    tipoAlerta?: 'meta' | 'contrato' | 'mes_aberto'
     contratoId?: string
     contratanteId?: string
+    empresaId?: string
+    mesAbertoNum?: number
+    anoAbertoNum?: number
   }
 
   // Alertas de Renovação de Contratos (vencendo em 30 dias ou menos)
@@ -1358,10 +1361,92 @@ export default function Dashboard() {
     contasMap,
   ])
 
-  // Combina alertas de metas em risco e contratos vencendo
+  // Alertas de Meses com Balanço/DRE em Aberto (fechado = false)
+  const alertasMesesEmAberto = useMemo<AlertaMetaRiscoItem[]>(() => {
+    const NOMES_MESES = [
+      '',
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ]
+
+    // Agrupa competências não fechadas por empresa + ano
+    const empresasAnalisadas = selectedEmpresaId
+      ? empresas.filter((e) => e.id === selectedEmpresaId)
+      : empresas
+
+    const lista: AlertaMetaRiscoItem[] = []
+
+    for (const emp of empresasAnalisadas) {
+      // Pega balanços e dres da empresa para o ano selecionado
+      const balancosEmpAno = allBalancos.filter(
+        (b) => b.empresa === emp.id && b.ano === selectedAno && b.mes && b.mes >= 1 && b.mes <= 12,
+      )
+      const dresEmpAno = dres.filter(
+        (d) => d.empresa === emp.id && d.ano === selectedAno && d.mes && d.mes >= 1 && d.mes <= 12,
+      )
+
+      // Identifica os meses com registros lançados mas não fechados (fechado === false ou ausente/indefinido)
+      const mesesComRegistro = new Set<number>()
+      for (const b of balancosEmpAno) mesesComRegistro.add(b.mes!)
+      for (const d of dresEmpAno) mesesComRegistro.add(d.mes!)
+
+      const mesesAbertos: {
+        mesNum: number
+        mesNome: string
+        temBalanco: boolean
+        temDre: boolean
+      }[] = []
+
+      for (const mesNum of Array.from(mesesComRegistro).sort((a, b) => a - b)) {
+        const b = balancosEmpAno.find((item) => item.mes === mesNum)
+        const d = dresEmpAno.find((item) => item.mes === mesNum)
+
+        const balancoAberto = b ? b.fechado !== true : false
+        const dreAberto = d ? d.fechado !== true : false
+
+        if (balancoAberto || dreAberto) {
+          mesesAbertos.push({
+            mesNum,
+            mesNome: NOMES_MESES[mesNum] || `Mês ${mesNum}`,
+            temBalanco: !!b,
+            temDre: !!d,
+          })
+        }
+      }
+
+      if (mesesAbertos.length > 0) {
+        const nomesMesesStr = mesesAbertos.map((m) => m.mesNome).join(', ')
+        lista.push({
+          id: `mes-aberto-${emp.id}-${selectedAno}`,
+          titulo: `${mesesAbertos.length} competência(s) em aberto em ${selectedAno} (${emp.nome})`,
+          descricao: `Meses com balanço/DRE pendentes de fechamento contábil: ${nomesMesesStr}. Faça o fechamento para consolidar os resultados no Patrimônio Líquido.`,
+          severidade: 'amber',
+          diasRestantes: 0,
+          tipoAlerta: 'mes_aberto',
+          empresaId: emp.id,
+          anoAbertoNum: selectedAno,
+          mesAbertoNum: mesesAbertos[0]?.mesNum,
+        })
+      }
+    }
+
+    return lista
+  }, [selectedEmpresaId, empresas, allBalancos, dres, selectedAno])
+
+  // Combina alertas de meses em aberto, contratos e metas em risco
   const todosAlertasInteligentes = useMemo(() => {
-    return [...alertasContratosRenovacao, ...alertasMetasEmRisco]
-  }, [alertasContratosRenovacao, alertasMetasEmRisco])
+    return [...alertasMesesEmAberto, ...alertasContratosRenovacao, ...alertasMetasEmRisco]
+  }, [alertasMesesEmAberto, alertasContratosRenovacao, alertasMetasEmRisco])
 
   const [mostrarTodosAlertas, setMostrarTodosAlertas] = useState(false)
   const alertasVisiveis = mostrarTodosAlertas
@@ -1692,6 +1777,7 @@ export default function Dashboard() {
             {alertasVisiveis.map((alerta) => {
               const isRed = alerta.severidade === 'red'
               const isContrato = alerta.tipoAlerta === 'contrato'
+              const isMesAberto = alerta.tipoAlerta === 'mes_aberto'
 
               const cardBg = isRed
                 ? 'bg-red-50/80 border-red-300 hover:bg-red-100/70'
@@ -1699,6 +1785,53 @@ export default function Dashboard() {
               const iconBoxBg = isRed ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
               const titleColor = isRed ? 'text-red-950' : 'text-amber-950'
               const descColor = isRed ? 'text-red-800' : 'text-amber-800'
+
+              if (isMesAberto) {
+                return (
+                  <div
+                    key={alerta.id}
+                    className={`text-left p-3.5 rounded-xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-2.5 ${cardBg}`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${iconBoxBg}`}
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Badge className="text-[9px] bg-amber-200/60 text-amber-900 border-amber-300 font-bold px-1.5 py-0">
+                            Competência em Aberto
+                          </Badge>
+                        </div>
+                        <p className={`text-xs font-bold leading-snug line-clamp-2 ${titleColor}`}>
+                          {alerta.titulo}
+                        </p>
+                        <p className={`text-[11px] mt-1 line-clamp-2 ${descColor}`}>
+                          {alerta.descricao}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-black/5 text-[10px] font-semibold">
+                      <span className="text-amber-800 font-bold">
+                        Exercício {alerta.anoAbertoNum || selectedAno}
+                      </span>
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold px-2.5 shadow-xs"
+                      >
+                        <Link
+                          to={`/empresas/${alerta.empresaId || selectedEmpresaId}?aba=comparativo-mensal`}
+                        >
+                          Comparativo Mensal <ArrowRight className="w-3 h-3 ml-1" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
 
               if (isContrato) {
                 return (

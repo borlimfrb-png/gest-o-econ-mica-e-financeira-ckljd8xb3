@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   empresasService,
   balancosService,
@@ -98,6 +98,7 @@ import {
 export default function AnaliseEmpresa() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { toast } = useToast()
   const { setSelectedEmpresaId } = useFilter()
 
@@ -109,8 +110,26 @@ export default function AnaliseEmpresa() {
   const [selectedMes, setSelectedMes] = useState<string>('todos')
   const [loading, setLoading] = useState(true)
 
-  // Abas
-  const [activeTab, setActiveTab] = useState('visao-geral')
+  // Abas (com suporte a param ?aba= via URL)
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('aba')
+    if (tabParam === 'comparativo-mensal' || tabParam === 'comparativo') return 'comparativo'
+    if (tabParam) return tabParam
+    return 'visao-geral'
+  })
+
+  useEffect(() => {
+    const tabParam = searchParams.get('aba')
+    const novoParam = searchParams.get('novo')
+    if (tabParam === 'comparativo-mensal' || tabParam === 'comparativo') {
+      setActiveTab('comparativo')
+    } else if (tabParam) {
+      setActiveTab(tabParam)
+    }
+    if (novoParam === 'true' || novoParam === '1' || novoParam === 'balanco-dre') {
+      openNovoLancamentoModal()
+    }
+  }, [searchParams])
 
   // Modais
   const [modalBalancoOpen, setModalBalancoOpen] = useState(false)

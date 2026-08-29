@@ -1,29 +1,22 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import {
-  FileSpreadsheet,
-  FileText,
   Upload,
+  FileSpreadsheet,
   CheckCircle2,
   AlertCircle,
-  AlertTriangle,
-  ArrowRight,
-  Eye,
-  RefreshCw,
-  Sparkles,
-  Layers,
+  Pencil,
+  RotateCcw,
   Building2,
   Calendar,
+  Layers,
+  Trash2,
+  Check,
+  RefreshCw,
+  Eye,
+  FileText,
+  Plus,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import * as XLSX from 'xlsx'
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from '@/components/ui/card'
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,18 +37,122 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
-import type { EmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
-import { NOMES_MESES, formatBrlMil } from '@/lib/financeCalculations'
-import { extractTextFromPdf, parseBrlNumber } from '@/lib/pdfParser'
-import { convertPdfPagesToExcelRows } from '@/lib/pdfToExcel'
+import { formatBrlMil } from '@/lib/financeCalculations'
 import {
   mapearBalanceteParaBalancoEDre,
   recalcularBalanceteMapeado,
   type BalanceteMapeadoResult,
   type ContaMapeadaItem,
 } from '@/lib/balanceteParser'
+import { extractTextFromPdf, parseBrlNumber } from '@/lib/pdfParser'
+import { convertPdfPagesToExcelRows } from '@/lib/pdfToExcel'
 import { balancosService, dreService } from '@/services/financeService'
-import { Pencil, Trash2, Plus, Check, RotateCcw } from 'lucide-react'
+import type { EmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
+import { useNavigate } from 'react-router-dom'
+import * as XLSX from 'xlsx'
+
+const NOMES_MESES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
+
+/**
+ * Tenta inferir o mês (1-12) pelo nome do arquivo (ex: "balancete_janeiro_2024.xlsx", "01-2024.pdf", "mar24.xlsx")
+ */
+function inferirMesPeloNomeArquivo(nome: string, mesPadrao: number): number {
+  const norm = nome.toLowerCase()
+  const mesesKeywords = [
+    {
+      mes: 1,
+      keys: ['janeiro', 'jan', '-01-', '_01_', '-01.', '_01.', '01_20', '01-20', 'jan2', 'jan_'],
+    },
+    {
+      mes: 2,
+      keys: ['fevereiro', 'fev', '-02-', '_02_', '-02.', '_02.', '02_20', '02-20', 'fev2', 'fev_'],
+    },
+    {
+      mes: 3,
+      keys: [
+        'marco',
+        'março',
+        'mar',
+        '-03-',
+        '_03_',
+        '-03.',
+        '_03.',
+        '03_20',
+        '03-20',
+        'mar2',
+        'mar_',
+      ],
+    },
+    {
+      mes: 4,
+      keys: ['abril', 'abr', '-04-', '_04_', '-04.', '_04.', '04_20', '04-20', 'abr2', 'abr_'],
+    },
+    {
+      mes: 5,
+      keys: ['maio', 'mai', '-05-', '_05_', '-05.', '_05.', '05_20', '05-20', 'mai2', 'mai_'],
+    },
+    {
+      mes: 6,
+      keys: ['junho', 'jun', '-06-', '_06_', '-06.', '_06.', '06_20', '06-20', 'jun2', 'jun_'],
+    },
+    {
+      mes: 7,
+      keys: ['julho', 'jul', '-07-', '_07_', '-07.', '_07.', '07_20', '07-20', 'jul2', 'jul_'],
+    },
+    {
+      mes: 8,
+      keys: ['agosto', 'ago', '-08-', '_08_', '-08.', '_08.', '08_20', '08-20', 'ago2', 'ago_'],
+    },
+    {
+      mes: 9,
+      keys: ['setembro', 'set', '-09-', '_09_', '-09.', '_09.', '09_20', '09-20', 'set2', 'set_'],
+    },
+    {
+      mes: 10,
+      keys: ['outubro', 'out', '-10-', '_10_', '-10.', '_10.', '10_20', '10-20', 'out2', 'out_'],
+    },
+    {
+      mes: 11,
+      keys: ['novembro', 'nov', '-11-', '_11_', '-11.', '_11.', '11_20', '11-20', 'nov2', 'nov_'],
+    },
+    {
+      mes: 12,
+      keys: ['dezembro', 'dez', '-12-', '_12_', '-12.', '_12.', '12_20', '12-20', 'dez2', 'dez_'],
+    },
+  ]
+
+  for (const m of mesesKeywords) {
+    if (m.keys.some((k) => norm.includes(k))) {
+      return m.mes
+    }
+  }
+  return mesPadrao
+}
+
+export interface BalanceteArquivoItem {
+  id: string
+  file: File
+  mes: number
+  ano: number
+  status: 'pendente' | 'processando' | 'processado' | 'erro' | 'gravado'
+  progress: number
+  errorMsg?: string
+  previewResult?: BalanceteMapeadoResult
+  originalPreviewResult?: BalanceteMapeadoResult
+}
 
 interface ImportarBalanceteMensalProps {
   empresas: EmpresaRecord[]
@@ -76,26 +173,19 @@ export function ImportarBalanceteMensal({
   const navigate = useNavigate()
 
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>(
-    initialEmpresaId || (empresas.length > 0 ? empresas[0].id : ''),
+    initialEmpresaId || empresas[0]?.id || '',
   )
   const [selectedAno, setSelectedAno] = useState<number>(initialAno || new Date().getFullYear())
-  const [selectedMes, setSelectedMes] = useState<number>(initialMes || new Date().getMonth() + 1)
 
-  const [file, setFile] = useState<File | null>(null)
-  const [processing, setProcessing] = useState(false)
-  const [progress, setProgress] = useState(0)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // Lista de arquivos selecionados (múltiplos balancetes)
+  const [arquivos, setArquivos] = useState<BalanceteArquivoItem[]>([])
+  // Índice do arquivo ativo para revisão e edição célula a célula
+  const [activeArquivoId, setActiveArquivoId] = useState<string | null>(null)
 
-  // Resultado do mapeamento prévio
-  const [previewResult, setPreviewResult] = useState<BalanceteMapeadoResult | null>(null)
-  const [originalPreviewResult, setOriginalPreviewResult] = useState<BalanceteMapeadoResult | null>(
-    null,
-  )
-  const [rawRowsCount, setRawRowsCount] = useState<number>(0)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
   const [savingImport, setSavingImport] = useState(false)
 
-  // Controle de edição manual célula a célula
+  // Controle de edição manual célula a célula no balancete ativo
   const [editingContaIdx, setEditingContaIdx] = useState<number | null>(null)
   const [editingBalancoField, setEditingBalancoField] = useState<string | null>(null)
   const [editingDreField, setEditingDreField] = useState<string | null>(null)
@@ -104,30 +194,34 @@ export function ImportarBalanceteMensal({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
 
-  const handleFileChange = async (selectedFile: File) => {
-    if (!selectedFile) return
-    setErrorMsg(null)
-    setPreviewResult(null)
-    setFile(selectedFile)
+  // Balancete atualmente em visualização detalhada
+  const activeBalancete = useMemo(() => {
+    return arquivos.find((a) => a.id === activeArquivoId) || arquivos[0] || null
+  }, [arquivos, activeArquivoId])
 
-    const isPdf =
-      selectedFile.type === 'application/pdf' || selectedFile.name.toLowerCase().endsWith('.pdf')
+  // Processa um arquivo individual (Excel ou PDF) para extrair as linhas e mapear
+  const processarArquivoIndividual = async (
+    item: BalanceteArquivoItem,
+    empresaId: string,
+    ano: number,
+  ): Promise<BalanceteArquivoItem> => {
+    const { file, mes } = item
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
     const isExcel =
-      selectedFile.type.includes('sheet') ||
-      selectedFile.type.includes('excel') ||
-      selectedFile.name.toLowerCase().endsWith('.xlsx') ||
-      selectedFile.name.toLowerCase().endsWith('.xls') ||
-      selectedFile.name.toLowerCase().endsWith('.csv')
+      file.type.includes('sheet') ||
+      file.type.includes('excel') ||
+      file.name.toLowerCase().endsWith('.xlsx') ||
+      file.name.toLowerCase().endsWith('.xls') ||
+      file.name.toLowerCase().endsWith('.csv')
 
     if (!isPdf && !isExcel) {
-      setErrorMsg(
-        'Formato de arquivo não suportado. Por favor, envie um arquivo Excel (.xlsx, .xls) ou PDF (.pdf).',
-      )
-      return
+      return {
+        ...item,
+        status: 'erro',
+        progress: 100,
+        errorMsg: 'Formato não suportado. Envie Excel (.xlsx, .xls) ou PDF (.pdf).',
+      }
     }
-
-    setProcessing(true)
-    setProgress(10)
 
     try {
       let extractedRows: Array<{
@@ -141,15 +235,10 @@ export function ImportarBalanceteMensal({
       }> = []
 
       if (isPdf) {
-        setProgress(30)
-        const pdfResult = await extractTextFromPdf(selectedFile, (pct) => {
-          setProgress(30 + Math.round(pct * 0.4))
-        })
-
+        const pdfResult = await extractTextFromPdf(file)
         if (pdfResult.isScannedOrEmpty) {
-          throw new Error('O arquivo PDF parece estar escaneado como imagem ou sem texto legível.')
+          throw new Error('PDF escaneado como imagem ou sem texto legível.')
         }
-
         const excelRows = convertPdfPagesToExcelRows(pdfResult.pages)
         extractedRows = excelRows.map((r) => ({
           codigo: r.codigo !== '-' ? r.codigo : undefined,
@@ -161,36 +250,27 @@ export function ImportarBalanceteMensal({
           linhaOriginal: r.linhaOriginal,
         }))
       } else {
-        // Leitura de Excel via XLSX
-        setProgress(40)
-        const arrayBuffer = await selectedFile.arrayBuffer()
+        const arrayBuffer = await file.arrayBuffer()
         const wb = XLSX.read(arrayBuffer, { type: 'array' })
         const sheetName = wb.SheetNames[0]
         const ws = wb.Sheets[sheetName]
         const jsonRows = XLSX.utils.sheet_to_json<any>(ws, { header: 1 })
 
-        setProgress(60)
-
-        // Itera sobre as linhas procurando colunas de código, descrição e saldo/valor
         for (const row of jsonRows) {
           if (!Array.isArray(row) || row.length === 0) continue
-
           let codigo = ''
           let desc = ''
           let valor = 0
 
-          // Procura colunas
           for (const cell of row) {
             const cellStr = String(cell || '').trim()
             if (!cellStr) continue
 
-            // Código contábil (ex: 1.1.01 ou 12345)
             if (/^\d{1,5}(?:\.\d+)*$/.test(cellStr) && !codigo) {
               codigo = cellStr
               continue
             }
 
-            // Valor numérico
             if (typeof cell === 'number') {
               valor = cell
             } else if (
@@ -212,112 +292,125 @@ export function ImportarBalanceteMensal({
         }
       }
 
-      setProgress(85)
-      setRawRowsCount(extractedRows.length)
-
       if (extractedRows.length === 0) {
-        throw new Error('Nenhuma linha contábil com valor válido foi identificada no arquivo.')
+        throw new Error('Nenhuma linha contábil com valor válido foi identificada.')
       }
 
-      // Executa o mapeamento inteligente
-      const mapped = mapearBalanceteParaBalancoEDre(
-        extractedRows,
-        selectedAno,
-        selectedMes,
-        selectedEmpresaId,
+      const mapped = mapearBalanceteParaBalancoEDre(extractedRows, ano, mes, empresaId)
+      return {
+        ...item,
+        status: 'processado',
+        progress: 100,
+        previewResult: mapped,
+        originalPreviewResult: JSON.parse(JSON.stringify(mapped)),
+      }
+    } catch (err: any) {
+      return {
+        ...item,
+        status: 'erro',
+        progress: 100,
+        errorMsg: err?.message || 'Falha ao processar balancete.',
+      }
+    }
+  }
+
+  // Lida com múltiplos arquivos selecionados
+  const handleFilesSelected = async (fileList: FileList | File[]) => {
+    const filesArray = Array.from(fileList)
+    if (filesArray.length === 0) return
+
+    const novosItens: BalanceteArquivoItem[] = []
+    let proximoMesBase = initialMes || new Date().getMonth() + 1
+
+    // Adiciona cada arquivo descobrindo ou incrementando o mês
+    filesArray.forEach((f, idx) => {
+      const mesInferido = inferirMesPeloNomeArquivo(
+        f.name,
+        Math.min(12, Math.max(1, proximoMesBase + idx)),
       )
+      novosItens.push({
+        id: `balancete-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
+        file: f,
+        mes: mesInferido,
+        ano: selectedAno,
+        status: 'processando',
+        progress: 20,
+      })
+    })
 
-      setProgress(100)
-      setPreviewResult(mapped)
-      setOriginalPreviewResult(JSON.parse(JSON.stringify(mapped)))
-      toast({
-        title: 'Balancete Processado com Sucesso!',
-        description: `${mapped.contasIdentificadas.length} contas contábeis foram mapeadas para Balanço e DRE de ${NOMES_MESES[selectedMes - 1]}/${selectedAno}. Você pode editar qualquer célula antes de confirmar.`,
-      })
-    } catch (err: any) {
-      console.error('Erro ao processar balancete:', err)
-      const msg = err?.message || 'Falha ao analisar o documento.'
-      setErrorMsg(msg)
-      toast({
-        variant: 'destructive',
-        title: 'Erro na importação do balancete',
-        description: msg,
-      })
-    } finally {
-      setProcessing(false)
+    const listaAtualizada = [...arquivos, ...novosItens]
+    setArquivos(listaAtualizada)
+    if (!activeArquivoId && novosItens.length > 0) {
+      setActiveArquivoId(novosItens[0].id)
     }
+
+    // Processa os novos arquivos
+    for (const item of novosItens) {
+      const resultadoProcessado = await processarArquivoIndividual(
+        item,
+        selectedEmpresaId,
+        selectedAno,
+      )
+      setArquivos((prev) => prev.map((a) => (a.id === item.id ? resultadoProcessado : a)))
+    }
+
+    toast({
+      title: `${novosItens.length} arquivo(s) adicionado(s)`,
+      description: 'Revise os meses atribuídos e confira a pré-visualização de cada balancete.',
+    })
   }
 
-  const handleConfirmarGravacao = async () => {
-    if (!previewResult || !selectedEmpresaId) return
-    setSavingImport(true)
-    try {
-      await Promise.all([
-        balancosService.upsert(
-          selectedEmpresaId,
-          selectedAno,
-          {
-            ...previewResult.balanco,
-            ano: selectedAno,
-            mes: selectedMes,
-            fechado: false,
-            fechamento_obs: `Importado de Balancete Mensal (${file?.name || 'arquivo'})`,
-          },
-          selectedMes,
-        ),
-        dreService.upsert(
-          selectedEmpresaId,
-          selectedAno,
-          {
-            ...previewResult.dre,
-            ano: selectedAno,
-            mes: selectedMes,
-            fechado: false,
-            fechamento_obs: `Importado de Balancete Mensal (${file?.name || 'arquivo'})`,
-          },
-          selectedMes,
-        ),
-      ])
+  // Alterar mês de um arquivo específico
+  const handleChangeMesArquivo = (id: string, novoMes: number) => {
+    setArquivos((prev) =>
+      prev.map((a) => {
+        if (a.id !== id) return a
+        let novoPreview = a.previewResult
+        if (novoPreview) {
+          novoPreview = recalcularBalanceteMapeado(
+            novoPreview.contasIdentificadas,
+            selectedAno,
+            novoMes,
+            selectedEmpresaId,
+          )
+        }
+        return {
+          ...a,
+          mes: novoMes,
+          previewResult: novoPreview,
+        }
+      }),
+    )
+  }
 
-      toast({
-        title: 'Lançamentos Importados e Gravados com Sucesso!',
-        description: `Os registros de Balanço e DRE para ${NOMES_MESES[selectedMes - 1]}/${selectedAno} foram atualizados.`,
-      })
-
-      setConfirmModalOpen(false)
-      if (onImportSuccess) {
-        onImportSuccess(selectedEmpresaId, selectedAno, selectedMes)
-      } else {
-        navigate(`/analise/${selectedEmpresaId}`)
+  // Remover arquivo da lista de importação
+  const handleRemoverArquivo = (id: string) => {
+    setArquivos((prev) => {
+      const filtered = prev.filter((a) => a.id !== id)
+      if (activeArquivoId === id) {
+        setActiveArquivoId(filtered[0]?.id || null)
       }
-    } catch (err: any) {
-      console.error('Erro ao gravar balancete:', err)
-      toast({
-        variant: 'destructive',
-        title: 'Falha ao salvar dados importados',
-        description: err?.message || 'Erro ao persistir informações no banco de dados.',
-      })
-    } finally {
-      setSavingImport(false)
-    }
+      return filtered
+    })
   }
 
-  const handleReset = () => {
-    setFile(null)
-    setPreviewResult(null)
-    setOriginalPreviewResult(null)
-    setErrorMsg(null)
-    setEditingContaIdx(null)
-    setEditingBalancoField(null)
-    setEditingDreField(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
+  // Reprocessar arquivo específico
+  const handleReprocessarArquivo = async (id: string) => {
+    const item = arquivos.find((a) => a.id === id)
+    if (!item) return
+    setArquivos((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status: 'processando', progress: 20 } : a)),
+    )
+    const res = await processarArquivoIndividual(item, selectedEmpresaId, selectedAno)
+    setArquivos((prev) => prev.map((a) => (a.id === id ? res : a)))
   }
 
-  // Atualização direta de campo do Balanço
+  // Atualização direta de campo do Balanço no arquivo ativo
   const handleUpdateBalancoField = (campo: keyof BalancoRecord, novoValor: number) => {
-    if (!previewResult) return
+    if (!activeBalancete?.previewResult) return
+    const prevRes = activeBalancete.previewResult
     const updatedBalanco = {
-      ...previewResult.balanco,
+      ...prevRes.balanco,
       [campo]: novoValor,
     }
 
@@ -345,19 +438,24 @@ export function ImportarBalanceteMensal({
       (updatedBalanco.reservas_lucros || 0) +
       (updatedBalanco.lucros_acumulados || 0)
 
-    setPreviewResult({
-      ...previewResult,
+    const updatedResult: BalanceteMapeadoResult = {
+      ...prevRes,
       balanco: updatedBalanco,
       totalAtivo,
       totalPassivo,
-    })
+    }
+
+    setArquivos((prev) =>
+      prev.map((a) => (a.id === activeBalancete.id ? { ...a, previewResult: updatedResult } : a)),
+    )
   }
 
-  // Atualização direta de campo da DRE
+  // Atualização direta de campo da DRE no arquivo ativo
   const handleUpdateDreField = (campo: keyof DreRecord, novoValor: number) => {
-    if (!previewResult) return
+    if (!activeBalancete?.previewResult) return
+    const prevRes = activeBalancete.previewResult
     const updatedDre = {
-      ...previewResult.dre,
+      ...prevRes.dre,
       [campo]: novoValor,
     }
 
@@ -369,18 +467,22 @@ export function ImportarBalanceteMensal({
       (updatedDre.despesas_financeiras || 0) +
       (updatedDre.imposto_renda || 0)
 
-    setPreviewResult({
-      ...previewResult,
+    const updatedResult: BalanceteMapeadoResult = {
+      ...prevRes,
       dre: updatedDre,
       totalReceitas,
       totalDespesas,
-    })
+    }
+
+    setArquivos((prev) =>
+      prev.map((a) => (a.id === activeBalancete.id ? { ...a, previewResult: updatedResult } : a)),
+    )
   }
 
-  // Atualização de uma conta da tabela detalhada
+  // Atualização de uma conta da tabela detalhada no arquivo ativo
   const handleUpdateContaItem = (index: number, updatedFields: Partial<ContaMapeadaItem>) => {
-    if (!previewResult) return
-    const novasContas = [...previewResult.contasIdentificadas]
+    if (!activeBalancete?.previewResult) return
+    const novasContas = [...activeBalancete.previewResult.contasIdentificadas]
     novasContas[index] = {
       ...novasContas[index],
       ...updatedFields,
@@ -389,43 +491,142 @@ export function ImportarBalanceteMensal({
     const recalculado = recalcularBalanceteMapeado(
       novasContas,
       selectedAno,
-      selectedMes,
+      activeBalancete.mes,
       selectedEmpresaId,
     )
-    setPreviewResult(recalculado)
+
+    setArquivos((prev) =>
+      prev.map((a) => (a.id === activeBalancete.id ? { ...a, previewResult: recalculado } : a)),
+    )
   }
 
-  // Exclusão de conta da lista
+  // Exclusão de conta da lista no arquivo ativo
   const handleRemoverContaItem = (index: number) => {
-    if (!previewResult) return
-    const novasContas = previewResult.contasIdentificadas.filter((_, idx) => idx !== index)
+    if (!activeBalancete?.previewResult) return
+    const novasContas = activeBalancete.previewResult.contasIdentificadas.filter(
+      (_, idx) => idx !== index,
+    )
     const recalculado = recalcularBalanceteMapeado(
       novasContas,
       selectedAno,
-      selectedMes,
+      activeBalancete.mes,
       selectedEmpresaId,
     )
-    setPreviewResult(recalculado)
+
+    setArquivos((prev) =>
+      prev.map((a) => (a.id === activeBalancete.id ? { ...a, previewResult: recalculado } : a)),
+    )
     toast({
       title: 'Conta removida do balancete',
       description: 'Os totais de Balanço e DRE foram recalculados.',
     })
   }
 
-  // Restaurar valores originais
+  // Restaurar valores originais do balancete ativo
   const handleRestaurarValoresOriginais = () => {
-    if (originalPreviewResult) {
-      setPreviewResult(JSON.parse(JSON.stringify(originalPreviewResult)))
+    if (activeBalancete?.originalPreviewResult) {
+      const original = JSON.parse(JSON.stringify(activeBalancete.originalPreviewResult))
+      setArquivos((prev) =>
+        prev.map((a) => (a.id === activeBalancete.id ? { ...a, previewResult: original } : a)),
+      )
       toast({
         title: 'Valores restaurados',
-        description: 'Os valores do balancete voltaram à detecção automática inicial do arquivo.',
+        description:
+          'Os valores deste balancete voltaram à detecção automática inicial do arquivo.',
       })
     }
   }
 
+  // Confirmar e gravar todos os balancetes processados com sucesso
+  const handleConfirmarGravacaoLote = async () => {
+    const prontosParaGravar = arquivos.filter((a) => a.status === 'processado' && a.previewResult)
+    if (prontosParaGravar.length === 0 || !selectedEmpresaId) {
+      toast({
+        variant: 'destructive',
+        title: 'Nenhum balancete pronto para gravação',
+        description: 'Adicione e processe pelo menos um balancete válido.',
+      })
+      return
+    }
+
+    setSavingImport(true)
+    let sucessos = 0
+    const erros: string[] = []
+
+    try {
+      for (const item of prontosParaGravar) {
+        try {
+          const res = item.previewResult!
+          await Promise.all([
+            balancosService.upsert(
+              selectedEmpresaId,
+              selectedAno,
+              {
+                ...res.balanco,
+                ano: selectedAno,
+                mes: item.mes,
+                fechado: false,
+                fechamento_obs: `Importado de Balancete Mensal (${item.file.name})`,
+              },
+              item.mes,
+            ),
+            dreService.upsert(
+              selectedEmpresaId,
+              selectedAno,
+              {
+                ...res.dre,
+                ano: selectedAno,
+                mes: item.mes,
+                fechado: false,
+                fechamento_obs: `Importado de Balancete Mensal (${item.file.name})`,
+              },
+              item.mes,
+            ),
+          ])
+          sucessos++
+        } catch (err: any) {
+          erros.push(`${NOMES_MESES[item.mes - 1]}: ${err?.message || 'Erro desconhecido'}`)
+        }
+      }
+
+      if (sucessos > 0) {
+        toast({
+          title: `${sucessos} Balancete(s) Gravado(s) com Sucesso!`,
+          description: `Os registros de Balanço e DRE para os respectivos meses de ${selectedAno} foram atualizados.`,
+        })
+
+        setConfirmModalOpen(false)
+        if (onImportSuccess) {
+          onImportSuccess(selectedEmpresaId, selectedAno, prontosParaGravar[0].mes)
+        } else {
+          navigate(`/analise/${selectedEmpresaId}?aba=comparativo-mensal`)
+        }
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Erro ao gravar balancetes',
+          description: erros.join(' | ') || 'Não foi possível gravar os dados no banco.',
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao gravar balancetes em lote:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Falha na gravação',
+        description: err?.message || 'Erro ao persistir informações no banco de dados.',
+      })
+    } finally {
+      setSavingImport(false)
+    }
+  }
+
+  const arquivosProcessadosValidos = arquivos.filter(
+    (a) => a.status === 'processado' && a.previewResult,
+  )
+
   return (
     <div className="space-y-6">
-      {/* Card Principal de Upload e Seleção */}
+      {/* Card Principal de Seleção e Múltiplos Arquivos */}
       <Card className="bg-white border-slate-200 shadow-2xs">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-2.5">
@@ -434,19 +635,19 @@ export function ImportarBalanceteMensal({
             </div>
             <div>
               <CardTitle className="text-base font-bold text-[#0B1F3A]">
-                Importar Balancete Mensal (Excel / PDF)
+                Importar Balancetes Mensais (Excel / PDF)
               </CardTitle>
               <CardDescription className="text-xs">
-                Faça o upload do balancete contábil mensal para gerar automaticamente os lançamentos
-                de Balanço Patrimonial e DRE com pré-visualização.
+                Selecione múltiplos arquivos de uma vez (um balancete por mês) para gerar
+                automaticamente os lançamentos de Balanço e DRE de cada competência.
               </CardDescription>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-6">
-          {/* Seletores de Empresa, Ano e Mês */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50/80 p-4 rounded-xl border border-slate-200/80">
+          {/* Seletores de Empresa e Ano */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50/80 p-4 rounded-xl border border-slate-200/80">
             <div>
               <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
                 <Building2 className="w-3.5 h-3.5 text-blue-600" />
@@ -456,7 +657,6 @@ export function ImportarBalanceteMensal({
                 value={selectedEmpresaId}
                 onValueChange={(val) => {
                   setSelectedEmpresaId(val)
-                  setPreviewResult(null)
                 }}
               >
                 <SelectTrigger className="h-9 text-xs bg-white">
@@ -483,190 +683,312 @@ export function ImportarBalanceteMensal({
                 max={2100}
                 value={selectedAno}
                 onChange={(e) => {
-                  setSelectedAno(Number(e.target.value))
-                  setPreviewResult(null)
+                  const ano = Number(e.target.value)
+                  setSelectedAno(ano)
+                  // Atualiza ano nos arquivos já carregados
+                  setArquivos((prev) =>
+                    prev.map((a) => ({
+                      ...a,
+                      ano,
+                      previewResult: a.previewResult
+                        ? recalcularBalanceteMapeado(
+                            a.previewResult.contasIdentificadas,
+                            ano,
+                            a.mes,
+                            selectedEmpresaId,
+                          )
+                        : undefined,
+                    })),
+                  )
                 }}
                 className="h-9 text-xs bg-white"
               />
             </div>
-
-            <div>
-              <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
-                <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                Mês de Competência
-              </Label>
-              <Select
-                value={String(selectedMes)}
-                onValueChange={(val) => {
-                  setSelectedMes(Number(val))
-                  setPreviewResult(null)
-                }}
-              >
-                <SelectTrigger className="h-9 text-xs bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {NOMES_MESES.map((nome, idx) => (
-                    <SelectItem key={idx + 1} value={String(idx + 1)} className="text-xs">
-                      {idx + 1} - {nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
-          {/* Área de Drag and Drop de Arquivo */}
-          {!previewResult && (
-            <div
-              onDragOver={(e) => {
-                e.preventDefault()
-                setIsDragOver(true)
-              }}
-              onDragLeave={() => setIsDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault()
-                setIsDragOver(false)
-                if (e.dataTransfer.files?.[0]) {
-                  handleFileChange(e.dataTransfer.files[0])
-                }
-              }}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
-                isDragOver
-                  ? 'border-blue-500 bg-blue-50/50 scale-[1.01]'
-                  : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
-              }`}
+          {/* Área de Drag and Drop de Múltiplos Arquivos */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault()
+              setIsDragOver(true)
+            }}
+            onDragLeave={() => setIsDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault()
+              setIsDragOver(false)
+              if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFilesSelected(e.dataTransfer.files)
+              }
+            }}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all ${
+              isDragOver
+                ? 'border-blue-500 bg-blue-50/50 scale-[1.01]'
+                : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
+            }`}
+          >
+            <input
+              type="file"
+              ref={fileInputRef}
+              multiple
+              onChange={(e) => e.target.files && handleFilesSelected(e.target.files)}
+              accept=".xlsx,.xls,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              className="hidden"
+            />
+
+            <div className="w-12 h-12 rounded-full bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mb-2">
+              <Upload className="w-6 h-6" />
+            </div>
+
+            <h4 className="text-sm font-bold text-slate-800">
+              Arraste múltiplos balancetes (um por mês) ou clique para selecionar
+            </h4>
+            <p className="text-xs text-slate-500 mt-1 max-w-md text-center">
+              Formatos aceitos: <strong>Excel (.xlsx, .xls)</strong> ou <strong>PDF (.pdf)</strong>.
+              O sistema identificará cada mês e gerará os dados de Balanço e DRE correspondentes.
+            </p>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 border-blue-200 text-blue-700 bg-white hover:bg-blue-50 text-xs font-semibold"
             >
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={(e) => e.target.files?.[0] && handleFileChange(e.target.files[0])}
-                accept=".xlsx,.xls,.csv,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                className="hidden"
-              />
+              <Plus className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+              Adicionar Arquivo(s) de Balancete
+            </Button>
+          </div>
 
-              <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mb-3">
-                <Upload className="w-7 h-7" />
-              </div>
-
-              <h4 className="text-base font-bold text-slate-800">
-                Arraste o balancete ou clique para selecionar
-              </h4>
-              <p className="text-xs text-slate-500 mt-1 max-w-md text-center">
-                Formatos aceitos: <strong>Excel (.xlsx, .xls)</strong> ou{' '}
-                <strong>PDF (.pdf)</strong>. O sistema extrairá automaticamente os saldos do Ativo,
-                Passivo e grupos da DRE.
-              </p>
-
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-4 border-blue-200 text-blue-700 bg-white hover:bg-blue-50 text-xs font-semibold"
-              >
-                <Upload className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                Escolher Arquivo do Balancete
-              </Button>
-            </div>
-          )}
-
-          {/* Progresso de leitura */}
-          {processing && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-              <div className="flex items-center justify-between text-xs font-semibold text-blue-900">
-                <span className="flex items-center gap-2">
-                  <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
-                  Lendo e estruturando balancete...
+          {/* =========================================================================
+              LISTA DE ARQUIVOS CARREGADOS COM SELETOR DE MÊS POR ARQUIVO
+          ========================================================================= */}
+          {arquivos.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-blue-600" />
+                  Balancetes Selecionados ({arquivos.length})
+                </h3>
+                <span className="text-[11px] text-slate-500">
+                  {arquivosProcessadosValidos.length} de {arquivos.length} prontos para gravação
                 </span>
-                <span>{progress}%</span>
               </div>
-              <div className="w-full bg-blue-200 h-2 rounded-full overflow-hidden">
-                <div
-                  className="bg-blue-600 h-full rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            </div>
-          )}
 
-          {/* Erro */}
-          {errorMsg && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-              <div className="text-xs text-red-800 flex-1">
-                <p className="font-bold text-red-900">Não foi possível processar o arquivo</p>
-                <p className="mt-0.5">{errorMsg}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {arquivos.map((item) => {
+                  const isActive = activeBalancete?.id === item.id
+                  const isProcessing = item.status === 'processando'
+                  const isError = item.status === 'erro'
+                  const isDone = item.status === 'processado'
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50/40 shadow-sm ring-1 ring-blue-500'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <div>
+                        {/* Cabeçalho do Card do Arquivo */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="p-1.5 bg-slate-100 rounded-lg shrink-0 text-slate-700">
+                              {item.file.name.toLowerCase().endsWith('.pdf') ? (
+                                <FileText className="w-4 h-4 text-red-600" />
+                              ) : (
+                                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p
+                                className="text-xs font-bold text-slate-900 truncate"
+                                title={item.file.name}
+                              >
+                                {item.file.name}
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                {(item.file.size / 1024).toFixed(0)} KB
+                              </p>
+                            </div>
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoverArquivo(item.id)}
+                            className="h-6 w-6 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                            title="Remover este arquivo"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+
+                        {/* Seletor de Competência (Mês) */}
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+                          <Label className="text-[11px] font-semibold text-slate-600 shrink-0">
+                            Mês:
+                          </Label>
+                          <Select
+                            value={String(item.mes)}
+                            onValueChange={(val) => handleChangeMesArquivo(item.id, Number(val))}
+                          >
+                            <SelectTrigger className="h-7 text-xs bg-white font-bold w-36">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {NOMES_MESES.map((nome, idx) => (
+                                <SelectItem
+                                  key={idx + 1}
+                                  value={String(idx + 1)}
+                                  className="text-xs"
+                                >
+                                  {idx + 1} - {nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Status / Progresso */}
+                        <div className="mt-2 text-xs">
+                          {isProcessing && (
+                            <div className="flex items-center gap-1.5 text-blue-600 text-[11px] font-medium">
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                              Processando balancete...
+                            </div>
+                          )}
+                          {isError && (
+                            <div className="text-[11px] text-red-600 font-medium flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{item.errorMsg || 'Erro na leitura'}</span>
+                            </div>
+                          )}
+                          {isDone && item.previewResult && (
+                            <div className="flex items-center justify-between text-[11px] text-slate-600">
+                              <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                {item.previewResult.contasIdentificadas.length} contas mapeadas
+                              </span>
+                              <span className="font-mono text-slate-700 font-bold">
+                                Ativo: {formatBrlMil(item.previewResult.totalAtivo)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Botões de Ação do Arquivo */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                        {isError ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleReprocessarArquivo(item.id)}
+                            className="text-[10px] h-6 px-2 text-slate-700"
+                          >
+                            Reprocessar
+                          </Button>
+                        ) : isDone ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={isActive ? 'default' : 'outline'}
+                            onClick={() => setActiveArquivoId(item.id)}
+                            className={`text-[10px] h-6 px-2.5 gap-1 font-semibold ${
+                              isActive
+                                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                                : 'text-blue-700 border-blue-200 hover:bg-blue-50'
+                            }`}
+                          >
+                            <Eye className="w-3 h-3" />
+                            {isActive ? 'Revisando' : 'Revisar / Editar'}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleReset}
-                className="text-xs text-red-700 hover:bg-red-100 h-7"
-              >
-                Tentar outro
-              </Button>
+
+              {/* Botão de Gravação Geral em Lote */}
+              {arquivosProcessadosValidos.length > 0 && (
+                <div className="bg-slate-900 text-white rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md mt-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                      <h4 className="text-sm font-bold text-white">
+                        {arquivosProcessadosValidos.length} balancete(s) pronto(s) para gravação
+                      </h4>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      Competências:{' '}
+                      {arquivosProcessadosValidos
+                        .map((a) => `${NOMES_MESES[a.mes - 1]}/${selectedAno}`)
+                        .join(', ')}
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={() => setConfirmModalOpen(true)}
+                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs h-9 shadow-md gap-1.5 px-4 self-start sm:self-auto"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    Confirmar e Gravar Todos ({arquivosProcessadosValidos.length})
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
           {/* =========================================================================
-              PRÉ-VISUALIZAÇÃO DO MAPEAMENTO
+              PRÉ-VISUALIZAÇÃO E EDIÇÃO DO BALANCETE ATIVO
           ========================================================================= */}
-          {previewResult && (
-            <div className="space-y-6 pt-2">
-              {/* Resumo Geral do Mapeamento */}
-              <div className="bg-gradient-to-r from-blue-900 via-slate-900 to-slate-800 text-white rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          {activeBalancete?.previewResult && (
+            <div className="space-y-6 pt-4 border-t border-slate-200">
+              {/* Cabeçalho de Revisão do Arquivo Ativo */}
+              <div className="bg-gradient-to-r from-blue-900 via-slate-900 to-slate-800 text-white rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                    <h3 className="text-base font-bold text-white">
-                      Pré-visualização do Balancete ({NOMES_MESES[selectedMes - 1]}/{selectedAno})
+                    <h3 className="text-sm font-bold text-white">
+                      Revisando Balancete: {NOMES_MESES[activeBalancete.mes - 1]} / {selectedAno}
                     </h3>
                   </div>
-                  <p className="text-xs text-slate-300 mt-1">
-                    Arquivo: <strong className="text-white">{file?.name}</strong> ·{' '}
-                    {previewResult.contasIdentificadas.length} contas contábeis mapeadas
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Arquivo: <strong className="text-white">{activeBalancete.file.name}</strong> ·{' '}
+                    {activeBalancete.previewResult.contasIdentificadas.length} contas contábeis
+                    mapeadas
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  {originalPreviewResult && (
+                  {activeBalancete.originalPreviewResult && (
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleRestaurarValoresOriginais}
-                      className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs h-9 gap-1"
+                      className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs h-8 gap-1"
                       title="Restaurar valores detectados originalmente no arquivo"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       Restaurar
                     </Button>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleReset}
-                    className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs h-9"
-                  >
-                    Trocar Arquivo
-                  </Button>
-                  <Button
-                    onClick={() => setConfirmModalOpen(true)}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs h-9 shadow-md gap-1.5 px-4"
-                  >
-                    <CheckCircle2 className="w-4 h-4" />
-                    Confirmar e Gravar Lançamentos
-                  </Button>
                 </div>
               </div>
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-900">
                 <span className="flex items-center gap-1.5">
                   <Pencil className="w-4 h-4 text-blue-600 shrink-0" />
-                  <strong>Ajuste Manual Célula a Célula Habilitado:</strong> Clique sobre qualquer
-                  valor ou campo nas tabelas abaixo para editar manualmente antes da gravação final.
+                  <strong>Edição Célula a Célula Habilitada:</strong> Clique sobre qualquer valor
+                  nas tabelas abaixo para editar manualmente antes da gravação final.
                 </span>
                 <Badge className="bg-white text-blue-800 border-blue-300 text-[10px] font-semibold">
-                  {previewResult.contasIdentificadas.length} contas
+                  {activeBalancete.previewResult.contasIdentificadas.length} contas
                 </Badge>
               </div>
 
@@ -676,10 +998,10 @@ export function ImportarBalanceteMensal({
                 <Card className="border-slate-200 shadow-2xs">
                   <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200 flex flex-row items-center justify-between">
                     <CardTitle className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                      Balanço Patrimonial Apurado (Editável)
+                      Balanço Patrimonial Apurado ({NOMES_MESES[activeBalancete.mes - 1]})
                     </CardTitle>
                     <Badge className="bg-blue-100 text-blue-800 text-[10px]">
-                      Ativo: {formatBrlMil(previewResult.totalAtivo)}
+                      Ativo: {formatBrlMil(activeBalancete.previewResult.totalAtivo)}
                     </Badge>
                   </CardHeader>
                   <CardContent className="p-4 space-y-2 text-xs">
@@ -695,7 +1017,7 @@ export function ImportarBalanceteMensal({
                       { key: 'capital_social', label: 'Capital Social' },
                       { key: 'lucros_acumulados', label: 'Lucros Acumulados' },
                     ].map((item) => {
-                      const val = (previewResult.balanco as any)[item.key] || 0
+                      const val = (activeBalancete.previewResult?.balanco as any)?.[item.key] || 0
                       const isEditing = editingBalancoField === item.key
 
                       return (
@@ -749,7 +1071,7 @@ export function ImportarBalanceteMensal({
                     <div className="flex justify-between pt-2 font-bold text-slate-800">
                       <span>Total Passivo + PL Mapeado:</span>
                       <span className="text-blue-700">
-                        {formatBrlMil(previewResult.totalPassivo)}
+                        {formatBrlMil(activeBalancete.previewResult.totalPassivo)}
                       </span>
                     </div>
                   </CardContent>
@@ -759,10 +1081,10 @@ export function ImportarBalanceteMensal({
                 <Card className="border-slate-200 shadow-2xs">
                   <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200 flex flex-row items-center justify-between">
                     <CardTitle className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                      DRE (Demonstração do Resultado — Editável)
+                      DRE (Demonstração do Resultado — {NOMES_MESES[activeBalancete.mes - 1]})
                     </CardTitle>
                     <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">
-                      Receita: {formatBrlMil(previewResult.totalReceitas)}
+                      Receita: {formatBrlMil(activeBalancete.previewResult.totalReceitas)}
                     </Badge>
                   </CardHeader>
                   <CardContent className="p-4 space-y-2 text-xs">
@@ -799,7 +1121,7 @@ export function ImportarBalanceteMensal({
                         color: 'text-slate-700',
                       },
                     ].map((item) => {
-                      const val = (previewResult.dre as any)[item.key] || 0
+                      const val = (activeBalancete.previewResult?.dre as any)?.[item.key] || 0
                       const isEditing = editingDreField === item.key
 
                       return (
@@ -854,24 +1176,30 @@ export function ImportarBalanceteMensal({
                       <span>Resultado Líquido Estimado:</span>
                       <span
                         className={
-                          previewResult.totalReceitas - previewResult.totalDespesas >= 0
+                          activeBalancete.previewResult.totalReceitas -
+                            activeBalancete.previewResult.totalDespesas >=
+                          0
                             ? 'text-emerald-700'
                             : 'text-red-600'
                         }
                       >
-                        {formatBrlMil(previewResult.totalReceitas - previewResult.totalDespesas)}
+                        {formatBrlMil(
+                          activeBalancete.previewResult.totalReceitas -
+                            activeBalancete.previewResult.totalDespesas,
+                        )}
                       </span>
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Tabela Detalhada de Contas Identificadas com Edição Célula a Célula */}
+              {/* Tabela Detalhada de Contas Identificadas */}
               <Card className="border-slate-200 shadow-2xs overflow-hidden">
                 <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-xs font-bold text-[#0B1F3A]">
-                      Detalhamento das Contas Mapeadas ({previewResult.contasIdentificadas.length})
+                      Detalhamento das Contas Mapeadas (
+                      {activeBalancete.previewResult.contasIdentificadas.length})
                     </CardTitle>
                     <CardDescription className="text-[11px]">
                       Edite nomes, códigos, grupos contábeis e valores numéricos diretamente na
@@ -900,7 +1228,7 @@ export function ImportarBalanceteMensal({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {previewResult.contasIdentificadas
+                      {activeBalancete.previewResult.contasIdentificadas
                         .map((c, originalIdx) => ({ c, originalIdx }))
                         .filter(
                           ({ c }) =>
@@ -1104,33 +1432,49 @@ export function ImportarBalanceteMensal({
       </Card>
 
       {/* =========================================================================
-          MODAL DE CONFIRMAÇÃO DE GRAVAÇÃO
+          MODAL DE CONFIRMAÇÃO DE GRAVAÇÃO EM LOTE
       ========================================================================= */}
       <Dialog open={confirmModalOpen} onOpenChange={setConfirmModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white">
+        <DialogContent className="sm:max-w-lg bg-white">
           <DialogHeader>
             <DialogTitle className="text-base font-bold text-[#0B1F3A]">
-              Confirmar Importação de Balancete
+              Confirmar Gravação de Balancetes Mensais
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
-              Gravar lançamentos mensais de Balanço e DRE para {NOMES_MESES[selectedMes - 1]}/
-              {selectedAno}
+              Gravar lançamentos de Balanço e DRE para {arquivosProcessadosValidos.length}{' '}
+              competência(s) de {selectedAno}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 text-xs py-2 text-slate-700 leading-relaxed">
             <p>
-              Os dados extraídos do arquivo <strong>{file?.name}</strong> serão gravados na
-              competência de{' '}
-              <strong>
-                {NOMES_MESES[selectedMes - 1]} de {selectedAno}
-              </strong>{' '}
-              da empresa selecionada.
+              Os seguintes balancetes serão gravados para a empresa selecionada no exercício de{' '}
+              <strong>{selectedAno}</strong>:
             </p>
+
+            <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2.5 bg-slate-50">
+              {arquivosProcessadosValidos.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between text-xs py-1 px-2 bg-white rounded-lg border border-slate-100"
+                >
+                  <span className="font-bold text-[#0B1F3A]">
+                    {NOMES_MESES[a.mes - 1]} / {selectedAno}
+                  </span>
+                  <span className="text-slate-500 text-[11px] truncate max-w-[200px]">
+                    {a.file.name}
+                  </span>
+                  <span className="font-mono text-emerald-700 font-semibold text-[11px]">
+                    Ativo: {formatBrlMil(a.previewResult?.totalAtivo || 0)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-blue-900 text-[11px] space-y-1">
               <p>
-                • Se já existirem registros para este mês, eles serão atualizados com os novos
-                saldos.
+                • Se já existirem registros para os meses indicados, eles serão atualizados com os
+                novos saldos.
               </p>
               <p>• Os dados ficam integrados na Análise da Empresa e no Comparativo Mês a Mês.</p>
             </div>
@@ -1148,11 +1492,13 @@ export function ImportarBalanceteMensal({
             </Button>
             <Button
               type="button"
-              onClick={handleConfirmarGravacao}
+              onClick={handleConfirmarGravacaoLote}
               disabled={savingImport}
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
             >
-              {savingImport ? 'Gravando...' : 'Confirmar e Gravar'}
+              {savingImport
+                ? 'Gravando balancetes...'
+                : `Gravar ${arquivosProcessadosValidos.length} Balancete(s)`}
             </Button>
           </DialogFooter>
         </DialogContent>
