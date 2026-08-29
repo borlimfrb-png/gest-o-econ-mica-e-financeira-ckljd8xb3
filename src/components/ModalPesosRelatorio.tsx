@@ -69,13 +69,14 @@ export function ModalPesosRelatorio({
 
   // Total dos pesos
   const totalPesos =
-    pesos.liquidez +
-    pesos.endividamento +
-    pesos.rentabilidade +
-    pesos.estruturaCapital +
-    pesos.ebitda +
-    pesos.eficienciaOperacional +
-    pesos.economicos
+    (pesos.liquidez || 0) +
+    (pesos.endividamento || 0) +
+    (pesos.rentabilidade || 0) +
+    (pesos.estruturaCapital || 0) +
+    (pesos.ebitda || 0) +
+    (pesos.eficienciaOperacional || 0) +
+    (pesos.economicos || 0) +
+    (pesos.kanitz || 0)
 
   const isValidTotal = totalPesos === 100
 
@@ -144,6 +145,11 @@ export function ModalPesosRelatorio({
       key: 'economicos',
       label: 'Econômicos (Avançado)',
       desc: 'Criação de valor econômico e custo de capital (EVA, ROIC, WACC)',
+    },
+    {
+      key: 'kanitz',
+      label: 'Solvência (Termômetro de Kanitz)',
+      desc: 'Fator de Insolvência FI (X1 a X5) ponderado para predição de falência',
     },
   ]
 

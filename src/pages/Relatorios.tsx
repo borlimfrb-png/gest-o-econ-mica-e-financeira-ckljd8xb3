@@ -9,6 +9,7 @@ import {
   calcularIndicadores,
   calcularCapitalGiro,
   calcularPontoEquilibrio,
+  calcularKanitz,
   gerarAnaliseAutomatica,
   formatBrlMil,
   formatCurrency,
@@ -251,7 +252,19 @@ export default function Relatorios() {
       csvContent += `Capital de Giro Líquido (CGL);${giroAtual.cgl.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.cgl.toFixed(2).replace('.', ',') : '—'};Ativo Circulante - Passivo Circulante\n`
       csvContent += `Necessidade de Capital de Giro (NCG);${giroAtual.ncg.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.ncg.toFixed(2).replace('.', ',') : '—'};Ativo Circ. Operacional - Passivo Circ. Operacional\n`
       csvContent += `Saldo de Tesouraria (ST);${giroAtual.saldoTesouraria.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.saldoTesouraria.toFixed(2).replace('.', ',') : '—'};Ativo Circ. Financeiro - Passivo Circ. Financeiro (ou CGL - NCG)\n`
-      csvContent += `Diagnóstico Fleuriet;${giroAtual.tipoFleurietNome};${giroAnterior ? giroAnterior.tipoFleurietNome : '—'};${giroAtual.tipoFleurietDescricao}\n`
+      csvContent += `Diagnóstico Fleuriet;${giroAtual.tipoFleurietNome};${giroAnterior ? giroAnterior.tipoFleurietNome : '—'};${giroAtual.tipoFleurietDescricao}\n\n`
+
+      // Kanitz (Termômetro de Insolvência)
+      const kanitzAtualExport = calcularKanitz(balancoAtual, dreAtual)
+      const kanitzAnteriorExport = calcularKanitz(balancoAnterior, dreAnterior)
+      csvContent += `SOLVÊNCIA & PREVISÃO DE INSOLVÊNCIA (KANITZ)\n`
+      csvContent += `Métrica / Variável;${selectedAno};${hasAnoAnterior ? anoAnterior : 'Ano Anterior'};Fórmula & Coeficiente\n`
+      csvContent += `Fator de Insolvência (FI);${kanitzAtualExport.fi !== null ? kanitzAtualExport.fi.toFixed(2) : 'N/D'};${kanitzAnteriorExport.fi !== null ? kanitzAnteriorExport.fi.toFixed(2) : 'N/D'};FI = 0.05*X1 + 1.65*X2 + 3.55*X3 - 1.06*X4 - 0.33*X5\n`
+      csvContent += `Classificação de Risco;${kanitzAtualExport.statusTexto};${kanitzAnteriorExport.statusTexto};${kanitzAtualExport.classificacao.toUpperCase()}\n`
+      csvContent += `Diagnóstico Resumido;${kanitzAtualExport.diagnosticoResumido};${kanitzAnteriorExport.diagnosticoResumido};—\n`
+      for (const v of kanitzAtualExport.variaveis) {
+        csvContent += `${v.sigla} - ${v.nome};${v.valor !== null ? v.valor.toFixed(4) : 'N/D'};—;${v.formula} (Coef: ${v.coeficiente})\n`
+      }
     }
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

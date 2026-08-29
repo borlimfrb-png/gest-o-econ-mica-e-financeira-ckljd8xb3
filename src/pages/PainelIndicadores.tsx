@@ -1474,7 +1474,7 @@ export default function PainelIndicadores() {
         setor: 'FI ≥ 0,00 (Solvente)',
         unidade: '',
         tendencia: calcularTendencia(kanitzAtual.fi, kanitzAno1?.fi ?? null, false),
-        peso: 15,
+        peso: pesos.kanitz || 0,
       },
     ]
   }, [indAtual, indAno1, indAno2, kanitzAtual, kanitzAno1, kanitzAno2, benchmarkAtivo, pesos])
@@ -3636,7 +3636,7 @@ export default function PainelIndicadores() {
                       Termômetro de Insolvência de Kanitz
                     </CardTitle>
                     <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-bold">
-                      Fator de Insolvência (FI)
+                      Peso {pesos.kanitz || 0}%
                     </Badge>
                   </div>
                   <CardDescription className="text-xs text-slate-500 mt-0.5">
@@ -4317,7 +4317,10 @@ export default function PainelIndicadores() {
           kanitzFi: kanitzAtual.fi,
           kanitzClassificacao: kanitzAtual.classificacao,
           kanitzStatusTexto: kanitzAtual.statusTexto,
+          kanitzResultado: kanitzAtual,
         }}
+        balancoAtual={balancoAtual}
+        dreAtual={dreAtual}
         radarItems={radarItems}
         benchmarkAtivo={benchmarkAtivo}
         selectedSetorBenchmark={selectedSetorBenchmark}

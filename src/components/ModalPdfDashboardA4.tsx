@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -29,9 +29,12 @@ import {
   ShieldCheck,
   TrendingDown,
   Minus,
+  Flame,
+  AlertCircle,
+  Info,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import type { EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
+import type { EmpresaRecord, MinhaEmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import type { GrupoRadarItem, BenchmarkSetorValores } from '@/lib/benchmarks'
 import {
   formatCurrency,
@@ -39,6 +42,8 @@ import {
   formatCnpj,
   formatNumber,
   formatBrlMil,
+  calcularKanitz,
+  type KanitzResultado,
 } from '@/lib/financeCalculations'
 
 export interface IndicadorLinhaImpressao {
@@ -84,7 +89,10 @@ export interface ModalPdfDashboardA4Props {
     kanitzFi?: number | null
     kanitzClassificacao?: string | null
     kanitzStatusTexto?: string | null
+    kanitzResultado?: KanitzResultado | null
   }
+  balancoAtual?: BalancoRecord | null
+  dreAtual?: DreRecord | null
   radarItems: GrupoRadarItem[]
   benchmarkAtivo: BenchmarkSetorValores | null
   selectedSetorBenchmark: string
@@ -116,7 +124,14 @@ export function ModalPdfDashboardA4({
   empresaB,
   anoB,
   scoreGeralB,
+  balancoAtual,
+  dreAtual,
 }: ModalPdfDashboardA4Props) {
+  // Apuração do KanitzResultado se não vier pronto nos destaques
+  const kanitzCalculado: KanitzResultado = useMemo(() => {
+    if (destaques.kanitzResultado) return destaques.kanitzResultado
+    return calcularKanitz(balancoAtual || null, dreAtual || null)
+  }, [destaques.kanitzResultado, balancoAtual, dreAtual])
   const handlePrint = () => {
     window.print()
   }
@@ -379,18 +394,26 @@ export function ModalPdfDashboardA4({
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('sec-4-tabela')}
-                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                  onClick={() => scrollToSection('sec-4-kanitz')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-indigo-900 font-medium transition-colors flex items-center justify-between bg-indigo-50/40"
                 >
-                  <span>4. Tabela (3 Anos)</span>
+                  <span>4. Solvência (Kanitz)</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('sec-5-conclusao')}
-                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between sm:col-span-2"
+                  onClick={() => scrollToSection('sec-5-tabela')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>5. Conclusão &amp; Parecer</span>
+                  <span>5. Tabela (3 Anos)</span>
+                  <span className="text-[10px] text-slate-400">Ir &darr;</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('sec-6-conclusao')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between sm:col-span-1"
+                >
+                  <span>6. Conclusão &amp; Parecer</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
               </div>
@@ -787,12 +810,118 @@ export function ModalPdfDashboardA4({
             </section>
 
             {/* ========================================================= */}
-            {/* 4. TABELA CONSOLIDADA DE INDICADORES (3 ANOS) */}
+            {/* 4. KANITZ (TERMÔMETRO DE INSOLVÊNCIA & ANÁLISE PREDITIVA) */}
             {/* ========================================================= */}
-            <section id="sec-4-tabela" className="space-y-3">
+            <section id="sec-4-kanitz" className="space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
+                    4
+                  </span>
+                  Kanitz (Termômetro de Insolvência) ({selectedAno})
+                </h2>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-bold ${
+                    kanitzCalculado.classificacao === 'solvente'
+                      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                      : kanitzCalculado.classificacao === 'penumbra'
+                        ? 'bg-amber-50 text-amber-800 border-amber-300'
+                        : kanitzCalculado.classificacao === 'insolvente'
+                          ? 'bg-rose-50 text-rose-800 border-rose-300'
+                          : 'bg-slate-100 text-slate-700 border-slate-300'
+                  }`}
+                >
+                  {kanitzCalculado.classificacao === 'solvente' && '🟢 '}
+                  {kanitzCalculado.classificacao === 'penumbra' && '🟠 '}
+                  {kanitzCalculado.classificacao === 'insolvente' && '🔴 '}
+                  {kanitzCalculado.statusTexto}
+                </Badge>
+              </div>
+
+              {/* Card Resumo do Fator de Insolvência e Diagnóstico */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-xl space-y-1">
+                  <span className="text-[10px] font-bold text-indigo-900 uppercase block">
+                    Fator de Insolvência (FI)
+                  </span>
+                  <div className="flex items-baseline justify-between">
+                    <strong className="text-2xl font-black font-mono text-indigo-950">
+                      {kanitzCalculado.fi !== null ? kanitzCalculado.fi.toFixed(2) : 'N/D'}
+                    </strong>
+                    <span className="text-[10px] text-indigo-700 font-semibold">
+                      Ref: FI &ge; 0,00 (Solvente)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 sm:col-span-2 flex flex-col justify-center">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                    Parecer de Risco de Insolvência
+                  </span>
+                  <p className="text-[11px] text-slate-700 leading-snug">
+                    {kanitzCalculado.diagnosticoResumido} {kanitzCalculado.descricaoClassificacao}
+                  </p>
+                </div>
+              </div>
+
+              {/* Tabela das 5 Variáveis X1 a X5 */}
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200 text-[10px]">
+                      <th className="py-2 px-2.5">Variável</th>
+                      <th className="py-2 px-2.5">Conceito / Nome</th>
+                      <th className="py-2 px-2">Fórmula Contábil</th>
+                      <th className="py-2 px-2 text-center">Coeficiente</th>
+                      <th className="py-2 px-2 text-right">Valor Extraído</th>
+                      <th className="py-2 px-2 text-right bg-indigo-50/50 text-indigo-950 font-bold">
+                        Contribuição no FI
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-[10px]">
+                    {kanitzCalculado.variaveis.map((v) => {
+                      const isPositive = v.contribuicao !== null && v.contribuicao >= 0
+                      return (
+                        <tr key={v.id} className="hover:bg-slate-50/50">
+                          <td className="py-1.5 px-2.5 font-mono font-bold text-indigo-700">
+                            {v.sigla}
+                          </td>
+                          <td className="py-1.5 px-2.5 font-medium text-slate-800">{v.nome}</td>
+                          <td className="py-1.5 px-2 font-mono text-slate-500 text-[9px]">
+                            {v.formula}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-mono font-semibold text-slate-700">
+                            {v.coeficiente > 0 ? `+${v.coeficiente}` : v.coeficiente}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono font-medium text-slate-800">
+                            {v.descricaoValor}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono font-bold bg-indigo-50/30">
+                            <span className={isPositive ? 'text-emerald-700' : 'text-rose-700'}>
+                              {v.contribuicao !== null
+                                ? v.contribuicao > 0
+                                  ? `+${v.contribuicao.toFixed(3)}`
+                                  : v.contribuicao.toFixed(3)
+                                : 'N/D'}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* ========================================================= */}
+            {/* 5. TABELA CONSOLIDADA DE INDICADORES (3 ANOS) */}
+            {/* ========================================================= */}
+            <section id="sec-5-tabela" className="space-y-3">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  4
+                  5
                 </span>
                 Tabela Consolidada de Indicadores ({ano2}, {ano1}, {selectedAno})
               </h2>
@@ -854,12 +983,12 @@ export function ModalPdfDashboardA4({
             </section>
 
             {/* ========================================================= */}
-            {/* 5. CONCLUSÃO & RECOMENDAÇÕES EXECUTIVAS */}
+            {/* 6. CONCLUSÃO & RECOMENDAÇÕES EXECUTIVAS */}
             {/* ========================================================= */}
-            <section id="sec-5-conclusao" className="space-y-3 pt-2">
+            <section id="sec-6-conclusao" className="space-y-3 pt-2">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  5
+                  6
                 </span>
                 Conclusão e Parecer da Consultoria
               </h2>

@@ -16,6 +16,7 @@ export interface PesosGrupos {
   ebitda: number
   eficienciaOperacional: number
   economicos: number
+  kanitz: number // 0 a 100 - Termômetro de Insolvência de Stephen Kanitz
   capitalGiro?: number
 }
 
@@ -30,57 +31,63 @@ export const PERFIS_PESOS_PREDEFINIDOS: Record<PerfilPesosId, PerfilConfig> = {
   industria: {
     id: 'industria',
     nome: 'Indústria',
-    descricao: 'Maior peso em Liquidez (25%), Endividamento (25%) e Eficiência Operacional (25%)',
+    descricao:
+      'Foco em Liquidez (20%), Endividamento (20%), Eficiência (20%) e Solvência Kanitz (15%)',
     pesos: {
-      liquidez: 25,
-      endividamento: 25,
+      liquidez: 20,
+      endividamento: 20,
       rentabilidade: 10,
       estruturaCapital: 5,
       ebitda: 5,
-      eficienciaOperacional: 25,
+      eficienciaOperacional: 20,
       economicos: 5,
+      kanitz: 15,
     },
   },
   comercio: {
     id: 'comercio',
     nome: 'Comércio',
-    descricao: 'Maior peso em Liquidez (30%) e Eficiência Operacional (30%)',
+    descricao: 'Foco em Liquidez (25%), Eficiência (25%) e Solvência Kanitz (15%)',
     pesos: {
-      liquidez: 30,
+      liquidez: 25,
       endividamento: 15,
       rentabilidade: 15,
       estruturaCapital: 5,
       ebitda: 5,
-      eficienciaOperacional: 30,
+      eficienciaOperacional: 25,
       economicos: 0,
+      kanitz: 10,
     },
   },
   servicos: {
     id: 'servicos',
     nome: 'Serviços',
-    descricao: 'Maior peso em Rentabilidade (30%) e EBITDA (25%)',
+    descricao: 'Foco em Rentabilidade (25%), EBITDA (20%) e Solvência Kanitz (10%)',
     pesos: {
       liquidez: 15,
       endividamento: 10,
-      rentabilidade: 30,
+      rentabilidade: 25,
       estruturaCapital: 10,
-      ebitda: 25,
+      ebitda: 20,
       eficienciaOperacional: 5,
       economicos: 5,
+      kanitz: 10,
     },
   },
   tecnologia: {
     id: 'tecnologia',
     nome: 'Tecnologia',
-    descricao: 'Maior peso em Rentabilidade (25%), Econômicos (25%) e EBITDA (20%)',
+    descricao:
+      'Foco em Rentabilidade (20%), Econômicos (20%), EBITDA (20%) e Solvência Kanitz (10%)',
     pesos: {
       liquidez: 10,
       endividamento: 10,
-      rentabilidade: 25,
+      rentabilidade: 20,
       estruturaCapital: 5,
       ebitda: 20,
       eficienciaOperacional: 5,
-      economicos: 25,
+      economicos: 20,
+      kanitz: 10,
     },
   },
   personalizado: {
@@ -88,13 +95,14 @@ export const PERFIS_PESOS_PREDEFINIDOS: Record<PerfilPesosId, PerfilConfig> = {
     nome: 'Personalizado',
     descricao: 'Pesos ajustados manualmente pelo consultor conforme o perfil do cliente',
     pesos: {
-      liquidez: 20,
-      endividamento: 20,
-      rentabilidade: 20,
+      liquidez: 15,
+      endividamento: 15,
+      rentabilidade: 15,
       estruturaCapital: 10,
       ebitda: 15,
       eficienciaOperacional: 10,
       economicos: 5,
+      kanitz: 15,
     },
   },
 }
@@ -899,6 +907,31 @@ export function calcularScoresRadar(
   const empresaEcon = Math.round(scoreSpread * 0.6 + scoreEVA * 0.4)
   const setorEcon = 65
 
+  // 8. Kanitz (Termômetro de Insolvência): Normalização contínua do FI (0-100)
+  // Escala contínua:
+  // FI >= +7 -> score 100
+  // FI = 0 (fronteira solvente) -> score 70
+  // FI = -3 (fronteira insolvente) -> score 35
+  // FI <= -7 -> score 0
+  let empresaKanitzScore = 50
+  if (empresaInd.kanitzFi !== null && empresaInd.kanitzFi !== undefined) {
+    const fi = empresaInd.kanitzFi
+    if (fi >= 0) {
+      // 0 a +7 mapeado para 70 a 100
+      const ratio = Math.min(fi / 7, 1)
+      empresaKanitzScore = Math.round(70 + ratio * 30)
+    } else if (fi >= -3) {
+      // -3 a 0 mapeado para 35 a 70
+      const ratio = (fi - -3) / 3 // 0 em -3, 1 em 0
+      empresaKanitzScore = Math.round(35 + ratio * 35)
+    } else {
+      // -7 a -3 mapeado para 0 a 35 (clamped)
+      const ratio = Math.max((fi - -7) / 4, 0) // 0 em -7, 1 em -3
+      empresaKanitzScore = Math.min(35, Math.max(0, Math.round(ratio * 35)))
+    }
+  }
+  const setorKanitz = 70
+
   const getStatus = (emp: number, set: number): 'acima' | 'em_linha' | 'abaixo' => {
     if (emp > set + 5) return 'acima'
     if (emp < set - 5) return 'abaixo'
@@ -959,6 +992,24 @@ export function calcularScoresRadar(
       empresaValorRealStr: `Ciclo Fin.: ${empresaInd.cf !== null ? `${Math.round(empresaInd.cf)}d` : '—'}`,
       setorValorRealStr: `Ciclo Fin.: ${benchmark.cicloFinanceiro}d`,
       status: getStatus(empresaEfic, setorEfic),
+    },
+    {
+      grupoId: 'economicos',
+      grupoNome: 'Econômicos',
+      empresaScore: empresaEcon,
+      setorScore: setorEcon,
+      empresaValorRealStr: `Spread: ${empresaInd.spread !== null ? `${empresaInd.spread.toFixed(1)}%` : '—'}`,
+      setorValorRealStr: `Spread: ${benchmark.spread.toFixed(1)}%`,
+      status: getStatus(empresaEcon, setorEcon),
+    },
+    {
+      grupoId: 'kanitz',
+      grupoNome: 'Solvência (Kanitz)',
+      empresaScore: empresaKanitzScore,
+      setorScore: setorKanitz,
+      empresaValorRealStr: `FI: ${empresaInd.kanitzFi !== null && empresaInd.kanitzFi !== undefined ? empresaInd.kanitzFi.toFixed(2) : '—'}`,
+      setorValorRealStr: `FI ≥ 0,00`,
+      status: getStatus(empresaKanitzScore, setorKanitz),
     },
   ]
 }
