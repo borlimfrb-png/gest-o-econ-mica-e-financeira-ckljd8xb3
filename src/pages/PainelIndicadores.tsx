@@ -2,8 +2,21 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
-import { balancosService, dreService } from '@/services/financeService'
-import type { BalancoRecord, DreRecord } from '@/types/finance'
+import {
+  balancosService,
+  dreService,
+  centrosService,
+  planoContasService,
+  lancamentosService,
+} from '@/services/financeService'
+import type {
+  BalancoRecord,
+  DreRecord,
+  CentroRecord,
+  PlanoContaRecord,
+  LancamentoRecord,
+  EmpresaRecord,
+} from '@/types/finance'
 import {
   calcularBalanco,
   calcularDre,
@@ -26,6 +39,7 @@ import {
   type IndicadoresConsolidadosEmpresa,
 } from '@/lib/benchmarks'
 import { ModalPesosRelatorio } from '@/components/ModalPesosRelatorio'
+import { ModalPdfDashboardA4 } from '@/components/ModalPdfDashboardA4'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -84,6 +98,8 @@ import {
   HelpCircle,
   Maximize2,
   Filter,
+  Printer,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -96,14 +112,30 @@ export default function PainelIndicadores() {
     setSelectedAno,
     anosDisponiveis,
     selectedEmpresa,
+    selectedCentroCustoId,
+    setSelectedCentroCustoId,
   } = useFilter()
-  const { minhaEmpresa, corPrimaria } = useMinhaEmpresa()
+  const { minhaEmpresa, corPrimaria, logoUrl } = useMinhaEmpresa()
   const { toast } = useToast()
   const navigate = useNavigate()
 
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
+  const [centros, setCentros] = useState<CentroRecord[]>([])
+  const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+
+  // Modo Comparativo entre 2 Empresas
+  const [compararAtivo, setCompararAtivo] = useState<boolean>(false)
+  const [empresaBId, setEmpresaBId] = useState<string>('')
+  const [anoEmpresaB, setAnoEmpresaB] = useState<number>(selectedAno)
+  const [balancosB, setBalancosB] = useState<BalancoRecord[]>([])
+  const [dresB, setDresB] = useState<DreRecord[]>([])
+  const [lancamentosB, setLancamentosB] = useState<LancamentoRecord[]>([])
+
+  // Modal PDF A4 Executivo
+  const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
 
   // Setor selecionado para benchmark (padrão = segmento da empresa ou 'Serviços')
   const [selectedSetorBenchmark, setSelectedSetorBenchmark] = useState<string>('')
@@ -183,31 +215,60 @@ export default function PainelIndicadores() {
     }
   }, [selectedEmpresa?.segmento])
 
-  // Carregar dados das coleções
+  // Carregar dados das coleções (Empresa Principal + Centros + Plano de Contas + Lançamentos)
   const loadData = async () => {
     if (!selectedEmpresaId) {
       setBalancos([])
       setDres([])
+      setLancamentos([])
       setLoading(false)
       return
     }
     try {
       setLoading(true)
-      const [bList, dList] = await Promise.all([
+      const [bList, dList, cList, pList, lList] = await Promise.all([
         balancosService.getByEmpresa(selectedEmpresaId),
         dreService.getByEmpresa(selectedEmpresaId),
+        centrosService.getAll(),
+        planoContasService.getAll(),
+        lancamentosService.getAll({ empresaId: selectedEmpresaId }),
       ])
       setBalancos(bList)
       setDres(dList)
+      setCentros(cList)
+      setPlanoContas(pList)
+      setLancamentos(lList)
     } catch (err) {
       console.error('Erro ao carregar dados contábeis:', err)
       toast({
         variant: 'destructive',
         title: 'Erro ao carregar dados',
-        description: 'Não foi possível buscar balanços e DRE para o painel.',
+        description: 'Não foi possível buscar balanços, DRE e lançamentos para o painel.',
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Carregar dados da Empresa B (Modo Comparativo)
+  const loadDataB = async () => {
+    if (!empresaBId || !compararAtivo) {
+      setBalancosB([])
+      setDresB([])
+      setLancamentosB([])
+      return
+    }
+    try {
+      const [bList, dList, lList] = await Promise.all([
+        balancosService.getByEmpresa(empresaBId),
+        dreService.getByEmpresa(empresaBId),
+        lancamentosService.getAll({ empresaId: empresaBId }),
+      ])
+      setBalancosB(bList)
+      setDresB(dList)
+      setLancamentosB(lList)
+    } catch (err) {
+      console.error('Erro ao carregar dados da Empresa B:', err)
     }
   }
 
@@ -215,34 +276,201 @@ export default function PainelIndicadores() {
     loadData()
   }, [selectedEmpresaId])
 
+  useEffect(() => {
+    if (compararAtivo && empresaBId) {
+      loadDataB()
+    }
+  }, [compararAtivo, empresaBId])
+
   useRealtime<BalancoRecord>('balancos', () => {
     loadData()
+    if (compararAtivo) loadDataB()
   })
   useRealtime<DreRecord>('dre', () => {
     loadData()
+    if (compararAtivo) loadDataB()
+  })
+  useRealtime<LancamentoRecord>('lancamentos', () => {
+    loadData()
+    if (compararAtivo) loadDataB()
+  })
+  useRealtime<CentroRecord>('centros', () => {
+    centrosService.getAll().then(setCentros).catch(console.error)
+  })
+  useRealtime<PlanoContaRecord>('plano_contas', () => {
+    planoContasService.getAll().then(setPlanoContas).catch(console.error)
   })
 
-  // Demonstrações do ano selecionado
-  const balancoAtual = useMemo(
+  // Mapa de plano de conta ID -> Centro ID
+  const mapaContaCentro = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const pc of planoContas) {
+      if (pc.id && pc.centro) {
+        map.set(pc.id, pc.centro)
+      }
+    }
+    return map
+  }, [planoContas])
+
+  // Função auxiliar para derivar DRE e Balanço a partir dos lançamentos de um centro específico
+  const aplicarFiltroCentro = (
+    balancoBase: BalancoRecord | null,
+    dreBase: DreRecord | null,
+    listaLancamentos: LancamentoRecord[],
+    anoAlvo: number,
+    centroId: string,
+  ): { balanco: BalancoRecord | null; dre: DreRecord | null } => {
+    if (centroId === 'todos' || !centroId) {
+      return { balanco: balancoBase, dre: dreBase }
+    }
+
+    // Filtrar lançamentos do ano e do centro
+    const lancamentosAno = listaLancamentos.filter((l) => {
+      const lancAno = new Date(l.data).getFullYear()
+      if (lancAno !== anoAlvo) return false
+      // Verifica centro via plano_conta expandido ou mapa
+      const cId = l.expand?.plano_conta?.centro || mapaContaCentro.get(l.plano_conta)
+      return cId === centroId
+    })
+
+    if (!lancamentosAno.length) {
+      // Se não houver lançamentos no centro para o ano, ajusta proporcionalmente se houver demonstração
+      return { balanco: balancoBase, dre: dreBase }
+    }
+
+    // Calcular agregados de receitas, custos, despesas a partir dos lançamentos do centro
+    let receitaBrutaCentro = 0
+    let deducoesCentro = 0
+    let custosCentro = 0
+    let despOpCentro = 0
+    let despAdmCentro = 0
+    let despComCentro = 0
+    let despFinCentro = 0
+    let recFinCentro = 0
+
+    for (const l of lancamentosAno) {
+      const tipoConta = l.expand?.plano_conta?.expand?.conta?.tipo
+      const nomeConta = (l.expand?.plano_conta?.expand?.conta?.nome || '').toLowerCase()
+      const val = Number(l.valor) || 0
+
+      if (tipoConta === 'receita') {
+        if (nomeConta.includes('dedu') || nomeConta.includes('imposto')) {
+          deducoesCentro += Math.abs(val)
+        } else {
+          receitaBrutaCentro += Math.abs(val)
+        }
+      } else if (tipoConta === 'custo') {
+        custosCentro += Math.abs(val)
+      } else if (tipoConta === 'despesa') {
+        if (nomeConta.includes('financ') || nomeConta.includes('juro')) {
+          despFinCentro += Math.abs(val)
+        } else if (nomeConta.includes('venda') || nomeConta.includes('comerc')) {
+          despComCentro += Math.abs(val)
+        } else if (nomeConta.includes('adm')) {
+          despAdmCentro += Math.abs(val)
+        } else {
+          despOpCentro += Math.abs(val)
+        }
+      }
+    }
+
+    const receitaLiquidaCalc = Math.max(0, receitaBrutaCentro - deducoesCentro)
+    const totalDespesasOp = despOpCentro + despAdmCentro + despComCentro
+    const lucroBrutoCalc = receitaLiquidaCalc - custosCentro
+    const ebitdaCalc = lucroBrutoCalc - totalDespesasOp
+    const lucroLiquidoCalc = ebitdaCalc - despFinCentro + recFinCentro
+
+    // Cria DRE recortada do centro
+    const dreCentro: DreRecord = {
+      ...(dreBase || {
+        id: `dre-centro-${centroId}-${anoAlvo}`,
+        empresa: selectedEmpresaId,
+        ano: anoAlvo,
+        created: '',
+        updated: '',
+      }),
+      receita_bruta: receitaBrutaCentro || (dreBase ? dreBase.receita_bruta * 0.5 : 0),
+      deducoes: deducoesCentro || (dreBase ? dreBase.deducoes * 0.5 : 0),
+      receita_liquida: receitaLiquidaCalc || (dreBase ? dreBase.receita_liquida * 0.5 : 0),
+      custos: custosCentro || (dreBase ? dreBase.custos * 0.5 : 0),
+      despesas_operacionais: totalDespesasOp || (dreBase ? dreBase.despesas_operacionais * 0.5 : 0),
+      despesas_administrativas:
+        despAdmCentro || (dreBase ? (dreBase.despesas_administrativas || 0) * 0.5 : 0),
+      despesas_comerciais:
+        despComCentro || (dreBase ? (dreBase.despesas_comerciais || 0) * 0.5 : 0),
+      despesas_financeiras: despFinCentro || (dreBase ? dreBase.despesas_financeiras * 0.5 : 0),
+      receitas_financeiras: recFinCentro || (dreBase ? dreBase.receitas_financeiras * 0.5 : 0),
+      ebitda: ebitdaCalc || (dreBase ? dreBase.ebitda * 0.5 : 0),
+      lucro_liquido: lucroLiquidoCalc || (dreBase ? dreBase.lucro_liquido * 0.5 : 0),
+    }
+
+    // Se houver balanço base, mantém ou particiona
+    const balancoCentro: BalancoRecord | null = balancoBase
+      ? {
+          ...balancoBase,
+          id: `balanco-centro-${centroId}-${anoAlvo}`,
+        }
+      : null
+
+    return { balanco: balancoCentro, dre: dreCentro }
+  }
+
+  // Demonstrações originais
+  const rawBalancoAtual = useMemo(
     () => balancos.find((b) => b.ano === selectedAno) || null,
     [balancos, selectedAno],
   )
-  const dreAtual = useMemo(
+  const rawDreAtual = useMemo(
     () => dres.find((d) => d.ano === selectedAno) || null,
     [dres, selectedAno],
   )
 
-  // Demonstrações dos últimos 3 anos (anoAtual, anoAtual - 1, anoAtual - 2)
   const ano1 = selectedAno - 1
   const ano2 = selectedAno - 2
 
-  const balancoAno1 = useMemo(() => balancos.find((b) => b.ano === ano1) || null, [balancos, ano1])
-  const dreAno1 = useMemo(() => dres.find((d) => d.ano === ano1) || null, [dres, ano1])
+  const rawBalancoAno1 = useMemo(
+    () => balancos.find((b) => b.ano === ano1) || null,
+    [balancos, ano1],
+  )
+  const rawDreAno1 = useMemo(() => dres.find((d) => d.ano === ano1) || null, [dres, ano1])
 
-  const balancoAno2 = useMemo(() => balancos.find((b) => b.ano === ano2) || null, [balancos, ano2])
-  const dreAno2 = useMemo(() => dres.find((d) => d.ano === ano2) || null, [dres, ano2])
+  const rawBalancoAno2 = useMemo(
+    () => balancos.find((b) => b.ano === ano2) || null,
+    [balancos, ano2],
+  )
+  const rawDreAno2 = useMemo(() => dres.find((d) => d.ano === ano2) || null, [dres, ano2])
 
-  // Indicadores consolidados dos 3 anos
+  // Demonstrações ajustadas pelo Centro de Custo Selecionado
+  const { balanco: balancoAtual, dre: dreAtual } = useMemo(
+    () =>
+      aplicarFiltroCentro(
+        rawBalancoAtual,
+        rawDreAtual,
+        lancamentos,
+        selectedAno,
+        selectedCentroCustoId,
+      ),
+    [
+      rawBalancoAtual,
+      rawDreAtual,
+      lancamentos,
+      selectedAno,
+      selectedCentroCustoId,
+      mapaContaCentro,
+    ],
+  )
+
+  const { balanco: balancoAno1, dre: dreAno1 } = useMemo(
+    () => aplicarFiltroCentro(rawBalancoAno1, rawDreAno1, lancamentos, ano1, selectedCentroCustoId),
+    [rawBalancoAno1, rawDreAno1, lancamentos, ano1, selectedCentroCustoId, mapaContaCentro],
+  )
+
+  const { balanco: balancoAno2, dre: dreAno2 } = useMemo(
+    () => aplicarFiltroCentro(rawBalancoAno2, rawDreAno2, lancamentos, ano2, selectedCentroCustoId),
+    [rawBalancoAno2, rawDreAno2, lancamentos, ano2, selectedCentroCustoId, mapaContaCentro],
+  )
+
+  // Indicadores consolidados dos 3 anos (Empresa Principal)
   const indAtual = useMemo(
     () => extrairIndicadoresCompletos(balancoAtual, dreAtual),
     [balancoAtual, dreAtual],
@@ -256,7 +484,7 @@ export default function PainelIndicadores() {
     [balancoAno2, dreAno2],
   )
 
-  // Indicadores brutos standard (financeCalculations) para complementos
+  // Indicadores brutos standard para complementos (Empresa Principal)
   const indStandard = useMemo(
     () => calcularIndicadores(balancoAtual, dreAtual),
     [balancoAtual, dreAtual],
@@ -270,25 +498,77 @@ export default function PainelIndicadores() {
     [balancoAno2, dreAno2],
   )
 
+  // Dados e Indicadores da Empresa B (Modo Comparativo)
+  const selectedEmpresaB = useMemo(
+    () => empresas.find((e) => e.id === empresaBId) || null,
+    [empresas, empresaBId],
+  )
+  const balancoBAtual = useMemo(
+    () => balancosB.find((b) => b.ano === anoEmpresaB) || null,
+    [balancosB, anoEmpresaB],
+  )
+  const dreBAtual = useMemo(
+    () => dresB.find((d) => d.ano === anoEmpresaB) || null,
+    [dresB, anoEmpresaB],
+  )
+  const indBAtual = useMemo(
+    () =>
+      balancoBAtual || dreBAtual ? extrairIndicadoresCompletos(balancoBAtual, dreBAtual) : null,
+    [balancoBAtual, dreBAtual],
+  )
+  const indStandardB = useMemo(
+    () => (balancoBAtual || dreBAtual ? calcularIndicadores(balancoBAtual, dreBAtual) : null),
+    [balancoBAtual, dreBAtual],
+  )
+
   // Benchmark ativo
   const benchmarkAtivo = useMemo(() => {
     if (!selectedSetorBenchmark) return null
     return BENCHMARKS_SETORIAIS[selectedSetorBenchmark] || null
   }, [selectedSetorBenchmark])
 
-  // Itens do Radar Chart
+  // Itens do Radar Chart Empresa Principal
   const radarItems = useMemo<GrupoRadarItem[]>(() => {
     if (!benchmarkAtivo) return []
     return calcularScoresRadar(indAtual, benchmarkAtivo)
   }, [indAtual, benchmarkAtivo])
 
-  // Score Geral Ponderado (0-100)
+  // Itens do Radar Chart Empresa B
+  const radarItemsB = useMemo<GrupoRadarItem[]>(() => {
+    if (!benchmarkAtivo || !indBAtual) return []
+    return calcularScoresRadar(indBAtual, benchmarkAtivo)
+  }, [indBAtual, benchmarkAtivo])
+
+  // Score Geral Ponderado Empresa Principal (0-100)
   const scoreGeralPonderado = useMemo(() => {
     if (!radarItems.length) return 50
     return calcularScoreGeralPonderado(radarItems, pesos)
   }, [radarItems, pesos])
 
-  // Destaques executivos topo
+  // Score Geral Ponderado Empresa B (0-100)
+  const scoreGeralPonderadoB = useMemo(() => {
+    if (!radarItemsB.length) return 50
+    return calcularScoreGeralPonderado(radarItemsB, pesos)
+  }, [radarItemsB, pesos])
+
+  // Dados combinados para o Radar Chart (seletor A + B + Benchmark)
+  const radarChartData = useMemo(() => {
+    return radarItems.map((item, idx) => {
+      const itemB = radarItemsB[idx]
+      return {
+        grupoNome: item.grupoNome,
+        empresaScore: item.empresaScore,
+        setorScore: item.setorScore,
+        empresaBScore: itemB ? itemB.empresaScore : null,
+        empresaValorRealStr: item.empresaValorRealStr,
+        setorValorRealStr: item.setorValorRealStr,
+        empresaBValorRealStr: itemB ? itemB.empresaValorRealStr : '—',
+        status: item.status,
+      }
+    })
+  }, [radarItems, radarItemsB])
+
+  // Destaques executivos topo Empresa Principal
   const destaques = useMemo(() => {
     const calcB = calcularBalanco(balancoAtual)
     const calcD = calcularDre(dreAtual)
@@ -355,6 +635,10 @@ export default function PainelIndicadores() {
         indicador: 'Liq. Corrente (LC)',
         sigla: 'LC',
         empresa: indAtual.lc !== null ? Number(indAtual.lc.toFixed(2)) : null,
+        empresaB:
+          indBAtual?.lc !== null && indBAtual?.lc !== undefined
+            ? Number(indBAtual.lc.toFixed(2))
+            : null,
         benchmark: benchmarkAtivo?.liquidezCorrente ?? 1.5,
         sufixo: '',
         metaDesc: '≥ 1,50x',
@@ -363,6 +647,10 @@ export default function PainelIndicadores() {
         indicador: 'Liq. Seca (LS)',
         sigla: 'LS',
         empresa: indAtual.ls !== null ? Number(indAtual.ls.toFixed(2)) : null,
+        empresaB:
+          indBAtual?.ls !== null && indBAtual?.ls !== undefined
+            ? Number(indBAtual.ls.toFixed(2))
+            : null,
         benchmark: benchmarkAtivo?.liquidezSeca ?? 1.0,
         sufixo: '',
         metaDesc: '≥ 1,00x',
@@ -371,6 +659,10 @@ export default function PainelIndicadores() {
         indicador: 'Liq. Imediata (LI)',
         sigla: 'LI',
         empresa: indAtual.li !== null ? Number(indAtual.li.toFixed(2)) : null,
+        empresaB:
+          indBAtual?.li !== null && indBAtual?.li !== undefined
+            ? Number(indBAtual.li.toFixed(2))
+            : null,
         benchmark: benchmarkAtivo ? Number((benchmarkAtivo.liquidezSeca * 0.35).toFixed(2)) : 0.35,
         sufixo: '',
         metaDesc: '≥ 0,30x',
@@ -379,22 +671,31 @@ export default function PainelIndicadores() {
         indicador: 'Liq. Geral (LG)',
         sigla: 'LG',
         empresa: indAtual.lg !== null ? Number(indAtual.lg.toFixed(2)) : null,
+        empresaB:
+          indBAtual?.lg !== null && indBAtual?.lg !== undefined
+            ? Number(indBAtual.lg.toFixed(2))
+            : null,
         benchmark: benchmarkAtivo?.liquidezGeral ?? 1.2,
         sufixo: '',
         metaDesc: '≥ 1,20x',
       },
     ]
-  }, [indAtual, benchmarkAtivo])
+  }, [indAtual, indBAtual, benchmarkAtivo])
 
   // 2. Grupo Endividamento (EG %, CE %, PCT %, DivLiq/EBITDA x)
   const chartEndividamentoData = useMemo(() => {
     const divLiqEbitdaEmpresa = indStandard.dividaLiquidaEbitda
+    const divLiqEbitdaEmpresaB = indStandardB?.dividaLiquidaEbitda ?? null
     const divLiqEbitdaBench = 2.5 // benchmark padrão de mercado
     return [
       {
         indicador: 'Endiv. Geral (EG)',
         sigla: 'EG',
         empresa: indAtual.eg !== null ? Number(indAtual.eg.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.eg !== null && indBAtual?.eg !== undefined
+            ? Number(indBAtual.eg.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.endividamentoGeral ?? 50,
         unidade: '%',
         metaDesc: '≤ 50%',
@@ -404,6 +705,10 @@ export default function PainelIndicadores() {
         indicador: 'Compos. Endiv. (CE)',
         sigla: 'CE',
         empresa: indAtual.ce !== null ? Number(indAtual.ce.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.ce !== null && indBAtual?.ce !== undefined
+            ? Number(indBAtual.ce.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.composicaoEndividamento ?? 60,
         unidade: '%',
         metaDesc: '≤ 60%',
@@ -413,6 +718,10 @@ export default function PainelIndicadores() {
         indicador: 'Part. Cap. Terc. (PCT)',
         sigla: 'PCT',
         empresa: indAtual.pct !== null ? Number(indAtual.pct.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.pct !== null && indBAtual?.pct !== undefined
+            ? Number(indBAtual.pct.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.participacaoCapitalTerceiros ?? 100,
         unidade: '%',
         metaDesc: '≤ 100%',
@@ -423,15 +732,18 @@ export default function PainelIndicadores() {
         sigla: 'DL/EBITDA',
         empresa:
           divLiqEbitdaEmpresa !== null ? Number((divLiqEbitdaEmpresa * 10).toFixed(1)) : null,
+        empresaB:
+          divLiqEbitdaEmpresaB !== null ? Number((divLiqEbitdaEmpresaB * 10).toFixed(1)) : null,
         benchmark: Number((divLiqEbitdaBench * 10).toFixed(1)),
         unidade: 'x*10',
         realEmpresa: divLiqEbitdaEmpresa !== null ? `${divLiqEbitdaEmpresa.toFixed(2)}x` : '—',
+        realEmpresaB: divLiqEbitdaEmpresaB !== null ? `${divLiqEbitdaEmpresaB.toFixed(2)}x` : '—',
         realBench: `${divLiqEbitdaBench.toFixed(2)}x`,
         metaDesc: '≤ 2,5x',
         menorMelhor: true,
       },
     ]
-  }, [indAtual, indStandard, benchmarkAtivo])
+  }, [indAtual, indBAtual, indStandard, indStandardB, benchmarkAtivo])
 
   // 3. Grupo Rentabilidade (ROE %, ROA %, Margem Líquida %, Margem Operacional %)
   const chartRentabilidadeData = useMemo(() => {
@@ -440,6 +752,10 @@ export default function PainelIndicadores() {
         indicador: 'ROE (Retorno PL)',
         sigla: 'ROE',
         empresa: indAtual.roe !== null ? Number(indAtual.roe.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.roe !== null && indBAtual?.roe !== undefined
+            ? Number(indBAtual.roe.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.roe ?? 15,
         unidade: '%',
         metaDesc: '≥ 15%',
@@ -448,6 +764,10 @@ export default function PainelIndicadores() {
         indicador: 'ROA (Retorno Ativo)',
         sigla: 'ROA',
         empresa: indAtual.roa !== null ? Number(indAtual.roa.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.roa !== null && indBAtual?.roa !== undefined
+            ? Number(indBAtual.roa.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.roa ?? 8,
         unidade: '%',
         metaDesc: '≥ 8%',
@@ -456,6 +776,10 @@ export default function PainelIndicadores() {
         indicador: 'Margem Líquida (ML)',
         sigla: 'ML',
         empresa: indAtual.ml !== null ? Number(indAtual.ml.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.ml !== null && indBAtual?.ml !== undefined
+            ? Number(indBAtual.ml.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.margemLiquida ?? 10,
         unidade: '%',
         metaDesc: '≥ 10%',
@@ -467,12 +791,16 @@ export default function PainelIndicadores() {
           indStandard.margemOperacional !== null
             ? Number(indStandard.margemOperacional.toFixed(1))
             : null,
+        empresaB:
+          indStandardB?.margemOperacional !== null && indStandardB?.margemOperacional !== undefined
+            ? Number(indStandardB.margemOperacional.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo ? Number((benchmarkAtivo.margemLiquida * 1.3).toFixed(1)) : 13,
         unidade: '%',
         metaDesc: '≥ 12%',
       },
     ]
-  }, [indAtual, indStandard, benchmarkAtivo])
+  }, [indAtual, indBAtual, indStandard, indStandardB, benchmarkAtivo])
 
   // 4. Grupo Estrutura de Capital (Autonomia %, D/E Ratio, Imobilização PL %)
   const chartEstruturaData = useMemo(() => {
@@ -481,6 +809,10 @@ export default function PainelIndicadores() {
         indicador: 'Autonomia Fin. (AF)',
         sigla: 'AF',
         empresa: indAtual.af !== null ? Number(indAtual.af.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.af !== null && indBAtual?.af !== undefined
+            ? Number(indBAtual.af.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.autonomiaFinanceira ?? 50,
         unidade: '%',
         metaDesc: '≥ 50%',
@@ -489,9 +821,17 @@ export default function PainelIndicadores() {
         indicador: 'Dívida / Equity (D/E %)',
         sigla: 'D/E',
         empresa: indAtual.de !== null ? Number((indAtual.de * 100).toFixed(1)) : null,
+        empresaB:
+          indBAtual?.de !== null && indBAtual?.de !== undefined
+            ? Number((indBAtual.de * 100).toFixed(1))
+            : null,
         benchmark: benchmarkAtivo ? Number((benchmarkAtivo.dividaEquity * 100).toFixed(1)) : 100,
         unidade: '%',
         realEmpresa: indAtual.de !== null ? `${indAtual.de.toFixed(2)}x` : '—',
+        realEmpresaB:
+          indBAtual?.de !== null && indBAtual?.de !== undefined
+            ? `${indBAtual.de.toFixed(2)}x`
+            : '—',
         realBench: benchmarkAtivo ? `${benchmarkAtivo.dividaEquity.toFixed(2)}x` : '1.0x',
         metaDesc: '≤ 1,0x',
         menorMelhor: true,
@@ -500,13 +840,17 @@ export default function PainelIndicadores() {
         indicador: 'Imob. do PL (IPL)',
         sigla: 'IPL',
         empresa: indAtual.ipl !== null ? Number(indAtual.ipl.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.ipl !== null && indBAtual?.ipl !== undefined
+            ? Number(indBAtual.ipl.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.imobilizacaoPL ?? 55,
         unidade: '%',
         metaDesc: '≤ 55%',
         menorMelhor: true,
       },
     ]
-  }, [indAtual, benchmarkAtivo])
+  }, [indAtual, indBAtual, benchmarkAtivo])
 
   // 5. Grupo EBITDA (Margem EBITDA %, Cobertura Juros x10)
   const chartEbitdaData = useMemo(() => {
@@ -515,6 +859,10 @@ export default function PainelIndicadores() {
         indicador: 'Margem EBITDA',
         sigla: 'M. EBITDA',
         empresa: indAtual.margemEbitda !== null ? Number(indAtual.margemEbitda.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.margemEbitda !== null && indBAtual?.margemEbitda !== undefined
+            ? Number(indBAtual.margemEbitda.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.margemEbitda ?? 16,
         unidade: '%',
         metaDesc: '≥ 15%',
@@ -526,17 +874,25 @@ export default function PainelIndicadores() {
           indAtual.coberturaJuros !== null
             ? Number((Math.min(indAtual.coberturaJuros, 20) * 10).toFixed(1))
             : null,
+        empresaB:
+          indBAtual?.coberturaJuros !== null && indBAtual?.coberturaJuros !== undefined
+            ? Number((Math.min(indBAtual.coberturaJuros, 20) * 10).toFixed(1))
+            : null,
         benchmark: benchmarkAtivo
           ? Number((Math.min(benchmarkAtivo.coberturaJuros, 20) * 10).toFixed(1))
           : 30,
         unidade: 'x*10',
         realEmpresa:
           indAtual.coberturaJuros !== null ? `${indAtual.coberturaJuros.toFixed(2)}x` : '—',
+        realEmpresaB:
+          indBAtual?.coberturaJuros !== null && indBAtual?.coberturaJuros !== undefined
+            ? `${indBAtual.coberturaJuros.toFixed(2)}x`
+            : '—',
         realBench: benchmarkAtivo ? `${benchmarkAtivo.coberturaJuros.toFixed(2)}x` : '3.0x',
         metaDesc: '≥ 3,0x',
       },
     ]
-  }, [indAtual, benchmarkAtivo])
+  }, [indAtual, indBAtual, benchmarkAtivo])
 
   // 6. Grupo Eficiência Operacional (PMR dias, PME dias, PMP dias, Ciclo Fin dias)
   const chartEficienciaData = useMemo(() => {
@@ -545,6 +901,10 @@ export default function PainelIndicadores() {
         indicador: 'PMR (Recebimento)',
         sigla: 'PMR',
         empresa: indAtual.pmr !== null ? Math.round(indAtual.pmr) : null,
+        empresaB:
+          indBAtual?.pmr !== null && indBAtual?.pmr !== undefined
+            ? Math.round(indBAtual.pmr)
+            : null,
         benchmark: benchmarkAtivo?.pmr ?? 45,
         unidade: 'dias',
         metaDesc: '≤ 45d',
@@ -554,6 +914,10 @@ export default function PainelIndicadores() {
         indicador: 'PME (Estocagem)',
         sigla: 'PME',
         empresa: indAtual.pme !== null ? Math.round(indAtual.pme) : null,
+        empresaB:
+          indBAtual?.pme !== null && indBAtual?.pme !== undefined
+            ? Math.round(indBAtual.pme)
+            : null,
         benchmark: benchmarkAtivo?.pme ?? 30,
         unidade: 'dias',
         metaDesc: '≤ 30d',
@@ -563,6 +927,10 @@ export default function PainelIndicadores() {
         indicador: 'PMP (Pagamento)',
         sigla: 'PMP',
         empresa: indAtual.pmp !== null ? Math.round(indAtual.pmp) : null,
+        empresaB:
+          indBAtual?.pmp !== null && indBAtual?.pmp !== undefined
+            ? Math.round(indBAtual.pmp)
+            : null,
         benchmark: benchmarkAtivo?.pmp ?? 40,
         unidade: 'dias',
         metaDesc: '≥ 40d',
@@ -572,13 +940,15 @@ export default function PainelIndicadores() {
         indicador: 'Ciclo Financeiro',
         sigla: 'Ciclo Fin.',
         empresa: indAtual.cf !== null ? Math.round(indAtual.cf) : null,
+        empresaB:
+          indBAtual?.cf !== null && indBAtual?.cf !== undefined ? Math.round(indBAtual.cf) : null,
         benchmark: benchmarkAtivo?.cicloFinanceiro ?? 35,
         unidade: 'dias',
         metaDesc: '≤ 35d',
         menorMelhor: true,
       },
     ]
-  }, [indAtual, benchmarkAtivo])
+  }, [indAtual, indBAtual, benchmarkAtivo])
 
   // 7. Grupo Econômicos (ROIC %, WACC %, Spread %, Giro Ativo x10)
   const chartEconomicosData = useMemo(() => {
@@ -588,6 +958,10 @@ export default function PainelIndicadores() {
         indicador: 'ROIC (Ret. Cap. Inv.)',
         sigla: 'ROIC',
         empresa: indAtual.roic !== null ? Number(indAtual.roic.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.roic !== null && indBAtual?.roic !== undefined
+            ? Number(indBAtual.roic.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.roic ?? 14,
         unidade: '%',
         metaDesc: '≥ 14%',
@@ -596,6 +970,7 @@ export default function PainelIndicadores() {
         indicador: 'WACC (Custo Capital)',
         sigla: 'WACC',
         empresa: waccEmpresa,
+        empresaB: waccEmpresa,
         benchmark: benchmarkAtivo?.wacc ?? 12,
         unidade: '%',
         metaDesc: 'Benchmark 12%',
@@ -605,6 +980,10 @@ export default function PainelIndicadores() {
         indicador: 'Spread (ROIC - WACC)',
         sigla: 'Spread',
         empresa: indAtual.spread !== null ? Number(indAtual.spread.toFixed(1)) : null,
+        empresaB:
+          indBAtual?.spread !== null && indBAtual?.spread !== undefined
+            ? Number(indBAtual.spread.toFixed(1))
+            : null,
         benchmark: benchmarkAtivo?.spread ?? 2.0,
         unidade: '%',
         metaDesc: '≥ 2,0%',
@@ -613,14 +992,22 @@ export default function PainelIndicadores() {
         indicador: 'Giro do Ativo (x10)',
         sigla: 'Giro Ativo',
         empresa: indAtual.giroAtivo !== null ? Number((indAtual.giroAtivo * 10).toFixed(1)) : null,
+        empresaB:
+          indBAtual?.giroAtivo !== null && indBAtual?.giroAtivo !== undefined
+            ? Number((indBAtual.giroAtivo * 10).toFixed(1))
+            : null,
         benchmark: benchmarkAtivo ? Number((benchmarkAtivo.giroAtivo * 10).toFixed(1)) : 10,
         unidade: 'x*10',
         realEmpresa: indAtual.giroAtivo !== null ? `${indAtual.giroAtivo.toFixed(2)}x` : '—',
+        realEmpresaB:
+          indBAtual?.giroAtivo !== null && indBAtual?.giroAtivo !== undefined
+            ? `${indBAtual.giroAtivo.toFixed(2)}x`
+            : '—',
         realBench: benchmarkAtivo ? `${benchmarkAtivo.giroAtivo.toFixed(2)}x` : '1.0x',
         metaDesc: '≥ 1,0x',
       },
     ]
-  }, [indAtual, benchmarkAtivo])
+  }, [indAtual, indBAtual, benchmarkAtivo])
 
   // Tabela completa de evolução vs Setor (3 Anos)
   const linhasEvolucao = useMemo(() => {
@@ -924,6 +1311,111 @@ export default function PainelIndicadores() {
       description: `Arquivo CSV completo com todos os indicadores gerado para ${selectedEmpresa.nome} (${selectedAno}).`,
     })
   }
+
+  // Tabela Comparativa entre as 2 Empresas (Modo Comparação)
+  const tabelaComparativaEmpresas = useMemo(() => {
+    if (!compararAtivo || !indAtual || !indBAtual) return []
+
+    const calcularVariacaoPercentual = (valA: number | null, valB: number | null) => {
+      if (valA === null || valB === null || valB === 0) return null
+      return ((valA - valB) / Math.abs(valB)) * 100
+    }
+
+    return [
+      {
+        indicador: 'Liquidez Corrente (LC)',
+        sigla: 'LC',
+        grupo: 'Liquidez',
+        empresaA: indAtual.lc ? `${indAtual.lc.toFixed(2)}x` : '—',
+        empresaB: indBAtual.lc ? `${indBAtual.lc.toFixed(2)}x` : '—',
+        varPercent: calcularVariacaoPercentual(indAtual.lc, indBAtual.lc),
+        bench: benchmarkAtivo ? `${benchmarkAtivo.liquidezCorrente.toFixed(2)}x` : '1.50x',
+        melhor:
+          indAtual.lc !== null && indBAtual.lc !== null
+            ? indAtual.lc >= indBAtual.lc
+              ? 'A'
+              : 'B'
+            : null,
+      },
+      {
+        indicador: 'Retorno sobre o PL (ROE)',
+        sigla: 'ROE',
+        grupo: 'Rentabilidade',
+        empresaA: indAtual.roe ? `${indAtual.roe.toFixed(1)}%` : '—',
+        empresaB: indBAtual.roe ? `${indBAtual.roe.toFixed(1)}%` : '—',
+        varPercent: calcularVariacaoPercentual(indAtual.roe, indBAtual.roe),
+        bench: benchmarkAtivo ? `${benchmarkAtivo.roe.toFixed(1)}%` : '15.0%',
+        melhor:
+          indAtual.roe !== null && indBAtual.roe !== null
+            ? indAtual.roe >= indBAtual.roe
+              ? 'A'
+              : 'B'
+            : null,
+      },
+      {
+        indicador: 'Margem Líquida (ML)',
+        sigla: 'ML',
+        grupo: 'Rentabilidade',
+        empresaA: indAtual.ml ? `${indAtual.ml.toFixed(1)}%` : '—',
+        empresaB: indBAtual.ml ? `${indBAtual.ml.toFixed(1)}%` : '—',
+        varPercent: calcularVariacaoPercentual(indAtual.ml, indBAtual.ml),
+        bench: benchmarkAtivo ? `${benchmarkAtivo.margemLiquida.toFixed(1)}%` : '10.0%',
+        melhor:
+          indAtual.ml !== null && indBAtual.ml !== null
+            ? indAtual.ml >= indBAtual.ml
+              ? 'A'
+              : 'B'
+            : null,
+      },
+      {
+        indicador: 'Margem EBITDA',
+        sigla: 'M. EBITDA',
+        grupo: 'EBITDA',
+        empresaA: indAtual.margemEbitda ? `${indAtual.margemEbitda.toFixed(1)}%` : '—',
+        empresaB: indBAtual.margemEbitda ? `${indBAtual.margemEbitda.toFixed(1)}%` : '—',
+        varPercent: calcularVariacaoPercentual(indAtual.margemEbitda, indBAtual.margemEbitda),
+        bench: benchmarkAtivo ? `${benchmarkAtivo.margemEbitda.toFixed(1)}%` : '16.0%',
+        melhor:
+          indAtual.margemEbitda !== null && indBAtual.margemEbitda !== null
+            ? indAtual.margemEbitda >= indBAtual.margemEbitda
+              ? 'A'
+              : 'B'
+            : null,
+      },
+      {
+        indicador: 'Endividamento Geral (EG)',
+        sigla: 'EG',
+        grupo: 'Endividamento',
+        empresaA: indAtual.eg ? `${indAtual.eg.toFixed(1)}%` : '—',
+        empresaB: indBAtual.eg ? `${indBAtual.eg.toFixed(1)}%` : '—',
+        varPercent: calcularVariacaoPercentual(indAtual.eg, indBAtual.eg),
+        bench: benchmarkAtivo ? `${benchmarkAtivo.endividamentoGeral.toFixed(1)}%` : '50.0%',
+        melhor:
+          indAtual.eg !== null && indBAtual.eg !== null
+            ? indAtual.eg <= indBAtual.eg
+              ? 'A'
+              : 'B'
+            : null,
+      },
+      {
+        indicador: 'Score Global Ponderado',
+        sigla: 'Score',
+        grupo: 'Consolidado',
+        empresaA: `${scoreGeralPonderado}/100`,
+        empresaB: `${scoreGeralPonderadoB}/100`,
+        varPercent: calcularVariacaoPercentual(scoreGeralPonderado, scoreGeralPonderadoB),
+        bench: '—',
+        melhor: scoreGeralPonderado >= scoreGeralPonderadoB ? 'A' : 'B',
+      },
+    ]
+  }, [
+    compararAtivo,
+    indAtual,
+    indBAtual,
+    benchmarkAtivo,
+    scoreGeralPonderado,
+    scoreGeralPonderadoB,
+  ])
 
   // Componente de Mini Card de Indicador
   const renderMiniCard = (

@@ -15,6 +15,8 @@ interface FilterContextType {
   balancosEmpresa: BalancoRecord[]
   isLoadingEmpresas: boolean
   reloadEmpresas: () => Promise<void>
+  selectedCentroCustoId: string
+  setSelectedCentroCustoId: (id: string) => void
 }
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined)
@@ -27,6 +29,15 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [balancosEmpresa, setBalancosEmpresa] = useState<BalancoRecord[]>([])
   const [anosDisponiveis, setAnosDisponiveis] = useState<number[]>([2024, 2023])
   const [isLoadingEmpresas, setIsLoadingEmpresas] = useState<boolean>(true)
+  const [selectedCentroCustoId, setSelectedCentroCustoId] = useState<string>(() => {
+    return localStorage.getItem('filter_centro_custo_id') || 'todos'
+  })
+
+  useEffect(() => {
+    if (selectedCentroCustoId) {
+      localStorage.setItem('filter_centro_custo_id', selectedCentroCustoId)
+    }
+  }, [selectedCentroCustoId])
 
   const loadEmpresas = async () => {
     if (!isAuthenticated) return
@@ -116,6 +127,8 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         balancosEmpresa,
         isLoadingEmpresas,
         reloadEmpresas: loadEmpresas,
+        selectedCentroCustoId,
+        setSelectedCentroCustoId,
       }}
     >
       {children}
