@@ -61,7 +61,8 @@ import {
   formatNumber,
   formatPercent,
   formatCnpj,
-} from '@/lib/financeCalculations'import { useRealtime } from '@/hooks/use-realtime'
+} from '@/lib/financeCalculations'
+import { useRealtime } from '@/hooks/use-realtime'
 import type {
   EmpresaRecord,
   BalancoRecord,
