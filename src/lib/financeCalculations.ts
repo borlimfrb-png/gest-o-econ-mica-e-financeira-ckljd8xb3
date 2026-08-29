@@ -37,6 +37,117 @@ export const NOMES_MESES_ABREV = [
 ]
 
 /**
+ * Interface com os dados mensais calculados para os 12 meses do ano
+ */
+export interface MesComparativoData {
+  mesNum: number
+  mesNome: string
+  mesAbrev: string
+  temDados: boolean
+  temBalanco: boolean
+  temDre: boolean
+  fechado: boolean
+  fechadoEm?: string
+  fechamentoObs?: string
+  // Balanço
+  ativoTotal: number
+  ativoCirculante: number
+  ativoNaoCirculante: number
+  passivoTotal: number
+  passivoCirculante: number
+  passivoNaoCirculante: number
+  patrimonioLiquido: number
+  caixaEquivalentes: number
+  contasReceber: number
+  estoques: number
+  // DRE
+  receitaBruta: number
+  deducoes: number
+  receitaLiquida: number
+  custoMercadorias: number
+  lucroBruto: number
+  despesasOperacionais: number
+  resultadoOperacional: number
+  despesasFinanceiras: number
+  outrasReceitasDespesas: number
+  impostoRenda: number
+  lucroLiquido: number
+  ebitda: number
+  // Indicadores rápidos
+  margemLiquida: number | null
+  liquidezCorrente: number | null
+  endividamentoGeral: number | null
+}
+
+/**
+ * Gera a série dos 12 meses (Janeiro a Dezembro) para o ano e empresa selecionados,
+ * preenchendo meses sem lançamento com zero e flag `temDados: false`.
+ */
+export function gerarComparativoMensalAno(
+  balancos: BalancoRecord[],
+  dres: DreRecord[],
+  ano: number,
+): MesComparativoData[] {
+  const result: MesComparativoData[] = []
+
+  for (let m = 1; m <= 12; m++) {
+    const b = balancos.find((item) => item.ano === ano && (item.mes ?? 12) === m)
+    const d = dres.find((item) => item.ano === ano && (item.mes ?? 12) === m)
+
+    const temBalanco = !!b
+    const temDre = !!d
+    const temDados = temBalanco || temDre
+
+    const calcB = b ? calcularBalanco(b) : null
+    const calcD = d ? calcularDre(d) : null
+    const ind = calcularIndicadores(b || null, d || null)
+
+    const fechado = Boolean(b?.fechado || d?.fechado)
+    const fechadoEm = b?.fechado_em || d?.fechado_em
+    const fechamentoObs = b?.fechamento_obs || d?.fechamento_obs
+
+    result.push({
+      mesNum: m,
+      mesNome: NOMES_MESES[m - 1],
+      mesAbrev: NOMES_MESES_ABREV[m - 1],
+      temDados,
+      temBalanco,
+      temDre,
+      fechado,
+      fechadoEm,
+      fechamentoObs,
+      ativoTotal: calcB?.ativoTotal || 0,
+      ativoCirculante: calcB?.ativoCirculante || 0,
+      ativoNaoCirculante: calcB?.ativoNaoCirculante || 0,
+      passivoTotal: calcB?.passivoTotal || 0,
+      passivoCirculante: calcB?.passivoCirculante || 0,
+      passivoNaoCirculante: calcB?.passivoNaoCirculante || 0,
+      patrimonioLiquido: calcB?.patrimonioLiquido || 0,
+      caixaEquivalentes: b?.caixa_equivalentes || 0,
+      contasReceber: b?.contas_receber || 0,
+      estoques: b?.estoques || 0,
+      receitaBruta: d?.receita_bruta || 0,
+      deducoes: d?.deducoes_receita || 0,
+      receitaLiquida: calcD?.receitaLiquida || 0,
+      custoMercadorias: d?.custo_mercadorias || 0,
+      lucroBruto: calcD?.lucroBruto || 0,
+      despesasOperacionais: d?.despesas_operacionais || 0,
+      resultadoOperacional: calcD?.resultadoOperacional || 0,
+      despesasFinanceiras: d?.despesas_financeiras || 0,
+      outrasReceitasDespesas: d?.outras_receitas_despesas || 0,
+      impostoRenda: d?.imposto_renda || 0,
+      lucroLiquido: calcD?.lucroLiquido || 0,
+      ebitda: calcD?.ebitda || 0,
+      margemLiquida: ind.margemLiquida,
+      liquidezCorrente: ind.liquidezCorrente,
+      endividamentoGeral: ind.endividamentoGeral,
+    })
+  }
+
+  return result
+}
+
+/**
  * Consolida uma lista de balanços para um determinado ano.
  * Para balanço patrimonial (saldos), utiliza o registro do mês mais recente cadastrado no ano.
  */

@@ -73,6 +73,9 @@ export interface BalancoRecord extends RecordModel {
   empresa: string
   ano: number
   mes?: number
+  fechado?: boolean
+  fechado_em?: string
+  fechamento_obs?: string
   // Mapeamento de campo -> id da conta vinculada (opcional).
   vinculos_contas?: VinculosContasBalanco | null
   // Ativo Circulante
@@ -106,6 +109,9 @@ export interface DreRecord extends RecordModel {
   empresa: string
   ano: number
   mes?: number
+  fechado?: boolean
+  fechado_em?: string
+  fechamento_obs?: string
   receita_bruta: number
   deducoes_receita: number
   custo_mercadorias: number

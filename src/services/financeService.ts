@@ -158,6 +158,193 @@ export const dreService = {
   },
 }
 
+export const fechamentoMensalService = {
+  /**
+   * Executa o fechamento de competência de um determinado mês:
+   * 1. Marca o Balanço e DRE do mês fechado como fechado: true, fechado_em: ISO string
+   * 2. Incorpora o Lucro/Prejuízo Líquido do mês apurado na DRE nos "Lucros Acumulados" do Balanço do mês fechado
+   * 3. Projeta/inicializa o Balanço do mês seguinte (mes + 1, ou Jan do próximo ano) transferindo os saldos patrimoniais (acumulados)
+   * 4. Garante que o DRE do mês seguinte inicie zerado (contas de resultado zeradas para apuração do novo período)
+   */
+  async fecharMes(options: {
+    empresaId: string
+    ano: number
+    mes: number
+    observacoes?: string
+  }): Promise<{
+    balancoFechado: BalancoRecord
+    dreFechada: DreRecord
+    proximoBalanco?: BalancoRecord
+    proximaDre?: DreRecord
+    lucroApurado: number
+  }> {
+    const { empresaId, ano, mes, observacoes } = options
+    const fechadoEm = new Date().toISOString()
+
+    // 1. Obter ou montar balanço e DRE do mês atual
+    const bList = await balancosService.getByEmpresa(empresaId)
+    const dList = await dreService.getByEmpresa(empresaId)
+
+    const balancoMes = bList.find((b) => b.ano === ano && (b.mes ?? 12) === mes)
+    const dreMes = dList.find((d) => d.ano === ano && (d.mes ?? 12) === mes)
+
+    if (!balancoMes && !dreMes) {
+      throw new Error(
+        `Não existem lançamentos contábeis cadastrados para ${mes}/${ano} para realizar o fechamento.`,
+      )
+    }
+
+    // Calcular resultado do mês atual (DRE)
+    const recLiq = (dreMes?.receita_bruta || 0) - (dreMes?.deducoes_receita || 0)
+    const lucroBruto = recLiq - (dreMes?.custo_mercadorias || 0)
+    const ro = lucroBruto - (dreMes?.despesas_operacionais || 0)
+    const lair = ro - (dreMes?.despesas_financeiras || 0) + (dreMes?.outras_receitas_despesas || 0)
+    const lucroLiquidoApurado = lair - (dreMes?.imposto_renda || 0)
+
+    // Atualizar balanço do mês com incorporação do resultado em Lucros Acumulados (se já não estiver)
+    const lucrosAcumuladosAtual = balancoMes?.lucros_acumulados || 0
+    const novoLucrosAcumulados = lucrosAcumuladosAtual + lucroLiquidoApurado
+
+    // Salvar Balanço Fechado
+    const balancoFechado = await balancosService.upsert(
+      empresaId,
+      ano,
+      {
+        ...(balancoMes || {}),
+        lucros_acumulados: novoLucrosAcumulados,
+        fechado: true,
+        fechado_em: fechadoEm,
+        fechamento_obs: observacoes || undefined,
+      },
+      mes,
+    )
+
+    // Salvar DRE Fechada
+    const dreFechada = await dreService.upsert(
+      empresaId,
+      ano,
+      {
+        ...(dreMes || {}),
+        fechado: true,
+        fechado_em: fechadoEm,
+        fechamento_obs: observacoes || undefined,
+      },
+      mes,
+    )
+
+    // 2. Preparar mês seguinte:
+    const proxMes = mes === 12 ? 1 : mes + 1
+    const proxAno = mes === 12 ? ano + 1 : ano
+
+    // Projeta Balanço inicial do mês seguinte se não existir
+    const existingProxBalanco = bList.find((b) => b.ano === proxAno && (b.mes ?? 12) === proxMes)
+    let proximoBalanco: BalancoRecord | undefined = undefined
+
+    if (!existingProxBalanco) {
+      // Cria balanço do próximo mês herdando os saldos patrimoniais finais do mês fechado
+      proximoBalanco = await balancosService.upsert(
+        empresaId,
+        proxAno,
+        {
+          caixa_equivalentes: balancoFechado.caixa_equivalentes,
+          aplicacoes_financeiras: balancoFechado.aplicacoes_financeiras,
+          contas_receber: balancoFechado.contas_receber,
+          estoques: balancoFechado.estoques,
+          impostos_recuperar: balancoFechado.impostos_recuperar,
+          outros_ativo_circulante: balancoFechado.outros_ativo_circulante,
+          realizavel_longo_prazo: balancoFechado.realizavel_longo_prazo,
+          investimentos: balancoFechado.investimentos,
+          imobilizado: balancoFechado.imobilizado,
+          intangivel: balancoFechado.intangivel,
+          fornecedores: balancoFechado.fornecedores,
+          emprestimos_curto_prazo: balancoFechado.emprestimos_curto_prazo,
+          obrigacoes_trabalhistas: balancoFechado.obrigacoes_trabalhistas,
+          obrigacoes_tributarias: balancoFechado.obrigacoes_tributarias,
+          outros_passivo_circulante: balancoFechado.outros_passivo_circulante,
+          emprestimos_longo_prazo: balancoFechado.emprestimos_longo_prazo,
+          outras_obrigacoes_longo_prazo: balancoFechado.outras_obrigacoes_longo_prazo,
+          capital_social: balancoFechado.capital_social,
+          reservas_lucros: balancoFechado.reservas_lucros,
+          lucros_acumulados: balancoFechado.lucros_acumulados,
+          vinculos_contas: balancoFechado.vinculos_contas,
+          fechado: false,
+          fechado_em: undefined,
+          fechamento_obs: `Iniciado a partir do fechamento de ${mes}/${ano}`,
+        },
+        proxMes,
+      )
+    }
+
+    // Garante DRE do próximo mês zerada
+    const existingProxDre = dList.find((d) => d.ano === proxAno && (d.mes ?? 12) === proxMes)
+    let proximaDre: DreRecord | undefined = undefined
+
+    if (!existingProxDre) {
+      proximaDre = await dreService.upsert(
+        empresaId,
+        proxAno,
+        {
+          receita_bruta: 0,
+          deducoes_receita: 0,
+          custo_mercadorias: 0,
+          despesas_operacionais: 0,
+          despesas_financeiras: 0,
+          outras_receitas_despesas: 0,
+          imposto_renda: 0,
+          fechado: false,
+          fechado_em: undefined,
+          fechamento_obs: `Contas de resultado zeradas após fechamento de ${mes}/${ano}`,
+        },
+        proxMes,
+      )
+    }
+
+    return {
+      balancoFechado,
+      dreFechada,
+      proximoBalanco,
+      proximaDre,
+      lucroApurado: lucroLiquidoApurado,
+    }
+  },
+
+  /**
+   * Reabre um mês previamente fechado
+   */
+  async reabrirMes(options: {
+    empresaId: string
+    ano: number
+    mes: number
+  }): Promise<{ balanco: BalancoRecord | null; dre: DreRecord | null }> {
+    const { empresaId, ano, mes } = options
+    const bList = await balancosService.getByEmpresa(empresaId)
+    const dList = await dreService.getByEmpresa(empresaId)
+
+    const balancoMes = bList.find((b) => b.ano === ano && (b.mes ?? 12) === mes)
+    const dreMes = dList.find((d) => d.ano === ano && (d.mes ?? 12) === mes)
+
+    let updatedB: BalancoRecord | null = null
+    let updatedD: DreRecord | null = null
+
+    if (balancoMes) {
+      updatedB = await balancosService.update(balancoMes.id, {
+        fechado: false,
+        fechado_em: '',
+        fechamento_obs: 'Competência reaberta para ajustes.',
+      })
+    }
+    if (dreMes) {
+      updatedD = await dreService.update(dreMes.id, {
+        fechado: false,
+        fechado_em: '',
+        fechamento_obs: 'Competência reaberta para ajustes.',
+      })
+    }
+
+    return { balanco: updatedB, dre: updatedD }
+  },
+}
+
 function currentUserId(): string {
   const id = pb.authStore.record?.id
   if (!id) throw new Error('Usuário não autenticado')

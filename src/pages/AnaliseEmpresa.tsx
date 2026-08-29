@@ -74,7 +74,11 @@ import {
   Scale,
   DollarSign,
   FileSpreadsheet,
+  Lock,
+  CalendarRange,
 } from 'lucide-react'
+import { ComparativoMensal } from '@/components/ComparativoMensal'
+import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import {
   PieChart,
   Pie,
@@ -118,6 +122,9 @@ export default function AnaliseEmpresa() {
   const [modalBalancoMes, setModalBalancoMes] = useState<number>(12)
   const [modalDreMes, setModalDreMes] = useState<number>(12)
   const [novoMes, setNovoMes] = useState<number>(12)
+
+  // Modal de Importação de Balancete Mensal
+  const [modalImportarBalanceteOpen, setModalImportarBalanceteOpen] = useState(false)
 
   // Indicadores Accordions (expandir/recolher)
   const [expandedInd, setExpandedInd] = useState<{
@@ -702,6 +709,15 @@ export default function AnaliseEmpresa() {
           </div>
 
           <Button
+            onClick={() => setModalImportarBalanceteOpen(true)}
+            variant="outline"
+            className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 font-semibold text-xs h-9 shadow-xs gap-1.5"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+            Importar Balancete
+          </Button>
+
+          <Button
             onClick={openNovoLancamentoModal}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
           >
@@ -713,12 +729,19 @@ export default function AnaliseEmpresa() {
 
       {/* Navegação por Abas */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 bg-slate-200/70 p-1 rounded-xl mb-6">
+        <TabsList className="grid w-full grid-cols-5 bg-slate-200/70 p-1 rounded-xl mb-6">
           <TabsTrigger
             value="visao-geral"
             className="rounded-lg text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm transition-all"
           >
             Visão Geral
+          </TabsTrigger>
+          <TabsTrigger
+            value="comparativo-mensal"
+            className="rounded-lg text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-sm transition-all flex items-center gap-1.5"
+          >
+            <CalendarRange className="w-3.5 h-3.5" />
+            Comparativo Mensal (Jan-Dez)
           </TabsTrigger>
           <TabsTrigger
             value="balanco"
@@ -739,11 +762,11 @@ export default function AnaliseEmpresa() {
             Indicadores Financeiros
           </TabsTrigger>
         </TabsList>
-
         {/* =========================================================================
             ABA 1: VISÃO GERAL
         ========================================================================= */}
         <TabsContent value="visao-geral" className="space-y-6 focus-visible:outline-none">
+          {' '}
           {/* Cards KPI com variação vs ano anterior */}
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
             {/* Ativo Total */}
@@ -912,7 +935,6 @@ export default function AnaliseEmpresa() {
               </div>
             </Card>
           </div>
-
           {/* Gráficos Visão Geral */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Composição Ativo */}
@@ -1087,7 +1109,6 @@ export default function AnaliseEmpresa() {
               </CardContent>
             </Card>
           </div>
-
           {/* Painel "Análise do Consultor" */}
           <Card className="bg-gradient-to-br from-blue-900 to-[#0B1F3A] text-white border-blue-950 shadow-md">
             <CardHeader className="pb-3 border-b border-white/10">
@@ -1115,10 +1136,45 @@ export default function AnaliseEmpresa() {
             </CardContent>
           </Card>
         </TabsContent>
-
+        {/* =========================================================================
+            NOVA ABA: COMPARATIVO MÊS A MÊS (JANEIRO A DEZEMBRO + FECHAMENTO)
+        ========================================================================= */}
+        <TabsContent value="comparativo-mensal" className="space-y-6 focus-visible:outline-none">
+          <ComparativoMensal
+            empresaId={id || ''}
+            empresaNome={empresa.nome}
+            ano={selectedAno}
+            balancos={balancos}
+            dres={dres}
+            onSelectMes={(mesNum) => {
+              setSelectedMes(String(mesNum))
+              setActiveTab('balanco')
+            }}
+            onOpenNovoLancamento={openNovoLancamentoModal}
+            onDataChange={loadData}
+          />
+        </TabsContent>
+        {/* =========================================================================
+            NOVA ABA: COMPARATIVO MÊS A MÊS (JANEIRO A DEZEMBRO + FECHAMENTO)
+        ========================================================================= */}
+        <TabsContent value="comparativo-mensal" className="space-y-6 focus-visible:outline-none">
+          <ComparativoMensal
+            empresaId={id || ''}
+            empresaNome={empresa.nome}
+            ano={selectedAno}
+            balancos={balancos}
+            dres={dres}
+            onSelectMes={(mesNum) => {
+              setSelectedMes(String(mesNum))
+              setActiveTab('balanco')
+            }}
+            onOpenNovoLancamento={openNovoLancamentoModal}
+            onDataChange={loadData}
+          />
+        </TabsContent>
         {/* =========================================================================
             ABA 2: BALANÇO PATRIMONIAL
-        ========================================================================= */}
+        ========================================================================= */}{' '}
         <TabsContent value="balanco" className="space-y-4 focus-visible:outline-none">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
@@ -1716,7 +1772,6 @@ export default function AnaliseEmpresa() {
             </div>
           </Card>
         </TabsContent>
-
         {/* =========================================================================
             ABA 3: DRE (DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO)
         ========================================================================= */}
@@ -2008,7 +2063,6 @@ export default function AnaliseEmpresa() {
             (exclui depreciação e amortização não discriminadas separadamente).
           </p>
         </TabsContent>
-
         {/* =========================================================================
             ABA 4: INDICADORES FINANCEIROS
         ========================================================================= */}
@@ -3526,6 +3580,33 @@ export default function AnaliseEmpresa() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* =========================================================================
+          MODAL DE IMPORTAÇÃO DE BALANCETE MENSAL DIRETO
+      ========================================================================= */}
+      <Dialog open={modalImportarBalanceteOpen} onOpenChange={setModalImportarBalanceteOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-white p-6">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-lg font-bold text-[#0B1F3A]">
+              Importar Balancete Mensal — {empresa.nome}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Faça upload do balancete em Excel ou PDF para gerar os lançamentos de Balanço e DRE
+            </DialogDescription>
+          </DialogHeader>
+
+          <ImportarBalanceteMensal
+            empresas={empresa ? [empresa] : []}
+            initialEmpresaId={empresa.id}
+            initialAno={selectedAno}
+            initialMes={selectedMes !== 'todos' ? Number(selectedMes) : new Date().getMonth() + 1}
+            onImportSuccess={() => {
+              setModalImportarBalanceteOpen(false)
+              loadData()
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>

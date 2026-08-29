@@ -25,7 +25,9 @@ import {
   RotateCcw,
   Pencil,
   Bot,
+  BookOpen,
 } from 'lucide-react'
+import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1081,11 +1083,21 @@ export default function Importacao() {
       </div>
 
       {/* Abas Principais: Excel vs PDF */}
-      <Tabs defaultValue="pdf-to-excel" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-xl bg-slate-100 p-1 rounded-xl">
+      <Tabs defaultValue="balancete-mensal" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4 max-w-3xl bg-slate-100 p-1 rounded-xl">
+          <TabsTrigger
+            value="balancete-mensal"
+            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
+          >
+            <BookOpen className="w-4 h-4 text-blue-600" />
+            Balancete Mensal
+            <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
+              Balanço/DRE
+            </span>
+          </TabsTrigger>
           <TabsTrigger
             value="pdf-to-excel"
-            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
+            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
           >
             <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
             PDF para Excel
@@ -1095,22 +1107,26 @@ export default function Importacao() {
           </TabsTrigger>
           <TabsTrigger
             value="pdf"
-            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
+            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
           >
             <FileText className="w-4 h-4 text-rose-500" />
             Importar PDF
-            <span className="text-[10px] bg-blue-100 text-blue-700 font-semibold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
-              Lançamentos
-            </span>
           </TabsTrigger>
           <TabsTrigger
             value="excel"
-            className="flex items-center gap-2 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
+            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
             Importar Excel
           </TabsTrigger>
         </TabsList>
+
+        {/* ========================================================================= */}
+        {/* ABA BALANCETE MENSAL (EXCEL / PDF) -> BALANÇO & DRE MENSAL                */}
+        {/* ========================================================================= */}
+        <TabsContent value="balancete-mensal" className="space-y-6 focus:outline-none">
+          <ImportarBalanceteMensal empresas={empresas} />
+        </TabsContent>
 
         {/* ========================================================================= */}
         {/* ABA 0: PDF PARA EXCEL (.xlsx) - APRIMORADA                                 */}

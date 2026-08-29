@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T12:29:04.175Z",
+  "generatedAt": "2026-08-29T12:51:44.309Z",
   "collections": [
     {
       "name": "users",
@@ -412,6 +412,24 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "fechado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fechado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fechamento_obs",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -504,6 +522,24 @@
         {
           "name": "mes",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fechado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fechado_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fechamento_obs",
+          "type": "text",
           "required": false,
           "system": false
         }
