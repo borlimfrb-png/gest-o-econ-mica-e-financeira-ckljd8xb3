@@ -16,7 +16,6 @@ import {
 } from '@/lib/financeCalculations'
 import {
   BENCHMARKS_SETORIAIS,
-  getBenchmarkParaSegmento,
   extrairIndicadoresCompletos,
   calcularScoresRadar,
   calcularScoreGeralPonderado,
@@ -24,6 +23,7 @@ import {
   type PerfilPesosId,
   type PesosGrupos,
   type GrupoRadarItem,
+  type IndicadoresConsolidadosEmpresa,
 } from '@/lib/benchmarks'
 import { ModalPesosRelatorio } from '@/components/ModalPesosRelatorio'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -47,7 +47,14 @@ import {
   PolarRadiusAxis,
   Radar,
   Tooltip as RechartsTooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Legend,
+  LineChart,
+  Line,
 } from 'recharts'
 import {
   Gauge,
@@ -72,6 +79,11 @@ import {
   CheckCircle2,
   ArrowRight,
   BarChart3,
+  LineChart as LineChartIcon,
+  PieChart as PieChartIcon,
+  HelpCircle,
+  Maximize2,
+  Filter,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -96,8 +108,53 @@ export default function PainelIndicadores() {
   // Setor selecionado para benchmark (padrão = segmento da empresa ou 'Serviços')
   const [selectedSetorBenchmark, setSelectedSetorBenchmark] = useState<string>('')
 
-  // Toggle de evolução 3 anos
-  const [verEvolucao, setVerEvolucao] = useState<boolean>(false)
+  // Filtro de visualização de grupos no dashboard
+  const [filtroGrupo, setFiltroGrupo] = useState<string>('todos')
+
+  // Estado de expansão dos cards de grupo (todos abertos por padrão)
+  const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({
+    liquidez: true,
+    endividamento: true,
+    rentabilidade: true,
+    estruturaCapital: true,
+    ebitda: true,
+    eficienciaOperacional: true,
+    economicos: true,
+  })
+
+  const toggleGrupo = (grupoKey: string) => {
+    setGruposExpandidos((prev) => ({
+      ...prev,
+      [grupoKey]: !prev[grupoKey],
+    }))
+  }
+
+  const expandirTodos = () => {
+    setGruposExpandidos({
+      liquidez: true,
+      endividamento: true,
+      rentabilidade: true,
+      estruturaCapital: true,
+      ebitda: true,
+      eficienciaOperacional: true,
+      economicos: true,
+    })
+  }
+
+  const recolherTodos = () => {
+    setGruposExpandidos({
+      liquidez: false,
+      endividamento: false,
+      rentabilidade: false,
+      estruturaCapital: false,
+      ebitda: false,
+      eficienciaOperacional: false,
+      economicos: false,
+    })
+  }
+
+  // Toggle de evolução 3 anos na tabela
+  const [verEvolucao, setVerEvolucao] = useState<boolean>(true)
 
   // Modal de Pesos
   const [modalPesosOpen, setModalPesosOpen] = useState<boolean>(false)
@@ -119,7 +176,7 @@ export default function PainelIndicadores() {
 
   // Sincroniza o setor de benchmark quando a empresa selecionada muda
   useEffect(() => {
-    if (selectedEmpresa?.segmento) {
+    if (selectedEmpresa?.segmento && BENCHMARKS_SETORIAIS[selectedEmpresa.segmento]) {
       setSelectedSetorBenchmark(selectedEmpresa.segmento)
     } else if (!selectedSetorBenchmark) {
       setSelectedSetorBenchmark('Serviços')
@@ -199,6 +256,20 @@ export default function PainelIndicadores() {
     [balancoAno2, dreAno2],
   )
 
+  // Indicadores brutos standard (financeCalculations) para complementos
+  const indStandard = useMemo(
+    () => calcularIndicadores(balancoAtual, dreAtual),
+    [balancoAtual, dreAtual],
+  )
+  const indStandardAno1 = useMemo(
+    () => (balancoAno1 || dreAno1 ? calcularIndicadores(balancoAno1, dreAno1) : null),
+    [balancoAno1, dreAno1],
+  )
+  const indStandardAno2 = useMemo(
+    () => (balancoAno2 || dreAno2 ? calcularIndicadores(balancoAno2, dreAno2) : null),
+    [balancoAno2, dreAno2],
+  )
+
   // Benchmark ativo
   const benchmarkAtivo = useMemo(() => {
     if (!selectedSetorBenchmark) return null
@@ -217,7 +288,7 @@ export default function PainelIndicadores() {
     return calcularScoreGeralPonderado(radarItems, pesos)
   }, [radarItems, pesos])
 
-  // Cards de Destaques
+  // Destaques executivos topo
   const destaques = useMemo(() => {
     const calcB = calcularBalanco(balancoAtual)
     const calcD = calcularDre(dreAtual)
@@ -230,6 +301,8 @@ export default function PainelIndicadores() {
       liquidezCorrente: indAtual.lc,
       roe: indAtual.roe,
       endividamentoGeral: indAtual.eg,
+      margemLiquida: indAtual.ml,
+      cicloFinanceiro: indAtual.cf,
     }
   }, [balancoAtual, dreAtual, indAtual])
 
@@ -245,7 +318,311 @@ export default function PainelIndicadores() {
     })
   }
 
-  // Tabela de Evolução vs Setor (3 Anos)
+  // Dados para Gráfico de Evolução Histórica dos 6 principais indicadores (Linhas)
+  const historicoLinhasData = useMemo(() => {
+    const anos = [ano2, ano1, selectedAno]
+    const listInd = [indAno2, indAno1, indAtual]
+
+    return anos.map((ano, idx) => {
+      const ind = listInd[idx]
+      return {
+        ano: String(ano),
+        liquidezCorrente:
+          ind?.lc !== null && ind?.lc !== undefined ? Number(ind.lc.toFixed(2)) : null,
+        roe: ind?.roe !== null && ind?.roe !== undefined ? Number(ind.roe.toFixed(1)) : null,
+        margemLiquida: ind?.ml !== null && ind?.ml !== undefined ? Number(ind.ml.toFixed(1)) : null,
+        margemEbitda:
+          ind?.margemEbitda !== null && ind?.margemEbitda !== undefined
+            ? Number(ind.margemEbitda.toFixed(1))
+            : null,
+        endividamentoGeral:
+          ind?.eg !== null && ind?.eg !== undefined ? Number(ind.eg.toFixed(1)) : null,
+        cicloFinanceiro:
+          ind?.cf !== null && ind?.cf !== undefined ? Number(Math.round(ind.cf)) : null,
+      }
+    })
+  }, [ano2, ano1, selectedAno, indAno2, indAno1, indAtual])
+
+  // Cores da marca e auxiliares
+  const primaryBrandColor = corPrimaria || '#2563EB'
+  const sectorColor = '#94A3B8'
+
+  // Dados de cada grupo para os gráficos de barras Empresa vs Benchmark
+  // 1. Grupo Liquidez (LC, LS, LI, LG)
+  const chartLiquidezData = useMemo(() => {
+    return [
+      {
+        indicador: 'Liq. Corrente (LC)',
+        sigla: 'LC',
+        empresa: indAtual.lc !== null ? Number(indAtual.lc.toFixed(2)) : null,
+        benchmark: benchmarkAtivo?.liquidezCorrente ?? 1.5,
+        sufixo: '',
+        metaDesc: '≥ 1,50x',
+      },
+      {
+        indicador: 'Liq. Seca (LS)',
+        sigla: 'LS',
+        empresa: indAtual.ls !== null ? Number(indAtual.ls.toFixed(2)) : null,
+        benchmark: benchmarkAtivo?.liquidezSeca ?? 1.0,
+        sufixo: '',
+        metaDesc: '≥ 1,00x',
+      },
+      {
+        indicador: 'Liq. Imediata (LI)',
+        sigla: 'LI',
+        empresa: indAtual.li !== null ? Number(indAtual.li.toFixed(2)) : null,
+        benchmark: benchmarkAtivo ? Number((benchmarkAtivo.liquidezSeca * 0.35).toFixed(2)) : 0.35,
+        sufixo: '',
+        metaDesc: '≥ 0,30x',
+      },
+      {
+        indicador: 'Liq. Geral (LG)',
+        sigla: 'LG',
+        empresa: indAtual.lg !== null ? Number(indAtual.lg.toFixed(2)) : null,
+        benchmark: benchmarkAtivo?.liquidezGeral ?? 1.2,
+        sufixo: '',
+        metaDesc: '≥ 1,20x',
+      },
+    ]
+  }, [indAtual, benchmarkAtivo])
+
+  // 2. Grupo Endividamento (EG %, CE %, PCT %, DivLiq/EBITDA x)
+  const chartEndividamentoData = useMemo(() => {
+    const divLiqEbitdaEmpresa = indStandard.dividaLiquidaEbitda
+    const divLiqEbitdaBench = 2.5 // benchmark padrão de mercado
+    return [
+      {
+        indicador: 'Endiv. Geral (EG)',
+        sigla: 'EG',
+        empresa: indAtual.eg !== null ? Number(indAtual.eg.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.endividamentoGeral ?? 50,
+        unidade: '%',
+        metaDesc: '≤ 50%',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'Compos. Endiv. (CE)',
+        sigla: 'CE',
+        empresa: indAtual.ce !== null ? Number(indAtual.ce.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.composicaoEndividamento ?? 60,
+        unidade: '%',
+        metaDesc: '≤ 60%',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'Part. Cap. Terc. (PCT)',
+        sigla: 'PCT',
+        empresa: indAtual.pct !== null ? Number(indAtual.pct.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.participacaoCapitalTerceiros ?? 100,
+        unidade: '%',
+        metaDesc: '≤ 100%',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'Dív. Líq. / EBITDA (x10)',
+        sigla: 'DL/EBITDA',
+        empresa:
+          divLiqEbitdaEmpresa !== null ? Number((divLiqEbitdaEmpresa * 10).toFixed(1)) : null,
+        benchmark: Number((divLiqEbitdaBench * 10).toFixed(1)),
+        unidade: 'x*10',
+        realEmpresa: divLiqEbitdaEmpresa !== null ? `${divLiqEbitdaEmpresa.toFixed(2)}x` : '—',
+        realBench: `${divLiqEbitdaBench.toFixed(2)}x`,
+        metaDesc: '≤ 2,5x',
+        menorMelhor: true,
+      },
+    ]
+  }, [indAtual, indStandard, benchmarkAtivo])
+
+  // 3. Grupo Rentabilidade (ROE %, ROA %, Margem Líquida %, Margem Operacional %)
+  const chartRentabilidadeData = useMemo(() => {
+    return [
+      {
+        indicador: 'ROE (Retorno PL)',
+        sigla: 'ROE',
+        empresa: indAtual.roe !== null ? Number(indAtual.roe.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.roe ?? 15,
+        unidade: '%',
+        metaDesc: '≥ 15%',
+      },
+      {
+        indicador: 'ROA (Retorno Ativo)',
+        sigla: 'ROA',
+        empresa: indAtual.roa !== null ? Number(indAtual.roa.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.roa ?? 8,
+        unidade: '%',
+        metaDesc: '≥ 8%',
+      },
+      {
+        indicador: 'Margem Líquida (ML)',
+        sigla: 'ML',
+        empresa: indAtual.ml !== null ? Number(indAtual.ml.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.margemLiquida ?? 10,
+        unidade: '%',
+        metaDesc: '≥ 10%',
+      },
+      {
+        indicador: 'Margem Operacional',
+        sigla: 'MO',
+        empresa:
+          indStandard.margemOperacional !== null
+            ? Number(indStandard.margemOperacional.toFixed(1))
+            : null,
+        benchmark: benchmarkAtivo ? Number((benchmarkAtivo.margemLiquida * 1.3).toFixed(1)) : 13,
+        unidade: '%',
+        metaDesc: '≥ 12%',
+      },
+    ]
+  }, [indAtual, indStandard, benchmarkAtivo])
+
+  // 4. Grupo Estrutura de Capital (Autonomia %, D/E Ratio, Imobilização PL %)
+  const chartEstruturaData = useMemo(() => {
+    return [
+      {
+        indicador: 'Autonomia Fin. (AF)',
+        sigla: 'AF',
+        empresa: indAtual.af !== null ? Number(indAtual.af.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.autonomiaFinanceira ?? 50,
+        unidade: '%',
+        metaDesc: '≥ 50%',
+      },
+      {
+        indicador: 'Dívida / Equity (D/E %)',
+        sigla: 'D/E',
+        empresa: indAtual.de !== null ? Number((indAtual.de * 100).toFixed(1)) : null,
+        benchmark: benchmarkAtivo ? Number((benchmarkAtivo.dividaEquity * 100).toFixed(1)) : 100,
+        unidade: '%',
+        realEmpresa: indAtual.de !== null ? `${indAtual.de.toFixed(2)}x` : '—',
+        realBench: benchmarkAtivo ? `${benchmarkAtivo.dividaEquity.toFixed(2)}x` : '1.0x',
+        metaDesc: '≤ 1,0x',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'Imob. do PL (IPL)',
+        sigla: 'IPL',
+        empresa: indAtual.ipl !== null ? Number(indAtual.ipl.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.imobilizacaoPL ?? 55,
+        unidade: '%',
+        metaDesc: '≤ 55%',
+        menorMelhor: true,
+      },
+    ]
+  }, [indAtual, benchmarkAtivo])
+
+  // 5. Grupo EBITDA (Margem EBITDA %, Cobertura Juros x10)
+  const chartEbitdaData = useMemo(() => {
+    return [
+      {
+        indicador: 'Margem EBITDA',
+        sigla: 'M. EBITDA',
+        empresa: indAtual.margemEbitda !== null ? Number(indAtual.margemEbitda.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.margemEbitda ?? 16,
+        unidade: '%',
+        metaDesc: '≥ 15%',
+      },
+      {
+        indicador: 'Cobertura Juros (x10)',
+        sigla: 'Cob. Juros',
+        empresa:
+          indAtual.coberturaJuros !== null
+            ? Number((Math.min(indAtual.coberturaJuros, 20) * 10).toFixed(1))
+            : null,
+        benchmark: benchmarkAtivo
+          ? Number((Math.min(benchmarkAtivo.coberturaJuros, 20) * 10).toFixed(1))
+          : 30,
+        unidade: 'x*10',
+        realEmpresa:
+          indAtual.coberturaJuros !== null ? `${indAtual.coberturaJuros.toFixed(2)}x` : '—',
+        realBench: benchmarkAtivo ? `${benchmarkAtivo.coberturaJuros.toFixed(2)}x` : '3.0x',
+        metaDesc: '≥ 3,0x',
+      },
+    ]
+  }, [indAtual, benchmarkAtivo])
+
+  // 6. Grupo Eficiência Operacional (PMR dias, PME dias, PMP dias, Ciclo Fin dias)
+  const chartEficienciaData = useMemo(() => {
+    return [
+      {
+        indicador: 'PMR (Recebimento)',
+        sigla: 'PMR',
+        empresa: indAtual.pmr !== null ? Math.round(indAtual.pmr) : null,
+        benchmark: benchmarkAtivo?.pmr ?? 45,
+        unidade: 'dias',
+        metaDesc: '≤ 45d',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'PME (Estocagem)',
+        sigla: 'PME',
+        empresa: indAtual.pme !== null ? Math.round(indAtual.pme) : null,
+        benchmark: benchmarkAtivo?.pme ?? 30,
+        unidade: 'dias',
+        metaDesc: '≤ 30d',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'PMP (Pagamento)',
+        sigla: 'PMP',
+        empresa: indAtual.pmp !== null ? Math.round(indAtual.pmp) : null,
+        benchmark: benchmarkAtivo?.pmp ?? 40,
+        unidade: 'dias',
+        metaDesc: '≥ 40d',
+        menorMelhor: false,
+      },
+      {
+        indicador: 'Ciclo Financeiro',
+        sigla: 'Ciclo Fin.',
+        empresa: indAtual.cf !== null ? Math.round(indAtual.cf) : null,
+        benchmark: benchmarkAtivo?.cicloFinanceiro ?? 35,
+        unidade: 'dias',
+        metaDesc: '≤ 35d',
+        menorMelhor: true,
+      },
+    ]
+  }, [indAtual, benchmarkAtivo])
+
+  // 7. Grupo Econômicos (ROIC %, WACC %, Spread %, Giro Ativo x10)
+  const chartEconomicosData = useMemo(() => {
+    const waccEmpresa = 12.0 // custo de capital padrão de referência
+    return [
+      {
+        indicador: 'ROIC (Ret. Cap. Inv.)',
+        sigla: 'ROIC',
+        empresa: indAtual.roic !== null ? Number(indAtual.roic.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.roic ?? 14,
+        unidade: '%',
+        metaDesc: '≥ 14%',
+      },
+      {
+        indicador: 'WACC (Custo Capital)',
+        sigla: 'WACC',
+        empresa: waccEmpresa,
+        benchmark: benchmarkAtivo?.wacc ?? 12,
+        unidade: '%',
+        metaDesc: 'Benchmark 12%',
+        menorMelhor: true,
+      },
+      {
+        indicador: 'Spread (ROIC - WACC)',
+        sigla: 'Spread',
+        empresa: indAtual.spread !== null ? Number(indAtual.spread.toFixed(1)) : null,
+        benchmark: benchmarkAtivo?.spread ?? 2.0,
+        unidade: '%',
+        metaDesc: '≥ 2,0%',
+      },
+      {
+        indicador: 'Giro do Ativo (x10)',
+        sigla: 'Giro Ativo',
+        empresa: indAtual.giroAtivo !== null ? Number((indAtual.giroAtivo * 10).toFixed(1)) : null,
+        benchmark: benchmarkAtivo ? Number((benchmarkAtivo.giroAtivo * 10).toFixed(1)) : 10,
+        unidade: 'x*10',
+        realEmpresa: indAtual.giroAtivo !== null ? `${indAtual.giroAtivo.toFixed(2)}x` : '—',
+        realBench: benchmarkAtivo ? `${benchmarkAtivo.giroAtivo.toFixed(2)}x` : '1.0x',
+        metaDesc: '≥ 1,0x',
+      },
+    ]
+  }, [indAtual, benchmarkAtivo])
+
+  // Tabela completa de evolução vs Setor (3 Anos)
   const linhasEvolucao = useMemo(() => {
     if (!benchmarkAtivo) return []
 
@@ -493,35 +870,153 @@ export default function PainelIndicadores() {
 
   const hasHistorico = !!(balancoAno1 || balancoAno2 || dreAno1 || dreAno2)
 
-  // Cores do Radar
-  const primaryBrandColor = corPrimaria || '#2563EB'
-  const sectorColor = '#94A3B8'
+  // Exportação CSV Completa com TODOS os indicadores de todos os grupos
+  const handleExportCsv = () => {
+    if (!selectedEmpresa) {
+      toast({
+        title: 'Selecione uma empresa',
+        description: 'É necessário selecionar uma empresa para exportar os indicadores.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    let csvContent = '\uFEFF' // BOM UTF-8
+    const dataEmissao = new Date().toLocaleDateString('pt-BR')
+
+    csvContent += `DASHBOARD COMPLETO DE INDICADORES FINANCEIROS & BENCHMARKS\n`
+    csvContent += `EMPRESA;${selectedEmpresa.nome}\n`
+    csvContent += `CNPJ;${formatCnpj(selectedEmpresa.cnpj)}\n`
+    csvContent += `SEGMENTO/BENCHMARK;${selectedSetorBenchmark || selectedEmpresa.segmento}\n`
+    csvContent += `EXERCÍCIO BASE;${selectedAno}\n`
+    csvContent += `DATA DE EMISSÃO;${dataEmissao}\n`
+    csvContent += `SCORE GERAL PONDERADO;${scoreGeralPonderado}/100;PERFIL;${PERFIS_PESOS_PREDEFINIDOS[perfilPesos]?.nome}\n\n`
+
+    csvContent += `RESUMO FINANCEIRO BASE (R$)\n`
+    csvContent += `Ativo Total;${formatCurrency(destaques.ativoTotal).replace(/\s/g, ' ')}\n`
+    csvContent += `Patrimônio Líquido;${formatCurrency(destaques.patrimonioLiquido).replace(/\s/g, ' ')}\n`
+    csvContent += `Receita Líquida;${formatCurrency(destaques.receitaLiquida).replace(/\s/g, ' ')}\n`
+    csvContent += `Lucro Líquido;${formatCurrency(destaques.lucroLiquido).replace(/\s/g, ' ')}\n`
+    csvContent += `EBITDA;${formatCurrency(destaques.ebitda).replace(/\s/g, ' ')}\n\n`
+
+    csvContent += `TABELA COMPARATIVA DE INDICADORES (TODOS OS GRUPOS)\n`
+    csvContent += `Grupo;Indicador;${ano2};${ano1};${selectedAno} (Atual);Benchmark Setor;Tendência;Peso no Relatório\n`
+
+    for (const linha of linhasEvolucao) {
+      csvContent += `${linha.grupo};${linha.indicador};${linha.ano2};${linha.ano1};${linha.anoAtual};${linha.setor};${linha.tendencia.label};${linha.peso}%\n`
+    }
+
+    csvContent += `\nDETALHAMENTO DOS SCORES DO RADAR (0-100)\n`
+    csvContent += `Grupo;Score Empresa;Score Setor;Status vs Setor;Valor Real Empresa;Valor Real Benchmark\n`
+    for (const item of radarItems) {
+      csvContent += `${item.grupoNome};${item.empresaScore};${item.setorScore};${item.status};${item.empresaValorRealStr};${item.setorValorRealStr}\n`
+    }
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `dashboard-indicadores-${selectedEmpresa.nome.replace(/\s+/g, '-').toLowerCase()}-${selectedAno}.csv`
+    link.click()
+    URL.revokeObjectURL(link.href)
+
+    toast({
+      title: 'Dashboard exportado com sucesso!',
+      description: `Arquivo CSV completo com todos os indicadores gerado para ${selectedEmpresa.nome} (${selectedAno}).`,
+    })
+  }
+
+  // Componente de Mini Card de Indicador
+  const renderMiniCard = (
+    nome: string,
+    sigla: string,
+    valorStr: string,
+    benchStr: string,
+    status: 'bom' | 'medio' | 'ruim' | 'neutro',
+    subtitulo: string,
+  ) => {
+    const corBadge =
+      status === 'bom'
+        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        : status === 'medio'
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : status === 'ruim'
+            ? 'bg-red-50 text-red-700 border-red-200'
+            : 'bg-slate-100 text-slate-700 border-slate-200'
+
+    return (
+      <div className="p-3 bg-white rounded-xl border border-slate-200 shadow-2xs hover:border-blue-300 transition-all flex flex-col justify-between">
+        <div className="flex items-center justify-between gap-1 mb-1.5">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 truncate">
+            {nome}
+          </span>
+          <Badge className="text-[9px] px-1 py-0 border-none font-mono font-bold bg-slate-100 text-slate-700">
+            {sigla}
+          </Badge>
+        </div>
+        <div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-base font-extrabold text-[#0B1F3A] font-mono">{valorStr}</span>
+            <Badge className={`text-[10px] font-bold px-1.5 py-0 ${corBadge}`}>
+              {status === 'bom'
+                ? 'Positivo'
+                : status === 'medio'
+                  ? 'Médio'
+                  : status === 'ruim'
+                    ? 'Alerta'
+                    : '—'}
+            </Badge>
+          </div>
+          <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1 pt-1 border-t border-slate-100">
+            <span>Ref: {benchStr}</span>
+            <span className="text-[9px] text-slate-400">{subtitulo}</span>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Helper para filtro de grupos
+  const gruposVisiveis = useMemo(() => {
+    if (filtroGrupo === 'todos') return null
+    return filtroGrupo
+  }, [filtroGrupo])
+
+  if (loading && !balancoAtual && !dreAtual && balancos.length === 0) {
+    return (
+      <div className="py-20 flex flex-col justify-center items-center gap-3">
+        <div className="w-9 h-9 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs text-slate-500 font-medium">
+          Carregando Dashboard de Indicadores...
+        </span>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12">
-      {/* 1. Header do Painel com Seletor de Benchmark, Empresa, Ano e Personalizar Relatório */}
+    <div className="space-y-6 animate-fadeIn pb-16">
+      {/* 1. Header do Dashboard com Seletores e Ações */}
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg shadow-md shadow-blue-600/20 shrink-0">
-            <Gauge className="w-6 h-6" />
+            <BarChart3 className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl font-extrabold text-[#0B1F3A] tracking-tight">
-                Painel de Indicadores &amp; Benchmarks
+                Dashboard de Indicadores Financeiros
               </h1>
               <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs">
-                Diagnóstico 360º
+                Visão Completa &amp; Gráficos
               </Badge>
             </div>
             <p className="text-xs text-[#5B6B7F] mt-0.5">
-              Análise comparativa da empresa frente ao benchmark do setor com gráfico de radar e
-              histórico de 3 anos
+              Análise gráfica de todos os grupos de indicadores com benchmarks setoriais e evolução
+              temporal
             </p>
           </div>
         </div>
 
-        {/* Controles: Empresa, Ano, Benchmark Setorial, Botão de Pesos */}
+        {/* Controles: Empresa, Ano, Benchmark Setorial, Exportar CSV e Personalizar Pesos */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Seletor Empresa */}
           <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
@@ -580,7 +1075,19 @@ export default function PainelIndicadores() {
             </Select>
           </div>
 
-          {/* Botão Personalizar Pesos / Relatório */}
+          {/* Botão Exportar CSV */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleExportCsv}
+            disabled={!balancoAtual && !dreAtual}
+            className="border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs h-9 shadow-2xs gap-1.5"
+          >
+            <Download className="w-3.5 h-3.5 text-blue-600" />
+            <span>Exportar CSV</span>
+          </Button>
+
+          {/* Botão Personalizar Pesos */}
           <Button
             type="button"
             variant="outline"
@@ -588,7 +1095,7 @@ export default function PainelIndicadores() {
             className="border-blue-200 text-blue-700 hover:bg-blue-50 font-semibold text-xs h-9 shadow-2xs gap-1.5"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-blue-600" />
-            <span>Personalizar Relatório</span>
+            <span className="hidden sm:inline">Personalizar</span>
             <Badge className="bg-blue-100 text-blue-800 border-none text-[10px] px-1.5 py-0">
               {PERFIS_PESOS_PREDEFINIDOS[perfilPesos]?.nome || 'Pesos'}
             </Badge>
@@ -601,77 +1108,203 @@ export default function PainelIndicadores() {
           >
             <Link to="/relatorios">
               <FileText className="w-3.5 h-3.5 mr-1.5" />
-              Gerar Relatório Executivo
+              Relatório Executivo
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* 2. Destaques Executivos dos Principais KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase block truncate">
-            Ativo Total
-          </span>
-          <strong className="text-sm sm:text-base font-bold text-slate-900 block mt-0.5">
-            {formatBrlMil(destaques.ativoTotal)}
-          </strong>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Base patrimonial</span>
-        </div>
-
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase block truncate">
-            Patrimônio Líquido
-          </span>
-          <strong className="text-sm sm:text-base font-bold text-emerald-700 block mt-0.5">
-            {formatBrlMil(destaques.patrimonioLiquido)}
-          </strong>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Recursos próprios</span>
-        </div>
-
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase block truncate">
-            Receita Líquida
-          </span>
-          <strong className="text-sm sm:text-base font-bold text-slate-900 block mt-0.5">
-            {formatBrlMil(destaques.receitaLiquida)}
-          </strong>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Faturamento líq.</span>
-        </div>
-
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase block truncate">
-            Lucro Líquido
-          </span>
-          <strong
-            className={`text-sm sm:text-base font-bold block mt-0.5 ${
-              destaques.lucroLiquido >= 0 ? 'text-emerald-600' : 'text-red-600'
-            }`}
-          >
-            {formatBrlMil(destaques.lucroLiquido)}
-          </strong>
-          <span className="text-[10px] text-slate-400 block mt-0.5">Resultado final</span>
-        </div>
-
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase block truncate">
-            Liq. Corrente (LC)
-          </span>
-          <strong className="text-sm sm:text-base font-bold text-blue-700 block mt-0.5">
-            {destaques.liquidezCorrente ? formatNumber(destaques.liquidezCorrente, 2) : '—'}
-          </strong>
-          <span className="text-[10px] text-slate-400 block mt-0.5">
-            Ref setor: {benchmarkAtivo?.liquidezCorrente.toFixed(2) || '—'}
+      {/* 2. Destaques Executivos dos Principais KPIs com Badges Coloridos */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        {/* KPI 1: Liquidez Corrente */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Liq. Corrente
+            </span>
+            <Badge
+              className={`text-[9px] px-1.5 py-0 font-bold ${
+                destaques.liquidezCorrente && destaques.liquidezCorrente >= 1.5
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : destaques.liquidezCorrente && destaques.liquidezCorrente >= 1.0
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+            >
+              {destaques.liquidezCorrente && destaques.liquidezCorrente >= 1.5
+                ? '🟢 Confortável'
+                : destaques.liquidezCorrente && destaques.liquidezCorrente >= 1.0
+                  ? '🟠 Regular'
+                  : '🔴 Crítico'}
+            </Badge>
+          </div>
+          <div className="my-1.5">
+            <strong className="text-xl sm:text-2xl font-black text-[#0B1F3A] font-mono">
+              {destaques.liquidezCorrente ? formatNumber(destaques.liquidezCorrente, 2) : '—'}
+            </strong>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            Ref Setor: {benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x
           </span>
         </div>
 
-        <div className="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs">
-          <span className="text-[10px] font-semibold text-slate-500 uppercase block truncate">
-            Score Ponderado
-          </span>
-          <div className="flex items-center gap-1.5 mt-0.5">
+        {/* KPI 2: ROE */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              ROE (Retorno PL)
+            </span>
+            <Badge
+              className={`text-[9px] px-1.5 py-0 font-bold ${
+                destaques.roe && destaques.roe >= 15
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : destaques.roe && destaques.roe >= 5
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+            >
+              {destaques.roe && destaques.roe >= 15
+                ? '🟢 Excelente'
+                : destaques.roe && destaques.roe >= 5
+                  ? '🟠 Moderado'
+                  : '🔴 Baixo'}
+            </Badge>
+          </div>
+          <div className="my-1.5">
             <strong
-              className={`text-sm sm:text-base font-black ${
+              className={`text-xl sm:text-2xl font-black font-mono ${
+                destaques.roe && destaques.roe >= 0 ? 'text-emerald-600' : 'text-red-600'
+              }`}
+            >
+              {destaques.roe ? `${formatNumber(destaques.roe, 1)}%` : '—'}
+            </strong>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            Ref Setor: {benchmarkAtivo?.roe.toFixed(1) || '15.0'}%
+          </span>
+        </div>
+
+        {/* KPI 3: Margem Líquida */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Margem Líquida
+            </span>
+            <Badge
+              className={`text-[9px] px-1.5 py-0 font-bold ${
+                destaques.margemLiquida && destaques.margemLiquida >= 10
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : destaques.margemLiquida && destaques.margemLiquida >= 5
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+            >
+              {destaques.margemLiquida && destaques.margemLiquida >= 10
+                ? '🟢 Saudável'
+                : destaques.margemLiquida && destaques.margemLiquida >= 5
+                  ? '🟠 Estável'
+                  : '🔴 Atenção'}
+            </Badge>
+          </div>
+          <div className="my-1.5">
+            <strong
+              className={`text-xl sm:text-2xl font-black font-mono ${
+                destaques.margemLiquida && destaques.margemLiquida >= 0
+                  ? 'text-emerald-700'
+                  : 'text-red-600'
+              }`}
+            >
+              {destaques.margemLiquida ? `${formatNumber(destaques.margemLiquida, 1)}%` : '—'}
+            </strong>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            Ref Setor: {benchmarkAtivo?.margemLiquida.toFixed(1) || '10.0'}%
+          </span>
+        </div>
+
+        {/* KPI 4: EBITDA & Margem */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              EBITDA / Caixa
+            </span>
+            <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[9px] px-1.5 py-0 font-bold">
+              {indAtual.margemEbitda ? `${indAtual.margemEbitda.toFixed(1)}%` : 'Margem'}
+            </Badge>
+          </div>
+          <div className="my-1.5">
+            <strong
+              className={`text-xl sm:text-2xl font-black font-mono ${
+                destaques.ebitda >= 0 ? 'text-purple-900' : 'text-red-600'
+              }`}
+            >
+              {formatBrlMil(destaques.ebitda)}
+            </strong>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            Ref Margem: {benchmarkAtivo?.margemEbitda.toFixed(1) || '16.0'}%
+          </span>
+        </div>
+
+        {/* KPI 5: Endividamento Geral */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Endividamento
+            </span>
+            <Badge
+              className={`text-[9px] px-1.5 py-0 font-bold ${
+                destaques.endividamentoGeral && destaques.endividamentoGeral <= 50
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : destaques.endividamentoGeral && destaques.endividamentoGeral <= 70
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+            >
+              {destaques.endividamentoGeral && destaques.endividamentoGeral <= 50
+                ? '🟢 Baixo'
+                : destaques.endividamentoGeral && destaques.endividamentoGeral <= 70
+                  ? '🟠 Moderado'
+                  : '🔴 Alto'}
+            </Badge>
+          </div>
+          <div className="my-1.5">
+            <strong className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+              {destaques.endividamentoGeral
+                ? `${formatNumber(destaques.endividamentoGeral, 1)}%`
+                : '—'}
+            </strong>
+          </div>
+          <span className="text-[10px] text-slate-400">
+            Ref Setor: {benchmarkAtivo?.endividamentoGeral.toFixed(1) || '50.0'}%
+          </span>
+        </div>
+
+        {/* KPI 6: Score Geral Ponderado */}
+        <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs hover:shadow-sm transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Score Global
+            </span>
+            <Badge
+              className={`text-[9px] px-1.5 py-0 font-black ${
+                scoreGeralPonderado >= 70
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : scoreGeralPonderado >= 50
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'bg-amber-100 text-amber-800'
+              }`}
+            >
+              {scoreGeralPonderado >= 70
+                ? '★ Forte'
+                : scoreGeralPonderado >= 50
+                  ? '● Equilibrado'
+                  : '▲ Atenção'}
+            </Badge>
+          </div>
+          <div className="my-1.5 flex items-baseline gap-1">
+            <strong
+              className={`text-xl sm:text-2xl font-black font-mono ${
                 scoreGeralPonderado >= 70
                   ? 'text-emerald-600'
                   : scoreGeralPonderado >= 50
@@ -679,76 +1312,60 @@ export default function PainelIndicadores() {
                     : 'text-amber-600'
               }`}
             >
-              {scoreGeralPonderado}/100
+              {scoreGeralPonderado}
             </strong>
-            <Badge className="bg-slate-100 text-slate-700 text-[10px] px-1 py-0 border-none font-semibold">
-              {scoreGeralPonderado >= 70
-                ? 'Forte'
-                : scoreGeralPonderado >= 50
-                  ? 'Médio'
-                  : 'Atenção'}
-            </Badge>
+            <span className="text-xs text-slate-400 font-mono font-medium">/100</span>
           </div>
-          <span className="text-[10px] text-slate-400 block mt-0.5">
+          <span className="text-[10px] text-slate-400">
             Perfil: {PERFIS_PESOS_PREDEFINIDOS[perfilPesos]?.nome}
           </span>
         </div>
       </div>
 
-      {/* 3. GRÁFICO DE RADAR (TEIA) COMPARATIVO VS BENCHMARK */}
-      <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
-        <CardHeader className="pb-2 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg">
-                <Activity className="w-4 h-4" />
+      {/* 3. GRÁFICO DE RADAR 360º + EVOLUÇÃO HISTÓRICA (SEÇÃO PRINCIPAL) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Radar Chart Comparativo vs Benchmark (7 colunas) */}
+        <Card className="lg:col-span-7 bg-white border-slate-200 shadow-2xs overflow-hidden flex flex-col justify-between">
+          <CardHeader className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                  Radar 360º: Empresa vs Benchmark ({selectedSetorBenchmark})
+                </CardTitle>
               </div>
-              <CardTitle className="text-base font-bold text-[#0B1F3A]">
-                Gráfico de Radar: Desempenho Global vs Benchmark Setorial ({selectedSetorBenchmark})
-              </CardTitle>
+              <CardDescription className="text-xs text-slate-500 mt-0.5">
+                Avaliação dos 6 grandes eixos de solidez financeira em escala normalizada (0-100)
+              </CardDescription>
             </div>
-            <CardDescription className="text-xs text-slate-500 mt-0.5">
-              Normalização em escala 0-100 para comparação equilibrada entre grupos de naturezas
-              distintas
-            </CardDescription>
-          </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 text-xs font-semibold">
+            <div className="flex items-center gap-3 text-xs font-semibold">
               <span className="flex items-center gap-1.5 text-blue-700">
                 <span
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: primaryBrandColor }}
                 />
-                Empresa ({selectedEmpresa?.nome || 'Atual'})
+                Empresa
               </span>
-              <span className="flex items-center gap-1.5 text-slate-500 ml-2">
+              <span className="flex items-center gap-1.5 text-slate-500">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: sectorColor }} />
-                Setor ({selectedSetorBenchmark})
+                Setor
               </span>
             </div>
-          </div>
-        </CardHeader>
+          </CardHeader>
 
-        <CardContent className="p-4 sm:p-6">
-          {!selectedSetorBenchmark ? (
-            <div className="py-16 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
-              <AlertCircle className="w-8 h-8 text-amber-500" />
-              <p className="font-semibold text-slate-700">
-                Selecione um setor no benchmark para ativar o gráfico comparativo
-              </p>
-            </div>
-          ) : !balancoAtual && !dreAtual ? (
-            <div className="py-16 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
-              <AlertCircle className="w-8 h-8 text-amber-500" />
-              <p className="font-semibold text-slate-700">
-                Nenhum dado financeiro cadastrado para a empresa no exercício de {selectedAno}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-              {/* Radar Chart Recharts */}
-              <div className="lg:col-span-7 h-80 sm:h-96 w-full flex items-center justify-center">
+          <CardContent className="p-4 sm:p-6 flex-1 flex flex-col justify-center">
+            {!balancoAtual && !dreAtual ? (
+              <div className="py-16 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
+                <AlertCircle className="w-8 h-8 text-amber-500" />
+                <p className="font-semibold text-slate-700">
+                  Nenhum dado financeiro cadastrado para a empresa no exercício de {selectedAno}
+                </p>
+              </div>
+            ) : (
+              <div className="h-72 sm:h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart
                     cx="50%"
@@ -829,90 +1446,1389 @@ export default function PainelIndicadores() {
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
+            )}
+          </CardContent>
+        </Card>
 
-              {/* Tabela Resumo dos Eixos do Radar ao Lado */}
-              <div className="lg:col-span-5 space-y-2.5">
-                <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-                  <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                    Detalhamento dos 6 Eixos do Radar
-                  </span>
-                  <span className="text-[11px] text-slate-500">Normalizado (0-100)</span>
+        {/* Gráfico de Evolução Histórica dos 6 Principais Indicadores (5 colunas) */}
+        <Card className="lg:col-span-5 bg-white border-slate-200 shadow-2xs overflow-hidden flex flex-col justify-between">
+          <CardHeader className="pb-2 border-b border-slate-100 flex flex-row items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-50 text-blue-700 rounded-lg">
+                  <LineChartIcon className="w-4 h-4" />
                 </div>
+                <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                  Evolução Histórica (3 Anos)
+                </CardTitle>
+              </div>
+              <CardDescription className="text-xs text-slate-500 mt-0.5">
+                Trajetória dos principais indicadores ({ano2}, {ano1}, {selectedAno})
+              </CardDescription>
+            </div>
+            <Badge className="bg-slate-100 text-slate-700 text-[10px] font-mono">
+              {hasHistorico ? '3 Exercícios' : 'Ano Base'}
+            </Badge>
+          </CardHeader>
 
-                <div className="space-y-2">
-                  {radarItems.map((item) => {
-                    const pesoGrupo = pesos[item.grupoId] || 0
-                    return (
-                      <div
-                        key={item.grupoId}
-                        className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/60 hover:bg-white transition-all space-y-1"
-                      >
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-800">{item.grupoNome}</span>
-                            <Badge className="bg-slate-200 text-slate-700 text-[9px] px-1 py-0 border-none font-mono">
-                              Peso {pesoGrupo}%
-                            </Badge>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-slate-900">
-                              {item.empresaScore} vs {item.setorScore}
-                            </span>
-                            {item.status === 'acima' && (
-                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 font-bold">
-                                ↑ Acima
-                              </Badge>
-                            )}
-                            {item.status === 'abaixo' && (
-                              <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] px-1.5 py-0 font-bold">
-                                ↓ Abaixo
-                              </Badge>
-                            )}
-                            {item.status === 'em_linha' && (
-                              <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] px-1.5 py-0">
-                                → Em linha
-                              </Badge>
-                            )}
-                          </div>
+          <CardContent className="p-4 sm:p-6 flex-1 flex flex-col justify-center">
+            <div className="h-72 sm:h-80 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={historicoLinhasData}
+                  margin={{ top: 15, right: 20, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                  <XAxis
+                    dataKey="ano"
+                    tick={{ fill: '#0B1F3A', fontSize: 12, fontWeight: 700 }}
+                    stroke="#CBD5E1"
+                  />
+                  <YAxis
+                    tick={{ fill: '#64748B', fontSize: 10 }}
+                    stroke="#CBD5E1"
+                    domain={['auto', 'auto']}
+                  />
+                  <RechartsTooltip
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload || !payload.length) return null
+                      return (
+                        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                          <strong className="block font-bold text-sm text-blue-300 border-b border-slate-700 pb-1">
+                            Exercício de {label}
+                          </strong>
+                          {payload.map((p, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-3">
+                              <span className="flex items-center gap-1.5 text-slate-300">
+                                <span
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: p.color }}
+                                />
+                                {p.name}:
+                              </span>
+                              <strong className="font-mono text-white">
+                                {p.value !== null && p.value !== undefined
+                                  ? `${p.value}${
+                                      p.dataKey === 'liquidezCorrente'
+                                        ? 'x'
+                                        : p.dataKey === 'cicloFinanceiro'
+                                          ? 'd'
+                                          : '%'
+                                    }`
+                                  : '—'}
+                              </strong>
+                            </div>
+                          ))}
                         </div>
+                      )
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
+                    iconType="circle"
+                    iconSize={8}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Liq. Corrente"
+                    dataKey="liquidezCorrente"
+                    stroke="#2563EB"
+                    strokeWidth={2.5}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                  <Line
+                    type="monotone"
+                    name="ROE (%)"
+                    dataKey="roe"
+                    stroke="#10B981"
+                    strokeWidth={2.5}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Margem Líq. (%)"
+                    dataKey="margemLiquida"
+                    stroke="#8B5CF6"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Margem EBITDA (%)"
+                    dataKey="margemEbitda"
+                    stroke="#EC4899"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                  <Line
+                    type="monotone"
+                    name="Endividamento (%)"
+                    dataKey="endividamentoGeral"
+                    stroke="#F59E0B"
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-                        {/* Barra comparativa de progresso */}
-                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden flex">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${item.empresaScore}%`,
-                              backgroundColor:
-                                item.empresaScore >= item.setorScore
-                                  ? '#10B981'
-                                  : item.empresaScore >= item.setorScore - 15
-                                    ? '#F59E0B'
-                                    : '#EF4444',
-                            }}
-                          />
-                        </div>
+      {/* 4. SELETOR / FILTRO DE GRUPOS DE INDICADORES COM EXPANDIR / RECOLHER */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Filter className="w-4 h-4 text-blue-600 shrink-0" />
+          <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+            Filtrar Grupos de Gráficos:
+          </span>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {[
+              { id: 'todos', label: 'Todos os Grupos' },
+              { id: 'liquidez', label: '1. Liquidez' },
+              { id: 'endividamento', label: '2. Endividamento' },
+              { id: 'rentabilidade', label: '3. Rentabilidade' },
+              { id: 'estruturaCapital', label: '4. Estrutura' },
+              { id: 'ebitda', label: '5. EBITDA' },
+              { id: 'eficienciaOperacional', label: '6. Eficiência' },
+              { id: 'economicos', label: '7. Econômicos' },
+            ].map((g) => (
+              <Button
+                key={g.id}
+                type="button"
+                variant={filtroGrupo === g.id ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFiltroGrupo(g.id)}
+                className={`h-7 text-xs ${
+                  filtroGrupo === g.id
+                    ? 'bg-blue-600 text-white'
+                    : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {g.label}
+              </Button>
+            ))}
+          </div>
+        </div>
 
-                        <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
-                          <span>
-                            Empresa:{' '}
-                            <strong className="text-slate-700">{item.empresaValorRealStr}</strong>
-                          </span>
-                          <span>
-                            Setor:{' '}
-                            <strong className="text-slate-600">{item.setorValorRealStr}</strong>
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={expandirTodos}
+            className="h-7 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+          >
+            Expandir Todos
+          </Button>
+          <span className="text-slate-300">|</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={recolherTodos}
+            className="h-7 text-xs text-slate-500 hover:text-slate-700"
+          >
+            Recolher Todos
+          </Button>
+        </div>
+      </div>
+
+      {/* 5. SEÇÃO DE GRÁFICOS DETALHADOS POR CADA UM DOS 7 GRUPOS DE INDICADORES */}
+      <div className="space-y-6">
+        {/* ========================================================================= */}
+        {/* GRUPO 1: INDICADORES DE LIQUIDEZ */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'liquidez') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('liquidez')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      1. Indicadores de Liquidez &amp; Solvência
+                    </CardTitle>
+                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-bold">
+                      Peso {pesos.liquidez}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Capacidade de pagamento a curto e longo prazo (LC, LS, LI, LG)
+                  </CardDescription>
                 </div>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* 4. SEÇÃO: HISTÓRICO DE BENCHMARKS (3 ANOS) COM TOGGLE */}
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-50"
+                >
+                  <Link to="/indicadores/liquidez">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.liquidez ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.liquidez && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras Comparativo Empresa vs Benchmark */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Comparativo: Empresa vs Benchmark Setorial ({selectedSetorBenchmark})
+                      </span>
+                      <span className="text-[10px] text-slate-500">Escala em Múltiplos (x)</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartLiquidezData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-blue-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.empresa !== null ? `${d.empresa.toFixed(2)}x` : '—'}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">
+                                    Benchmark ({selectedSetorBenchmark}):
+                                  </span>
+                                  <span className="text-slate-300 font-mono">
+                                    {d.benchmark.toFixed(2)}x
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Meta de Referência: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill={primaryBrandColor}
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards dos Indicadores de Liquidez */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'Liq. Corrente',
+                      'LC',
+                      indAtual.lc ? `${indAtual.lc.toFixed(2)}x` : '—',
+                      `${benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x`,
+                      indAtual.lc && indAtual.lc >= 1.5
+                        ? 'bom'
+                        : indAtual.lc && indAtual.lc >= 1.0
+                          ? 'medio'
+                          : 'ruim',
+                      'Curto Prazo (AC/PC)',
+                    )}
+                    {renderMiniCard(
+                      'Liq. Seca',
+                      'LS',
+                      indAtual.ls ? `${indAtual.ls.toFixed(2)}x` : '—',
+                      `${benchmarkAtivo?.liquidezSeca.toFixed(2) || '1.00'}x`,
+                      indAtual.ls && indAtual.ls >= 1.0
+                        ? 'bom'
+                        : indAtual.ls && indAtual.ls >= 0.7
+                          ? 'medio'
+                          : 'ruim',
+                      'Sem Estoques',
+                    )}
+                    {renderMiniCard(
+                      'Liq. Imediata',
+                      'LI',
+                      indAtual.li ? `${indAtual.li.toFixed(2)}x` : '—',
+                      '0,30x',
+                      indAtual.li && indAtual.li >= 0.3
+                        ? 'bom'
+                        : indAtual.li && indAtual.li >= 0.1
+                          ? 'medio'
+                          : 'ruim',
+                      'Caixa / PC',
+                    )}
+                    {renderMiniCard(
+                      'Liq. Geral',
+                      'LG',
+                      indAtual.lg ? `${indAtual.lg.toFixed(2)}x` : '—',
+                      `${benchmarkAtivo?.liquidezGeral.toFixed(2) || '1.20'}x`,
+                      indAtual.lg && indAtual.lg >= 1.2
+                        ? 'bom'
+                        : indAtual.lg && indAtual.lg >= 0.9
+                          ? 'medio'
+                          : 'ruim',
+                      'Longo Prazo Total',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 2: INDICADORES DE ENDIVIDAMENTO */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'endividamento') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('endividamento')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <TrendingDown className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      2. Indicadores de Endividamento &amp; Alavancagem
+                    </CardTitle>
+                    <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-bold">
+                      Peso {pesos.endividamento}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Proporção e qualidade das dívidas com terceiros (EG, CE, PCT, DL/EBITDA)
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
+                >
+                  <Link to="/indicadores/endividamento">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.endividamento ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.endividamento && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Comparativo de Endividamento vs Setor (Menor é Melhor)
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Valores em % (DL/EBITDA em x*10)
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartEndividamentoData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-amber-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.realEmpresa || (d.empresa !== null ? `${d.empresa}%` : '—')}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Benchmark:</span>
+                                  <span className="text-slate-300 font-mono">
+                                    {d.realBench || `${d.benchmark}%`}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Meta Saudável: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#F59E0B"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'Endiv. Geral',
+                      'EG',
+                      indAtual.eg ? `${indAtual.eg.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.endividamentoGeral.toFixed(1) || '50.0'}%`,
+                      indAtual.eg && indAtual.eg <= 50
+                        ? 'bom'
+                        : indAtual.eg && indAtual.eg <= 70
+                          ? 'medio'
+                          : 'ruim',
+                      'Passivo / Ativo',
+                    )}
+                    {renderMiniCard(
+                      'Compos. Endiv.',
+                      'CE',
+                      indAtual.ce ? `${indAtual.ce.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.composicaoEndividamento.toFixed(1) || '60.0'}%`,
+                      indAtual.ce && indAtual.ce <= 60
+                        ? 'bom'
+                        : indAtual.ce && indAtual.ce <= 80
+                          ? 'medio'
+                          : 'ruim',
+                      'Curto Prazo / Passivo',
+                    )}
+                    {renderMiniCard(
+                      'Cap. Terceiros',
+                      'PCT',
+                      indAtual.pct ? `${indAtual.pct.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.participacaoCapitalTerceiros.toFixed(1) || '100.0'}%`,
+                      indAtual.pct && indAtual.pct <= 100
+                        ? 'bom'
+                        : indAtual.pct && indAtual.pct <= 150
+                          ? 'medio'
+                          : 'ruim',
+                      'Passivo / PL',
+                    )}
+                    {renderMiniCard(
+                      'Dív. Líq / EBITDA',
+                      'DL/EBITDA',
+                      indStandard.dividaLiquidaEbitda !== null
+                        ? `${indStandard.dividaLiquidaEbitda.toFixed(2)}x`
+                        : '—',
+                      '2.50x',
+                      indStandard.dividaLiquidaEbitda !== null &&
+                        indStandard.dividaLiquidaEbitda <= 2.5
+                        ? 'bom'
+                        : indStandard.dividaLiquidaEbitda !== null &&
+                            indStandard.dividaLiquidaEbitda <= 4.0
+                          ? 'medio'
+                          : 'ruim',
+                      'Anos para Quitar',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 3: INDICADORES DE RENTABILIDADE */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'rentabilidade') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('rentabilidade')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      3. Indicadores de Rentabilidade &amp; Retorno
+                    </CardTitle>
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
+                      Peso {pesos.rentabilidade}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Retorno sobre capital próprio, ativos e margens (ROE, ROA, Margem Líquida,
+                    Margem Operacional)
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                >
+                  <Link to="/indicadores/rentabilidade">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.rentabilidade ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.rentabilidade && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Rentabilidade da Empresa vs Benchmark (%)
+                      </span>
+                      <span className="text-[10px] text-slate-500">Percentual ao Ano (%)</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartRentabilidadeData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-emerald-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.empresa !== null ? `${d.empresa}%` : '—'}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Benchmark:</span>
+                                  <span className="text-slate-300 font-mono">{d.benchmark}%</span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Meta: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#10B981"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'ROE (PL)',
+                      'ROE',
+                      indAtual.roe ? `${indAtual.roe.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.roe.toFixed(1) || '15.0'}%`,
+                      indAtual.roe && indAtual.roe >= 15
+                        ? 'bom'
+                        : indAtual.roe && indAtual.roe >= 5
+                          ? 'medio'
+                          : 'ruim',
+                      'Lucro Líq. / PL',
+                    )}
+                    {renderMiniCard(
+                      'ROA (Ativo)',
+                      'ROA',
+                      indAtual.roa ? `${indAtual.roa.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.roa.toFixed(1) || '8.0'}%`,
+                      indAtual.roa && indAtual.roa >= 8
+                        ? 'bom'
+                        : indAtual.roa && indAtual.roa >= 3
+                          ? 'medio'
+                          : 'ruim',
+                      'Lucro Líq. / Ativo',
+                    )}
+                    {renderMiniCard(
+                      'Margem Líquida',
+                      'ML',
+                      indAtual.ml ? `${indAtual.ml.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.margemLiquida.toFixed(1) || '10.0'}%`,
+                      indAtual.ml && indAtual.ml >= 10
+                        ? 'bom'
+                        : indAtual.ml && indAtual.ml >= 5
+                          ? 'medio'
+                          : 'ruim',
+                      'Lucro Líq. / Receita',
+                    )}
+                    {renderMiniCard(
+                      'Margem Operac.',
+                      'MO',
+                      indStandard.margemOperacional
+                        ? `${indStandard.margemOperacional.toFixed(1)}%`
+                        : '—',
+                      '13.0%',
+                      indStandard.margemOperacional && indStandard.margemOperacional >= 12
+                        ? 'bom'
+                        : indStandard.margemOperacional && indStandard.margemOperacional >= 6
+                          ? 'medio'
+                          : 'ruim',
+                      'EBIT / Receita',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 4: ESTRUTURA DE CAPITAL */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'estruturaCapital') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('estruturaCapital')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      4. Estrutura de Capital &amp; Solidez Patrimonial
+                    </CardTitle>
+                    <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-bold">
+                      Peso {pesos.estruturaCapital}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Autonomia financeira, relação Dívida/Equity e imobilização do patrimônio
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                >
+                  <Link to="/indicadores/estrutura-capital">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.estruturaCapital ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.estruturaCapital && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Estrutura Patrimonial vs Setor
+                      </span>
+                      <span className="text-[10px] text-slate-500">Valores em %</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartEstruturaData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-indigo-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.realEmpresa || (d.empresa !== null ? `${d.empresa}%` : '—')}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Benchmark:</span>
+                                  <span className="text-slate-300 font-mono">
+                                    {d.realBench || `${d.benchmark}%`}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Referência: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#6366F1"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 3 Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
+                    {renderMiniCard(
+                      'Autonomia Fin.',
+                      'AF',
+                      indAtual.af ? `${indAtual.af.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.autonomiaFinanceira.toFixed(1) || '50.0'}%`,
+                      indAtual.af && indAtual.af >= 50
+                        ? 'bom'
+                        : indAtual.af && indAtual.af >= 30
+                          ? 'medio'
+                          : 'ruim',
+                      'PL / Ativo Total',
+                    )}
+                    {renderMiniCard(
+                      'Dívida / Equity',
+                      'D/E',
+                      indAtual.de ? `${indAtual.de.toFixed(2)}x` : '—',
+                      `${benchmarkAtivo?.dividaEquity.toFixed(2) || '1.00'}x`,
+                      indAtual.de && indAtual.de <= 1.0
+                        ? 'bom'
+                        : indAtual.de && indAtual.de <= 1.8
+                          ? 'medio'
+                          : 'ruim',
+                      'Passivo Total / PL',
+                    )}
+                    {renderMiniCard(
+                      'Imobiliz. do PL',
+                      'IPL',
+                      indAtual.ipl ? `${indAtual.ipl.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.imobilizacaoPL.toFixed(1) || '55.0'}%`,
+                      indAtual.ipl && indAtual.ipl <= 55
+                        ? 'bom'
+                        : indAtual.ipl && indAtual.ipl <= 85
+                          ? 'medio'
+                          : 'ruim',
+                      'Imobilizado / PL',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 5: EBITDA (LAJIDA) */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'ebitda') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('ebitda')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      5. EBITDA (LAJIDA) &amp; Cobertura Financeira
+                    </CardTitle>
+                    <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-bold">
+                      Peso {pesos.ebitda}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Potencial de geração bruta de caixa e cobertura de juros operacionais
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-purple-200 text-purple-700 hover:bg-purple-50"
+                >
+                  <Link to="/indicadores/ebitda">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.ebitda ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.ebitda && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        EBITDA e Cobertura de Juros vs Setor
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        M. EBITDA (%) / Cob. Juros (x*10)
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartEbitdaData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-purple-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.realEmpresa || (d.empresa !== null ? `${d.empresa}%` : '—')}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Benchmark:</span>
+                                  <span className="text-slate-300 font-mono">
+                                    {d.realBench || `${d.benchmark}%`}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Referência: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#8B5CF6"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+                    {renderMiniCard(
+                      'Margem EBITDA',
+                      'M. EBITDA',
+                      indAtual.margemEbitda ? `${indAtual.margemEbitda.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.margemEbitda.toFixed(1) || '16.0'}%`,
+                      indAtual.margemEbitda && indAtual.margemEbitda >= 15
+                        ? 'bom'
+                        : indAtual.margemEbitda && indAtual.margemEbitda >= 8
+                          ? 'medio'
+                          : 'ruim',
+                      'EBITDA / Receita Líq.',
+                    )}
+                    {renderMiniCard(
+                      'Cobertura Juros',
+                      'Cob. Juros',
+                      indAtual.coberturaJuros !== null
+                        ? `${indAtual.coberturaJuros.toFixed(2)}x`
+                        : '—',
+                      `${benchmarkAtivo?.coberturaJuros.toFixed(2) || '3.00'}x`,
+                      indAtual.coberturaJuros !== null && indAtual.coberturaJuros >= 3.0
+                        ? 'bom'
+                        : indAtual.coberturaJuros !== null && indAtual.coberturaJuros >= 1.5
+                          ? 'medio'
+                          : 'ruim',
+                      'EBITDA / Desp. Financeiras',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 6: EFICIÊNCIA OPERACIONAL & CICLOS */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'eficienciaOperacional') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('eficienciaOperacional')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center font-bold">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      6. Eficiência Operacional &amp; Ciclos de Caixa
+                    </CardTitle>
+                    <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 text-[10px] font-bold">
+                      Peso {pesos.eficienciaOperacional}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Prazos médios de rotação (PMR, PME, PMP) e Ciclo Financeiro de tesouraria em
+                    dias
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-cyan-200 text-cyan-700 hover:bg-cyan-50"
+                >
+                  <Link to="/indicadores/eficiencia-operacional">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.eficienciaOperacional ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.eficienciaOperacional && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Prazos Médios e Ciclo Financeiro vs Setor (Dias)
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Menor Ciclo = Mais Caixa Livre
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartEficienciaData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-cyan-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.empresa !== null ? `${d.empresa} dias` : '—'}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Benchmark:</span>
+                                  <span className="text-slate-300 font-mono">
+                                    {d.benchmark} dias
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Meta: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#06B6D4"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'PMR (Receb.)',
+                      'PMR',
+                      indAtual.pmr ? `${Math.round(indAtual.pmr)}d` : '—',
+                      `${benchmarkAtivo?.pmr || 45}d`,
+                      indAtual.pmr && indAtual.pmr <= 45
+                        ? 'bom'
+                        : indAtual.pmr && indAtual.pmr <= 65
+                          ? 'medio'
+                          : 'ruim',
+                      'Contas a Receber',
+                    )}
+                    {renderMiniCard(
+                      'PME (Estoque)',
+                      'PME',
+                      indAtual.pme ? `${Math.round(indAtual.pme)}d` : '—',
+                      `${benchmarkAtivo?.pme || 30}d`,
+                      indAtual.pme && indAtual.pme <= 35
+                        ? 'bom'
+                        : indAtual.pme && indAtual.pme <= 60
+                          ? 'medio'
+                          : 'ruim',
+                      'Giro dos Estoques',
+                    )}
+                    {renderMiniCard(
+                      'PMP (Pagam.)',
+                      'PMP',
+                      indAtual.pmp ? `${Math.round(indAtual.pmp)}d` : '—',
+                      `${benchmarkAtivo?.pmp || 40}d`,
+                      indAtual.pmp && indAtual.pmp >= 40
+                        ? 'bom'
+                        : indAtual.pmp && indAtual.pmp >= 25
+                          ? 'medio'
+                          : 'ruim',
+                      'Prazo Fornecedores',
+                    )}
+                    {renderMiniCard(
+                      'Ciclo Financeiro',
+                      'Ciclo Fin.',
+                      indAtual.cf !== null ? `${Math.round(indAtual.cf)}d` : '—',
+                      `${benchmarkAtivo?.cicloFinanceiro || 35}d`,
+                      indAtual.cf !== null && indAtual.cf <= 35
+                        ? 'bom'
+                        : indAtual.cf !== null && indAtual.cf <= 60
+                          ? 'medio'
+                          : 'ruim',
+                      'Necessidade de Capital',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 7: ECONÔMICOS & CRIAÇÃO DE VALOR */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'economicos') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('economicos')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold">
+                  <Scale className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      7. Indicadores Econômicos &amp; Criação de Valor
+                    </CardTitle>
+                    <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold">
+                      Peso {pesos.economicos}%
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    ROIC, WACC, Spread Econômico e Giro dos Ativos
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-rose-200 text-rose-700 hover:bg-rose-50"
+                >
+                  <Link to="/indicadores/economicos">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.economicos ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.economicos && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        ROIC vs Custo de Capital WACC (%)
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Spread Positivo = Criação de Riqueza
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartEconomicosData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-rose-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Empresa:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.realEmpresa || (d.empresa !== null ? `${d.empresa}%` : '—')}
+                                  </strong>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Benchmark:</span>
+                                  <span className="text-slate-300 font-mono">
+                                    {d.realBench || `${d.benchmark}%`}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-emerald-400 pt-1 border-t border-slate-800">
+                                  Meta: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                        <Bar
+                          name={`Empresa (${selectedEmpresa?.nome || 'Atual'})`}
+                          dataKey="empresa"
+                          fill="#F43F5E"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          name={`Benchmark (${selectedSetorBenchmark})`}
+                          dataKey="benchmark"
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'ROIC',
+                      'ROIC',
+                      indAtual.roic ? `${indAtual.roic.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.roic.toFixed(1) || '14.0'}%`,
+                      indAtual.roic && indAtual.roic >= 14
+                        ? 'bom'
+                        : indAtual.roic && indAtual.roic >= 8
+                          ? 'medio'
+                          : 'ruim',
+                      'Retorno Cap. Investido',
+                    )}
+                    {renderMiniCard(
+                      'WACC',
+                      'WACC',
+                      '12,0%',
+                      `${benchmarkAtivo?.wacc.toFixed(1) || '12.0'}%`,
+                      'neutro',
+                      'Custo Médio Ponderado',
+                    )}
+                    {renderMiniCard(
+                      'Spread Econômico',
+                      'Spread',
+                      indAtual.spread !== null ? `${indAtual.spread.toFixed(1)}%` : '—',
+                      `${benchmarkAtivo?.spread.toFixed(1) || '2.0'}%`,
+                      indAtual.spread !== null && indAtual.spread > 0 ? 'bom' : 'ruim',
+                      'ROIC – WACC',
+                    )}
+                    {renderMiniCard(
+                      'Giro do Ativo',
+                      'Giro',
+                      indAtual.giroAtivo ? `${indAtual.giroAtivo.toFixed(2)}x` : '—',
+                      `${benchmarkAtivo?.giroAtivo.toFixed(2) || '1.00'}x`,
+                      indAtual.giroAtivo && indAtual.giroAtivo >= 1.0 ? 'bom' : 'medio',
+                      'Receita / Ativo Total',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+      </div>
+
+      {/* 6. TABELA CONSOLIDADA DE EVOLUÇÃO COMPARATIVA VS BENCHMARK (3 ANOS) */}
       <Card className="bg-white border-slate-200 shadow-2xs">
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -921,7 +2837,8 @@ export default function PainelIndicadores() {
                 <Clock className="w-4 h-4" />
               </div>
               <CardTitle className="text-base font-bold text-[#0B1F3A]">
-                Evolução vs Setor ({selectedAno - 2}, {selectedAno - 1}, {selectedAno})
+                Tabela Consolidada de Indicadores vs Setor ({selectedAno - 2}, {selectedAno - 1},{' '}
+                {selectedAno})
               </CardTitle>
             </div>
             <CardDescription className="text-xs text-slate-500 mt-0.5">
@@ -936,118 +2853,122 @@ export default function PainelIndicadores() {
                 htmlFor="evolucao-toggle"
                 className="text-xs font-bold text-slate-700 cursor-pointer"
               >
-                Ver evolução (3 anos)
+                Ver histórico temporal
               </Label>
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="p-0">
-          {!hasHistorico ? (
+          {!hasHistorico && verEvolucao ? (
             <div className="p-8 text-center text-xs text-slate-500 flex flex-col items-center justify-center gap-2">
               <Info className="w-6 h-6 text-slate-400" />
               <p className="font-semibold text-slate-700">
-                Dados insuficientes para análise histórica completa
+                Dados históricos parciais para análise temporal
               </p>
               <p className="text-[11px] text-slate-500 max-w-md">
-                A empresa possui apenas registros para o exercício corrente. Para ativar a visão de
-                tendência temporal completa, cadastre ou importe balanços dos anos {ano1} e {ano2}.
+                A empresa possui dados completos para {selectedAno}. Cadastre ou importe
+                demonstrações contábeis de {ano1} e {ano2} para preencher os exercícios anteriores.
               </p>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200 text-[11px]">
-                    <th className="py-2.5 px-3">Grupo</th>
-                    <th className="py-2.5 px-3">Indicador</th>
-                    <th className="py-2.5 px-3 text-right">{ano2}</th>
-                    <th className="py-2.5 px-3 text-right">{ano1}</th>
-                    <th className="py-2.5 px-3 text-right bg-blue-50/50 text-blue-900">
-                      {selectedAno} (Atual)
-                    </th>
-                    <th className="py-2.5 px-3 text-right bg-slate-100/70 text-slate-800">
-                      Benchmark Setor
-                    </th>
-                    <th className="py-2.5 px-3 text-center">Tendência</th>
-                    <th className="py-2.5 px-3 text-center">Página</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-[11px]">
-                  {linhasEvolucao.map((linha, idx) => {
-                    const isHighWeight = linha.peso >= 25
-                    return (
-                      <tr
-                        key={idx}
-                        className={`hover:bg-slate-50/80 transition-colors ${
-                          isHighWeight ? 'bg-amber-50/20 font-medium' : ''
-                        }`}
+          ) : null}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200 text-[11px]">
+                  <th className="py-2.5 px-3">Grupo</th>
+                  <th className="py-2.5 px-3">Indicador</th>
+                  {verEvolucao && <th className="py-2.5 px-3 text-right">{ano2}</th>}
+                  {verEvolucao && <th className="py-2.5 px-3 text-right">{ano1}</th>}
+                  <th className="py-2.5 px-3 text-right bg-blue-50/50 text-blue-900">
+                    {selectedAno} (Atual)
+                  </th>
+                  <th className="py-2.5 px-3 text-right bg-slate-100/70 text-slate-800">
+                    Benchmark Setor
+                  </th>
+                  <th className="py-2.5 px-3 text-center">Tendência</th>
+                  <th className="py-2.5 px-3 text-center">Página</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-[11px]">
+                {linhasEvolucao.map((linha, idx) => {
+                  const isHighWeight = linha.peso >= 25
+                  return (
+                    <tr
+                      key={idx}
+                      className={`hover:bg-slate-50/80 transition-colors ${
+                        isHighWeight ? 'bg-amber-50/20 font-medium' : ''
+                      }`}
+                    >
+                      <td className="py-2 px-3 text-slate-500">
+                        <span className="font-semibold text-slate-700">{linha.grupo}</span>
+                        {isHighWeight && (
+                          <Badge className="ml-1.5 bg-blue-100 text-blue-800 text-[9px] px-1 py-0 border-none font-bold">
+                            ★ Peso {linha.peso}%
+                          </Badge>
+                        )}
+                      </td>
+                      <td
+                        className={`py-2 px-3 ${isHighWeight ? 'font-bold text-slate-900' : 'text-slate-800'}`}
                       >
-                        <td className="py-2 px-3 text-slate-500">
-                          <span className="font-semibold text-slate-700">{linha.grupo}</span>
-                          {isHighWeight && (
-                            <Badge className="ml-1.5 bg-blue-100 text-blue-800 text-[9px] px-1 py-0 border-none font-bold">
-                              ★ Peso {linha.peso}%
-                            </Badge>
-                          )}
-                        </td>
-                        <td
-                          className={`py-2 px-3 ${isHighWeight ? 'font-bold text-slate-900' : 'text-slate-800'}`}
-                        >
-                          {linha.indicador}
-                        </td>
+                        {linha.indicador}
+                      </td>
+                      {verEvolucao && (
                         <td className="py-2 px-3 text-right font-mono text-slate-600">
                           {linha.ano2}
                         </td>
+                      )}
+                      {verEvolucao && (
                         <td className="py-2 px-3 text-right font-mono text-slate-600">
                           {linha.ano1}
                         </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold bg-blue-50/40 text-blue-900">
-                          {linha.anoAtual}
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono font-semibold bg-slate-100/50 text-slate-700">
-                          {linha.setor}
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          {linha.tendencia.icon === 'up' && (
-                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] gap-1 px-1.5 py-0 font-bold">
-                              <TrendingUp className="w-3 h-3 text-emerald-600" />↑ Melhora
-                            </Badge>
-                          )}
-                          {linha.tendencia.icon === 'down' && (
-                            <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] gap-1 px-1.5 py-0 font-bold">
-                              <TrendingDown className="w-3 h-3 text-red-600" />↓ Piora
-                            </Badge>
-                          )}
-                          {linha.tendencia.icon === 'stable' && (
-                            <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] gap-1 px-1.5 py-0">
-                              <Minus className="w-3 h-3" />→ Estável
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="py-2 px-3 text-center">
-                          <Button
-                            asChild
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 text-[10px] text-blue-600 hover:text-blue-800 px-2"
-                          >
-                            <Link to={linha.link}>
-                              Ver <ArrowRight className="w-3 h-3 ml-0.5" />
-                            </Link>
-                          </Button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                      )}
+                      <td className="py-2 px-3 text-right font-mono font-bold bg-blue-50/40 text-blue-900">
+                        {linha.anoAtual}
+                      </td>
+                      <td className="py-2 px-3 text-right font-mono font-semibold bg-slate-100/50 text-slate-700">
+                        {linha.setor}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {linha.tendencia.icon === 'up' && (
+                          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] gap-1 px-1.5 py-0 font-bold">
+                            <TrendingUp className="w-3 h-3 text-emerald-600" />↑ Melhora
+                          </Badge>
+                        )}
+                        {linha.tendencia.icon === 'down' && (
+                          <Badge className="bg-red-50 text-red-700 border-red-200 text-[10px] gap-1 px-1.5 py-0 font-bold">
+                            <TrendingDown className="w-3 h-3 text-red-600" />↓ Piora
+                          </Badge>
+                        )}
+                        {linha.tendencia.icon === 'stable' && (
+                          <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] gap-1 px-1.5 py-0">
+                            <Minus className="w-3 h-3" />→ Estável
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-[10px] text-blue-600 hover:text-blue-800 px-2"
+                        >
+                          <Link to={linha.link}>
+                            Ver <ArrowRight className="w-3 h-3 ml-0.5" />
+                          </Link>
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* 5. CARDS DE ACESSO RÁPIDO ÀS 7 PÁGINAS DE INDICADORES */}
+      {/* 7. CARDS DE ACESSO RÁPIDO ÀS PÁGINAS DE CADA MÓDULO */}
       <div className="space-y-3">
         <div className="flex items-center justify-between pb-1 border-b border-slate-200">
           <div>
@@ -1055,8 +2976,8 @@ export default function PainelIndicadores() {
               Módulos Específicos de Análise por Grupo
             </h3>
             <p className="text-xs text-slate-500">
-              Navegue para o detalhamento profundo de fórmulas, variáveis contábeis e gráficos por
-              grupo
+              Navegue para o detalhamento profundo de fórmulas, variáveis contábeis e gráficos
+              individuais
             </p>
           </div>
           <Badge className="bg-slate-100 text-slate-700 font-bold text-xs">
