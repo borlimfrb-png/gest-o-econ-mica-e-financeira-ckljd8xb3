@@ -122,7 +122,7 @@ export default function AnaliseEmpresa() {
     const tabParam = searchParams.get('aba')
     const novoParam = searchParams.get('novo')
     if (tabParam === 'comparativo-mensal' || tabParam === 'comparativo') {
-      setActiveTab('comparativo')
+      setActiveTab('comparativo-mensal')
     } else if (tabParam) {
       setActiveTab(tabParam)
     }

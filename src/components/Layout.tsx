@@ -73,12 +73,21 @@ export default function Layout() {
   ]
 
   const isCadastroActive =
-    location.pathname.startsWith('/empresas') ||
+    (location.pathname.startsWith('/empresas') && !location.search.includes('novo=balanco-dre')) ||
     location.pathname.startsWith('/centros') ||
     location.pathname.startsWith('/tipos-despesas') ||
     location.pathname.startsWith('/contas') ||
     location.pathname.startsWith('/plano-contas') ||
     location.pathname === '/minha-empresa'
+
+  // Atalho Balanço e DRE destino
+  const balancoDreUrl = selectedEmpresaId
+    ? `/empresas/${selectedEmpresaId}?aba=comparativo-mensal&novo=balanco-dre`
+    : '/empresas'
+
+  const isLancamentosActive =
+    location.pathname === '/lancamentos' ||
+    (location.pathname.startsWith('/empresas') && location.search.includes('novo=balanco-dre'))
 
   // Itens do submenu Financeiro
   const financeiroSubItems = [
@@ -148,6 +157,9 @@ export default function Layout() {
   // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente
   const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
 
+  // Grupo "Lançamentos" expansível/colapsável
+  const [lancamentosOpen, setLancamentosOpen] = useState<boolean>(isLancamentosActive || true)
+
   // Grupo "Financeiro" expansível/colapsável
   const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroActive)
 
@@ -159,6 +171,12 @@ export default function Layout() {
       setCadastrosOpen(true)
     }
   }, [isCadastroActive])
+
+  React.useEffect(() => {
+    if (isLancamentosActive) {
+      setLancamentosOpen(true)
+    }
+  }, [isLancamentosActive])
 
   React.useEffect(() => {
     if (isFinanceiroActive) {
@@ -395,19 +413,87 @@ export default function Layout() {
                   </div>
                 </div>
 
-                {/* 3. Lançamentos */}
-                <NavLink
-                  to="/lancamentos"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/lancamentos'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 text-blue-400" />
-                  Lançamentos
-                </NavLink>
+                {/* 3. Lançamentos (Expansível / Colapsável com atalho para Balanço e DRE) */}
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setLancamentosOpen((prev) => !prev)}
+                    style={
+                      isLancamentosActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isLancamentosActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText
+                        className={`w-4 h-4 ${isLancamentosActive ? 'text-blue-300' : 'text-blue-400'}`}
+                      />
+                      <span>Lançamentos</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                        lancamentosOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu Lançamentos com transição suave */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      lancamentosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
+                        <NavLink
+                          to="/lancamentos"
+                          onClick={() => setMobileDrawerOpen(false)}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                            location.pathname === '/lancamentos'
+                              ? 'bg-white/15 text-white font-semibold shadow-xs'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <FileText
+                            className={`w-3.5 h-3.5 ${
+                              location.pathname === '/lancamentos'
+                                ? 'text-blue-300'
+                                : 'text-slate-400'
+                            }`}
+                          />
+                          <span className="truncate">Lançamentos Rápidos</span>
+                        </NavLink>
+
+                        <NavLink
+                          to={balancoDreUrl}
+                          onClick={() => setMobileDrawerOpen(false)}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                            location.search.includes('novo=balanco-dre')
+                              ? 'bg-white/15 text-white font-semibold shadow-xs'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <Scale
+                            className={`w-3.5 h-3.5 ${
+                              location.search.includes('novo=balanco-dre')
+                                ? 'text-blue-300'
+                                : 'text-emerald-400'
+                            }`}
+                          />
+                          <span className="truncate">Balanço e DRE (Mensal)</span>
+                        </NavLink>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
                 {/* 4. Financeiro (Expansível / Colapsável) */}
                 <div className="space-y-1">
@@ -836,24 +922,23 @@ export default function Layout() {
                 </div>
               </div>
 
-              {/* 3. Lançamentos */}
-              <div>
+              {/* 3. Lançamentos - Grupo com Subitens (Lançamentos Rápidos e Balanço e DRE) */}
+              <div className="space-y-1">
+                {/* Visualização Tablet */}
                 <div className="lg:hidden">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <NavLink
                         to="/lancamentos"
-                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          location.pathname === '/lancamentos'
-                            ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          isLancamentosActive
+                            ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
                             : 'text-slate-300 hover:text-white hover:bg-white/5'
                         }`}
                       >
                         <FileText
                           className={`w-5 h-5 ${
-                            location.pathname === '/lancamentos'
-                              ? 'text-blue-300'
-                              : 'text-slate-400'
+                            isLancamentosActive ? 'text-blue-300' : 'text-slate-400'
                           }`}
                         />
                       </NavLink>
@@ -862,26 +947,91 @@ export default function Layout() {
                       side="right"
                       className="bg-[#0B1F3A] text-white border-blue-900"
                     >
-                      Lançamentos
+                      Lançamentos (Rápidos, Balanço e DRE)
                     </TooltipContent>
                   </Tooltip>
                 </div>
+
+                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
                 <div className="hidden lg:block">
-                  <NavLink
-                    to="/lancamentos"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/lancamentos'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                  <button
+                    type="button"
+                    onClick={() => setLancamentosOpen((prev) => !prev)}
+                    style={
+                      isLancamentosActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isLancamentosActive
+                        ? 'text-white font-semibold border'
                         : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <FileText
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/lancamentos' ? 'text-blue-300' : 'text-slate-400'
+                    <div className="flex items-center gap-3 min-w-0">
+                      <FileText
+                        className={`w-5 h-5 shrink-0 ${
+                          isLancamentosActive ? 'text-blue-300' : 'text-slate-400'
+                        }`}
+                      />
+                      <span className="truncate font-medium">Lançamentos</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                        lancamentosOpen ? 'rotate-0' : '-rotate-90'
                       }`}
                     />
-                    <span className="truncate">Lançamentos</span>
-                  </NavLink>
+                  </button>
+
+                  {/* Submenu com animação suave via grid template rows */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      lancamentosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
+                        <NavLink
+                          to="/lancamentos"
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                            location.pathname === '/lancamentos'
+                              ? 'bg-white/15 text-white font-semibold shadow-xs'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <FileText
+                            className={`w-4 h-4 shrink-0 ${
+                              location.pathname === '/lancamentos'
+                                ? 'text-blue-300'
+                                : 'text-slate-400'
+                            }`}
+                          />
+                          <span className="truncate">Lançamentos Rápidos</span>
+                        </NavLink>
+
+                        <NavLink
+                          to={balancoDreUrl}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                            location.search.includes('novo=balanco-dre')
+                              ? 'bg-white/15 text-white font-semibold shadow-xs'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <Scale
+                            className={`w-4 h-4 shrink-0 ${
+                              location.search.includes('novo=balanco-dre')
+                                ? 'text-blue-300'
+                                : 'text-emerald-400'
+                            }`}
+                          />
+                          <span className="truncate">Balanço e DRE (Mensal)</span>
+                        </NavLink>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 

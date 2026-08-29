@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   lancamentosService,
   lancamentosRecorrentesService,
@@ -13,6 +14,7 @@ import type {
 } from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
+import { useFilter } from '@/contexts/FilterContext'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -66,6 +68,7 @@ import {
   CheckCircle2,
   Clock,
   Filter,
+  Scale,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -149,7 +152,9 @@ function calcularProximoLancamento(diaMes: number): { dataIso: string; dataForma
 }
 
 export default function Lancamentos() {
+  const navigate = useNavigate()
   const { toast } = useToast()
+  const { selectedEmpresaId } = useFilter()
 
   // Aba ativa: 'lancamento' | 'historico' | 'recorrentes'
   const [activeTab, setActiveTab] = useState<string>('lancamento')
@@ -851,7 +856,7 @@ export default function Lancamentos() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Cabeçalho Principal da Página com Abas */}
+      {/* Cabeçalho Principal da Página com Abas e Atalho Balanço e DRE */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight flex items-center gap-2">
@@ -863,39 +868,57 @@ export default function Lancamentos() {
           </p>
         </div>
 
-        {/* Informações da Sessão Ativa / Botão de Destravar (apenas quando na aba lançamento) */}
-        {activeTab === 'lancamento' && isTravado && (
-          <div className="flex items-center gap-2 bg-blue-50/80 border border-blue-200/80 rounded-xl px-3 py-1.5 shadow-2xs">
-            <div className="flex items-center gap-1.5 text-xs text-blue-950 font-semibold">
-              <Lock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span>Sessão Fixada:</span>
-              <Badge className="bg-blue-600 text-white hover:bg-blue-600 text-[11px] font-bold px-2 py-0.5">
-                <Building className="w-3 h-3 mr-1 inline" />
-                {empresaAtiva?.nome || 'Empresa selecionada'}
-              </Badge>
-              <Badge
-                variant="outline"
-                className="bg-white text-blue-900 border-blue-300 text-[11px] font-semibold px-2 py-0.5"
-              >
-                <Calendar className="w-3 h-3 mr-1 inline text-blue-600" />
-                {formatarDataBr(dataFixa)}
-              </Badge>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDestravar}
-              className="h-7 text-xs bg-white text-blue-700 hover:text-blue-800 hover:bg-blue-100/60 border-blue-200 font-semibold ml-1 shadow-2xs gap-1"
-              title="Permite trocar a empresa e a data dos próximos lançamentos"
-            >
-              <Unlock className="w-3 h-3" />
-              Alterar
-            </Button>
-          </div>
-        )}
-      </div>
+        {/* Botão Atalho "Balanço e DRE" e Informações da Sessão Ativa */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button
+            type="button"
+            onClick={() => {
+              const empresaAlvoId = empresaFixaId || selectedEmpresaId
+              if (empresaAlvoId) {
+                navigate(`/empresas/${empresaAlvoId}?aba=comparativo-mensal&novo=balanco-dre`)
+              } else {
+                navigate('/empresas')
+              }
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 shadow-xs gap-1.5"
+            title="Abrir cadastro de Balanço e DRE Mensal na tela da empresa"
+          >
+            <Scale className="w-3.5 h-3.5" />
+            Balanço e DRE
+          </Button>
 
+          {activeTab === 'lancamento' && isTravado && (
+            <div className="flex items-center gap-2 bg-blue-50/80 border border-blue-200/80 rounded-xl px-3 py-1 shadow-2xs">
+              <div className="flex items-center gap-1.5 text-xs text-blue-950 font-semibold">
+                <Lock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="hidden sm:inline">Sessão:</span>
+                <Badge className="bg-blue-600 text-white hover:bg-blue-600 text-[11px] font-bold px-2 py-0.5">
+                  <Building className="w-3 h-3 mr-1 inline" />
+                  {empresaAtiva?.nome || 'Empresa'}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className="bg-white text-blue-900 border-blue-300 text-[11px] font-semibold px-2 py-0.5"
+                >
+                  <Calendar className="w-3 h-3 mr-1 inline text-blue-600" />
+                  {formatarDataBr(dataFixa)}
+                </Badge>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDestravar}
+                className="h-6 text-[11px] bg-white text-blue-700 hover:text-blue-800 hover:bg-blue-100/60 border-blue-200 font-semibold ml-1 shadow-2xs gap-1 px-2"
+                title="Permite trocar a empresa e a data dos próximos lançamentos"
+              >
+                <Unlock className="w-3 h-3" />
+                Alterar
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
       {/* Navegação por Abas Principais */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full sm:w-auto grid-cols-3 bg-slate-100/80 p-1 border border-slate-200 rounded-xl h-10">
