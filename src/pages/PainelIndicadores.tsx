@@ -353,19 +353,19 @@ export default function PainelIndicadores() {
     let recFinCentro = 0
 
     for (const l of lancamentosAno) {
-      const tipoConta = l.expand?.plano_conta?.expand?.conta?.tipo
+      const tipoConta = (l.expand?.plano_conta?.expand?.conta?.tipo || '').toLowerCase()
       const nomeConta = (l.expand?.plano_conta?.expand?.conta?.nome || '').toLowerCase()
       const val = Number(l.valor) || 0
 
-      if (tipoConta === 'receita') {
+      if (tipoConta.includes('receita')) {
         if (nomeConta.includes('dedu') || nomeConta.includes('imposto')) {
           deducoesCentro += Math.abs(val)
         } else {
           receitaBrutaCentro += Math.abs(val)
         }
-      } else if (tipoConta === 'custo') {
+      } else if (tipoConta.includes('custo')) {
         custosCentro += Math.abs(val)
-      } else if (tipoConta === 'despesa') {
+      } else if (tipoConta.includes('despesa')) {
         if (nomeConta.includes('financ') || nomeConta.includes('juro')) {
           despFinCentro += Math.abs(val)
         } else if (nomeConta.includes('venda') || nomeConta.includes('comerc')) {
@@ -378,34 +378,25 @@ export default function PainelIndicadores() {
       }
     }
 
-    const receitaLiquidaCalc = Math.max(0, receitaBrutaCentro - deducoesCentro)
     const totalDespesasOp = despOpCentro + despAdmCentro + despComCentro
-    const lucroBrutoCalc = receitaLiquidaCalc - custosCentro
-    const ebitdaCalc = lucroBrutoCalc - totalDespesasOp
-    const lucroLiquidoCalc = ebitdaCalc - despFinCentro + recFinCentro
 
     // Cria DRE recortada do centro
     const dreCentro: DreRecord = {
-      ...(dreBase || {
-        id: `dre-centro-${centroId}-${anoAlvo}`,
-        empresa: selectedEmpresaId,
-        ano: anoAlvo,
-        created: '',
-        updated: '',
-      }),
+      id: dreBase?.id ? `dre-centro-${centroId}-${anoAlvo}` : `dre-centro-${centroId}-${anoAlvo}`,
+      collectionId: dreBase?.collectionId || '',
+      collectionName: dreBase?.collectionName || 'dres',
+      created: dreBase?.created || '',
+      updated: dreBase?.updated || '',
+      empresa: selectedEmpresaId,
+      ano: anoAlvo,
       receita_bruta: receitaBrutaCentro || (dreBase ? dreBase.receita_bruta * 0.5 : 0),
-      deducoes: deducoesCentro || (dreBase ? dreBase.deducoes * 0.5 : 0),
-      receita_liquida: receitaLiquidaCalc || (dreBase ? dreBase.receita_liquida * 0.5 : 0),
-      custos: custosCentro || (dreBase ? dreBase.custos * 0.5 : 0),
+      deducoes_receita: deducoesCentro || (dreBase ? dreBase.deducoes_receita * 0.5 : 0),
+      custo_mercadorias: custosCentro || (dreBase ? dreBase.custo_mercadorias * 0.5 : 0),
       despesas_operacionais: totalDespesasOp || (dreBase ? dreBase.despesas_operacionais * 0.5 : 0),
-      despesas_administrativas:
-        despAdmCentro || (dreBase ? (dreBase.despesas_administrativas || 0) * 0.5 : 0),
-      despesas_comerciais:
-        despComCentro || (dreBase ? (dreBase.despesas_comerciais || 0) * 0.5 : 0),
       despesas_financeiras: despFinCentro || (dreBase ? dreBase.despesas_financeiras * 0.5 : 0),
-      receitas_financeiras: recFinCentro || (dreBase ? dreBase.receitas_financeiras * 0.5 : 0),
-      ebitda: ebitdaCalc || (dreBase ? dreBase.ebitda * 0.5 : 0),
-      lucro_liquido: lucroLiquidoCalc || (dreBase ? dreBase.lucro_liquido * 0.5 : 0),
+      outras_receitas_despesas:
+        recFinCentro || (dreBase ? dreBase.outras_receitas_despesas * 0.5 : 0),
+      imposto_renda: dreBase ? dreBase.imposto_renda * 0.5 : 0,
     }
 
     // Se houver balanço base, mantém ou particiona
@@ -1717,6 +1708,18 @@ export default function PainelIndicadores() {
           >
             <Download className="w-3.5 h-3.5 text-blue-600" />
             <span>Exportar CSV</span>
+          </Button>
+
+          {/* Botão Relatório PDF A4 */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setModalPdfOpen(true)}
+            disabled={!balancoAtual && !dreAtual}
+            className="border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs h-9 shadow-2xs gap-1.5"
+          >
+            <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Relatório A4</span>
           </Button>
 
           {/* Botão Personalizar Pesos */}
@@ -3911,6 +3914,37 @@ export default function PainelIndicadores() {
         perfilAtual={perfilPesos}
         pesosAtuais={pesos}
         onSalvar={handleSalvarPesos}
+      />
+
+      {/* Modal de Impressão / PDF A4 do Dashboard Executivo */}
+      <ModalPdfDashboardA4
+        open={modalPdfOpen}
+        onOpenChange={setModalPdfOpen}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        selectedCentroNome={
+          selectedCentroCustoId !== 'all'
+            ? centros.find((c) => c.id === selectedCentroCustoId)?.nome
+            : undefined
+        }
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+        scoreGeralPonderado={scoreGeralPonderado}
+        perfilPesosNome={PERFIS_PESOS_PREDEFINIDOS[perfilPesos]?.nome || 'Padrão'}
+        destaques={{
+          ...destaques,
+          saldoTesouraria: indAtual.saldoTesouraria,
+          cgl: indAtual.cgl,
+        }}
+        radarItems={radarItems}
+        benchmarkAtivo={benchmarkAtivo}
+        selectedSetorBenchmark={selectedSetorBenchmark}
+        linhasEvolucao={linhasEvolucao}
+        ano1={ano1}
+        ano2={ano2}
+        empresaB={selectedEmpresaB}
+        anoB={anoEmpresaB}
+        scoreGeralB={scoreGeralPonderadoB}
       />
     </div>
   )

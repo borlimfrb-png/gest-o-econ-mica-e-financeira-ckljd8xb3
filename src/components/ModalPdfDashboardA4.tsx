@@ -74,6 +74,8 @@ export interface ModalPdfDashboardA4Props {
     endividamentoGeral: number | null
     margemLiquida: number | null
     cicloFinanceiro: number | null
+    saldoTesouraria?: number | null
+    cgl?: number | null
   }
   radarItems: GrupoRadarItem[]
   benchmarkAtivo: BenchmarkSetorValores | null
@@ -414,13 +416,15 @@ export function ModalPdfDashboardA4({
                   <div className="flex items-baseline justify-between">
                     <strong
                       className={`text-base font-black font-mono ${
-                        indAtual.saldoTesouraria !== null && indAtual.saldoTesouraria >= 0
+                        destaques.saldoTesouraria !== null &&
+                        destaques.saldoTesouraria !== undefined &&
+                        destaques.saldoTesouraria >= 0
                           ? 'text-emerald-700'
                           : 'text-red-700'
                       }`}
                     >
-                      {indAtual.saldoTesouraria !== null
-                        ? formatCurrency(indAtual.saldoTesouraria)
+                      {destaques.saldoTesouraria !== null && destaques.saldoTesouraria !== undefined
+                        ? formatCurrency(destaques.saldoTesouraria)
                         : '—'}
                     </strong>
                     <span className="text-[10px] text-slate-400">Ref: &gt; R$ 0</span>
@@ -694,8 +698,8 @@ export function ModalPdfDashboardA4({
                       : '—'}
                   </strong>{' '}
                   (benchmark setorial de {benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x)
-                  {indAtual.saldoTesouraria !== null
-                    ? `, Capital de Giro Líquido (CGL) de ${formatCurrency(indAtual.cgl || 0)} e Saldo de Tesouraria de ${formatCurrency(indAtual.saldoTesouraria)}`
+                  {destaques.saldoTesouraria !== null && destaques.saldoTesouraria !== undefined
+                    ? `, Capital de Giro Líquido (CGL) de ${formatCurrency(destaques.cgl || 0)} e Saldo de Tesouraria de ${formatCurrency(destaques.saldoTesouraria)}`
                     : ''}
                   , com Retorno sobre o Patrimônio Líquido (ROE) de{' '}
                   <strong>{destaques.roe ? `${formatNumber(destaques.roe, 1)}%` : '—'}</strong>.
