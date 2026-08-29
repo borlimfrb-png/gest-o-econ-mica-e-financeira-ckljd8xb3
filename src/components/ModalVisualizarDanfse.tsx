@@ -37,6 +37,8 @@ export function ModalVisualizarDanfse({
   if (!dados || !dados.nota) return null
 
   const { nota, prestador, tomador } = dados
+  const isCancelada = nota.status === 'Cancelada'
+  const isDebitoCredito = nota.tipo_documento === 'Debito' || nota.tipo_documento === 'Credito'
 
   const handlePrint = () => {
     window.print()
@@ -44,9 +46,14 @@ export function ModalVisualizarDanfse({
 
   const handleDownloadXml = () => {
     const xml = gerarXmlNfse(dados)
+    const prefixo = isCancelada
+      ? 'Cancelamento_NFSe'
+      : isDebitoCredito
+        ? `Nota_${nota.tipo_documento}`
+        : 'NFSe'
     downloadArquivo(
       xml,
-      `NFSe_${nota.numero}_${prestador.cnpj.replace(/\D/g, '')}.xml`,
+      `${prefixo}_${nota.numero}_${prestador.cnpj.replace(/\D/g, '')}.xml`,
       'application/xml',
     )
   }
@@ -83,11 +90,32 @@ export function ModalVisualizarDanfse({
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-blue-600" />
             <div>
-              <DialogTitle className="text-sm font-bold text-slate-900 leading-tight">
-                DANFSE — Documento Auxiliar da Nota Fiscal de Serviços Eletrônica
+              <DialogTitle className="text-sm font-bold text-slate-900 leading-tight flex items-center gap-2">
+                {isDebitoCredito
+                  ? `Nota de ${nota.tipo_documento === 'Debito' ? 'Débito' : 'Crédito'} de Ajuste`
+                  : 'DANFSE — Documento Auxiliar da Nota Fiscal de Serviços Eletrônica'}
+                {isCancelada && (
+                  <Badge
+                    variant="destructive"
+                    className="text-[10px] font-black uppercase px-2 py-0.5"
+                  >
+                    Nota Cancelada
+                  </Badge>
+                )}
+                {isDebitoCredito && (
+                  <Badge
+                    className={`text-[10px] font-bold uppercase px-2 py-0.5 ${
+                      nota.tipo_documento === 'Debito'
+                        ? 'bg-amber-100 text-amber-900 border-amber-300'
+                        : 'bg-purple-100 text-purple-900 border-purple-300'
+                    }`}
+                  >
+                    {nota.tipo_documento === 'Debito' ? 'Débito' : 'Crédito'}
+                  </Badge>
+                )}
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                NFS-e Nº {nota.numero} · Série {nota.serie || '1'} · Status: {nota.status}
+                Nº {nota.numero} · Série {nota.serie || '1'} · Status: {nota.status}
               </DialogDescription>
             </div>
           </div>
@@ -112,8 +140,18 @@ export function ModalVisualizarDanfse({
             {onEnviarEmail && (
               <Button
                 size="sm"
-                onClick={() => onEnviarEmail(nota)}
-                className="text-xs h-8 bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
+                disabled={isCancelada}
+                onClick={() => {
+                  if (!isCancelada) onEnviarEmail(nota)
+                }}
+                className={`text-xs h-8 font-semibold shadow-xs ${
+                  isCancelada
+                    ? 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+                title={
+                  isCancelada ? 'Notas canceladas não podem ser reenviadas' : 'Enviar por e-mail'
+                }
               >
                 <Mail className="w-3.5 h-3.5 mr-1" /> Enviar por E-mail
               </Button>
@@ -125,8 +163,74 @@ export function ModalVisualizarDanfse({
         <div className="p-4 sm:p-6 flex justify-center print:p-0">
           <div
             id="danfse-document"
-            className="w-full max-w-[800px] bg-white border border-slate-300 shadow-sm p-6 text-slate-900 text-xs font-sans leading-tight space-y-3 print:border-none print:shadow-none print:p-0 print:max-w-none"
+            className={`w-full max-w-[800px] bg-white border border-slate-300 shadow-sm p-6 text-slate-900 text-xs font-sans leading-tight space-y-3 print:border-none print:shadow-none print:p-0 print:max-w-none relative ${
+              isCancelada ? 'border-red-400 bg-red-50/10' : ''
+            }`}
           >
+            {/* Tarja / Marca d'água de Cancelamento */}
+            {isCancelada && (
+              <div className="border-2 border-red-600 bg-red-50 text-red-800 p-3 rounded-md mb-2 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-black uppercase tracking-wider flex items-center gap-1.5 text-red-700">
+                    <span>⛔</span> NOTA FISCAL CANCELADA
+                  </p>
+                  <p className="text-[11px] text-red-900 mt-0.5">
+                    <strong>Motivo:</strong>{' '}
+                    {nota.motivo_cancelamento || 'Cancelamento solicitado pelo prestador.'}
+                  </p>
+                  {nota.cancelada_em && (
+                    <p className="text-[10px] text-red-700 mt-0.5">
+                      Cancelada em: {new Date(nota.cancelada_em).toLocaleString('pt-BR')} ·
+                      Protocolo: {nota.protocolo_cancelamento || 'CAN-000'}
+                    </p>
+                  )}
+                </div>
+                <Badge
+                  variant="destructive"
+                  className="font-bold text-xs uppercase px-2.5 py-1 shrink-0"
+                >
+                  Sem Valor Fiscal
+                </Badge>
+              </div>
+            )}
+
+            {/* Tarja de Nota de Débito / Crédito de Ajuste */}
+            {isDebitoCredito && (
+              <div
+                className={`border p-2.5 rounded-md mb-2 flex items-center justify-between ${
+                  nota.tipo_documento === 'Debito'
+                    ? 'border-amber-300 bg-amber-50 text-amber-900'
+                    : 'border-purple-300 bg-purple-50 text-purple-900'
+                }`}
+              >
+                <div>
+                  <p className="text-xs font-black uppercase tracking-wider">
+                    {nota.tipo_documento === 'Debito'
+                      ? '📈 NOTA DE DÉBITO (AJUSTE A MAIOR)'
+                      : '📉 NOTA DE CRÉDITO (AJUSTE A MENOR)'}
+                  </p>
+                  <p className="text-[11px] mt-0.5">
+                    Referência: Parcela{' '}
+                    {nota.parcela_referencia ? `nº ${nota.parcela_referencia}` : 'de contrato'} ·
+                    Valor Original: {formatBrlMoeda(nota.valor_original)} → Renegociado:{' '}
+                    {formatBrlMoeda(nota.valor_renegociado)}
+                  </p>
+                </div>
+                <Badge
+                  className={`font-bold text-xs px-2 py-0.5 ${
+                    nota.tipo_documento === 'Debito'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-purple-600 text-white'
+                  }`}
+                >
+                  Diferença:{' '}
+                  {formatBrlMoeda(
+                    Math.abs(Number(nota.valor_diferenca) || Number(nota.valor_servicos)),
+                  )}
+                </Badge>
+              </div>
+            )}
+
             {/* 1. Cabeçalho Oficial */}
             <div className="border border-slate-900 rounded p-3 grid grid-cols-12 gap-2 items-center">
               <div className="col-span-8 flex items-center gap-3">
@@ -138,11 +242,13 @@ export function ModalVisualizarDanfse({
                     PREFEITURA MUNICIPAL / SISTEMA NACIONAL DE NFS-E
                   </h2>
                   <h1 className="text-sm font-black tracking-tight text-slate-900 uppercase">
-                    NOTA FISCAL DE SERVIÇOS ELETRÔNICA - NFS-e
+                    {isDebitoCredito
+                      ? `NOTA DE ${nota.tipo_documento === 'Debito' ? 'DÉBITO' : 'CRÉDITO'} DE AJUSTE`
+                      : 'NOTA FISCAL DE SERVIÇOS ELETRÔNICA - NFS-e'}
                   </h1>
                   <p className="text-[10px] text-slate-600">
                     RPS nº {nota.numero} · Padrão Nacional / ABRASF · Natureza da Operação:
-                    Tributação no município
+                    {nota.natureza_operacao || 'Tributação no município'}
                   </p>
                 </div>
               </div>

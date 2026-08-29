@@ -51,8 +51,11 @@ import {
   Receipt,
   FileSpreadsheet,
   AlertTriangle,
+  Edit3,
+  FileText,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { notasFiscaisService } from '@/services/notasFiscaisService'
 
 // Formata data ISO ou YYYY-MM-DD para dd/mm/aaaa
 function formatarDataBr(dataStr?: string | null): string {
@@ -123,6 +126,17 @@ export default function BaixaRecebiveis() {
   const [modalExcluirOpen, setModalExcluirOpen] = useState(false)
   const [recebivelParaExcluir, setRecebivelParaExcluir] = useState<RecebivelRecord | null>(null)
   const [salvandoExcluir, setSalvandoExcluir] = useState(false)
+
+  // Modal Renegociar Parcela (com geração automática de Nota de Débito/Crédito NFSe)
+  const [modalRenegociarOpen, setModalRenegociarOpen] = useState(false)
+  const [recebivelParaRenegociar, setRecebivelParaRenegociar] = useState<RecebivelRecord | null>(
+    null,
+  )
+  const [novoValorRenegociado, setNovoValorRenegociado] = useState<number>(0)
+  const [novoVencimentoRenegociado, setNovoVencimentoRenegociado] = useState<string>('')
+  const [motivoRenegociacao, setMotivoRenegociacao] = useState<string>('')
+  const [gerarNotaAjuste, setGerarNotaAjuste] = useState<boolean>(true)
+  const [salvandoRenegociacao, setSalvandoRenegociacao] = useState(false)
 
   // Carregar dados
   const carregarDados = async () => {
@@ -374,6 +388,86 @@ export default function BaixaRecebiveis() {
       })
     } finally {
       setSalvandoDesfazer(false)
+    }
+  }
+
+  const handleAbrirRenegociar = (r: RecebivelRecord) => {
+    setRecebivelParaRenegociar(r)
+    setNovoValorRenegociado(Number(r.valor) || 0)
+    setNovoVencimentoRenegociado((r.vencimento || '').slice(0, 10))
+    setMotivoRenegociacao('')
+    setGerarNotaAjuste(true)
+    setModalRenegociarOpen(true)
+  }
+
+  const handleConfirmarRenegociacao = async () => {
+    if (!recebivelParaRenegociar) return
+    const valorOriginal = Number(recebivelParaRenegociar.valor) || 0
+    const novoValor = Number(novoValorRenegociado)
+
+    if (isNaN(novoValor) || novoValor < 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Valor inválido',
+        description: 'Informe um valor numérico válido para a parcela.',
+      })
+      return
+    }
+
+    setSalvandoRenegociacao(true)
+    try {
+      // 1. Atualiza o recebível com o novo valor
+      const atualizado = await recebiveisService.renegociarParcela(
+        recebivelParaRenegociar.id,
+        novoValor,
+        novoVencimentoRenegociado,
+      )
+
+      setRecebiveis((prev) => prev.map((item) => (item.id === atualizado.id ? atualizado : item)))
+
+      const diferenca = novoValor - valorOriginal
+
+      // 2. Se habilitado e houve diferença de valor, gera automaticamente a nota de débito ou crédito
+      if (gerarNotaAjuste && Math.abs(diferenca) >= 0.01) {
+        const tipoNota = diferenca > 0 ? 'Débito' : 'Crédito'
+        try {
+          const notaGerada = await notasFiscaisService.gerarNotaAjusteRenegociacao({
+            empresaId: recebivelParaRenegociar.empresa,
+            parcela: recebivelParaRenegociar.parcela,
+            valorOriginal,
+            valorRenegociado: novoValor,
+            motivoRenegociacao: motivoRenegociacao.trim() || undefined,
+          })
+
+          toast({
+            title: `Parcela renegociada & Nota de ${tipoNota} gerada!`,
+            description: `Parcela ${recebivelParaRenegociar.parcela} alterada para ${formatarMoeda(novoValor)}. Nota de ${tipoNota} nº ${notaGerada?.numero} gerada pela diferença de ${formatarMoeda(Math.abs(diferenca))}.`,
+          })
+        } catch (notaErr: any) {
+          console.error('Erro ao gerar nota de ajuste:', notaErr)
+          toast({
+            title: 'Parcela alterada',
+            description: `Valor atualizado com sucesso, mas a nota de ${tipoNota} não pôde ser gerada automaticamente (${notaErr?.message}).`,
+          })
+        }
+      } else {
+        toast({
+          title: 'Parcela renegociada',
+          description: `Parcela ${recebivelParaRenegociar.parcela} atualizada para ${formatarMoeda(novoValor)}.`,
+        })
+      }
+
+      setModalRenegociarOpen(false)
+      setRecebivelParaRenegociar(null)
+    } catch (err: any) {
+      console.error('Erro ao renegociar parcela:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro na renegociação',
+        description: err?.message || 'Não foi possível salvar a renegociação da parcela.',
+      })
+    } finally {
+      setSalvandoRenegociacao(false)
     }
   }
 
@@ -963,6 +1057,18 @@ export default function BaixaRecebiveis() {
                         {/* Ações */}
                         <td className="py-3 px-3 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Botão de Renegociação de Parcela */}
+                            <Button
+                              onClick={() => handleAbrirRenegociar(r)}
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs text-blue-700 hover:text-blue-800 bg-blue-50/70 border-blue-200 hover:bg-blue-100 font-semibold px-2 gap-1"
+                              title="Renegociar valor da parcela e gerar Nota de Débito/Crédito"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-blue-600" />
+                              Renegociar
+                            </Button>
+
                             {!isPago ? (
                               <Button
                                 onClick={() => handleAbrirBaixa(r)}
@@ -971,14 +1077,14 @@ export default function BaixaRecebiveis() {
                                 title="Dar baixa neste título"
                               >
                                 <CheckCircle2 className="w-3.5 h-3.5" />
-                                Dar Baixa
+                                Baixa
                               </Button>
                             ) : (
                               <Button
                                 onClick={() => handleAbrirDesfazer(r)}
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-xs text-amber-700 hover:text-amber-800 bg-amber-50/70 border-amber-200 hover:bg-amber-100 font-semibold px-2.5 gap-1"
+                                className="h-7 text-xs text-amber-700 hover:text-amber-800 bg-amber-50/70 border-amber-200 hover:bg-amber-100 font-semibold px-2 gap-1"
                                 title="Estornar baixa e voltar para pendente"
                               >
                                 <Undo2 className="w-3.5 h-3.5" />
@@ -1121,6 +1227,161 @@ export default function BaixaRecebiveis() {
             >
               <CheckCircle2 className="w-4 h-4" />
               {salvandoBaixa ? 'Confirmando...' : 'Confirmar Pagamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ================= MODAL: RENEGOCIAR PARCELA ================= */}
+      <Dialog open={modalRenegociarOpen} onOpenChange={setModalRenegociarOpen}>
+        <DialogContent className="sm:max-w-[480px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+              <Edit3 className="w-5 h-5 text-blue-600" />
+              Renegociação de Parcela de Contrato
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Altere o valor da parcela. Se houver diferença, o sistema gerará automaticamente uma{' '}
+              <strong>Nota de Débito</strong> (se maior) ou <strong>Nota de Crédito</strong> (se
+              menor) vinculada na NFSe.
+            </DialogDescription>
+          </DialogHeader>
+
+          {recebivelParaRenegociar && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Empresa:</span>
+                  <span className="font-bold text-slate-900">
+                    {recebivelParaRenegociar.expand?.empresa?.nome ||
+                      empresaMap.get(recebivelParaRenegociar.empresa)?.nome ||
+                      'Empresa'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-500 font-medium">Parcela:</span>
+                  <span className="font-mono font-bold text-blue-700">
+                    Nº {recebivelParaRenegociar.parcela}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
+                  <span className="text-slate-600 font-medium">Valor Original:</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {formatarMoeda(recebivelParaRenegociar.valor)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Novo Valor (R$) *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={novoValorRenegociado}
+                    onChange={(e) => setNovoValorRenegociado(Number(e.target.value))}
+                    className="h-9 text-xs font-mono font-bold text-blue-700 bg-white"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Novo Vencimento</Label>
+                  <Input
+                    type="date"
+                    value={novoVencimentoRenegociado}
+                    onChange={(e) => setNovoVencimentoRenegociado(e.target.value)}
+                    className="h-9 text-xs bg-white"
+                  />
+                </div>
+              </div>
+
+              {/* Indicador de Diferença e Tipo de Nota */}
+              {(() => {
+                const diff = novoValorRenegociado - Number(recebivelParaRenegociar.valor)
+                if (Math.abs(diff) < 0.01) {
+                  return (
+                    <div className="p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-600 text-[11px]">
+                      Sem alteração no valor da parcela. Nenhuma nota de ajuste será emitida.
+                    </div>
+                  )
+                }
+                const isDebito = diff > 0
+                return (
+                  <div
+                    className={`p-3 rounded-xl border flex items-center justify-between ${
+                      isDebito
+                        ? 'bg-amber-50 border-amber-200 text-amber-950'
+                        : 'bg-purple-50 border-purple-200 text-purple-950'
+                    }`}
+                  >
+                    <div>
+                      <p className="font-bold flex items-center gap-1.5">
+                        <FileText className="w-4 h-4" />
+                        {isDebito ? 'Gerar Nota de Débito (+)' : 'Gerar Nota de Crédito (-)'}
+                      </p>
+                      <p className="text-[11px] opacity-90 mt-0.5">
+                        {isDebito
+                          ? 'Acréscimo a ser cobrado do tomador'
+                          : 'Abatimento/desconto concedido ao tomador'}
+                      </p>
+                    </div>
+                    <span className="font-mono font-bold text-sm">
+                      {isDebito ? '+' : '-'} {formatarMoeda(Math.abs(diff))}
+                    </span>
+                  </div>
+                )
+              })()}
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Justificativa / Motivo da Renegociação
+                </Label>
+                <Input
+                  type="text"
+                  placeholder="Ex: Aditivo contratual com escopo ampliado, desconto pontualidade..."
+                  value={motivoRenegociacao}
+                  onChange={(e) => setMotivoRenegociacao(e.target.value)}
+                  className="h-9 text-xs bg-white"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="chk-gerar-nota-ajuste"
+                  checked={gerarNotaAjuste}
+                  onChange={(e) => setGerarNotaAjuste(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                />
+                <label
+                  htmlFor="chk-gerar-nota-ajuste"
+                  className="text-xs font-medium text-slate-700 cursor-pointer"
+                >
+                  Gerar e autorizar automaticamente a Nota de Ajuste (Débito/Crédito) na NFSe
+                </label>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalRenegociarOpen(false)}
+              className="text-xs"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleConfirmarRenegociacao}
+              disabled={salvandoRenegociacao}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs gap-1.5 shadow-xs"
+            >
+              <Edit3 className="w-4 h-4" />
+              {salvandoRenegociacao ? 'Salvando...' : 'Confirmar Renegociação'}
             </Button>
           </DialogFooter>
         </DialogContent>

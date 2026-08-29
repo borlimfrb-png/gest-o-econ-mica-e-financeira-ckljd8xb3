@@ -193,6 +193,28 @@ export const recebiveisService = {
   },
 
   /**
+   * Renegocia o valor e/ou vencimento de uma parcela de recebível.
+   */
+  async renegociarParcela(
+    id: string,
+    novoValor: number,
+    novoVencimento?: string,
+  ): Promise<RecebivelRecord> {
+    const dados: Record<string, any> = {
+      valor: Number(novoValor) || 0,
+    }
+    if (novoVencimento) {
+      dados.vencimento = novoVencimento.includes(' ')
+        ? novoVencimento
+        : `${novoVencimento} 12:00:00`
+    }
+
+    return await pb.collection('recebiveis').update<RecebivelRecord>(id, dados, {
+      expand: 'empresa',
+    })
+  },
+
+  /**
    * Exclui uma parcela individual de recebível.
    */
   async excluirParcela(id: string): Promise<boolean> {

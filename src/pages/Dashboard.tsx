@@ -14,6 +14,7 @@ import {
 } from '@/services/financeService'
 import { contratosService } from '@/services/contratosService'
 import { recebiveisService } from '@/services/recebiveisService'
+import { notasFiscaisService } from '@/services/notasFiscaisService'
 import type {
   BalancoRecord,
   CentroRecord,
@@ -26,6 +27,7 @@ import type {
   TipoDespesaRecord,
   ContratoRecord,
   RecebivelRecord,
+  NotaFiscalRecord,
 } from '@/types/finance'
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import {
@@ -78,6 +80,11 @@ import {
   Check,
   Tag,
   Download,
+  FileText,
+  Percent,
+  AlertCircle,
+  Eye,
+  Plus,
 } from 'lucide-react'
 
 const CHART_COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
@@ -98,6 +105,7 @@ export default function Dashboard() {
   const [metas, setMetas] = useState<MetaLancamentoRecord[]>([])
   const [contratos, setContratos] = useState<ContratoRecord[]>([])
   const [recebiveis, setRecebiveis] = useState<RecebivelRecord[]>([])
+  const [notasFiscais, setNotasFiscais] = useState<NotaFiscalRecord[]>([])
   const [modalMetasOpen, setModalMetasOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
@@ -116,6 +124,7 @@ export default function Dashboard() {
         allMetas,
         allContratos,
         allRecebiveis,
+        allNotas,
       ] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
@@ -128,6 +137,7 @@ export default function Dashboard() {
         metasLancamentosService.getAll({ expandRelations: true }),
         contratosService.listar().catch(() => [] as ContratoRecord[]),
         recebiveisService.listarPorPeriodo().catch(() => [] as RecebivelRecord[]),
+        notasFiscaisService.listar().catch(() => [] as NotaFiscalRecord[]),
       ])
       setAllBalancos(allB)
       setDres(allD)
@@ -140,6 +150,7 @@ export default function Dashboard() {
       setMetas(allMetas)
       setContratos(allContratos)
       setRecebiveis(allRecebiveis)
+      setNotasFiscais(allNotas)
 
       if (selectedEmpresaId) {
         setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
@@ -204,6 +215,201 @@ export default function Dashboard() {
   useRealtime<RecebivelRecord>('financeiro', () => {
     loadData()
   })
+  useRealtime<NotaFiscalRecord>('notas_fiscais', () => {
+    loadData()
+  })
+
+  // SEÇÃO / INDICADORES DE NOTAS FISCAIS (NFSe)
+  const resumoNfseDashboard = useMemo(() => {
+    // Filtro por empresa se selecionada
+    const notasFiltradas = notasFiscais.filter((n) => {
+      if (selectedEmpresaId && n.empresa !== selectedEmpresaId) return false
+      return true
+    })
+
+    // Notas válidas emitidas/enviadas
+    const notasEmitidas = notasFiltradas.filter(
+      (n) => n.status === 'Emitida' || n.status === 'Enviada',
+    )
+    const notasCanceladas = notasFiltradas.filter((n) => n.status === 'Cancelada')
+
+    // Valores
+    const faturamentoTotalEmitido = notasEmitidas.reduce(
+      (acc, n) => acc + (Number(n.valor_servicos) || 0),
+      0,
+    )
+    const totalImpostosEmitidos = notasEmitidas.reduce((acc, n) => {
+      const iss = Number(n.valor_iss) || 0
+      const pis = Number(n.valor_pis) || 0
+      const cofins = Number(n.valor_cofins) || 0
+      const inss = Number(n.valor_inss) || 0
+      const ir = Number(n.valor_ir) || 0
+      const csll = Number(n.valor_csll) || 0
+      return acc + iss + pis + cofins + inss + ir + csll
+    }, 0)
+    const valorLiquidoTotal = notasEmitidas.reduce(
+      (acc, n) => acc + (Number(n.valor_liquido) || 0),
+      0,
+    )
+
+    // Inadimplência de Emissão:
+    // Clientes que possuem emitir_nota_fiscal = true (ou contratos ativos com emitir_nota = true)
+    // E possuem parcelas de recebíveis vencidas (ou a vencer) que ainda NÃO possuem nota fiscal emitida vinculada.
+    const empresasComEmissaoAtiva = new Set(
+      empresas.filter((e) => e.emitir_nota_fiscal).map((e) => e.id),
+    )
+
+    // Adiciona também empresas que possuem contratos com emitir_nota_fiscal = true
+    for (const c of contratos) {
+      if (c.emitir_nota_fiscal && c.contratante) {
+        empresasComEmissaoAtiva.add(c.contratante)
+      }
+    }
+
+    const hojeStr = new Date().toISOString().slice(0, 10)
+    const parcelasSemNotaEmitida: {
+      recebivel: RecebivelRecord
+      empresaNome: string
+      motivoInadimplencia: string
+      diasAtraso: number
+    }[] = []
+
+    let valorInadimplenciaEmissao = 0
+
+    // Set de recebíveis ou contratos que já possuem notas fiscais emitidas
+    const contratosComNotasEmitidas = new Set(
+      notasEmitidas.map((n) => n.contrato).filter(Boolean) as string[],
+    )
+    const empresasComNotasEmitidasMesAtual = new Set<string>()
+    const mesAtualIso = hojeStr.slice(0, 7)
+
+    for (const n of notasEmitidas) {
+      if ((n.data_emissao || '').slice(0, 7) === mesAtualIso) {
+        empresasComNotasEmitidasMesAtual.add(n.empresa)
+      }
+    }
+
+    for (const r of recebiveis) {
+      if (selectedEmpresaId && r.empresa !== selectedEmpresaId) continue
+
+      // Deve pertencer a cliente com emissão de nota ativa
+      if (!empresasComEmissaoAtiva.has(r.empresa)) continue
+
+      const emp = empresas.find((e) => e.id === r.empresa) || r.expand?.empresa
+      const empNome = emp?.nome || 'Empresa'
+      const vencimentoYmd = (r.vencimento || '').slice(0, 10)
+      const isVencida = vencimentoYmd && vencimentoYmd < hojeStr && r.status === 'Pendente'
+
+      // Verifica se já teve nota emitida vinculada ao contrato ou se há parcela sem nota
+      const jaTemNotaContrato = r.contrato ? contratosComNotasEmitidas.has(r.contrato) : false
+      const jaTemNotaEmpresaMes = empresasComNotasEmitidasMesAtual.has(r.empresa)
+
+      if (isVencida || (!jaTemNotaContrato && !jaTemNotaEmpresaMes && r.status === 'Pendente')) {
+        let diasAtraso = 0
+        if (vencimentoYmd) {
+          const diffMs = new Date().getTime() - new Date(vencimentoYmd).getTime()
+          diasAtraso = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+        }
+
+        const motivo = isVencida
+          ? `Parcela ${r.parcela} vencida há ${diasAtraso} dia(s) (${vencimentoYmd}) sem NFS-e emitida`
+          : `Parcela ${r.parcela} pendente com "Emitir NF = Sim" aguardando emissão de nota`
+
+        parcelasSemNotaEmitida.push({
+          recebivel: r,
+          empresaNome: empNome,
+          motivoInadimplencia: motivo,
+          diasAtraso,
+        })
+        valorInadimplenciaEmissao += Number(r.valor) || 0
+      }
+    }
+
+    // Mini gráfico de faturamento mensal de notas (últimos 6 meses)
+    const agora = new Date()
+    const anoAtual = agora.getFullYear()
+    const mesAtual = agora.getMonth() // 0-11
+    const NOMES_MESES_ABREV = [
+      'Jan',
+      'Fev',
+      'Mar',
+      'Abr',
+      'Mai',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Set',
+      'Out',
+      'Nov',
+      'Dez',
+    ]
+
+    const mesesGraficoNfse: {
+      key: string
+      label: string
+      faturamento: number
+      impostos: number
+      quantidade: number
+    }[] = []
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(anoAtual, mesAtual - i, 1)
+      const y = d.getFullYear()
+      const m = d.getMonth()
+      const key = `${y}-${String(m + 1).padStart(2, '0')}`
+      const label = `${NOMES_MESES_ABREV[m]}/${String(y).slice(2)}`
+      mesesGraficoNfse.push({
+        key,
+        label,
+        faturamento: 0,
+        impostos: 0,
+        quantidade: 0,
+      })
+    }
+
+    const mapMesesNfse = new Map<string, (typeof mesesGraficoNfse)[0]>()
+    for (const mObj of mesesGraficoNfse) {
+      mapMesesNfse.set(mObj.key, mObj)
+    }
+
+    for (const n of notasEmitidas) {
+      const dStr = (n.data_emissao || '').slice(0, 7)
+      const mObj = mapMesesNfse.get(dStr)
+      if (mObj) {
+        const val = Number(n.valor_servicos) || 0
+        const iss = Number(n.valor_iss) || 0
+        const pis = Number(n.valor_pis) || 0
+        const cofins = Number(n.valor_cofins) || 0
+        const inss = Number(n.valor_inss) || 0
+        const ir = Number(n.valor_ir) || 0
+        const csll = Number(n.valor_csll) || 0
+        mObj.faturamento += val
+        mObj.impostos += iss + pis + cofins + inss + ir + csll
+        mObj.quantidade += 1
+      }
+    }
+
+    // Últimas 5 notas emitidas para exibição rápida
+    const ultimasNotasEmitidas = [...notasFiltradas]
+      .sort((a, b) => (b.numero || 0) - (a.numero || 0))
+      .slice(0, 6)
+
+    return {
+      totalNotasCadastradas: notasFiltradas.length,
+      totalNotasEmitidas: notasEmitidas.length,
+      totalNotasCanceladas: notasCanceladas.length,
+      faturamentoTotalEmitido,
+      totalImpostosEmitidos,
+      valorLiquidoTotal,
+      aliquotaEfetivaMedia:
+        faturamentoTotalEmitido > 0 ? (totalImpostosEmitidos / faturamentoTotalEmitido) * 100 : 0,
+      inadimplenciaEmissaoQtd: parcelasSemNotaEmitida.length,
+      inadimplenciaEmissaoValor: valorInadimplenciaEmissao,
+      parcelasSemNotaEmitida: parcelasSemNotaEmitida.slice(0, 5),
+      mesesGraficoNfse,
+      ultimasNotasEmitidas,
+    }
+  }, [notasFiscais, empresas, contratos, recebiveis, selectedEmpresaId])
 
   // Lookup maps
   const contasMap = useMemo(() => {
@@ -2147,6 +2353,373 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ========================================================================= */}
+      {/* SEÇÃO: PAINEL DE NOTAS FISCAIS EMITIDAS (NFSE)                           */}
+      {/* ========================================================================= */}
+      <Card className="bg-white border-slate-200 shadow-2xs">
+        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <FileText className="w-4 h-4 text-blue-600" />
+              Painel de Notas Fiscais (NFS-e)
+              {selectedEmpresa && (
+                <Badge
+                  variant="outline"
+                  className="ml-1 bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold"
+                >
+                  {selectedEmpresa.nome}
+                </Badge>
+              )}
+            </CardTitle>
+            <CardDescription className="text-xs mt-0.5">
+              Resumo de notas emitidas, faturamento tributável, impostos apurados, inadimplência de
+              emissão e histórico recente
+            </CardDescription>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 font-medium gap-1 shrink-0"
+            >
+              <Link to="/notas-fiscais">
+                Gerenciar NFS-e <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-4 space-y-4">
+          {/* 4 Cards de Resumo NFSe */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Total de Notas Emitidas */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Notas Emitidas
+                </span>
+                <div className="p-1.5 bg-blue-100 text-blue-700 rounded-lg">
+                  <FileText className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-xl sm:text-2xl font-bold text-[#0B1F3A] tracking-tight">
+                <AnimatedCounter
+                  value={resumoNfseDashboard.totalNotasEmitidas}
+                  formatter={(v) => `${v} notas`}
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                {resumoNfseDashboard.totalNotasCanceladas > 0
+                  ? `${resumoNfseDashboard.totalNotasCanceladas} nota(s) cancelada(s)`
+                  : 'Nenhuma nota cancelada'}
+              </p>
+            </div>
+
+            {/* 2. Faturamento Total em Notas */}
+            <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50/70 to-teal-50/40 border border-emerald-200 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                  Faturamento NFS-e
+                </span>
+                <div className="p-1.5 bg-emerald-600 text-white rounded-lg shadow-2xs">
+                  <DollarSign className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-xl sm:text-2xl font-black text-emerald-950 tracking-tight">
+                <AnimatedCounter
+                  value={resumoNfseDashboard.faturamentoTotalEmitido}
+                  formatter={(v) => formatBrlMil(v)}
+                />
+              </div>
+              <p className="text-[11px] text-emerald-700 mt-1">
+                Líquido: {formatBrlMil(resumoNfseDashboard.valorLiquidoTotal)}
+              </p>
+            </div>
+
+            {/* 3. Valor Total de Impostos */}
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                  Impostos Apurados
+                </span>
+                <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg">
+                  <Percent className="w-4 h-4" />
+                </div>
+              </div>
+              <div className="mt-2 text-xl sm:text-2xl font-bold text-amber-700 tracking-tight">
+                <AnimatedCounter
+                  value={resumoNfseDashboard.totalImpostosEmitidos}
+                  formatter={(v) => formatBrlMil(v)}
+                />
+              </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Alíquota efetiva:{' '}
+                <span className="font-semibold text-slate-700">
+                  {formatPercent(resumoNfseDashboard.aliquotaEfetivaMedia, 1)}
+                </span>
+              </p>
+            </div>
+
+            {/* 4. Inadimplência de Emissão */}
+            <div
+              className={`p-3.5 rounded-xl border flex flex-col justify-between ${
+                resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                  ? 'bg-rose-50/70 border-rose-300'
+                  : 'bg-emerald-50/50 border-emerald-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className={`text-[11px] font-bold uppercase tracking-wider ${
+                    resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                      ? 'text-rose-800'
+                      : 'text-emerald-800'
+                  }`}
+                >
+                  Inadimplência de Emissão
+                </span>
+                <div
+                  className={`p-1.5 rounded-lg ${
+                    resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                      ? 'bg-rose-600 text-white shadow-2xs'
+                      : 'bg-emerald-100 text-emerald-700'
+                  }`}
+                >
+                  {resumoNfseDashboard.inadimplenciaEmissaoQtd > 0 ? (
+                    <AlertCircle className="w-4 h-4" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4" />
+                  )}
+                </div>
+              </div>
+              <div
+                className={`mt-2 text-xl sm:text-2xl font-bold tracking-tight ${
+                  resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                    ? 'text-rose-700 font-black'
+                    : 'text-emerald-700 font-bold'
+                }`}
+              >
+                {resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                  ? formatBrlMil(resumoNfseDashboard.inadimplenciaEmissaoValor)
+                  : 'Zero Pendências'}
+              </div>
+              <p
+                className={`text-[11px] mt-1 ${
+                  resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                    ? 'text-rose-700 font-medium'
+                    : 'text-emerald-700'
+                }`}
+              >
+                {resumoNfseDashboard.inadimplenciaEmissaoQtd > 0
+                  ? `${resumoNfseDashboard.inadimplenciaEmissaoQtd} parcela(s) pendente(s) de NFS-e`
+                  : 'Todos clientes com "Emitir NF" em dia'}
+              </p>
+            </div>
+          </div>
+
+          {/* Gráfico Mensal de Faturamento NFSe + Lista das Últimas Notas Emitidas */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 pt-1">
+            {/* Gráfico de Faturamento Mensal (7 colunas) */}
+            <div className="lg:col-span-7 space-y-2">
+              <div className="flex items-center justify-between text-xs px-1">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
+                  Faturamento Mensal de Notas Fiscais (Últimos 6 Meses)
+                </span>
+                <span className="text-[11px] text-slate-400">Valores em Reais (R$)</span>
+              </div>
+              <div className="h-64 w-full bg-slate-50/50 rounded-xl p-3 border border-slate-100">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={resumoNfseDashboard.mesesGraficoNfse}
+                    margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                    <XAxis
+                      dataKey="label"
+                      tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#64748B' }}
+                      tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: any, name: any) => [formatBrlMil(Number(val)), name]}
+                    />
+                    <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }} />
+                    <Bar
+                      dataKey="faturamento"
+                      name="Faturamento NFS-e"
+                      fill="#2563EB"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      dataKey="impostos"
+                      name="Impostos Retidos/Devidos"
+                      fill="#F59E0B"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Lista das Últimas Notas Emitidas com Status (5 colunas) */}
+            <div className="lg:col-span-5 space-y-2">
+              <div className="flex items-center justify-between text-xs px-1">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  Últimas Notas Fiscais
+                </span>
+                <Link
+                  to="/notas-fiscais"
+                  className="text-[11px] font-semibold text-blue-600 hover:underline"
+                >
+                  Ver todas ({resumoNfseDashboard.totalNotasCadastradas})
+                </Link>
+              </div>
+
+              {resumoNfseDashboard.ultimasNotasEmitidas.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200 p-4">
+                  <FileText className="w-8 h-8 text-slate-300 mb-2" />
+                  <p className="text-xs font-bold text-slate-700">Nenhuma nota fiscal emitida</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5 max-w-xs mb-3">
+                    Emita suas primeiras NFS-e a partir dos contratos e recebíveis financeiros.
+                  </p>
+                  <Button
+                    asChild
+                    size="sm"
+                    className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  >
+                    <Link to="/notas-fiscais">Ir para NFS-e</Link>
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                  {resumoNfseDashboard.ultimasNotasEmitidas.map((nota) => {
+                    const isCancelada = nota.status === 'Cancelada'
+                    const isDebito = nota.tipo_documento === 'Debito'
+                    const isCredito = nota.tipo_documento === 'Credito'
+
+                    return (
+                      <div
+                        key={nota.id}
+                        className={`p-2.5 rounded-xl border transition-all flex items-center justify-between gap-2 text-xs shadow-2xs ${
+                          isCancelada
+                            ? 'bg-red-50/40 border-red-200'
+                            : isDebito
+                              ? 'bg-amber-50/30 border-amber-200'
+                              : isCredito
+                                ? 'bg-purple-50/30 border-purple-200'
+                                : 'bg-white border-slate-200 hover:border-blue-300'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-mono font-bold text-blue-700">
+                              #{nota.numero}
+                            </span>
+                            {isDebito && (
+                              <Badge className="text-[9px] bg-amber-100 text-amber-900 border-amber-300 font-bold px-1 py-0">
+                                Débito
+                              </Badge>
+                            )}
+                            {isCredito && (
+                              <Badge className="text-[9px] bg-purple-100 text-purple-900 border-purple-300 font-bold px-1 py-0">
+                                Crédito
+                              </Badge>
+                            )}
+                            <Badge
+                              className={`text-[9px] font-bold px-1.5 py-0 ${
+                                isCancelada
+                                  ? 'bg-red-100 text-red-800 border-red-300'
+                                  : nota.status === 'Emitida'
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300'
+                                    : nota.status === 'Enviada'
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                      : 'bg-slate-100 text-slate-800 border-slate-300'
+                              }`}
+                            >
+                              {nota.status}
+                            </Badge>
+                          </div>
+                          <p
+                            className="font-semibold text-slate-900 truncate mt-0.5 text-[11px]"
+                            title={nota.tomador_razao_social || 'Cliente'}
+                          >
+                            {nota.tomador_razao_social || 'Cliente'}
+                          </p>
+                          <p className="text-[10px] text-slate-400">
+                            {nota.data_emissao ? nota.data_emissao.slice(0, 10) : '—'}
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span
+                            className={`font-mono font-bold text-xs block ${
+                              isCancelada ? 'line-through text-slate-400' : 'text-slate-900'
+                            }`}
+                          >
+                            {formatBrlMil(nota.valor_liquido || nota.valor_servicos)}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            ISS: {formatBrlMil(nota.valor_iss || 0)}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Se houver parcelas com inadimplência de emissão, exibe detalhe de alerta */}
+          {resumoNfseDashboard.parcelasSemNotaEmitida.length > 0 && (
+            <div className="p-3 bg-rose-50/70 border border-rose-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                  <span className="text-xs font-bold text-rose-900">
+                    Atenção Fiscal: Parcelas de clientes com emissão obrigatória pendentes de NFS-e
+                  </span>
+                </div>
+                <Button
+                  asChild
+                  size="sm"
+                  className="h-6 text-[11px] bg-rose-600 hover:bg-rose-700 text-white font-semibold px-2"
+                >
+                  <Link to="/notas-fiscais">Emitir Notas Pendentes</Link>
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-1">
+                {resumoNfseDashboard.parcelasSemNotaEmitida.map((item) => (
+                  <div
+                    key={item.recebivel.id}
+                    className="p-2 rounded-lg bg-white border border-rose-200 text-xs flex items-center justify-between shadow-2xs"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 truncate text-[11px]">
+                        {item.empresaNome}
+                      </p>
+                      <p className="text-[10px] text-rose-700 truncate">
+                        {item.motivoInadimplencia}
+                      </p>
+                    </div>
+                    <span className="font-mono font-bold text-rose-900 ml-2 shrink-0">
+                      {formatBrlMil(item.recebivel.valor)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ========================================================================= */}
       {/* SEÇÃO: CURVA DE RECEBIMENTO PREVISTO (PRÓXIMOS 6 MESES - FINANCEIRO)     */}

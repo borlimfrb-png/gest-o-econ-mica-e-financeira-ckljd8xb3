@@ -342,6 +342,7 @@ export interface ContratoRecord extends RecordModel {
 
 export type StatusNotaFiscal = 'Rascunho' | 'Emitida' | 'Enviada' | 'Cancelada' | 'Erro'
 export type ModoEmissaoNFSe = 'Homologação / Simulação' | 'Produção SEFAZ / Gateway'
+export type TipoDocumentoFiscal = 'NFSe' | 'Debito' | 'Credito'
 
 export interface NotaFiscalRecord extends RecordModel {
   user: string
@@ -383,9 +384,25 @@ export interface NotaFiscalRecord extends RecordModel {
   xml_conteudo?: string
   email_enviado_em?: string
   email_destinatario?: string
+
+  // Cancelamento
+  motivo_cancelamento?: string
+  cancelada_em?: string
+  protocolo_cancelamento?: string
+  xml_cancelamento?: string
+
+  // Nota de Débito / Crédito de Ajuste
+  tipo_documento?: TipoDocumentoFiscal
+  nota_referencia?: string
+  parcela_referencia?: number
+  valor_original?: number
+  valor_renegociado?: number
+  valor_diferenca?: number
+
   expand?: {
     empresa?: EmpresaRecord
     contrato?: ContratoRecord
+    nota_referencia?: NotaFiscalRecord
   }
 }
 

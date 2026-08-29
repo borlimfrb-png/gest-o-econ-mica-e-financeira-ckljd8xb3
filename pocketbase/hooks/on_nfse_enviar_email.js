@@ -32,6 +32,14 @@ routerAdd(
         return e.json(403, { success: false, message: 'Acesso negado a esta nota fiscal.' })
       }
 
+      if (notaRec.get('status') === 'Cancelada') {
+        return e.json(400, {
+          success: false,
+          message:
+            'Esta nota fiscal está CANCELADA e não pode ser reenviada por e-mail como documento válido.',
+        })
+      }
+
       // Busca dados do prestador (Minha Empresa)
       let nomePrestador = 'Nossa Consultoria'
       let cnpjPrestador = ''

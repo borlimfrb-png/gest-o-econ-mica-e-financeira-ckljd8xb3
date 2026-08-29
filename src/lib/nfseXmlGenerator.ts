@@ -36,6 +36,14 @@ export interface DadosDanfse {
 export function gerarXmlNfse(dados: DadosDanfse): string {
   const { nota, prestador, tomador } = dados
 
+  if (
+    nota.status === 'Cancelada' &&
+    nota.xml_cancelamento &&
+    nota.xml_cancelamento.trim().startsWith('<?xml')
+  ) {
+    return nota.xml_cancelamento
+  }
+
   if (nota.xml_conteudo && nota.xml_conteudo.trim().startsWith('<?xml')) {
     return nota.xml_conteudo
   }

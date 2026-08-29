@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T01:30:11.669Z",
+  "generatedAt": "2026-08-29T03:06:28.873Z",
   "collections": [
     {
       "name": "users",
@@ -1960,6 +1960,68 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "motivo_cancelamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cancelada_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "protocolo_cancelamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "xml_cancelamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_documento",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["NFSe", "Debito", "Credito"]
+        },
+        {
+          "name": "nota_referencia",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "notas_fiscais"
+        },
+        {
+          "name": "parcela_referencia",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_original",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_renegociado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_diferenca",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []

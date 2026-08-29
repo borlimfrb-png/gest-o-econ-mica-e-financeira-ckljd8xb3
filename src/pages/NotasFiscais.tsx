@@ -72,6 +72,9 @@ import {
   Sparkles,
   ArrowRight,
   Info,
+  Ban,
+  TrendingUp,
+  TrendingDown,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -156,6 +159,13 @@ export default function NotasFiscais() {
   const [emailDestinatarioInput, setEmailDestinatarioInput] = useState('')
   const [emailMensagemInput, setEmailMensagemInput] = useState('')
   const [enviandoEmail, setEnviandoEmail] = useState(false)
+
+  // Modal de Cancelamento de NFSe
+  const [cancelarModalOpen, setCancelarModalOpen] = useState(false)
+  const [notaParaCancelar, setNotaParaCancelar] = useState<NotaFiscalRecord | null>(null)
+  const [motivoCancelamento, setMotivoCancelamento] = useState('')
+  const [codigoCancelamento, setCodigoCancelamento] = useState('1')
+  const [cancelando, setCancelando] = useState(false)
 
   // Confirmação de exclusão
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -529,12 +539,101 @@ export default function NotasFiscais() {
     })
   }
 
+  const abrirModalCancelar = (nota: NotaFiscalRecord) => {
+    if (nota.status === 'Cancelada') {
+      toast({
+        variant: 'destructive',
+        title: 'Nota já cancelada',
+        description: 'Esta nota fiscal já se encontra no status Cancelada.',
+      })
+      return
+    }
+    if (nota.status === 'Rascunho') {
+      toast({
+        title: 'Nota em Rascunho',
+        description: 'Notas em rascunho podem ser excluídas diretamente no botão de lixeira.',
+      })
+      return
+    }
+    setNotaParaCancelar(nota)
+    setMotivoCancelamento('')
+    setCodigoCancelamento('1')
+    setCancelarModalOpen(true)
+  }
+
+  const handleCancelarSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!notaParaCancelar) return
+
+    if (!motivoCancelamento || !motivoCancelamento.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Motivo obrigatório',
+        description: 'Por favor, informe a justificativa detalhada para o cancelamento.',
+      })
+      return
+    }
+
+    setCancelando(true)
+    try {
+      const res = await notasFiscaisService.cancelar({
+        notaId: notaParaCancelar.id,
+        motivo: motivoCancelamento.trim(),
+        codigoCancelamento,
+      })
+
+      if (res.success) {
+        toast({
+          title: 'NFS-e cancelada com sucesso!',
+          description:
+            res.message ||
+            `Nota nº ${notaParaCancelar.numero} cancelada junto ao gateway/SEFAZ (ABRASF).`,
+        })
+        setCancelarModalOpen(false)
+        setNotaParaCancelar(null)
+        setMotivoCancelamento('')
+        await loadData()
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Falha no cancelamento',
+          description: res.message || 'Não foi possível cancelar a nota fiscal.',
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao cancelar NFS-e:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao cancelar NFS-e',
+        description:
+          err?.message || 'Ocorreu um erro ao comunicar o cancelamento com o gateway NFSe.',
+      })
+    } finally {
+      setCancelando(false)
+    }
+  }
+
   const abrirModalEmail = (nota: NotaFiscalRecord) => {
+    if (nota.status === 'Cancelada') {
+      toast({
+        variant: 'destructive',
+        title: 'Nota Cancelada',
+        description:
+          'Esta nota fiscal está CANCELADA e não pode ser reenviada por e-mail como documento válido.',
+      })
+      return
+    }
+
     const empresaCliente = empresas.find((e) => e.id === nota.empresa) || nota.expand?.empresa
+    const isDebitoCredito = nota.tipo_documento === 'Debito' || nota.tipo_documento === 'Credito'
+    const docTitulo = isDebitoCredito
+      ? `Nota de ${nota.tipo_documento === 'Debito' ? 'Débito' : 'Crédito'} de Ajuste`
+      : 'Nota Fiscal Eletrônica'
+
     setNotaParaEmail(nota)
     setEmailDestinatarioInput(nota.tomador_email || empresaCliente?.email || '')
     setEmailMensagemInput(
-      `Olá, ${nota.tomador_razao_social || empresaCliente?.nome || 'Cliente'},\n\nSegue a Nota Fiscal Eletrônica nº ${nota.numero} referente à prestação de serviços contábeis e financeiros.\n\nValor: ${formatBrlMoeda(nota.valor_liquido)}\nCódigo de Verificação: ${nota.codigo_verificacao || 'N/A'}\n\nAtenciosamente,\n${minhaEmpresa?.razao_social || 'Gestão Financeira'}`,
+      `Olá, ${nota.tomador_razao_social || empresaCliente?.nome || 'Cliente'},\n\nSegue o documento auxiliar da ${docTitulo} nº ${nota.numero} referente à prestação de serviços.\n\nValor: ${formatBrlMoeda(nota.valor_liquido)}\nCódigo de Verificação: ${nota.codigo_verificacao || 'N/A'}\n\nAtenciosamente,\n${minhaEmpresa?.razao_social || 'Gestão Financeira'}`,
     )
     setModalEmailOpen(true)
   }
@@ -640,6 +739,7 @@ export default function NotasFiscais() {
 
   const totalEmitidas = notas.filter((n) => n.status === 'Emitida' || n.status === 'Enviada').length
   const totalEnviadasEmail = notas.filter((n) => n.status === 'Enviada').length
+  const totalCanceladas = notas.filter((n) => n.status === 'Cancelada').length
 
   const getStatusBadge = (status: StatusNotaFiscal) => {
     switch (status) {
@@ -811,6 +911,9 @@ export default function NotasFiscais() {
                 <SelectItem value="Rascunho" className="text-xs">
                   Rascunho
                 </SelectItem>
+                <SelectItem value="Cancelada" className="text-xs">
+                  Canceladas
+                </SelectItem>
               </SelectContent>
             </Select>
 
@@ -870,10 +973,29 @@ export default function NotasFiscais() {
                             <span className="text-[10px] text-slate-400 font-normal">
                               (Série {nota.serie || '1'})
                             </span>
+                            {nota.tipo_documento === 'Debito' && (
+                              <Badge className="text-[9px] bg-amber-100 text-amber-900 border-amber-300 font-bold px-1.5 py-0">
+                                <TrendingUp className="w-2.5 h-2.5 mr-0.5 inline" /> Débito
+                              </Badge>
+                            )}
+                            {nota.tipo_documento === 'Credito' && (
+                              <Badge className="text-[9px] bg-purple-100 text-purple-900 border-purple-300 font-bold px-1.5 py-0">
+                                <TrendingDown className="w-2.5 h-2.5 mr-0.5 inline" /> Crédito
+                              </Badge>
+                            )}
                           </div>
                           {nota.codigo_verificacao && (
                             <span className="text-[10px] text-slate-500 font-mono block">
                               Cód: {nota.codigo_verificacao}
+                            </span>
+                          )}
+                          {nota.status === 'Cancelada' && nota.cancelada_em && (
+                            <span
+                              className="text-[10px] text-red-600 font-medium block truncate max-w-[180px]"
+                              title={nota.motivo_cancelamento}
+                            >
+                              Canc: {new Date(nota.cancelada_em).toLocaleDateString('pt-BR')}{' '}
+                              {nota.motivo_cancelamento ? `• ${nota.motivo_cancelamento}` : ''}
                             </span>
                           )}
                         </td>
@@ -927,12 +1049,35 @@ export default function NotasFiscais() {
                               <Download className="w-3.5 h-3.5" />
                             </Button>
 
+                            {/* Botão de Cancelar NFSe (apenas para Emitida / Enviada) */}
+                            {(nota.status === 'Emitida' || nota.status === 'Enviada') && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => abrirModalCancelar(nota)}
+                                className="h-7 px-1.5 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                title="Cancelar Nota Fiscal no Gateway/SEFAZ"
+                              >
+                                <Ban className="w-3.5 h-3.5 mr-1" /> Cancelar
+                              </Button>
+                            )}
+
+                            {/* Botão de Envio por E-mail (desabilitado se Cancelada) */}
                             <Button
                               size="sm"
                               variant="ghost"
+                              disabled={nota.status === 'Cancelada'}
                               onClick={() => abrirModalEmail(nota)}
-                              className="h-7 w-7 p-0 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50"
-                              title="Enviar por E-mail ao cliente"
+                              className={`h-7 w-7 p-0 ${
+                                nota.status === 'Cancelada'
+                                  ? 'text-slate-300 cursor-not-allowed'
+                                  : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50'
+                              }`}
+                              title={
+                                nota.status === 'Cancelada'
+                                  ? 'Nota cancelada não pode ser reenviada'
+                                  : 'Enviar por E-mail ao cliente'
+                              }
                             >
                               <Mail className="w-3.5 h-3.5" />
                             </Button>
@@ -1297,6 +1442,119 @@ export default function NotasFiscais() {
                   <>
                     <Send className="w-3.5 h-3.5 mr-1.5" />
                     Enviar NFS-e Agora
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Cancelamento de NFSe */}
+      <Dialog open={cancelarModalOpen} onOpenChange={setCancelarModalOpen}>
+        <DialogContent className="sm:max-w-[560px] bg-white">
+          <form onSubmit={handleCancelarSubmit}>
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-rose-700 flex items-center gap-2">
+                <Ban className="w-5 h-5 text-rose-600" />
+                Cancelamento de NFS-e via Gateway / SEFAZ
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-600">
+                Você está prestes a cancelar a NFS-e nº{' '}
+                <strong className="text-slate-900 font-bold">
+                  #{notaParaCancelar?.numero}
+                </strong>{' '}
+                emitida para{' '}
+                <strong className="text-slate-900 font-semibold">
+                  {notaParaCancelar?.tomador_razao_social || 'Cliente'}
+                </strong>{' '}
+                no valor de{' '}
+                <strong className="text-slate-900 font-mono">
+                  {formatBrlMoeda(notaParaCancelar?.valor_liquido)}
+                </strong>
+                .
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-3">
+              <Alert className="bg-amber-50 border-amber-200 text-amber-900">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertTitle className="text-xs font-bold">Atenção ao Cancelamento</AlertTitle>
+                <AlertDescription className="text-[11px] text-amber-800 leading-relaxed">
+                  O cancelamento transmitirá um evento oficial no padrão{' '}
+                  <strong>ABRASF v2.03</strong> junto à SEFAZ/Gateway Municipal. Após cancelada, a
+                  nota não poderá ser revertida nem reenviada por e-mail como documento válido.
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Código de Cancelamento ABRASF *
+                </Label>
+                <Select value={codigoCancelamento} onValueChange={setCodigoCancelamento}>
+                  <SelectTrigger className="h-9 text-xs bg-white border-slate-300">
+                    <SelectValue placeholder="Selecione o motivo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1" className="text-xs">
+                      1 — Erro na Emissão de Dados / Valores
+                    </SelectItem>
+                    <SelectItem value="2" className="text-xs">
+                      2 — Serviço Não Prestado ou Cancelamento de Contrato
+                    </SelectItem>
+                    <SelectItem value="3" className="text-xs">
+                      3 — Duplicidade de Nota Fiscal
+                    </SelectItem>
+                    <SelectItem value="9" className="text-xs">
+                      9 — Outros Motivos
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">
+                  Justificativa / Motivo Obrigatório do Cancelamento *
+                </Label>
+                <Textarea
+                  value={motivoCancelamento}
+                  onChange={(e) => setMotivoCancelamento(e.target.value)}
+                  placeholder="Descreva o motivo detalhado do cancelamento (ex: Erro no valor dos honorários conforme acordo com cliente, alteração contratual...)"
+                  rows={4}
+                  className="text-xs font-sans"
+                  required
+                />
+                <p className="text-[10px] text-slate-400">
+                  Este texto constará no pedido de cancelamento e ficará gravado no histórico da
+                  nota fiscal.
+                </p>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCancelarModalOpen(false)}
+                disabled={cancelando}
+                className="text-xs h-9"
+              >
+                Voltar
+              </Button>
+              <Button
+                type="submit"
+                disabled={cancelando || !motivoCancelamento.trim()}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs h-9 shadow-xs"
+              >
+                {cancelando ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    Transmitindo Cancelamento...
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-3.5 h-3.5 mr-1.5" />
+                    Confirmar Cancelamento de NFS-e
                   </>
                 )}
               </Button>
