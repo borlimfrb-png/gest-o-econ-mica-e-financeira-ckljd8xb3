@@ -1,20 +1,139 @@
 import { normalizeText } from './pdfParser'
 import type { BalancoRecord, DreRecord } from '@/types/finance'
 
+export interface ContaMapeadaItem {
+  id?: string
+  codigo?: string
+  descricao: string
+  valor: number
+  grupoContabil: string
+  campoMapeado: string
+}
+
 export interface BalanceteMapeadoResult {
   balanco: Partial<BalancoRecord>
   dre: Partial<DreRecord>
-  contasIdentificadas: Array<{
-    codigo?: string
-    descricao: string
-    valor: number
-    grupoContabil: string
-    campoMapeado: string
-  }>
+  contasIdentificadas: ContaMapeadaItem[]
   totalAtivo: number
   totalPassivo: number
   totalReceitas: number
   totalDespesas: number
+}
+
+/**
+ * Recalcula os totais e objetos Balanco / Dre a partir da lista de contas identificadas
+ */
+export function recalcularBalanceteMapeado(
+  contas: ContaMapeadaItem[],
+  ano: number,
+  mes: number,
+  empresaId: string,
+): BalanceteMapeadoResult {
+  const balanco: Partial<BalancoRecord> = {
+    empresa: empresaId,
+    ano,
+    mes,
+    caixa_equivalentes: 0,
+    aplicacoes_financeiras: 0,
+    contas_receber: 0,
+    estoques: 0,
+    impostos_recuperar: 0,
+    outros_ativo_circulante: 0,
+    realizavel_longo_prazo: 0,
+    investimentos: 0,
+    imobilizado: 0,
+    intangivel: 0,
+    fornecedores: 0,
+    emprestimos_curto_prazo: 0,
+    obrigacoes_trabalhistas: 0,
+    obrigacoes_tributarias: 0,
+    outros_passivo_circulante: 0,
+    emprestimos_longo_prazo: 0,
+    outras_obrigacoes_longo_prazo: 0,
+    capital_social: 0,
+    reservas_lucros: 0,
+    lucros_acumulados: 0,
+  }
+
+  const dre: Partial<DreRecord> = {
+    empresa: empresaId,
+    ano,
+    mes,
+    receita_bruta: 0,
+    deducoes_receita: 0,
+    custo_mercadorias: 0,
+    despesas_operacionais: 0,
+    despesas_financeiras: 0,
+    outras_receitas_despesas: 0,
+    imposto_renda: 0,
+  }
+
+  for (const c of contas) {
+    const val = Number(c.valor) || 0
+    const absVal = Math.abs(val)
+    const campo = c.campoMapeado as keyof BalancoRecord | keyof DreRecord
+
+    if (!campo) continue
+
+    // Se pertence a Balanço
+    if (campo in balanco) {
+      if (campo === 'lucros_acumulados' || campo === 'outras_receitas_despesas') {
+        ;(balanco as any)[campo] = ((balanco as any)[campo] || 0) + val
+      } else {
+        ;(balanco as any)[campo] = ((balanco as any)[campo] || 0) + absVal
+      }
+    }
+    // Se pertence a DRE
+    else if (campo in dre) {
+      if (campo === 'outras_receitas_despesas') {
+        ;(dre as any)[campo] = ((dre as any)[campo] || 0) + val
+      } else {
+        ;(dre as any)[campo] = ((dre as any)[campo] || 0) + absVal
+      }
+    }
+  }
+
+  const totalAtivo =
+    (balanco.caixa_equivalentes || 0) +
+    (balanco.aplicacoes_financeiras || 0) +
+    (balanco.contas_receber || 0) +
+    (balanco.estoques || 0) +
+    (balanco.impostos_recuperar || 0) +
+    (balanco.outros_ativo_circulante || 0) +
+    (balanco.realizavel_longo_prazo || 0) +
+    (balanco.investimentos || 0) +
+    (balanco.imobilizado || 0) +
+    (balanco.intangivel || 0)
+
+  const totalPassivo =
+    (balanco.fornecedores || 0) +
+    (balanco.emprestimos_curto_prazo || 0) +
+    (balanco.obrigacoes_trabalhistas || 0) +
+    (balanco.obrigacoes_tributarias || 0) +
+    (balanco.outros_passivo_circulante || 0) +
+    (balanco.emprestimos_longo_prazo || 0) +
+    (balanco.outras_obrigacoes_longo_prazo || 0) +
+    (balanco.capital_social || 0) +
+    (balanco.reservas_lucros || 0) +
+    (balanco.lucros_acumulados || 0)
+
+  const totalReceitas = dre.receita_bruta || 0
+  const totalDespesas =
+    (dre.deducoes_receita || 0) +
+    (dre.custo_mercadorias || 0) +
+    (dre.despesas_operacionais || 0) +
+    (dre.despesas_financeiras || 0) +
+    (dre.imposto_renda || 0)
+
+  return {
+    balanco,
+    dre,
+    contasIdentificadas: contas,
+    totalAtivo,
+    totalPassivo,
+    totalReceitas,
+    totalDespesas,
+  }
 }
 
 /**
@@ -374,6 +493,7 @@ export function mapearBalanceteParaBalancoEDre(
 
     if (campoMapeado) {
       contasIdentificadas.push({
+        id: `conta-${contasIdentificadas.length + 1}-${Date.now()}`,
         codigo: rawCod || undefined,
         descricao: rawDesc,
         valor: row.valor,

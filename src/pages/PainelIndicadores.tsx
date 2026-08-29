@@ -4321,6 +4321,8 @@ export default function PainelIndicadores() {
         }}
         balancoAtual={balancoAtual}
         dreAtual={dreAtual}
+        balancosAno={balancos}
+        dresAno={dres}
         radarItems={radarItems}
         benchmarkAtivo={benchmarkAtivo}
         selectedSetorBenchmark={selectedSetorBenchmark}

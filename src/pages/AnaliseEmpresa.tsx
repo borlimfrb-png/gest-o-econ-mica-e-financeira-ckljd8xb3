@@ -1155,24 +1155,6 @@ export default function AnaliseEmpresa() {
           />
         </TabsContent>
         {/* =========================================================================
-            NOVA ABA: COMPARATIVO MÊS A MÊS (JANEIRO A DEZEMBRO + FECHAMENTO)
-        ========================================================================= */}
-        <TabsContent value="comparativo-mensal" className="space-y-6 focus-visible:outline-none">
-          <ComparativoMensal
-            empresaId={id || ''}
-            empresaNome={empresa.nome}
-            ano={selectedAno}
-            balancos={balancos}
-            dres={dres}
-            onSelectMes={(mesNum) => {
-              setSelectedMes(String(mesNum))
-              setActiveTab('balanco')
-            }}
-            onOpenNovoLancamento={openNovoLancamentoModal}
-            onDataChange={loadData}
-          />
-        </TabsContent>
-        {/* =========================================================================
             ABA 2: BALANÇO PATRIMONIAL
         ========================================================================= */}{' '}
         <TabsContent value="balanco" className="space-y-4 focus-visible:outline-none">

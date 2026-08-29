@@ -309,6 +309,66 @@ export const fechamentoMensalService = {
   },
 
   /**
+   * Executa o fechamento em lote de múltiplos meses sequenciais de um ano (ex: do mês 1 até o mês limite)
+   */
+  async fecharEmLote(options: {
+    empresaId: string
+    ano: number
+    ateMes?: number
+    observacoes?: string
+  }): Promise<{
+    mesesProcessados: number[]
+    mesesFechadosComSucesso: Array<{
+      mes: number
+      lucroApurado: number
+    }>
+    mesesPuladosSemDados: number[]
+    erros: Array<{ mes: number; motivo: string }>
+  }> {
+    const { empresaId, ano, ateMes, observacoes } = options
+    const currentYear = new Date().getFullYear()
+    const currentMonth = new Date().getMonth() + 1
+    const mesMaximo = ateMes !== undefined ? ateMes : ano === currentYear ? currentMonth : 12
+
+    const resultado = {
+      mesesProcessados: [] as number[],
+      mesesFechadosComSucesso: [] as Array<{ mes: number; lucroApurado: number }>,
+      mesesPuladosSemDados: [] as number[],
+      erros: [] as Array<{ mes: number; motivo: string }>,
+    }
+
+    for (let m = 1; m <= mesMaximo; m++) {
+      resultado.mesesProcessados.push(m)
+      try {
+        const res = await this.fecharMes({
+          empresaId,
+          ano,
+          mes: m,
+          observacoes:
+            observacoes ||
+            `Fechamento em lote executado em ${new Date().toLocaleDateString('pt-BR')}`,
+        })
+        resultado.mesesFechadosComSucesso.push({
+          mes: m,
+          lucroApurado: res.lucroApurado,
+        })
+      } catch (err: any) {
+        const errorMsg = err?.message || 'Erro desconhecido'
+        if (
+          errorMsg.includes('Não existem lançamentos contábeis') ||
+          errorMsg.includes('sem dados')
+        ) {
+          resultado.mesesPuladosSemDados.push(m)
+        } else {
+          resultado.erros.push({ mes: m, motivo: errorMsg })
+        }
+      }
+    }
+
+    return resultado
+  },
+
+  /**
    * Reabre um mês previamente fechado
    */
   async reabrirMes(options: {

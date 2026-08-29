@@ -32,7 +32,9 @@ import {
   Flame,
   AlertCircle,
   Info,
+  Download,
 } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
 import { Link } from 'react-router-dom'
 import type { EmpresaRecord, MinhaEmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import type { GrupoRadarItem, BenchmarkSetorValores } from '@/lib/benchmarks'
@@ -43,7 +45,9 @@ import {
   formatNumber,
   formatBrlMil,
   calcularKanitz,
+  gerarComparativoMensalAno,
   type KanitzResultado,
+  type MesComparativoData,
 } from '@/lib/financeCalculations'
 
 export interface IndicadorLinhaImpressao {
@@ -93,6 +97,8 @@ export interface ModalPdfDashboardA4Props {
   }
   balancoAtual?: BalancoRecord | null
   dreAtual?: DreRecord | null
+  balancosAno?: BalancoRecord[]
+  dresAno?: DreRecord[]
   radarItems: GrupoRadarItem[]
   benchmarkAtivo: BenchmarkSetorValores | null
   selectedSetorBenchmark: string
@@ -126,14 +132,105 @@ export function ModalPdfDashboardA4({
   scoreGeralB,
   balancoAtual,
   dreAtual,
+  balancosAno,
+  dresAno,
 }: ModalPdfDashboardA4Props) {
+  const { toast } = useToast()
   // Apuração do KanitzResultado se não vier pronto nos destaques
   const kanitzCalculado: KanitzResultado = useMemo(() => {
     if (destaques.kanitzResultado) return destaques.kanitzResultado
     return calcularKanitz(balancoAtual || null, dreAtual || null)
   }, [destaques.kanitzResultado, balancoAtual, dreAtual])
+
+  // Comparativo Mensal (Janeiro a Dezembro) para o PDF Executivo
+  const dadosMensais = useMemo(() => {
+    const bList = balancosAno || (balancoAtual ? [balancoAtual] : [])
+    const dList = dresAno || (dreAtual ? [dreAtual] : [])
+    return gerarComparativoMensalAno(bList, dList, selectedAno)
+  }, [balancosAno, dresAno, balancoAtual, dreAtual, selectedAno])
+
+  const totalReceitaMensalAno = dadosMensais.reduce((acc, m) => acc + m.receitaBruta, 0)
+  const totalLucroMensalAno = dadosMensais.reduce((acc, m) => acc + m.lucroLiquido, 0)
+  const mesesComLancamento = dadosMensais.filter((m) => m.temDados).length
+  const mesesFechados = dadosMensais.filter((m) => m.fechado).length
   const handlePrint = () => {
     window.print()
+  }
+
+  const handleExportCSV = () => {
+    if (!selectedEmpresa) {
+      toast({
+        variant: 'destructive',
+        title: 'Empresa não selecionada',
+        description: 'É necessário ter uma empresa selecionada para exportar o relatório em CSV.',
+      })
+      return
+    }
+
+    let csv = '\uFEFF' // UTF-8 BOM
+    csv += `RELATÓRIO EXECUTIVO DE INDICADORES ECONÔMICO-FINANCEIROS\n`
+    csv += `Empresa;${selectedEmpresa.nome}\n`
+    csv += `CNPJ;${selectedEmpresa.cnpj ? formatCnpj(selectedEmpresa.cnpj) : '—'}\n`
+    csv += `Exercício Base;${selectedAno}\n`
+    csv += `Data de Emissão;${dataEmissao}\n\n`
+
+    // Seção 1: KPIs
+    csv += `--- KPIS E DESTAQUES FINANCEIROS (${selectedAno}) ---\n`
+    csv += `Indicador;Valor\n`
+    csv += `Score Global;${scoreGeralPonderado}/100 (${scoreStatus.label})\n`
+    csv += `Liquidez Corrente;${destaques.liquidezCorrente ? destaques.liquidezCorrente.toFixed(2) : '—'}\n`
+    csv += `Saldo de Tesouraria (R$);${destaques.saldoTesouraria || 0}\n`
+    csv += `ROE (%);${destaques.roe ? destaques.roe.toFixed(2) : '—'}\n`
+    csv += `Margem Líquida (%);${destaques.margemLiquida ? destaques.margemLiquida.toFixed(2) : '—'}\n`
+    csv += `EBITDA (R$ mil);${destaques.ebitda || 0}\n`
+    csv += `Endividamento Geral (%);${destaques.endividamentoGeral ? destaques.endividamentoGeral.toFixed(2) : '—'}\n\n`
+
+    // Seção 2: Comparativo Mensal Jan-Dez
+    csv += `--- COMPARATIVO MENSAL (JANEIRO A DEZEMBRO - ${selectedAno}) ---\n`
+    csv += `Mês;Status;Receita Bruta (R$);CMV (R$);Despesas Operacionais (R$);Lucro Líquido (R$);Margem Líquida (%);Ativo Total (R$);Patrimônio Líquido (R$)\n`
+    dadosMensais.forEach((m) => {
+      csv += `${m.mesNum} - ${m.mesNome};`
+      csv += `${!m.temDados ? 'Sem Lançamento' : m.fechado ? 'Fechado' : 'Aberto'};`
+      csv += `${m.temDre ? m.receitaBruta.toFixed(2).replace('.', ',') : '0,00'};`
+      csv += `${m.temDre ? m.custoMercadorias.toFixed(2).replace('.', ',') : '0,00'};`
+      csv += `${m.temDre ? m.despesasOperacionais.toFixed(2).replace('.', ',') : '0,00'};`
+      csv += `${m.temDre ? m.lucroLiquido.toFixed(2).replace('.', ',') : '0,00'};`
+      csv += `${m.margemLiquida !== null ? m.margemLiquida.toFixed(2).replace('.', ',') + '%' : '—'};`
+      csv += `${m.temBalanco ? m.ativoTotal.toFixed(2).replace('.', ',') : '0,00'};`
+      csv += `${m.temBalanco ? m.patrimonioLiquido.toFixed(2).replace('.', ',') : '0,00'}\n`
+    })
+    csv += `TOTAL ACUMULADO;${mesesFechados} fechados / ${mesesComLancamento} cadastrados;`
+    csv += `${totalReceitaMensalAno.toFixed(2).replace('.', ',')};`
+    csv += `${dadosMensais
+      .reduce((a, m) => a + m.custoMercadorias, 0)
+      .toFixed(2)
+      .replace('.', ',')};`
+    csv += `${dadosMensais
+      .reduce((a, m) => a + m.despesasOperacionais, 0)
+      .toFixed(2)
+      .replace('.', ',')};`
+    csv += `${totalLucroMensalAno.toFixed(2).replace('.', ',')};`
+    csv += `${totalReceitaMensalAno > 0 ? ((totalLucroMensalAno / totalReceitaMensalAno) * 100).toFixed(2).replace('.', ',') + '%' : '—'};`
+    csv += `—;—\n\n`
+
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute(
+      'download',
+      `Relatorio_Executivo_${selectedEmpresa.nome.replace(/\s+/g, '_')}_${selectedAno}.csv`,
+    )
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'CSV Exportado com Sucesso',
+      description: 'O relatório executivo com comparativo mensal foi baixado.',
+    })
   }
 
   const dataEmissao = new Date().toLocaleDateString('pt-BR', {
@@ -182,6 +279,16 @@ export function ModalPdfDashboardA4({
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              className="h-8 text-xs font-semibold gap-1 text-slate-700 hover:bg-slate-100"
+              title="Exportar dados do relatório e comparativo mensal em CSV"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Exportar CSV
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -402,18 +509,26 @@ export function ModalPdfDashboardA4({
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('sec-5-tabela')}
-                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                  onClick={() => scrollToSection('sec-5-comparativo-mensal')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between bg-emerald-50/40"
                 >
-                  <span>5. Tabela (3 Anos)</span>
+                  <span>5. Comparativo Mensal (Jan-Dez)</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('sec-6-conclusao')}
+                  onClick={() => scrollToSection('sec-6-tabela')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                >
+                  <span>6. Tabela (3 Anos)</span>
+                  <span className="text-[10px] text-slate-400">Ir &darr;</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('sec-7-conclusao')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between sm:col-span-1"
                 >
-                  <span>6. Conclusão &amp; Parecer</span>
+                  <span>7. Conclusão &amp; Parecer</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
               </div>
@@ -916,12 +1031,155 @@ export function ModalPdfDashboardA4({
             </section>
 
             {/* ========================================================= */}
-            {/* 5. TABELA CONSOLIDADA DE INDICADORES (3 ANOS) */}
+            {/* 5. COMPARATIVO MENSAL (JANEIRO A DEZEMBRO) */}
             {/* ========================================================= */}
-            <section id="sec-5-tabela" className="space-y-3">
+            <section id="sec-5-comparativo-mensal" className="space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1 flex-wrap gap-2">
+                <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
+                    5
+                  </span>
+                  Comparativo Mensal de Desempenho — Janeiro a Dezembro ({selectedAno})
+                </h2>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-blue-50 text-blue-800 border-blue-200 font-semibold"
+                >
+                  {mesesComLancamento}/12 Meses Cadastrados · {mesesFechados} Fechados
+                </Badge>
+              </div>
+
+              {/* Tabela de Evolução Mês a Mês com Destaques e Totais */}
+              <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 font-bold text-slate-700 border-b border-slate-200 text-[10px]">
+                      <th className="py-2 px-2.5">Mês</th>
+                      <th className="py-2 px-2 text-center">Status</th>
+                      <th className="py-2 px-2 text-right text-blue-900">Receita Bruta</th>
+                      <th className="py-2 px-2 text-right">Custos (CMV)</th>
+                      <th className="py-2 px-2 text-right">Desp. Oper.</th>
+                      <th className="py-2 px-2 text-right text-emerald-900 font-bold">
+                        Lucro Líquido
+                      </th>
+                      <th className="py-2 px-2 text-right">Margem Líq.</th>
+                      <th className="py-2 px-2 text-right">Ativo Total</th>
+                      <th className="py-2 px-2 text-right">Patrimônio Líq.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-[10px]">
+                    {dadosMensais.map((m) => {
+                      const temDados = m.temDados
+                      return (
+                        <tr
+                          key={m.mesNum}
+                          className={
+                            temDados
+                              ? 'hover:bg-slate-50/50'
+                              : 'bg-slate-50/30 text-slate-400 italic'
+                          }
+                        >
+                          <td className="py-1.5 px-2.5 font-semibold text-slate-800">
+                            {m.mesNum} - {m.mesNome}
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            {!temDados ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400 font-medium">
+                                Sem lançamento
+                              </span>
+                            ) : m.fechado ? (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-bold">
+                                🔒 Fechado
+                              </span>
+                            ) : (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">
+                                Aberto
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono font-medium text-slate-900">
+                            {temDados && m.temDre ? formatBrlMil(m.receitaBruta) : '—'}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono text-slate-600">
+                            {temDados && m.temDre ? formatBrlMil(m.custoMercadorias) : '—'}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono text-slate-600">
+                            {temDados && m.temDre ? formatBrlMil(m.despesasOperacionais) : '—'}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono font-bold">
+                            {temDados && m.temDre ? (
+                              <span
+                                className={
+                                  m.lucroLiquido >= 0 ? 'text-emerald-700' : 'text-red-600'
+                                }
+                              >
+                                {formatBrlMil(m.lucroLiquido)}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono">
+                            {temDados && m.margemLiquida !== null
+                              ? `${formatNumber(m.margemLiquida, 1)}%`
+                              : '—'}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono text-slate-700">
+                            {temDados && m.temBalanco ? formatBrlMil(m.ativoTotal) : '—'}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono text-slate-700">
+                            {temDados && m.temBalanco ? formatBrlMil(m.patrimonioLiquido) : '—'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-100 font-extrabold text-slate-900 border-t-2 border-slate-300 text-[10px]">
+                      <td className="py-2 px-2.5" colSpan={2}>
+                        TOTAL ACUMULADO ({selectedAno})
+                      </td>
+                      <td className="py-2 px-2 text-right text-blue-900">
+                        {formatBrlMil(totalReceitaMensalAno)}
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        {formatBrlMil(dadosMensais.reduce((acc, m) => acc + m.custoMercadorias, 0))}
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        {formatBrlMil(
+                          dadosMensais.reduce((acc, m) => acc + m.despesasOperacionais, 0),
+                        )}
+                      </td>
+                      <td
+                        className={`py-2 px-2 text-right ${
+                          totalLucroMensalAno >= 0 ? 'text-emerald-800' : 'text-red-700'
+                        }`}
+                      >
+                        {formatBrlMil(totalLucroMensalAno)}
+                      </td>
+                      <td className="py-2 px-2 text-right">
+                        {totalReceitaMensalAno > 0
+                          ? `${formatNumber((totalLucroMensalAno / totalReceitaMensalAno) * 100, 1)}%`
+                          : '—'}
+                      </td>
+                      <td className="py-2 px-2 text-right" colSpan={2}>
+                        <span className="text-slate-500 font-normal">
+                          {mesesFechados} de {mesesComLancamento} fechados
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </section>
+
+            {/* ========================================================= */}
+            {/* 6. TABELA CONSOLIDADA DE INDICADORES (3 ANOS) */}
+            {/* ========================================================= */}
+            <section id="sec-6-tabela" className="space-y-3">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  5
+                  6
                 </span>
                 Tabela Consolidada de Indicadores ({ano2}, {ano1}, {selectedAno})
               </h2>
@@ -983,12 +1241,12 @@ export function ModalPdfDashboardA4({
             </section>
 
             {/* ========================================================= */}
-            {/* 6. CONCLUSÃO & RECOMENDAÇÕES EXECUTIVAS */}
+            {/* 7. CONCLUSÃO & RECOMENDAÇÕES EXECUTIVAS */}
             {/* ========================================================= */}
-            <section id="sec-6-conclusao" className="space-y-3 pt-2">
+            <section id="sec-7-conclusao" className="space-y-3 pt-2">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  6
+                  7
                 </span>
                 Conclusão e Parecer da Consultoria
               </h2>

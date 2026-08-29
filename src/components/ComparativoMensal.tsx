@@ -73,11 +73,25 @@ export function ComparativoMensal({
 }: ComparativoMensalProps) {
   const { toast } = useToast()
 
-  // Modal de Fechamento de Mês
+  // Modal de Fechamento de Mês Individual
   const [modalFecharOpen, setModalFecharOpen] = useState(false)
   const [mesParaFechar, setMesParaFechar] = useState<MesComparativoData | null>(null)
   const [fechamentoObs, setFechamentoObs] = useState('')
   const [executingFechamento, setExecutingFechamento] = useState(false)
+
+  // Modal de Fechamento em Lote
+  const [modalLoteOpen, setModalLoteOpen] = useState(false)
+  const currentYear = new Date().getFullYear()
+  const currentMonth = new Date().getMonth() + 1
+  const defaultAteMes = ano === currentYear ? currentMonth : 12
+  const [mesLimiteLote, setMesLimiteLote] = useState<number>(defaultAteMes)
+  const [loteObs, setLoteObs] = useState('')
+  const [executingLote, setExecutingLote] = useState(false)
+  const [loteResultado, setLoteResultado] = useState<{
+    mesesFechados: Array<{ mes: number; lucroApurado: number }>
+    mesesPulados: number[]
+    erros: Array<{ mes: number; motivo: string }>
+  } | null>(null)
 
   // Modal de Reabertura de Mês
   const [modalReabrirOpen, setModalReabrirOpen] = useState(false)
@@ -147,6 +161,71 @@ export function ComparativoMensal({
       })
     } finally {
       setExecutingFechamento(false)
+    }
+  }
+
+  // Meses candidatos ao fechamento em lote
+  const mesesCandidatosLote = useMemo(() => {
+    return dadosMensais.filter((m) => m.mesNum <= mesLimiteLote)
+  }, [dadosMensais, mesLimiteLote])
+
+  const mesesAbertosNoLote = useMemo(() => {
+    return mesesCandidatosLote.filter((m) => m.temDados && !m.fechado)
+  }, [mesesCandidatosLote])
+
+  const mesesSemDadosNoLote = useMemo(() => {
+    return mesesCandidatosLote.filter((m) => !m.temDados)
+  }, [mesesCandidatosLote])
+
+  const mesesJaFechadosNoLote = useMemo(() => {
+    return mesesCandidatosLote.filter((m) => m.fechado)
+  }, [mesesCandidatosLote])
+
+  const handleAbrirModalLote = () => {
+    setLoteObs(`Fechamento em lote do exercício ${ano} (até ${NOMES_MESES[mesLimiteLote - 1]}).`)
+    setLoteResultado(null)
+    setModalLoteOpen(true)
+  }
+
+  const handleConfirmarFechamentoLote = async () => {
+    setExecutingLote(true)
+    try {
+      const res = await fechamentoMensalService.fecharEmLote({
+        empresaId,
+        ano,
+        ateMes: mesLimiteLote,
+        observacoes: loteObs,
+      })
+
+      setLoteResultado({
+        mesesFechados: res.mesesFechadosComSucesso,
+        mesesPulados: res.mesesPuladosSemDados,
+        erros: res.erros,
+      })
+
+      const totalFechados = res.mesesFechadosComSucesso.length
+      if (totalFechados > 0) {
+        toast({
+          title: `Fechamento em Lote Concluído!`,
+          description: `${totalFechados} mês(es) foram fechados em sequência com sucesso. Saldos integrados nos Lucros Acumulados.`,
+        })
+      } else if (res.mesesPuladosSemDados.length > 0) {
+        toast({
+          title: 'Nenhum mês elegível para fechamento',
+          description: 'Os meses selecionados não possuem lançamentos contábeis cadastrados.',
+        })
+      }
+
+      onDataChange()
+    } catch (err: any) {
+      console.error('Erro no fechamento em lote:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Falha no fechamento em lote',
+        description: err?.message || 'Ocorreu um erro ao processar o lote de meses.',
+      })
+    } finally {
+      setExecutingLote(false)
     }
   }
 
@@ -412,13 +491,24 @@ export function ComparativoMensal({
               competência
             </CardDescription>
           </div>
-          <Button
-            onClick={onOpenNovoLancamento}
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
-          >
-            + Novo Lançamento Mensal
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              onClick={handleAbrirModalLote}
+              size="sm"
+              variant="outline"
+              className="border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-semibold text-xs h-8 gap-1.5 shadow-2xs"
+            >
+              <Lock className="w-3.5 h-3.5 text-emerald-700" />
+              Fechamento em Lote
+            </Button>
+            <Button
+              onClick={onOpenNovoLancamento}
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
+            >
+              + Novo Lançamento Mensal
+            </Button>
+          </div>
         </CardHeader>
 
         <div className="overflow-x-auto">
@@ -704,6 +794,277 @@ export function ComparativoMensal({
                 </>
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* =========================================================================
+          MODAL DE FECHAMENTO EM LOTE (JANEIRO ATÉ MÊS SELECIONADO)
+      ========================================================================= */}
+      <Dialog open={modalLoteOpen} onOpenChange={setModalLoteOpen}>
+        <DialogContent className="sm:max-w-xl bg-white max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5 text-emerald-700">
+              <div className="p-2 bg-emerald-100 rounded-xl">
+                <Lock className="w-5 h-5 text-emerald-700" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-[#0B1F3A]">
+                  Fechamento Contábil em Lote
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Fechar em sequência múltiplos meses abertos do exercício {ano} — {empresaNome}
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {!loteResultado ? (
+            <div className="space-y-4 text-xs py-2">
+              {/* Seletor do Mês Limite */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <Label className="text-xs font-semibold text-slate-800">
+                    Fechar competências de Janeiro até:
+                  </Label>
+                  <select
+                    value={mesLimiteLote}
+                    onChange={(e) => setMesLimiteLote(Number(e.target.value))}
+                    className="h-8 px-2.5 rounded-lg border border-slate-300 bg-white text-xs font-medium focus:ring-1 focus:ring-emerald-500"
+                  >
+                    {NOMES_MESES.map((nome, idx) => (
+                      <option key={idx + 1} value={idx + 1}>
+                        {idx + 1} - {nome}/{ano}{' '}
+                        {ano === currentYear && idx + 1 === currentMonth ? '(Mês Atual)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                  O sistema percorrerá sequencialmente os meses de <strong>1 (Janeiro)</strong> até{' '}
+                  <strong>
+                    {mesLimiteLote} ({NOMES_MESES[mesLimiteLote - 1]})
+                  </strong>
+                  .
+                </p>
+              </div>
+
+              {/* Resumo do Status dos Meses do Lote */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-amber-800 uppercase block">
+                    Abertos para Fechar
+                  </span>
+                  <span className="text-xl font-extrabold text-amber-900">
+                    {mesesAbertosNoLote.length}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-emerald-800 uppercase block">
+                    Já Fechados
+                  </span>
+                  <span className="text-xl font-extrabold text-emerald-900">
+                    {mesesJaFechadosNoLote.length}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-center">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase block">
+                    Sem Lançamentos
+                  </span>
+                  <span className="text-xl font-extrabold text-slate-700">
+                    {mesesSemDadosNoLote.length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Lista dos Meses e seus status */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                <table className="w-full text-left text-[11px] border-collapse">
+                  <thead className="bg-slate-100 sticky top-0 font-semibold text-slate-700">
+                    <tr>
+                      <th className="py-1.5 px-3">Mês</th>
+                      <th className="py-1.5 px-3">Status Atual</th>
+                      <th className="py-1.5 px-3 text-right">Resultado DRE</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {mesesCandidatosLote.map((m) => (
+                      <tr key={m.mesNum} className="hover:bg-slate-50">
+                        <td className="py-1.5 px-3 font-medium text-slate-800">
+                          {m.mesNum} - {m.mesNome}
+                        </td>
+                        <td className="py-1.5 px-3">
+                          {!m.temDados ? (
+                            <Badge className="bg-slate-100 text-slate-500 border-slate-200 text-[9px]">
+                              Sem lançamentos
+                            </Badge>
+                          ) : m.fechado ? (
+                            <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 text-[9px]">
+                              Fechado
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200 text-[9px] font-semibold">
+                              Aberto (será fechado)
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="py-1.5 px-3 text-right font-mono font-medium">
+                          {m.temDre ? (
+                            <span
+                              className={m.lucroLiquido >= 0 ? 'text-emerald-700' : 'text-red-600'}
+                            >
+                              {formatBrlMil(m.lucroLiquido)}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Regras Aplicadas */}
+              <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-[11px] text-emerald-900 space-y-1">
+                <div className="font-bold">Regras automáticas aplicadas a cada mês fechado:</div>
+                <ul className="list-disc list-inside space-y-0.5 text-emerald-800">
+                  <li>Apuração do Lucro/Prejuízo Líquido da DRE do mês.</li>
+                  <li>Incorporação nos Lucros Acumulados do Balanço Patrimonial.</li>
+                  <li>
+                    Projeção patrimonial para o mês seguinte com herança de saldos e contas de
+                    resultado zeradas.
+                  </li>
+                  <li>Marcação da competência com o status Fechado.</li>
+                </ul>
+              </div>
+
+              {/* Observação Opcional */}
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold text-slate-700">
+                  Observações para o Lote (opcional):
+                </Label>
+                <Textarea
+                  value={loteObs}
+                  onChange={(e) => setLoteObs(e.target.value)}
+                  placeholder="Ex: Fechamento em lote do 1º semestre após conciliação contábil."
+                  rows={2}
+                  className="text-xs"
+                />
+              </div>
+            </div>
+          ) : (
+            /* ================= Feedback do Resultado ================= */
+            <div className="space-y-4 text-xs py-2">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2">
+                <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  Processamento em Lote Finalizado
+                </div>
+                <p className="text-[11px] text-emerald-900">
+                  Foram fechados com sucesso <strong>
+                    {loteResultado.mesesFechados.length}
+                  </strong>{' '}
+                  mês(es).
+                  {loteResultado.mesesPulados.length > 0 &&
+                    ` ${loteResultado.mesesPulados.length} mês(es) foram pulados por não possuírem dados cadastrados.`}
+                </p>
+              </div>
+
+              {/* Tabela com os meses processados */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100 font-semibold text-slate-700">
+                    <tr>
+                      <th className="py-2 px-3">Mês</th>
+                      <th className="py-2 px-3">Resultado do Fechamento</th>
+                      <th className="py-2 px-3 text-right">Lucro Incorporado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {loteResultado.mesesFechados.map((item) => (
+                      <tr key={item.mes} className="bg-emerald-50/30">
+                        <td className="py-2 px-3 font-semibold text-slate-800">
+                          {NOMES_MESES[item.mes - 1]}/{ano}
+                        </td>
+                        <td className="py-2 px-3">
+                          <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] gap-1">
+                            <Lock className="w-2.5 h-2.5" />
+                            Fechado com Sucesso
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                          {formatBrlMil(item.lucroApurado)}
+                        </td>
+                      </tr>
+                    ))}
+                    {loteResultado.mesesPulados.map((mesNum) => (
+                      <tr key={mesNum} className="text-slate-400 bg-slate-50/50">
+                        <td className="py-2 px-3 font-medium">
+                          {NOMES_MESES[mesNum - 1]}/{ano}
+                        </td>
+                        <td className="py-2 px-3">
+                          <Badge className="bg-slate-100 text-slate-500 border-slate-200 text-[10px]">
+                            Pulado (Sem Lançamentos)
+                          </Badge>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono">—</td>
+                      </tr>
+                    ))}
+                    {loteResultado.erros.map((e, idx) => (
+                      <tr key={idx} className="bg-red-50/50 text-red-900">
+                        <td className="py-2 px-3 font-semibold">
+                          {NOMES_MESES[e.mes - 1]}/{ano}
+                        </td>
+                        <td className="py-2 px-3 text-red-700 font-medium" colSpan={2}>
+                          Erro: {e.motivo}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            {!loteResultado ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalLoteOpen(false)}
+                  disabled={executingLote}
+                  className="text-xs h-8"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmarFechamentoLote}
+                  disabled={executingLote || mesesAbertosNoLote.length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 gap-1.5"
+                >
+                  {executingLote ? (
+                    'Processando Lote...'
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5" />
+                      Executar Fechamento em Lote ({mesesAbertosNoLote.length} meses)
+                    </>
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                onClick={() => setModalLoteOpen(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
+              >
+                Concluir e Fechar Janela
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

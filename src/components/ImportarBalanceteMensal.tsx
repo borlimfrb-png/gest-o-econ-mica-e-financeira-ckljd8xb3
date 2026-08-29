@@ -48,8 +48,14 @@ import type { EmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import { NOMES_MESES, formatBrlMil } from '@/lib/financeCalculations'
 import { extractTextFromPdf, parseBrlNumber } from '@/lib/pdfParser'
 import { convertPdfPagesToExcelRows } from '@/lib/pdfToExcel'
-import { mapearBalanceteParaBalancoEDre, type BalanceteMapeadoResult } from '@/lib/balanceteParser'
+import {
+  mapearBalanceteParaBalancoEDre,
+  recalcularBalanceteMapeado,
+  type BalanceteMapeadoResult,
+  type ContaMapeadaItem,
+} from '@/lib/balanceteParser'
 import { balancosService, dreService } from '@/services/financeService'
+import { Pencil, Trash2, Plus, Check, RotateCcw } from 'lucide-react'
 
 interface ImportarBalanceteMensalProps {
   empresas: EmpresaRecord[]
@@ -82,9 +88,18 @@ export function ImportarBalanceteMensal({
 
   // Resultado do mapeamento prévio
   const [previewResult, setPreviewResult] = useState<BalanceteMapeadoResult | null>(null)
+  const [originalPreviewResult, setOriginalPreviewResult] = useState<BalanceteMapeadoResult | null>(
+    null,
+  )
   const [rawRowsCount, setRawRowsCount] = useState<number>(0)
   const [confirmModalOpen, setConfirmModalOpen] = useState(false)
   const [savingImport, setSavingImport] = useState(false)
+
+  // Controle de edição manual célula a célula
+  const [editingContaIdx, setEditingContaIdx] = useState<number | null>(null)
+  const [editingBalancoField, setEditingBalancoField] = useState<string | null>(null)
+  const [editingDreField, setEditingDreField] = useState<string | null>(null)
+  const [filterContasTerm, setFilterContasTerm] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
@@ -214,9 +229,10 @@ export function ImportarBalanceteMensal({
 
       setProgress(100)
       setPreviewResult(mapped)
+      setOriginalPreviewResult(JSON.parse(JSON.stringify(mapped)))
       toast({
         title: 'Balancete Processado com Sucesso!',
-        description: `${mapped.contasIdentificadas.length} contas contábeis foram mapeadas para Balanço e DRE de ${NOMES_MESES[selectedMes - 1]}/${selectedAno}.`,
+        description: `${mapped.contasIdentificadas.length} contas contábeis foram mapeadas para Balanço e DRE de ${NOMES_MESES[selectedMes - 1]}/${selectedAno}. Você pode editar qualquer célula antes de confirmar.`,
       })
     } catch (err: any) {
       console.error('Erro ao processar balancete:', err)
@@ -289,8 +305,122 @@ export function ImportarBalanceteMensal({
   const handleReset = () => {
     setFile(null)
     setPreviewResult(null)
+    setOriginalPreviewResult(null)
     setErrorMsg(null)
+    setEditingContaIdx(null)
+    setEditingBalancoField(null)
+    setEditingDreField(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Atualização direta de campo do Balanço
+  const handleUpdateBalancoField = (campo: keyof BalancoRecord, novoValor: number) => {
+    if (!previewResult) return
+    const updatedBalanco = {
+      ...previewResult.balanco,
+      [campo]: novoValor,
+    }
+
+    const totalAtivo =
+      (updatedBalanco.caixa_equivalentes || 0) +
+      (updatedBalanco.aplicacoes_financeiras || 0) +
+      (updatedBalanco.contas_receber || 0) +
+      (updatedBalanco.estoques || 0) +
+      (updatedBalanco.impostos_recuperar || 0) +
+      (updatedBalanco.outros_ativo_circulante || 0) +
+      (updatedBalanco.realizavel_longo_prazo || 0) +
+      (updatedBalanco.investimentos || 0) +
+      (updatedBalanco.imobilizado || 0) +
+      (updatedBalanco.intangivel || 0)
+
+    const totalPassivo =
+      (updatedBalanco.fornecedores || 0) +
+      (updatedBalanco.emprestimos_curto_prazo || 0) +
+      (updatedBalanco.obrigacoes_trabalhistas || 0) +
+      (updatedBalanco.obrigacoes_tributarias || 0) +
+      (updatedBalanco.outros_passivo_circulante || 0) +
+      (updatedBalanco.emprestimos_longo_prazo || 0) +
+      (updatedBalanco.outras_obrigacoes_longo_prazo || 0) +
+      (updatedBalanco.capital_social || 0) +
+      (updatedBalanco.reservas_lucros || 0) +
+      (updatedBalanco.lucros_acumulados || 0)
+
+    setPreviewResult({
+      ...previewResult,
+      balanco: updatedBalanco,
+      totalAtivo,
+      totalPassivo,
+    })
+  }
+
+  // Atualização direta de campo da DRE
+  const handleUpdateDreField = (campo: keyof DreRecord, novoValor: number) => {
+    if (!previewResult) return
+    const updatedDre = {
+      ...previewResult.dre,
+      [campo]: novoValor,
+    }
+
+    const totalReceitas = updatedDre.receita_bruta || 0
+    const totalDespesas =
+      (updatedDre.deducoes_receita || 0) +
+      (updatedDre.custo_mercadorias || 0) +
+      (updatedDre.despesas_operacionais || 0) +
+      (updatedDre.despesas_financeiras || 0) +
+      (updatedDre.imposto_renda || 0)
+
+    setPreviewResult({
+      ...previewResult,
+      dre: updatedDre,
+      totalReceitas,
+      totalDespesas,
+    })
+  }
+
+  // Atualização de uma conta da tabela detalhada
+  const handleUpdateContaItem = (index: number, updatedFields: Partial<ContaMapeadaItem>) => {
+    if (!previewResult) return
+    const novasContas = [...previewResult.contasIdentificadas]
+    novasContas[index] = {
+      ...novasContas[index],
+      ...updatedFields,
+    }
+
+    const recalculado = recalcularBalanceteMapeado(
+      novasContas,
+      selectedAno,
+      selectedMes,
+      selectedEmpresaId,
+    )
+    setPreviewResult(recalculado)
+  }
+
+  // Exclusão de conta da lista
+  const handleRemoverContaItem = (index: number) => {
+    if (!previewResult) return
+    const novasContas = previewResult.contasIdentificadas.filter((_, idx) => idx !== index)
+    const recalculado = recalcularBalanceteMapeado(
+      novasContas,
+      selectedAno,
+      selectedMes,
+      selectedEmpresaId,
+    )
+    setPreviewResult(recalculado)
+    toast({
+      title: 'Conta removida do balancete',
+      description: 'Os totais de Balanço e DRE foram recalculados.',
+    })
+  }
+
+  // Restaurar valores originais
+  const handleRestaurarValoresOriginais = () => {
+    if (originalPreviewResult) {
+      setPreviewResult(JSON.parse(JSON.stringify(originalPreviewResult)))
+      toast({
+        title: 'Valores restaurados',
+        description: 'Os valores do balancete voltaram à detecção automática inicial do arquivo.',
+      })
+    }
   }
 
   return (
@@ -498,7 +628,19 @@ export function ImportarBalanceteMensal({
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {originalPreviewResult && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleRestaurarValoresOriginais}
+                      className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-xs h-9 gap-1"
+                      title="Restaurar valores detectados originalmente no arquivo"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Restaurar
+                    </Button>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
@@ -517,70 +659,93 @@ export function ImportarBalanceteMensal({
                 </div>
               </div>
 
-              {/* Cards de Balanço e DRE Mapeados */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-900">
+                <span className="flex items-center gap-1.5">
+                  <Pencil className="w-4 h-4 text-blue-600 shrink-0" />
+                  <strong>Ajuste Manual Célula a Célula Habilitado:</strong> Clique sobre qualquer
+                  valor ou campo nas tabelas abaixo para editar manualmente antes da gravação final.
+                </span>
+                <Badge className="bg-white text-blue-800 border-blue-300 text-[10px] font-semibold">
+                  {previewResult.contasIdentificadas.length} contas
+                </Badge>
+              </div>
+
+              {/* Cards de Balanço e DRE Mapeados com Edição Célula a Célula */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* 1. Balanço Patrimonial */}
                 <Card className="border-slate-200 shadow-2xs">
                   <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200 flex flex-row items-center justify-between">
                     <CardTitle className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                      Balanço Patrimonial Apurado
+                      Balanço Patrimonial Apurado (Editável)
                     </CardTitle>
                     <Badge className="bg-blue-100 text-blue-800 text-[10px]">
                       Ativo: {formatBrlMil(previewResult.totalAtivo)}
                     </Badge>
                   </CardHeader>
                   <CardContent className="p-4 space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Caixa e Equivalentes:</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.caixa_equivalentes)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Aplicações Financeiras:</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.aplicacoes_financeiras)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Contas a Receber (Clientes):</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.contas_receber)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Estoques:</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.estoques)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Ativo Imobilizado:</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.imobilizado)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Fornecedores (Passivo):</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.fornecedores)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Empréstimos e Financiamentos:</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(
-                          (previewResult.balanco.emprestimos_curto_prazo || 0) +
-                            (previewResult.balanco.emprestimos_longo_prazo || 0),
-                        )}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Capital Social:</span>
-                      <strong className="font-mono">
-                        {formatBrlMil(previewResult.balanco.capital_social)}
-                      </strong>
-                    </div>
+                    {[
+                      { key: 'caixa_equivalentes', label: 'Caixa e Equivalentes' },
+                      { key: 'aplicacoes_financeiras', label: 'Aplicações Financeiras' },
+                      { key: 'contas_receber', label: 'Contas a Receber (Clientes)' },
+                      { key: 'estoques', label: 'Estoques' },
+                      { key: 'impostos_recuperar', label: 'Impostos a Recuperar' },
+                      { key: 'imobilizado', label: 'Ativo Imobilizado' },
+                      { key: 'fornecedores', label: 'Fornecedores (Passivo)' },
+                      { key: 'emprestimos_curto_prazo', label: 'Empréstimos Curto Prazo' },
+                      { key: 'capital_social', label: 'Capital Social' },
+                      { key: 'lucros_acumulados', label: 'Lucros Acumulados' },
+                    ].map((item) => {
+                      const val = (previewResult.balanco as any)[item.key] || 0
+                      const isEditing = editingBalancoField === item.key
+
+                      return (
+                        <div
+                          key={item.key}
+                          className="flex items-center justify-between py-1 border-b border-slate-100 gap-2"
+                        >
+                          <span className="text-slate-600 truncate">{item.label}:</span>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                step="any"
+                                defaultValue={val}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleUpdateBalancoField(
+                                      item.key as keyof BalancoRecord,
+                                      Number((e.target as HTMLInputElement).value) || 0,
+                                    )
+                                    setEditingBalancoField(null)
+                                  } else if (e.key === 'Escape') {
+                                    setEditingBalancoField(null)
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  handleUpdateBalancoField(
+                                    item.key as keyof BalancoRecord,
+                                    Number(e.target.value) || 0,
+                                  )
+                                  setEditingBalancoField(null)
+                                }}
+                                className="h-7 w-28 text-xs font-mono font-bold text-right"
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingBalancoField(item.key)}
+                              className="font-mono font-bold text-slate-800 hover:text-blue-600 hover:bg-blue-50 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 group"
+                              title="Clique para editar este valor manualmente"
+                            >
+                              <span>{formatBrlMil(val)}</span>
+                              <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
                     <div className="flex justify-between pt-2 font-bold text-slate-800">
                       <span>Total Passivo + PL Mapeado:</span>
                       <span className="text-blue-700">
@@ -594,49 +759,97 @@ export function ImportarBalanceteMensal({
                 <Card className="border-slate-200 shadow-2xs">
                   <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200 flex flex-row items-center justify-between">
                     <CardTitle className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                      DRE (Demonstração do Resultado)
+                      DRE (Demonstração do Resultado — Editável)
                     </CardTitle>
                     <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">
                       Receita: {formatBrlMil(previewResult.totalReceitas)}
                     </Badge>
                   </CardHeader>
                   <CardContent className="p-4 space-y-2 text-xs">
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Receita Bruta:</span>
-                      <strong className="font-mono text-emerald-700">
-                        {formatBrlMil(previewResult.dre.receita_bruta)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Deduções da Receita:</span>
-                      <strong className="font-mono text-red-600">
-                        {formatBrlMil(previewResult.dre.deducoes_receita)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Custo Mercadorias / CMV:</span>
-                      <strong className="font-mono text-red-600">
-                        {formatBrlMil(previewResult.dre.custo_mercadorias)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Despesas Operacionais:</span>
-                      <strong className="font-mono text-red-600">
-                        {formatBrlMil(previewResult.dre.despesas_operacionais)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Despesas Financeiras:</span>
-                      <strong className="font-mono text-red-600">
-                        {formatBrlMil(previewResult.dre.despesas_financeiras)}
-                      </strong>
-                    </div>
-                    <div className="flex justify-between py-1 border-b border-slate-100">
-                      <span className="text-slate-600">Imposto de Renda / CSLL:</span>
-                      <strong className="font-mono text-red-600">
-                        {formatBrlMil(previewResult.dre.imposto_renda)}
-                      </strong>
-                    </div>
+                    {[
+                      { key: 'receita_bruta', label: 'Receita Bruta', color: 'text-emerald-700' },
+                      {
+                        key: 'deducoes_receita',
+                        label: 'Deduções da Receita',
+                        color: 'text-red-600',
+                      },
+                      {
+                        key: 'custo_mercadorias',
+                        label: 'Custo Mercadorias / CMV',
+                        color: 'text-red-600',
+                      },
+                      {
+                        key: 'despesas_operacionais',
+                        label: 'Despesas Operacionais',
+                        color: 'text-red-600',
+                      },
+                      {
+                        key: 'despesas_financeiras',
+                        label: 'Despesas Financeiras',
+                        color: 'text-red-600',
+                      },
+                      {
+                        key: 'imposto_renda',
+                        label: 'Imposto de Renda / CSLL',
+                        color: 'text-red-600',
+                      },
+                      {
+                        key: 'outras_receitas_despesas',
+                        label: 'Outras Rec./Desp.',
+                        color: 'text-slate-700',
+                      },
+                    ].map((item) => {
+                      const val = (previewResult.dre as any)[item.key] || 0
+                      const isEditing = editingDreField === item.key
+
+                      return (
+                        <div
+                          key={item.key}
+                          className="flex items-center justify-between py-1 border-b border-slate-100 gap-2"
+                        >
+                          <span className="text-slate-600 truncate">{item.label}:</span>
+                          {isEditing ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                step="any"
+                                defaultValue={val}
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleUpdateDreField(
+                                      item.key as keyof DreRecord,
+                                      Number((e.target as HTMLInputElement).value) || 0,
+                                    )
+                                    setEditingDreField(null)
+                                  } else if (e.key === 'Escape') {
+                                    setEditingDreField(null)
+                                  }
+                                }}
+                                onBlur={(e) => {
+                                  handleUpdateDreField(
+                                    item.key as keyof DreRecord,
+                                    Number(e.target.value) || 0,
+                                  )
+                                  setEditingDreField(null)
+                                }}
+                                className="h-7 w-28 text-xs font-mono font-bold text-right"
+                              />
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setEditingDreField(item.key)}
+                              className={`font-mono font-bold ${item.color} hover:bg-slate-100 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 group`}
+                              title="Clique para editar este valor manualmente"
+                            >
+                              <span>{formatBrlMil(val)}</span>
+                              <Pencil className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
                     <div className="flex justify-between pt-2 font-bold text-slate-800">
                       <span>Resultado Líquido Estimado:</span>
                       <span
@@ -653,40 +866,234 @@ export function ImportarBalanceteMensal({
                 </Card>
               </div>
 
-              {/* Tabela de Contas Identificadas */}
+              {/* Tabela Detalhada de Contas Identificadas com Edição Célula a Célula */}
               <Card className="border-slate-200 shadow-2xs overflow-hidden">
-                <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200">
-                  <CardTitle className="text-xs font-bold text-[#0B1F3A]">
-                    Detalhamento das Contas Mapeadas ({previewResult.contasIdentificadas.length})
-                  </CardTitle>
+                <CardHeader className="py-3 px-4 bg-slate-50/80 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-xs font-bold text-[#0B1F3A]">
+                      Detalhamento das Contas Mapeadas ({previewResult.contasIdentificadas.length})
+                    </CardTitle>
+                    <CardDescription className="text-[11px]">
+                      Edite nomes, códigos, grupos contábeis e valores numéricos diretamente na
+                      tabela
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      placeholder="Filtrar contas..."
+                      value={filterContasTerm}
+                      onChange={(e) => setFilterContasTerm(e.target.value)}
+                      className="h-7 text-xs w-48 bg-white"
+                    />
+                  </div>
                 </CardHeader>
-                <div className="max-h-64 overflow-y-auto">
+                <div className="max-h-80 overflow-y-auto">
                   <table className="w-full text-left text-xs border-collapse">
-                    <thead className="bg-slate-100 sticky top-0 text-slate-700 font-semibold">
+                    <thead className="bg-slate-100 sticky top-0 text-slate-700 font-semibold z-10">
                       <tr>
-                        <th className="py-2 px-3">Código</th>
+                        <th className="py-2 px-3 w-28">Código</th>
                         <th className="py-2 px-3">Conta / Descrição</th>
-                        <th className="py-2 px-3">Grupo Mapeado</th>
+                        <th className="py-2 px-3">Grupo Contábil</th>
                         <th className="py-2 px-3 text-right">Valor (R$)</th>
+                        <th className="py-2 px-3 text-center w-20">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {previewResult.contasIdentificadas.map((c, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50">
-                          <td className="py-1.5 px-3 font-mono text-[11px] text-slate-500">
-                            {c.codigo || '—'}
-                          </td>
-                          <td className="py-1.5 px-3 font-medium text-slate-800">{c.descricao}</td>
-                          <td className="py-1.5 px-3">
-                            <Badge className="text-[10px] bg-slate-100 text-slate-700 border-slate-200">
-                              {c.grupoContabil}
-                            </Badge>
-                          </td>
-                          <td className="py-1.5 px-3 text-right font-mono font-semibold text-slate-900">
-                            {formatBrlMil(c.valor)}
-                          </td>
-                        </tr>
-                      ))}
+                      {previewResult.contasIdentificadas
+                        .map((c, originalIdx) => ({ c, originalIdx }))
+                        .filter(
+                          ({ c }) =>
+                            !filterContasTerm ||
+                            c.descricao.toLowerCase().includes(filterContasTerm.toLowerCase()) ||
+                            (c.codigo && c.codigo.includes(filterContasTerm)) ||
+                            c.grupoContabil.toLowerCase().includes(filterContasTerm.toLowerCase()),
+                        )
+                        .map(({ c, originalIdx }) => {
+                          const isEditing = editingContaIdx === originalIdx
+
+                          return (
+                            <tr
+                              key={c.id || originalIdx}
+                              className="hover:bg-slate-50 transition-colors"
+                            >
+                              {/* Código */}
+                              <td className="py-1.5 px-3 font-mono text-[11px] text-slate-500">
+                                {isEditing ? (
+                                  <Input
+                                    defaultValue={c.codigo || ''}
+                                    onChange={(e) =>
+                                      handleUpdateContaItem(originalIdx, {
+                                        codigo: e.target.value,
+                                      })
+                                    }
+                                    className="h-6 text-[11px] font-mono"
+                                  />
+                                ) : (
+                                  c.codigo || '—'
+                                )}
+                              </td>
+
+                              {/* Descrição */}
+                              <td className="py-1.5 px-3 font-medium text-slate-800">
+                                {isEditing ? (
+                                  <Input
+                                    defaultValue={c.descricao}
+                                    onChange={(e) =>
+                                      handleUpdateContaItem(originalIdx, {
+                                        descricao: e.target.value,
+                                      })
+                                    }
+                                    className="h-6 text-xs"
+                                  />
+                                ) : (
+                                  c.descricao
+                                )}
+                              </td>
+
+                              {/* Grupo Contábil / Campo Mapeado */}
+                              <td className="py-1.5 px-3">
+                                {isEditing ? (
+                                  <select
+                                    value={c.campoMapeado}
+                                    onChange={(e) => {
+                                      const novoCampo = e.target.value
+                                      handleUpdateContaItem(originalIdx, {
+                                        campoMapeado: novoCampo,
+                                        grupoContabil:
+                                          e.target.selectedOptions[0]?.text || novoCampo,
+                                      })
+                                    }}
+                                    className="h-6 text-[11px] rounded border border-slate-300 bg-white px-1"
+                                  >
+                                    <optgroup label="Ativo">
+                                      <option value="caixa_equivalentes">
+                                        Ativo - Caixa e Equivalentes
+                                      </option>
+                                      <option value="aplicacoes_financeiras">
+                                        Ativo - Aplicações Financeiras
+                                      </option>
+                                      <option value="contas_receber">
+                                        Ativo - Clientes a Receber
+                                      </option>
+                                      <option value="estoques">Ativo - Estoques</option>
+                                      <option value="impostos_recuperar">
+                                        Ativo - Impostos a Recuperar
+                                      </option>
+                                      <option value="imobilizado">Ativo - Imobilizado</option>
+                                      <option value="intangivel">Ativo - Intangível</option>
+                                      <option value="investimentos">Ativo - Investimentos</option>
+                                      <option value="realizavel_longo_prazo">
+                                        Ativo - Realizável LP
+                                      </option>
+                                      <option value="outros_ativo_circulante">
+                                        Ativo - Outros Circulantes
+                                      </option>
+                                    </optgroup>
+                                    <optgroup label="Passivo e PL">
+                                      <option value="fornecedores">Passivo - Fornecedores</option>
+                                      <option value="emprestimos_curto_prazo">
+                                        Passivo - Empréstimos CP
+                                      </option>
+                                      <option value="obrigacoes_trabalhistas">
+                                        Passivo - Trab./Folha
+                                      </option>
+                                      <option value="obrigacoes_tributarias">
+                                        Passivo - Impostos/Tributos
+                                      </option>
+                                      <option value="emprestimos_longo_prazo">
+                                        Passivo - Empréstimos LP
+                                      </option>
+                                      <option value="capital_social">PL - Capital Social</option>
+                                      <option value="reservas_lucros">
+                                        PL - Reservas de Lucros
+                                      </option>
+                                      <option value="lucros_acumulados">
+                                        PL - Lucros Acumulados
+                                      </option>
+                                    </optgroup>
+                                    <optgroup label="DRE (Resultado)">
+                                      <option value="receita_bruta">DRE - Receita Bruta</option>
+                                      <option value="deducoes_receita">
+                                        DRE - Deduções da Receita
+                                      </option>
+                                      <option value="custo_mercadorias">DRE - CMV / Custos</option>
+                                      <option value="despesas_operacionais">
+                                        DRE - Despesas Operacionais
+                                      </option>
+                                      <option value="despesas_financeiras">
+                                        DRE - Despesas Financeiras
+                                      </option>
+                                      <option value="imposto_renda">DRE - IRPJ / CSLL</option>
+                                      <option value="outras_receitas_despesas">
+                                        DRE - Outras Receitas/Desp.
+                                      </option>
+                                    </optgroup>
+                                  </select>
+                                ) : (
+                                  <Badge className="text-[10px] bg-slate-100 text-slate-700 border-slate-200">
+                                    {c.grupoContabil}
+                                  </Badge>
+                                )}
+                              </td>
+
+                              {/* Valor */}
+                              <td className="py-1.5 px-3 text-right font-mono font-semibold text-slate-900">
+                                {isEditing ? (
+                                  <Input
+                                    type="number"
+                                    step="any"
+                                    defaultValue={c.valor}
+                                    onChange={(e) =>
+                                      handleUpdateContaItem(originalIdx, {
+                                        valor: Number(e.target.value) || 0,
+                                      })
+                                    }
+                                    className="h-6 text-xs font-mono text-right w-28 ml-auto"
+                                  />
+                                ) : (
+                                  formatBrlMil(c.valor)
+                                )}
+                              </td>
+
+                              {/* Ações */}
+                              <td className="py-1.5 px-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  {isEditing ? (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingContaIdx(null)}
+                                      className="h-6 w-6 p-0 text-emerald-600 hover:bg-emerald-50"
+                                      title="Salvar edição"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingContaIdx(originalIdx)}
+                                      className="h-6 w-6 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Editar célula"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleRemoverContaItem(originalIdx)}
+                                    className="h-6 w-6 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                    title="Remover do balancete"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        })}
                     </tbody>
                   </table>
                 </div>
