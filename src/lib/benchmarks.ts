@@ -640,6 +640,8 @@ export interface IndicadoresConsolidadosEmpresa {
   pco: number | null
   pcf: number | null
   tipoFleuriet: string | null
+  tipoFleurietNome?: string | null
+  tipoFleurietDescricao?: string | null
 }
 
 export function extrairIndicadoresCompletos(
@@ -726,6 +728,54 @@ export function extrairIndicadoresCompletos(
   const ncg = aco > 0 || pco > 0 ? aco - pco : null
   const saldoTesouraria = acf > 0 || pcf > 0 || (cgl !== null && ncg !== null) ? acf - pcf : null
 
+  // Diagnóstico Modelo Fleuriet
+  let tipoFleuriet: string | null = null
+  let tipoFleurietNome: string | null = null
+  let tipoFleurietDescricao: string | null = null
+
+  if (ac > 0 || pc > 0) {
+    const cglVal = cgl ?? 0
+    const ncgVal = ncg ?? 0
+    const stVal = saldoTesouraria ?? 0
+
+    if (cglVal > 0 && ncgVal > 0 && stVal > 0) {
+      tipoFleuriet = 'excelente'
+      tipoFleurietNome = 'Tipo I — Excelente (Muito Sólida)'
+      tipoFleurietDescricao =
+        'O Capital de Giro Líquido financia integralmente a Necessidade de Capital de Giro e ainda gera Saldo de Tesouraria positivo e folga financeira.'
+    } else if (cglVal > 0 && ncgVal <= 0 && stVal > 0) {
+      tipoFleuriet = 'solida'
+      tipoFleurietNome = 'Tipo II — Sólida com Financiamento Operacional'
+      tipoFleurietDescricao =
+        'A empresa opera com NCG negativa ou nula (financiada por fornecedores e clientes) e dispõe de CGL positivo, gerando tesouraria altamente superavitária.'
+    } else if (cglVal > 0 && ncgVal > 0 && stVal < 0) {
+      tipoFleuriet = 'em_crescimento'
+      tipoFleurietNome = 'Tipo III — Em Crescimento (Tesouraria Pressionada)'
+      tipoFleurietDescricao =
+        'A Necessidade de Capital de Giro supera o Capital de Giro Líquido gerado, forçando o uso de empréstimos bancários de curto prazo para financiar a expansão operacional.'
+    } else if (cglVal <= 0 && ncgVal > 0 && stVal < 0) {
+      tipoFleuriet = 'arriscada'
+      tipoFleurietNome = 'Tipo IV — Arriscada (Efeito Tesoura / Desequilíbrio)'
+      tipoFleurietDescricao =
+        'CGL negativo aliado a NCG positiva resulta em déficit expressivo de tesouraria. A empresa financia ativos de longo prazo e giro com dívidas bancárias onerosas de curto prazo.'
+    } else if (cglVal <= 0 && ncgVal <= 0 && stVal < 0) {
+      tipoFleuriet = 'alto_risco'
+      tipoFleurietNome = 'Tipo V — Alto Risco / Desbalanceada'
+      tipoFleurietDescricao =
+        'Recursos de longo prazo insuficientes (CGL < 0) e tesouraria deficitária, dependente de rolagem contínua de dívidas bancárias de curto prazo.'
+    } else if (cglVal <= 0 && stVal < 0) {
+      tipoFleuriet = 'critica'
+      tipoFleurietNome = 'Tipo VI — Crítica / Insolvência Iminente'
+      tipoFleurietDescricao =
+        'Passivo circulante muito superior ao ativo circulante com esgotamento das reservas de caixa e alto risco de descontinuidade operacional.'
+    } else {
+      tipoFleuriet = 'solida'
+      tipoFleurietNome = 'Equilibrada'
+      tipoFleurietDescricao =
+        'Estrutura de capital de giro em conformidade estável com as operações do exercício.'
+    }
+  }
+
   return {
     lc: ind.liquidezCorrente,
     ls: ind.liquidezSeca,
@@ -771,7 +821,9 @@ export function extrairIndicadoresCompletos(
     acf,
     pco,
     pcf,
-    tipoFleuriet: null,
+    tipoFleuriet,
+    tipoFleurietNome,
+    tipoFleurietDescricao,
   }
 }
 

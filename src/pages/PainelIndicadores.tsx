@@ -581,6 +581,32 @@ export default function PainelIndicadores() {
     }
   }, [balancoAtual, dreAtual, indAtual])
 
+  // Análise de Saldo de Tesouraria Negativo em Períodos Consecutivos (Histórico 3 anos)
+  const alertaStPainel = useMemo(() => {
+    const stAtual = indAtual.saldoTesouraria
+    const stAno1 = indAno1?.saldoTesouraria ?? null
+    const stAno2 = indAno2?.saldoTesouraria ?? null
+
+    const isNegativoAtual = stAtual !== null && stAtual < 0
+    const isConsecutivo2Anos = isNegativoAtual && stAno1 !== null && stAno1 < 0
+    const isConsecutivo3Anos = isConsecutivo2Anos && stAno2 !== null && stAno2 < 0
+
+    const anosNegativos: number[] = []
+    if (stAno2 !== null && stAno2 < 0) anosNegativos.push(ano2)
+    if (stAno1 !== null && stAno1 < 0) anosNegativos.push(ano1)
+    if (stAtual !== null && stAtual < 0) anosNegativos.push(selectedAno)
+
+    return {
+      isNegativoAtual,
+      isConsecutivo2Anos,
+      isConsecutivo3Anos,
+      anosNegativos,
+      stAtual,
+      stAno1,
+      stAno2,
+    }
+  }, [indAtual, indAno1, indAno2, selectedAno, ano1, ano2])
+
   // Salvar Pesos
   const handleSalvarPesos = (novoPerfil: PerfilPesosId, novosPesos: PesosGrupos) => {
     setPerfilPesos(novoPerfil)
@@ -2503,6 +2529,62 @@ export default function PainelIndicadores() {
 
             {gruposExpandidos.capitalGiro && (
               <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                {/* Alerta de Saldo de Tesouraria Negativo / Efeito Tesoura */}
+                {alertaStPainel.isNegativoAtual && (
+                  <div className="p-3.5 sm:p-4 rounded-xl border border-red-300 bg-linear-to-r from-red-50 via-rose-50 to-amber-50 shadow-2xs space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-red-600 text-white font-extrabold text-[11px] px-2 py-0.5">
+                          🔴 ALERTA: SALDO DE TESOURARIA NEGATIVO (ST &lt; 0)
+                        </Badge>
+                        {alertaStPainel.isConsecutivo3Anos ? (
+                          <Badge className="bg-red-950 text-red-200 border border-red-700 text-[10px] font-bold">
+                            ⚠️ Déficit por 3 Anos Consecutivos ({ano2}, {ano1}, {selectedAno})
+                          </Badge>
+                        ) : alertaStPainel.isConsecutivo2Anos ? (
+                          <Badge className="bg-red-900 text-red-100 border border-red-700 text-[10px] font-bold">
+                            ⚠️ Déficit Consecutivo ({ano1} e {selectedAno})
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold">
+                            Exercício {selectedAno} Deficitário
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="font-mono font-bold text-red-700 text-xs">
+                        ST: {formatCurrency(indAtual.saldoTesouraria || 0)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-red-900/90 leading-relaxed text-justify">
+                      <strong>
+                        Risco de Efeito Tesoura / Dependência Bancária de Curto Prazo:
+                      </strong>{' '}
+                      O Capital de Giro Líquido não é suficiente para cobrir a Necessidade de
+                      Capital de Giro da operação. A empresa recorre a dívidas bancárias onerosas de
+                      curto prazo para manter suas atividades.
+                      {alertaStPainel.isConsecutivo2Anos && (
+                        <span className="block mt-1 font-semibold text-red-950">
+                          Atenção: A tesouraria permaneceu deficitária consecutivamente nos anos de{' '}
+                          {alertaStPainel.anosNegativos.join(', ')}, indicando estrangulamento
+                          financeiro estrutural.
+                        </span>
+                      )}
+                    </p>
+                    <div className="pt-1.5 border-t border-red-200/70 flex items-center justify-between text-[11px] text-red-900">
+                      <span>
+                        <strong>Recomendação:</strong> Reestruturar perfil da dívida para longo
+                        prazo e otimizar prazos operacionais (PMR/PMP).
+                      </span>
+                      <Link
+                        to="/indicadores/capital-giro"
+                        className="font-bold text-blue-700 hover:underline shrink-0 ml-2"
+                      >
+                        Ver Diagnóstico Completo &rarr;
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                   {/* Gráfico de Barras */}
                   <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
@@ -3935,6 +4017,11 @@ export default function PainelIndicadores() {
           ...destaques,
           saldoTesouraria: indAtual.saldoTesouraria,
           cgl: indAtual.cgl,
+          cgb: indAtual.cgb,
+          ncg: indAtual.ncg,
+          tipoFleuriet: indAtual.tipoFleuriet,
+          tipoFleurietNome: indAtual.tipoFleurietNome,
+          tipoFleurietDescricao: indAtual.tipoFleurietDescricao,
         }}
         radarItems={radarItems}
         benchmarkAtivo={benchmarkAtivo}

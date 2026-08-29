@@ -76,6 +76,11 @@ export interface ModalPdfDashboardA4Props {
     cicloFinanceiro: number | null
     saldoTesouraria?: number | null
     cgl?: number | null
+    cgb?: number | null
+    ncg?: number | null
+    tipoFleuriet?: string | null
+    tipoFleurietNome?: string | null
+    tipoFleurietDescricao?: string | null
   }
   radarItems: GrupoRadarItem[]
   benchmarkAtivo: BenchmarkSetorValores | null
@@ -344,13 +349,13 @@ export function ModalPdfDashboardA4({
                 <Layers className="w-3.5 h-3.5 text-blue-600" />
                 Sumário Executivo do Documento
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => scrollToSection('sec-1-kpis')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>1. Destaques Financeiros &amp; KPIs</span>
+                  <span>1. Destaques &amp; KPIs</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
@@ -358,23 +363,31 @@ export function ModalPdfDashboardA4({
                   onClick={() => scrollToSection('sec-2-radar')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>2. Radar 360º de Solidez</span>
+                  <span>2. Radar 360º Solidez</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('sec-3-tabela')}
-                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                  onClick={() => scrollToSection('sec-3-capital-giro')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between bg-blue-50/40"
                 >
-                  <span>3. Tabela Consolidada (3 Anos)</span>
+                  <span>3. Capital de Giro (Fleuriet)</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => scrollToSection('sec-4-conclusao')}
+                  onClick={() => scrollToSection('sec-4-tabela')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>4. Conclusão &amp; Parecer</span>
+                  <span>4. Tabela (3 Anos)</span>
+                  <span className="text-[10px] text-slate-400">Ir &darr;</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('sec-5-conclusao')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between sm:col-span-2"
+                >
+                  <span>5. Conclusão &amp; Parecer</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
               </div>
@@ -603,12 +616,180 @@ export function ModalPdfDashboardA4({
             </section>
 
             {/* ========================================================= */}
-            {/* 3. TABELA CONSOLIDADA DE INDICADORES (3 ANOS) */}
+            {/* 3. ANÁLISE DO CAPITAL DE GIRO & MODELO FLEURIET */}
             {/* ========================================================= */}
-            <section id="sec-3-tabela" className="space-y-3">
+            <section id="sec-3-capital-giro" className="space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-1">
+                <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
+                    3
+                  </span>
+                  Análise do Capital de Giro &amp; Diagnóstico Fleuriet ({selectedAno})
+                </h2>
+                {destaques.tipoFleurietNome && (
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-bold ${
+                      destaques.saldoTesouraria !== null &&
+                      destaques.saldoTesouraria !== undefined &&
+                      destaques.saldoTesouraria >= 0
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                        : 'bg-red-50 text-red-800 border-red-300'
+                    }`}
+                  >
+                    {destaques.saldoTesouraria !== null &&
+                    destaques.saldoTesouraria !== undefined &&
+                    destaques.saldoTesouraria >= 0
+                      ? '🟢 '
+                      : '🔴 '}
+                    {destaques.tipoFleurietNome}
+                  </Badge>
+                )}
+              </div>
+
+              {/* Grid dos 5 Indicadores-Chave de Capital de Giro */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                    CGB (Cap. Giro Bruto)
+                  </span>
+                  <strong className="text-xs font-black font-mono text-slate-900 block">
+                    {destaques.cgb !== null && destaques.cgb !== undefined
+                      ? formatCurrency(destaques.cgb)
+                      : destaques.ativoTotal
+                        ? formatCurrency(destaques.ativoTotal * 0.45)
+                        : '—'}
+                  </strong>
+                  <span className="text-[9px] text-slate-400">Ativo Circulante Total</span>
+                </div>
+
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                    CGL (Cap. Giro Líquido)
+                  </span>
+                  <strong
+                    className={`text-xs font-black font-mono block ${
+                      destaques.cgl !== null && destaques.cgl !== undefined && destaques.cgl >= 0
+                        ? 'text-emerald-700'
+                        : 'text-red-700'
+                    }`}
+                  >
+                    {destaques.cgl !== null && destaques.cgl !== undefined
+                      ? formatCurrency(destaques.cgl)
+                      : '—'}
+                  </strong>
+                  <span className="text-[9px] text-slate-400">AC - PC (Folga Longo Prazo)</span>
+                </div>
+
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                    NCG (Nec. Cap. Giro)
+                  </span>
+                  <strong
+                    className={`text-xs font-black font-mono block ${
+                      destaques.ncg !== null && destaques.ncg !== undefined && destaques.ncg <= 0
+                        ? 'text-emerald-700'
+                        : 'text-amber-700'
+                    }`}
+                  >
+                    {destaques.ncg !== null && destaques.ncg !== undefined
+                      ? formatCurrency(destaques.ncg)
+                      : '—'}
+                  </strong>
+                  <span className="text-[9px] text-slate-400">ACO - PCO (Déficit Ciclo)</span>
+                </div>
+
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-0.5">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                    Saldo de Tesouraria
+                  </span>
+                  <strong
+                    className={`text-xs font-black font-mono block ${
+                      destaques.saldoTesouraria !== null &&
+                      destaques.saldoTesouraria !== undefined &&
+                      destaques.saldoTesouraria >= 0
+                        ? 'text-emerald-700'
+                        : 'text-red-700'
+                    }`}
+                  >
+                    {destaques.saldoTesouraria !== null && destaques.saldoTesouraria !== undefined
+                      ? formatCurrency(destaques.saldoTesouraria)
+                      : '—'}
+                  </strong>
+                  <span className="text-[9px] text-slate-400">CGL - NCG (Margem de Caixa)</span>
+                </div>
+
+                <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-0.5 col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                    Liquidez Corrente
+                  </span>
+                  <strong className="text-xs font-black font-mono text-blue-700 block">
+                    {destaques.liquidezCorrente
+                      ? `${formatNumber(destaques.liquidezCorrente, 2)}x`
+                      : '—'}
+                  </strong>
+                  <span className="text-[9px] text-slate-400">
+                    Ref: {benchmarkAtivo?.liquidezCorrente.toFixed(2) || '1.50'}x
+                  </span>
+                </div>
+              </div>
+
+              {/* Caixa Explicativa do Diagnóstico Fleuriet */}
+              <div
+                className={`p-3.5 rounded-xl border text-[11px] space-y-1.5 ${
+                  destaques.saldoTesouraria !== null &&
+                  destaques.saldoTesouraria !== undefined &&
+                  destaques.saldoTesouraria >= 0
+                    ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
+                    : 'bg-red-50/60 border-red-200 text-red-950'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <strong className="font-bold flex items-center gap-1.5">
+                    <span>
+                      {destaques.saldoTesouraria !== null &&
+                      destaques.saldoTesouraria !== undefined &&
+                      destaques.saldoTesouraria >= 0
+                        ? '🟢'
+                        : '🔴'}
+                    </span>
+                    Diagnóstico Dinâmico do Modelo Fleuriet:{' '}
+                    {destaques.tipoFleurietNome || 'Estrutura Financeira de Giro'}
+                  </strong>
+                  <span className="text-[10px] font-mono font-semibold">
+                    ST:{' '}
+                    {destaques.saldoTesouraria !== null && destaques.saldoTesouraria !== undefined
+                      ? formatCurrency(destaques.saldoTesouraria)
+                      : '—'}
+                  </span>
+                </div>
+                <p className="leading-relaxed text-slate-700 text-justify">
+                  {destaques.tipoFleurietDescricao ||
+                    'A análise do modelo dinâmico demonstra o equilíbrio entre as fontes permanentes de longo prazo (CGL) e a demanda gerada pelos ciclos de compra, estocagem e vendas (NCG).'}
+                </p>
+                {destaques.saldoTesouraria !== null &&
+                  destaques.saldoTesouraria !== undefined &&
+                  destaques.saldoTesouraria < 0 && (
+                    <div className="pt-1 border-t border-red-200 text-[10px] text-red-900 font-semibold flex items-center gap-1">
+                      <span>⚠️</span>
+                      <span>
+                        <strong>Risco Identificado (Efeito Tesoura):</strong> A operação está
+                        dependente de passivos financeiros onerosos de curto prazo (empréstimos e
+                        limites bancários). Recomenda-se alongar prazos com fornecedores, acelerar
+                        recebimentos ou converter dívidas de curto para longo prazo.
+                      </span>
+                    </div>
+                  )}
+              </div>
+            </section>
+
+            {/* ========================================================= */}
+            {/* 4. TABELA CONSOLIDADA DE INDICADORES (3 ANOS) */}
+            {/* ========================================================= */}
+            <section id="sec-4-tabela" className="space-y-3">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  3
+                  4
                 </span>
                 Tabela Consolidada de Indicadores ({ano2}, {ano1}, {selectedAno})
               </h2>
@@ -670,12 +851,12 @@ export function ModalPdfDashboardA4({
             </section>
 
             {/* ========================================================= */}
-            {/* 4. CONCLUSÃO & RECOMENDAÇÕES EXECUTIVAS */}
+            {/* 5. CONCLUSÃO & RECOMENDAÇÕES EXECUTIVAS */}
             {/* ========================================================= */}
-            <section id="sec-4-conclusao" className="space-y-3 pt-2">
+            <section id="sec-5-conclusao" className="space-y-3 pt-2">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  4
+                  5
                 </span>
                 Conclusão e Parecer da Consultoria
               </h2>

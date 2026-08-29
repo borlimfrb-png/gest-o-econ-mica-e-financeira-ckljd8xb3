@@ -34,6 +34,8 @@ import {
   ResponsiveContainer,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -117,6 +119,9 @@ export default function IndicadoresCapitalGiro() {
 
   // Toggle de evolução 3 anos
   const [verEvolucao, setVerEvolucao] = useState<boolean>(false)
+
+  // Tipo de visualização do gráfico de evolução 3 anos: 'linhas' | 'barras'
+  const [tipoGraficoEvolucao, setTipoGraficoEvolucao] = useState<'linhas' | 'barras'>('linhas')
 
   // Estado de detalhes expandidos por card
   const [expandedDetails, setExpandedDetails] = useState<Record<string, boolean>>({
@@ -599,6 +604,71 @@ export default function IndicadoresCapitalGiro() {
     ]
   }, [giroAtual])
 
+  // Dados para Gráfico de Evolução 3 Anos (CGB, CGL, NCG, ST)
+  const dadosGraficoEvolucao3Anos = useMemo(() => {
+    return [
+      {
+        ano: String(ano2),
+        cgb: giroAno2?.cgb ?? null,
+        cgl: giroAno2?.cgl ?? null,
+        ncg: giroAno2?.ncg ?? null,
+        st: giroAno2?.saldoTesouraria ?? null,
+        hasData: !!giroAno2,
+      },
+      {
+        ano: String(anoAnterior),
+        cgb: giroAnterior?.cgb ?? null,
+        cgl: giroAnterior?.cgl ?? null,
+        ncg: giroAnterior?.ncg ?? null,
+        st: giroAnterior?.saldoTesouraria ?? null,
+        hasData: !!giroAnterior,
+      },
+      {
+        ano: String(selectedAno),
+        cgb: giroAtual.cgb,
+        cgl: giroAtual.cgl,
+        ncg: giroAtual.ncg,
+        st: giroAtual.saldoTesouraria,
+        hasData: !!balancoAtual,
+      },
+    ]
+  }, [ano2, anoAnterior, selectedAno, giroAno2, giroAnterior, giroAtual, balancoAtual])
+
+  // Informações sobre anos sem dados completos
+  const anosComFaltaDados = useMemo(() => {
+    const faltantes: string[] = []
+    if (!giroAno2) faltantes.push(String(ano2))
+    if (!giroAnterior) faltantes.push(String(anoAnterior))
+    if (!balancoAtual) faltantes.push(String(selectedAno))
+    return faltantes
+  }, [ano2, anoAnterior, selectedAno, giroAno2, giroAnterior, balancoAtual])
+
+  // Análise de Saldo de Tesouraria Negativo em Períodos Consecutivos (Histórico 3 anos)
+  const analiseStConsecutivo = useMemo(() => {
+    const stAtual = giroAtual.saldoTesouraria
+    const stAnt = giroAnterior?.saldoTesouraria ?? null
+    const stAno2 = giroAno2?.saldoTesouraria ?? null
+
+    const anosNegativos: number[] = []
+    if (stAno2 !== null && stAno2 < 0) anosNegativos.push(ano2)
+    if (stAnt !== null && stAnt < 0) anosNegativos.push(anoAnterior)
+    if (stAtual !== null && stAtual < 0) anosNegativos.push(selectedAno)
+
+    const isNegativoAtual = stAtual !== null && stAtual < 0
+    const isConsecutivo2Anos = isNegativoAtual && stAnt !== null && stAnt < 0
+    const isConsecutivo3Anos = isConsecutivo2Anos && stAno2 !== null && stAno2 < 0
+
+    return {
+      isNegativoAtual,
+      isConsecutivo2Anos,
+      isConsecutivo3Anos,
+      anosNegativos,
+      stAtual,
+      stAnt,
+      stAno2,
+    }
+  }, [giroAtual, giroAnterior, giroAno2, selectedAno, anoAnterior, ano2])
+
   // Dados para Gráfico 2: Decomposição Ativo e Passivo Circulante (Operacional vs Financeiro)
   const dadosGraficoDecomposicao = useMemo(() => {
     return [
@@ -892,7 +962,101 @@ export default function IndicadoresCapitalGiro() {
         </div>
       </div>
 
-      {/* 2. ALERTA DE CLASSIFICAÇÃO FLEURIET */}
+      {/* 2. ALERTA DE SALDO DE TESOURARIA NEGATIVO (EFEITO TESOURA & SÉRIE HISTÓRICA) */}
+      {selectedEmpresa && analiseStConsecutivo.isNegativoAtual && (
+        <div className="p-4 sm:p-5 rounded-2xl border-2 border-red-300 bg-linear-to-r from-red-50 via-rose-50 to-amber-50 shadow-xs animate-fadeIn">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-red-600 text-white flex items-center justify-center shrink-0 shadow-md">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-red-600 text-white border-0 font-extrabold text-xs px-2.5 py-0.5 tracking-wide uppercase">
+                    🔴 ALERTA CRÍTICO: SALDO DE TESOURARIA DEFICITÁRIO (ST &lt; 0)
+                  </Badge>
+                  {analiseStConsecutivo.isConsecutivo3Anos ? (
+                    <Badge className="bg-red-950 text-red-200 border border-red-700 text-xs font-bold px-2 py-0.5">
+                      ⚠️ ST Negativo por 3 Anos Consecutivos ({ano2}, {anoAnterior}, {selectedAno})
+                    </Badge>
+                  ) : analiseStConsecutivo.isConsecutivo2Anos ? (
+                    <Badge className="bg-red-900 text-red-100 border border-red-700 text-xs font-bold px-2 py-0.5">
+                      ⚠️ ST Negativo Consecutivo ({anoAnterior} e {selectedAno})
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold px-2 py-0.5">
+                      Exercício {selectedAno} Deficitário
+                    </Badge>
+                  )}
+                </div>
+
+                <h3 className="text-sm sm:text-base font-bold text-red-950">
+                  Risco de "Efeito Tesoura" e Dependência Bancária de Curto Prazo
+                </h3>
+
+                <p className="text-xs text-red-900/90 leading-relaxed text-justify">
+                  O Saldo de Tesouraria fechou em{' '}
+                  <strong className="font-mono text-red-700 text-sm">
+                    {formatCurrency(giroAtual.saldoTesouraria)}
+                  </strong>
+                  . Isto significa que as fontes de longo prazo (CGL de{' '}
+                  {formatCurrency(giroAtual.cgl)}) não foram suficientes para sustentar as
+                  necessidades operacionais do negócio (NCG de {formatCurrency(giroAtual.ncg)}),
+                  forçando a empresa a cobrir a diferença através de{' '}
+                  <strong>
+                    empréstimos, descontos de duplicatas ou limites bancários de curto prazo (
+                    {formatCurrency(giroAtual.passivoCirculanteFinanceiro)})
+                  </strong>
+                  .
+                  {analiseStConsecutivo.isConsecutivo2Anos && (
+                    <span className="block mt-1 font-semibold text-red-950">
+                      🚨 <strong>Alerta de Série Histórica:</strong> A empresa mantém a tesouraria
+                      negativa consecutivamente nos exercícios de{' '}
+                      {analiseStConsecutivo.anosNegativos.join(', ')}. A persistência deste déficit
+                      caracteriza dependência estrutural de crédito rotativo caro, comprimindo o
+                      lucro líquido com despesas financeiras.
+                    </span>
+                  )}
+                </p>
+
+                <div className="pt-2 border-t border-red-200/80 flex flex-col sm:flex-row sm:items-center gap-2 text-xs text-red-900 font-medium">
+                  <span className="font-bold text-red-950 shrink-0">
+                    💡 Recomendação Executiva:
+                  </span>
+                  <span>
+                    Alongar passivos convertendo dívidas de curto prazo para linhas de longo prazo,
+                    renegociar prazos com fornecedores (aumentar PMP) e acelerar cobrança de
+                    recebíveis (reduzir PMR) para estancar o consumo de caixa.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="shrink-0 bg-white/90 backdrop-blur-xs p-3.5 rounded-xl border border-red-200 shadow-2xs text-xs space-y-1.5 self-stretch lg:self-auto min-w-[200px]">
+              <div className="flex justify-between items-center text-slate-500">
+                <span>Déficit ST Atual:</span>
+                <strong className="text-red-700 font-mono text-sm">
+                  {formatCurrency(giroAtual.saldoTesouraria)}
+                </strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-500">
+                <span>Dívidas Bancárias CP:</span>
+                <strong className="text-slate-800 font-mono">
+                  {formatCurrency(giroAtual.passivoCirculanteFinanceiro)}
+                </strong>
+              </div>
+              <div className="flex justify-between items-center text-slate-500">
+                <span>Déficit NCG s/ CGL:</span>
+                <strong className="text-amber-700 font-mono">
+                  {formatCurrency(Math.abs(giroAtual.cgl - giroAtual.ncg))}
+                </strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 2.1 DIAGNÓSTICO FLEURIET (QUANDO NÃO ESTIVER EM DEFICIT SEVERO OU PARA COMPLEMENTO) */}
       {selectedEmpresa && (
         <div
           className={`p-4 rounded-2xl border transition-all ${
@@ -1145,7 +1309,226 @@ export default function IndicadoresCapitalGiro() {
         })}
       </div>
 
-      {/* 4. SEÇÃO DE GRÁFICOS INTERATIVOS */}
+      {/* 4. GRÁFICO DE EVOLUÇÃO DO CAPITAL DE GIRO (3 ANOS) */}
+      <Card className="bg-white border-slate-200 shadow-2xs rounded-2xl p-5">
+        <CardHeader className="p-0 pb-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                <TrendingUp className="w-4 h-4" />
+              </div>
+              <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                Evolução Temporal do Capital de Giro ({ano2} • {anoAnterior} • {selectedAno})
+              </CardTitle>
+            </div>
+            <CardDescription className="text-xs text-slate-500 mt-0.5">
+              Trajetória comparativa dos 4 pilares: CGB (Ativo Circulante), CGL, NCG e Saldo de
+              Tesouraria (ST)
+            </CardDescription>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            {/* Seletor Linhas / Barras */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
+              <button
+                type="button"
+                onClick={() => setTipoGraficoEvolucao('linhas')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  tipoGraficoEvolucao === 'linhas'
+                    ? 'bg-white text-blue-700 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Linhas
+              </button>
+              <button
+                type="button"
+                onClick={() => setTipoGraficoEvolucao('barras')}
+                className={`px-2.5 py-1 rounded-md font-semibold transition-all ${
+                  tipoGraficoEvolucao === 'barras'
+                    ? 'bg-white text-blue-700 shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Barras
+              </button>
+            </div>
+          </div>
+        </CardHeader>
+
+        {/* Nota informativa quando faltarem dados de algum exercício */}
+        {anosComFaltaDados.length > 0 && (
+          <div className="mt-3 p-3 bg-blue-50/60 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-center gap-2">
+            <Info className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>
+              <strong>Nota sobre o histórico:</strong> Não foram encontrados lançamentos contábeis
+              completos para o(s) exercício(s){' '}
+              <strong className="font-mono">{anosComFaltaDados.join(', ')}</strong>. Os indicadores
+              correspondentes são exibidos como nulos até que as demonstrações sejam importadas.
+            </span>
+          </div>
+        )}
+
+        <CardContent className="p-0 pt-4 h-84 sm:h-96">
+          <ResponsiveContainer width="100%" height="100%">
+            {tipoGraficoEvolucao === 'linhas' ? (
+              <LineChart
+                data={dadosGraficoEvolucao3Anos}
+                margin={{ top: 20, right: 25, left: 10, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="ano" tick={{ fill: '#0B1F3A', fontSize: 12, fontWeight: 700 }} />
+                <YAxis
+                  tick={{ fill: '#64748B', fontSize: 10 }}
+                  tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                />
+                <ReferenceLine y={0} stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="2 2" />
+                <RechartsTooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || !payload.length) return null
+                    return (
+                      <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-xl text-xs space-y-2 border border-slate-700 min-w-[220px]">
+                        <strong className="block font-bold text-sm text-blue-300 border-b border-slate-800 pb-1">
+                          Exercício {label}
+                        </strong>
+                        <div className="space-y-1">
+                          {payload.map((p, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-4">
+                              <span className="flex items-center gap-1.5 text-slate-300">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full inline-block"
+                                  style={{ backgroundColor: p.color }}
+                                />
+                                {p.name}:
+                              </span>
+                              <strong className="font-mono text-white">
+                                {p.value !== null && p.value !== undefined
+                                  ? formatCurrency(p.value as number)
+                                  : 'Sem dados'}
+                              </strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                <Line
+                  type="monotone"
+                  name="CGB (Cap. Giro Bruto)"
+                  dataKey="cgb"
+                  stroke="#3B82F6"
+                  strokeWidth={3}
+                  dot={{ r: 5, fill: '#3B82F6' }}
+                  activeDot={{ r: 7 }}
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  name="CGL (Cap. Giro Líquido)"
+                  dataKey="cgl"
+                  stroke="#10B981"
+                  strokeWidth={3}
+                  dot={{ r: 5, fill: '#10B981' }}
+                  activeDot={{ r: 7 }}
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  name="NCG (Nec. Cap. Giro)"
+                  dataKey="ncg"
+                  stroke="#F59E0B"
+                  strokeWidth={3}
+                  dot={{ r: 5, fill: '#F59E0B' }}
+                  activeDot={{ r: 7 }}
+                  connectNulls={false}
+                />
+                <Line
+                  type="monotone"
+                  name="ST (Saldo de Tesouraria)"
+                  dataKey="st"
+                  stroke="#DC2626"
+                  strokeWidth={3.5}
+                  dot={{ r: 6, fill: '#DC2626' }}
+                  activeDot={{ r: 8 }}
+                  connectNulls={false}
+                />
+              </LineChart>
+            ) : (
+              <BarChart
+                data={dadosGraficoEvolucao3Anos}
+                margin={{ top: 20, right: 25, left: 10, bottom: 20 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                <XAxis dataKey="ano" tick={{ fill: '#0B1F3A', fontSize: 12, fontWeight: 700 }} />
+                <YAxis
+                  tick={{ fill: '#64748B', fontSize: 10 }}
+                  tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                />
+                <ReferenceLine y={0} stroke="#94A3B8" strokeWidth={1.5} />
+                <RechartsTooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload || !payload.length) return null
+                    return (
+                      <div className="bg-slate-900 text-white p-3.5 rounded-xl shadow-xl text-xs space-y-2 border border-slate-700 min-w-[220px]">
+                        <strong className="block font-bold text-sm text-blue-300 border-b border-slate-800 pb-1">
+                          Exercício {label}
+                        </strong>
+                        <div className="space-y-1">
+                          {payload.map((p, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-4">
+                              <span className="flex items-center gap-1.5 text-slate-300">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full inline-block"
+                                  style={{ backgroundColor: p.color }}
+                                />
+                                {p.name}:
+                              </span>
+                              <strong className="font-mono text-white">
+                                {p.value !== null && p.value !== undefined
+                                  ? formatCurrency(p.value as number)
+                                  : 'Sem dados'}
+                              </strong>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                <Bar
+                  name="CGB (Cap. Giro Bruto)"
+                  dataKey="cgb"
+                  fill="#3B82F6"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  name="CGL (Cap. Giro Líquido)"
+                  dataKey="cgl"
+                  fill="#10B981"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  name="NCG (Nec. Cap. Giro)"
+                  dataKey="ncg"
+                  fill="#F59E0B"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  name="ST (Saldo de Tesouraria)"
+                  dataKey="st"
+                  fill="#DC2626"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            )}
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* 5. SEÇÃO DE GRÁFICOS INTERATIVOS DO EXERCÍCIO */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Gráfico 1: Comparativo CGB, CGL, NCG e Saldo de Tesouraria */}
         <Card className="bg-white border-slate-200 shadow-2xs rounded-2xl p-5">

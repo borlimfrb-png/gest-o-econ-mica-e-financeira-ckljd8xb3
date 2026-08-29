@@ -7,6 +7,7 @@ import {
   calcularBalanco,
   calcularDre,
   calcularIndicadores,
+  calcularCapitalGiro,
   calcularPontoEquilibrio,
   gerarAnaliseAutomatica,
   formatBrlMil,
@@ -144,6 +145,14 @@ export default function Relatorios() {
   const indAtual = calcularIndicadores(balancoAtual, dreAtual)
   const indAnterior = balancoAnterior ? calcularIndicadores(balancoAnterior, dreAnterior) : null
 
+  const giroAtual = useMemo(() => {
+    return calcularCapitalGiro(balancoAtual, dreAtual)
+  }, [balancoAtual, dreAtual])
+
+  const giroAnterior = useMemo(() => {
+    return balancoAnterior ? calcularCapitalGiro(balancoAnterior, dreAnterior) : null
+  }, [balancoAnterior, dreAnterior])
+
   const pontoEquilibrioAtual = useMemo(() => {
     return calcularPontoEquilibrio(dreAtual, balancoAtual)
   }, [dreAtual, balancoAtual])
@@ -234,7 +243,15 @@ export default function Relatorios() {
       csvContent += `Ponto de Equilíbrio Financeiro (PEF);${pontoEquilibrioAtual.pef.toFixed(2).replace('.', ',')};${pontoEquilibrioAtual.pefUnidades || '—'};(Custos Fixos - Depreciação) / MC%\n`
       csvContent += `Margem de Contribuição (R$ e %);${pontoEquilibrioAtual.margemContribuicaoReais.toFixed(2).replace('.', ',')};—;${pontoEquilibrioAtual.margemContribuicaoPercentual.toFixed(1).replace('.', ',')}%\n`
       csvContent += `Margem de Segurança (% e R$);${pontoEquilibrioAtual.margemSegurancaReais.toFixed(2).replace('.', ',')};—;${pontoEquilibrioAtual.margemSeguranca.toFixed(1).replace('.', ',')}%\n`
-      csvContent += `Preço Médio Unitário Sugerido;${pontoEquilibrioAtual.precoMedioUnitario.toFixed(2).replace('.', ',')};—;Base de cálculo para unidades\n`
+      csvContent += `Preço Médio Unitário Sugerido;${pontoEquilibrioAtual.precoMedioUnitario.toFixed(2).replace('.', ',')};—;Base de cálculo para unidades\n\n`
+
+      csvContent += `ANÁLISE DO CAPITAL DE GIRO (MODELO FLEURIET)\n`
+      csvContent += `Indicador / Pilar;${selectedAno};${hasAnoAnterior ? anoAnterior : 'Ano Anterior'};Fórmula & Conceito\n`
+      csvContent += `Capital de Giro Bruto (CGB);${giroAtual.cgb.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.cgb.toFixed(2).replace('.', ',') : '—'};Ativo Circulante Total\n`
+      csvContent += `Capital de Giro Líquido (CGL);${giroAtual.cgl.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.cgl.toFixed(2).replace('.', ',') : '—'};Ativo Circulante - Passivo Circulante\n`
+      csvContent += `Necessidade de Capital de Giro (NCG);${giroAtual.ncg.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.ncg.toFixed(2).replace('.', ',') : '—'};Ativo Circ. Operacional - Passivo Circ. Operacional\n`
+      csvContent += `Saldo de Tesouraria (ST);${giroAtual.saldoTesouraria.toFixed(2).replace('.', ',')};${giroAnterior ? giroAnterior.saldoTesouraria.toFixed(2).replace('.', ',') : '—'};Ativo Circ. Financeiro - Passivo Circ. Financeiro (ou CGL - NCG)\n`
+      csvContent += `Diagnóstico Fleuriet;${giroAtual.tipoFleurietNome};${giroAnterior ? giroAnterior.tipoFleurietNome : '—'};${giroAtual.tipoFleurietDescricao}\n`
     }
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -1214,14 +1231,119 @@ export default function Relatorios() {
           </div>
         )}
 
-        {/* 5. SEÇÃO: PONTO DE EQUILÍBRIO (SE COMPLETO OU INDICADORES) */}
+        {/* 5. SEÇÃO: CAPITAL DE GIRO & MODELO FLEURIET */}
+        {(tipoRelatorio === 'completo' || tipoRelatorio === 'indicadores') && (
+          <div className="mb-6 space-y-3">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-[#0B1F3A] border-b border-slate-200 pb-1.5 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                {tipoRelatorio === 'completo'
+                  ? '5. Análise do Capital de Giro (Modelo Fleuriet)'
+                  : 'Capital de Giro (Modelo Fleuriet)'}
+              </span>
+              <Badge
+                variant="outline"
+                className={`text-[10px] font-bold ${
+                  giroAtual.tipoFleuriet === 'excelente' || giroAtual.tipoFleuriet === 'solida'
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                    : giroAtual.tipoFleuriet === 'em_crescimento'
+                      ? 'bg-amber-50 text-amber-800 border-amber-300'
+                      : 'bg-red-50 text-red-800 border-red-300'
+                }`}
+              >
+                {giroAtual.tipoFleuriet === 'excelente' || giroAtual.tipoFleuriet === 'solida'
+                  ? '🟢'
+                  : giroAtual.tipoFleuriet === 'em_crescimento'
+                    ? '🟠'
+                    : '🔴'}{' '}
+                {giroAtual.tipoFleurietNome}
+              </Badge>
+            </h4>
+
+            {/* Grid dos 4 Pilares do Capital de Giro */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Cap. Giro Bruto (CGB)</span>
+                <strong className="text-xs font-bold text-slate-900 block font-mono">
+                  {formatCurrency(giroAtual.cgb)}
+                </strong>
+                <span className="text-[9px] text-slate-400">Ativo Circulante</span>
+              </div>
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Cap. Giro Líquido (CGL)</span>
+                <strong
+                  className={`text-xs font-bold block font-mono ${
+                    giroAtual.cgl >= 0 ? 'text-emerald-700' : 'text-red-700'
+                  }`}
+                >
+                  {formatCurrency(giroAtual.cgl)}
+                </strong>
+                <span className="text-[9px] text-slate-400">AC - PC (Folga Longo Prazo)</span>
+              </div>
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Nec. Cap. Giro (NCG)</span>
+                <strong
+                  className={`text-xs font-bold block font-mono ${
+                    giroAtual.ncg <= 0 ? 'text-emerald-700' : 'text-amber-700'
+                  }`}
+                >
+                  {formatCurrency(giroAtual.ncg)}
+                </strong>
+                <span className="text-[9px] text-slate-400">ACO - PCO (Déficit do Ciclo)</span>
+              </div>
+              <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="text-[10px] text-slate-500 block">Saldo Tesouraria (ST)</span>
+                <strong
+                  className={`text-xs font-bold block font-mono ${
+                    giroAtual.saldoTesouraria >= 0 ? 'text-emerald-700' : 'text-red-700'
+                  }`}
+                >
+                  {formatCurrency(giroAtual.saldoTesouraria)}
+                </strong>
+                <span className="text-[9px] text-slate-400">CGL - NCG (Margem de Caixa)</span>
+              </div>
+            </div>
+
+            {/* Diagnóstico Curto do Modelo Fleuriet */}
+            <div
+              className={`p-3 rounded-xl border text-[11px] space-y-1 ${
+                giroAtual.tipoFleuriet === 'excelente' || giroAtual.tipoFleuriet === 'solida'
+                  ? 'bg-emerald-50/50 border-emerald-200 text-emerald-950'
+                  : giroAtual.tipoFleuriet === 'em_crescimento'
+                    ? 'bg-amber-50/50 border-amber-200 text-amber-950'
+                    : 'bg-red-50/50 border-red-200 text-red-950'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <strong className="font-bold">
+                  Diagnóstico Fleuriet: {giroAtual.tipoFleurietNome}
+                </strong>
+                <span className="text-[10px] font-semibold opacity-80 font-mono">
+                  ST = {formatCurrency(giroAtual.saldoTesouraria)}
+                </span>
+              </div>
+              <p className="leading-relaxed text-slate-700 text-justify">
+                {giroAtual.tipoFleurietDescricao}
+              </p>
+              {giroAtual.saldoTesouraria < 0 && (
+                <p className="text-[10px] font-semibold text-red-800 pt-1 border-t border-red-200/60">
+                  ⚠️ <strong>Risco de Efeito Tesoura:</strong> O saldo de tesouraria negativo indica
+                  dependência de empréstimos e linhas bancárias de curto prazo onerosas para cobrir
+                  o ciclo operacional.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 6. SEÇÃO: PONTO DE EQUILÍBRIO (SE COMPLETO OU INDICADORES) */}
         {(tipoRelatorio === 'completo' || tipoRelatorio === 'indicadores') && (
           <div className="mb-6 space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[#0B1F3A] border-b border-slate-200 pb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
                 <Scale className="w-3.5 h-3.5 text-blue-600" />
                 {tipoRelatorio === 'completo'
-                  ? '5. Ponto de Equilíbrio & Margem de Segurança'
+                  ? '6. Ponto de Equilíbrio & Margem de Segurança'
                   : 'Ponto de Equilíbrio'}
               </span>
               <span className="text-[10px] font-normal text-slate-500 lowercase">
@@ -1344,12 +1466,12 @@ export default function Relatorios() {
           </div>
         )}
 
-        {/* 6. PARECER AUTOMÁTICO DO CONSULTOR (SE COMPLETO) */}
+        {/* 7. PARECER AUTOMÁTICO DO CONSULTOR (SE COMPLETO) */}
         {tipoRelatorio === 'completo' && (
           <div className="mb-6 space-y-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-[#0B1F3A] border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
               <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
-              6. Parecer Técnico da Consultoria
+              7. Parecer Técnico da Consultoria
             </h4>
 
             <div className="space-y-2 text-[11px] leading-relaxed text-slate-700 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
