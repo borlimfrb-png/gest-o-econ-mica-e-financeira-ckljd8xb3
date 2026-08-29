@@ -72,6 +72,7 @@ export type VinculosContasBalanco = Record<string, string>
 export interface BalancoRecord extends RecordModel {
   empresa: string
   ano: number
+  mes?: number
   // Mapeamento de campo -> id da conta vinculada (opcional).
   vinculos_contas?: VinculosContasBalanco | null
   // Ativo Circulante
@@ -104,6 +105,7 @@ export interface BalancoRecord extends RecordModel {
 export interface DreRecord extends RecordModel {
   empresa: string
   ano: number
+  mes?: number
   receita_bruta: number
   deducoes_receita: number
   custo_mercadorias: number

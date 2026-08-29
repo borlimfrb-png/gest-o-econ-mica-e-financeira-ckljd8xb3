@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T10:56:34.321Z",
+  "generatedAt": "2026-08-29T12:29:04.175Z",
   "collections": [
     {
       "name": "users",
@@ -406,12 +406,19 @@
           "type": "json",
           "required": false,
           "system": false
+        },
+        {
+          "name": "mes",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE UNIQUE INDEX idx_balancos_empresa_ano ON balancos (empresa, ano)",
         "CREATE INDEX idx_balancos_empresa ON balancos (empresa)",
-        "CREATE INDEX idx_balancos_ano ON balancos (ano)"
+        "CREATE INDEX idx_balancos_ano ON balancos (ano)",
+        "CREATE INDEX `idx_balancos_mes` ON `balancos` (mes)",
+        "CREATE UNIQUE INDEX `idx_balancos_empresa_ano_mes` ON `balancos` (empresa, ano, mes)"
       ]
     },
     {
@@ -493,12 +500,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "mes",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
-        "CREATE UNIQUE INDEX idx_dre_empresa_ano ON dre (empresa, ano)",
         "CREATE INDEX idx_dre_empresa ON dre (empresa)",
-        "CREATE INDEX idx_dre_ano ON dre (ano)"
+        "CREATE INDEX idx_dre_ano ON dre (ano)",
+        "CREATE INDEX `idx_dre_mes` ON `dre` (mes)",
+        "CREATE UNIQUE INDEX `idx_dre_empresa_ano_mes` ON `dre` (empresa, ano, mes)"
       ]
     },
     {

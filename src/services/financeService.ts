@@ -48,18 +48,22 @@ export const balancosService = {
   async getByEmpresa(empresaId: string): Promise<BalancoRecord[]> {
     return await pb.collection('balancos').getFullList<BalancoRecord>({
       filter: `empresa = '${empresaId}'`,
-      sort: '-ano',
+      sort: '-ano,-mes',
     })
   },
 
   async getAll(): Promise<BalancoRecord[]> {
     return await pb.collection('balancos').getFullList<BalancoRecord>({
-      sort: '-ano',
+      sort: '-ano,-mes',
     })
   },
 
   async create(data: Omit<BalancoRecord, 'id' | 'created' | 'updated'>): Promise<BalancoRecord> {
-    return await pb.collection('balancos').create<BalancoRecord>(data)
+    const mes = data.mes !== undefined ? Number(data.mes) : 12
+    return await pb.collection('balancos').create<BalancoRecord>({
+      ...data,
+      mes,
+    } as any)
   },
 
   async update(id: string, data: Partial<BalancoRecord>): Promise<BalancoRecord> {
@@ -74,17 +78,24 @@ export const balancosService = {
     empresaId: string,
     ano: number,
     data: Partial<BalancoRecord>,
+    mes?: number,
   ): Promise<BalancoRecord> {
+    const targetMes =
+      data.mes !== undefined ? Number(data.mes) : mes !== undefined ? Number(mes) : 12
     const existing = await pb.collection('balancos').getList<BalancoRecord>(1, 1, {
-      filter: `empresa = '${empresaId}' && ano = ${ano}`,
+      filter: `empresa = '${empresaId}' && ano = ${ano} && mes = ${targetMes}`,
     })
     if (existing.items.length > 0) {
-      return await pb.collection('balancos').update<BalancoRecord>(existing.items[0].id, data)
+      return await pb.collection('balancos').update<BalancoRecord>(existing.items[0].id, {
+        ...data,
+        mes: targetMes,
+      })
     } else {
       return await pb.collection('balancos').create<BalancoRecord>({
         ...data,
         empresa: empresaId,
         ano,
+        mes: targetMes,
       } as any)
     }
   },
@@ -94,18 +105,22 @@ export const dreService = {
   async getByEmpresa(empresaId: string): Promise<DreRecord[]> {
     return await pb.collection('dre').getFullList<DreRecord>({
       filter: `empresa = '${empresaId}'`,
-      sort: '-ano',
+      sort: '-ano,-mes',
     })
   },
 
   async getAll(): Promise<DreRecord[]> {
     return await pb.collection('dre').getFullList<DreRecord>({
-      sort: '-ano',
+      sort: '-ano,-mes',
     })
   },
 
   async create(data: Omit<DreRecord, 'id' | 'created' | 'updated'>): Promise<DreRecord> {
-    return await pb.collection('dre').create<DreRecord>(data)
+    const mes = data.mes !== undefined ? Number(data.mes) : 12
+    return await pb.collection('dre').create<DreRecord>({
+      ...data,
+      mes,
+    } as any)
   },
 
   async update(id: string, data: Partial<DreRecord>): Promise<DreRecord> {
@@ -116,17 +131,28 @@ export const dreService = {
     return await pb.collection('dre').delete(id)
   },
 
-  async upsert(empresaId: string, ano: number, data: Partial<DreRecord>): Promise<DreRecord> {
+  async upsert(
+    empresaId: string,
+    ano: number,
+    data: Partial<DreRecord>,
+    mes?: number,
+  ): Promise<DreRecord> {
+    const targetMes =
+      data.mes !== undefined ? Number(data.mes) : mes !== undefined ? Number(mes) : 12
     const existing = await pb.collection('dre').getList<DreRecord>(1, 1, {
-      filter: `empresa = '${empresaId}' && ano = ${ano}`,
+      filter: `empresa = '${empresaId}' && ano = ${ano} && mes = ${targetMes}`,
     })
     if (existing.items.length > 0) {
-      return await pb.collection('dre').update<DreRecord>(existing.items[0].id, data)
+      return await pb.collection('dre').update<DreRecord>(existing.items[0].id, {
+        ...data,
+        mes: targetMes,
+      })
     } else {
       return await pb.collection('dre').create<DreRecord>({
         ...data,
         empresa: empresaId,
         ano,
+        mes: targetMes,
       } as any)
     }
   },

@@ -34,6 +34,8 @@ import {
   calcularBalanco,
   calcularDre,
   calcularIndicadores,
+  consolidarBalancoAnual,
+  consolidarDreAnual,
   formatBrlMil,
   formatNumber,
   formatPercent,
@@ -430,9 +432,22 @@ export default function Dashboard() {
     return map
   }, [tiposDespesa])
 
-  // Balanço e DRE do ano selecionado
-  const balancoAtual = balancos.find((b) => b.ano === selectedAno)
-  const dreAtual = dres.find((d) => d.empresa === selectedEmpresaId && d.ano === selectedAno)
+  // Balanço e DRE consolidados do ano selecionado
+  const balancosDaEmpresa = useMemo(() => {
+    return selectedEmpresaId ? balancos.filter((b) => b.empresa === selectedEmpresaId) : balancos
+  }, [balancos, selectedEmpresaId])
+
+  const dresDaEmpresa = useMemo(() => {
+    return selectedEmpresaId ? dres.filter((d) => d.empresa === selectedEmpresaId) : dres
+  }, [dres, selectedEmpresaId])
+
+  const balancoAtual = useMemo(() => {
+    return consolidarBalancoAnual(balancosDaEmpresa, selectedAno)
+  }, [balancosDaEmpresa, selectedAno])
+
+  const dreAtual = useMemo(() => {
+    return consolidarDreAnual(dresDaEmpresa, selectedAno)
+  }, [dresDaEmpresa, selectedAno])
 
   // Totais e Indicadores calculados
   const calcB = calcularBalanco(balancoAtual)
@@ -1083,7 +1098,7 @@ export default function Dashboard() {
   const anosOrdenados = Array.from(new Set(balancos.map((b) => b.ano))).sort((a, b) => a - b)
 
   const dataEvolucaoPL = anosOrdenados.map((ano) => {
-    const b = balancos.find((item) => item.ano === ano)
+    const b = consolidarBalancoAnual(balancosDaEmpresa, ano)
     const c = calcularBalanco(b)
     return {
       ano: String(ano),
@@ -1093,7 +1108,7 @@ export default function Dashboard() {
   })
 
   const dataEvolucaoReceitaLucro = anosOrdenados.map((ano) => {
-    const d = dres.find((item) => item.empresa === selectedEmpresaId && item.ano === ano)
+    const d = consolidarDreAnual(dresDaEmpresa, ano)
     const c = calcularDre(d)
     return {
       ano: String(ano),

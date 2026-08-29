@@ -20,6 +20,10 @@ import {
   calcularDre,
   calcularIndicadores,
   gerarAnaliseAutomatica,
+  consolidarBalancoAnual,
+  consolidarDreAnual,
+  NOMES_MESES,
+  NOMES_MESES_ABREV,
   formatBrlMil,
   formatNumber,
   formatPercent,
@@ -97,6 +101,8 @@ export default function AnaliseEmpresa() {
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [selectedAno, setSelectedAno] = useState<number>(2024)
+  // Filtro de mês: 'todos' = visão anual consolidada; '1'..'12' = mês específico
+  const [selectedMes, setSelectedMes] = useState<string>('todos')
   const [loading, setLoading] = useState(true)
 
   // Abas
@@ -107,6 +113,11 @@ export default function AnaliseEmpresa() {
   const [modalDreOpen, setModalDreOpen] = useState(false)
   const [modalNovoLancamentoOpen, setModalNovoLancamentoOpen] = useState(false)
   const [savingModal, setSavingModal] = useState(false)
+
+  // Mês alvo nos modais de edição individual
+  const [modalBalancoMes, setModalBalancoMes] = useState<number>(12)
+  const [modalDreMes, setModalDreMes] = useState<number>(12)
+  const [novoMes, setNovoMes] = useState<number>(12)
 
   // Indicadores Accordions (expandir/recolher)
   const [expandedInd, setExpandedInd] = useState<{
@@ -199,13 +210,47 @@ export default function AnaliseEmpresa() {
     return map
   }, [contas])
 
-  // Balanço e DRE Atual e Anterior
-  const balancoAtual = balancos.find((b) => b.ano === selectedAno) || null
-  const dreAtual = dres.find((d) => d.ano === selectedAno) || null
+  // Meses que possuem lançamentos cadastrados no ano selecionado
+  const mesesComDadosNoAno = React.useMemo(() => {
+    const mesesSet = new Set<number>()
+    balancos.filter((b) => b.ano === selectedAno).forEach((b) => mesesSet.add(b.mes ?? 12))
+    dres.filter((d) => d.ano === selectedAno).forEach((d) => mesesSet.add(d.mes ?? 12))
+    return Array.from(mesesSet).sort((a, b) => a - b)
+  }, [balancos, dres, selectedAno])
+
+  // Balanço e DRE Atual e Anterior considerando se o usuário selecionou um mês específico ou "todos" (Consolidado Anual)
+  const balancoAtual = React.useMemo(() => {
+    if (selectedMes === 'todos') {
+      return consolidarBalancoAnual(balancos, selectedAno)
+    }
+    const m = Number(selectedMes)
+    return balancos.find((b) => b.ano === selectedAno && (b.mes ?? 12) === m) || null
+  }, [balancos, selectedAno, selectedMes])
+
+  const dreAtual = React.useMemo(() => {
+    if (selectedMes === 'todos') {
+      return consolidarDreAnual(dres, selectedAno)
+    }
+    const m = Number(selectedMes)
+    return dres.find((d) => d.ano === selectedAno && (d.mes ?? 12) === m) || null
+  }, [dres, selectedAno, selectedMes])
 
   const anoAnterior = selectedAno - 1
-  const balancoAnterior = balancos.find((b) => b.ano === anoAnterior) || null
-  const dreAnterior = dres.find((d) => d.ano === anoAnterior) || null
+  const balancoAnterior = React.useMemo(() => {
+    if (selectedMes === 'todos') {
+      return consolidarBalancoAnual(balancos, anoAnterior)
+    }
+    const m = Number(selectedMes)
+    return balancos.find((b) => b.ano === anoAnterior && (b.mes ?? 12) === m) || null
+  }, [balancos, anoAnterior, selectedMes])
+
+  const dreAnterior = React.useMemo(() => {
+    if (selectedMes === 'todos') {
+      return consolidarDreAnual(dres, anoAnterior)
+    }
+    const m = Number(selectedMes)
+    return dres.find((d) => d.ano === anoAnterior && (d.mes ?? 12) === m) || null
+  }, [dres, anoAnterior, selectedMes])
 
   // Vínculos do balanço atual (campo -> contaId)
   const vinculosAtual: VinculosContasBalanco = balancoAtual?.vinculos_contas || {}
@@ -310,16 +355,21 @@ export default function AnaliseEmpresa() {
   }
 
   // Abertura de Modal de Edição Balanço
-  const openEditBalancoModal = () => {
-    if (balancoAtual) {
+  const openEditBalancoModal = (mesAlvo?: number) => {
+    const targetMes = mesAlvo ?? (selectedMes === 'todos' ? 12 : Number(selectedMes))
+    setModalBalancoMes(targetMes)
+    const existing = balancos.find((b) => b.ano === selectedAno && (b.mes ?? 12) === targetMes)
+    if (existing) {
       setFormBalanco({
-        ...balancoAtual,
-        vinculos_contas: { ...(balancoAtual.vinculos_contas || {}) },
+        ...existing,
+        mes: targetMes,
+        vinculos_contas: { ...(existing.vinculos_contas || {}) },
       })
     } else {
       setFormBalanco({
         empresa: id,
         ano: selectedAno,
+        mes: targetMes,
         caixa_equivalentes: 0,
         aplicacoes_financeiras: 0,
         contas_receber: 0,
@@ -346,15 +396,37 @@ export default function AnaliseEmpresa() {
     setModalBalancoOpen(true)
   }
 
+  const handleMudarMesModalBalanco = (novoMesValor: number) => {
+    setModalBalancoMes(novoMesValor)
+    const existing = balancos.find((b) => b.ano === selectedAno && (b.mes ?? 12) === novoMesValor)
+    if (existing) {
+      setFormBalanco({
+        ...existing,
+        mes: novoMesValor,
+        vinculos_contas: { ...(existing.vinculos_contas || {}) },
+      })
+    } else {
+      setFormBalanco((prev) => ({
+        ...prev,
+        mes: novoMesValor,
+      }))
+    }
+  }
+
   const saveBalancoModal = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!id) return
     setSavingModal(true)
     try {
-      await balancosService.upsert(id, selectedAno, formBalanco)
+      await balancosService.upsert(
+        id,
+        selectedAno,
+        { ...formBalanco, mes: modalBalancoMes },
+        modalBalancoMes,
+      )
       toast({
         title: 'Balanço salvo com sucesso!',
-        description: `Os dados do Balanço Patrimonial (${selectedAno}) foram atualizados.`,
+        description: `Os dados do Balanço Patrimonial (${NOMES_MESES[modalBalancoMes - 1]}/${selectedAno}) foram atualizados.`,
       })
       setModalBalancoOpen(false)
       loadData()
@@ -371,13 +443,17 @@ export default function AnaliseEmpresa() {
   }
 
   // Abertura de Modal de Edição DRE
-  const openEditDreModal = () => {
-    if (dreAtual) {
-      setFormDre({ ...dreAtual })
+  const openEditDreModal = (mesAlvo?: number) => {
+    const targetMes = mesAlvo ?? (selectedMes === 'todos' ? 12 : Number(selectedMes))
+    setModalDreMes(targetMes)
+    const existing = dres.find((d) => d.ano === selectedAno && (d.mes ?? 12) === targetMes)
+    if (existing) {
+      setFormDre({ ...existing, mes: targetMes })
     } else {
       setFormDre({
         empresa: id,
         ano: selectedAno,
+        mes: targetMes,
         receita_bruta: 0,
         deducoes_receita: 0,
         custo_mercadorias: 0,
@@ -390,15 +466,28 @@ export default function AnaliseEmpresa() {
     setModalDreOpen(true)
   }
 
+  const handleMudarMesModalDre = (novoMesValor: number) => {
+    setModalDreMes(novoMesValor)
+    const existing = dres.find((d) => d.ano === selectedAno && (d.mes ?? 12) === novoMesValor)
+    if (existing) {
+      setFormDre({ ...existing, mes: novoMesValor })
+    } else {
+      setFormDre((prev) => ({
+        ...prev,
+        mes: novoMesValor,
+      }))
+    }
+  }
+
   const saveDreModal = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!id) return
     setSavingModal(true)
     try {
-      await dreService.upsert(id, selectedAno, formDre)
+      await dreService.upsert(id, selectedAno, { ...formDre, mes: modalDreMes }, modalDreMes)
       toast({
         title: 'DRE salva com sucesso!',
-        description: `O Demonstrativo de Resultado (${selectedAno}) foi atualizado.`,
+        description: `O Demonstrativo de Resultado (${NOMES_MESES[modalDreMes - 1]}/${selectedAno}) foi atualizado.`,
       })
       setModalDreOpen(false)
       loadData()
@@ -414,14 +503,15 @@ export default function AnaliseEmpresa() {
     }
   }
 
-  // Abertura de Modal de Novo Lançamento (Ano Novo com Balanço + DRE)
+  // Abertura de Modal de Novo Lançamento (Ano + Mês com Balanço + DRE)
   const openNovoLancamentoModal = () => {
-    const nextAno =
-      anosDisponiveis.length > 0 ? Math.max(...anosDisponiveis) + 1 : new Date().getFullYear()
-    setNovoAno(nextAno)
+    const currentAno = anosDisponiveis.length > 0 ? anosDisponiveis[0] : new Date().getFullYear()
+    setNovoAno(currentAno)
+    setNovoMes(new Date().getMonth() + 1)
     setFormBalanco({
       empresa: id,
-      ano: nextAno,
+      ano: currentAno,
+      mes: new Date().getMonth() + 1,
       caixa_equivalentes: 0,
       aplicacoes_financeiras: 0,
       contas_receber: 0,
@@ -446,7 +536,8 @@ export default function AnaliseEmpresa() {
     })
     setFormDre({
       empresa: id,
-      ano: nextAno,
+      ano: currentAno,
+      mes: new Date().getMonth() + 1,
       receita_bruta: 0,
       deducoes_receita: 0,
       custo_mercadorias: 0,
@@ -464,12 +555,17 @@ export default function AnaliseEmpresa() {
     setSavingModal(true)
     try {
       await Promise.all([
-        balancosService.upsert(id, novoAno, { ...formBalanco, ano: novoAno }),
-        dreService.upsert(id, novoAno, { ...formDre, ano: novoAno }),
+        balancosService.upsert(
+          id,
+          novoAno,
+          { ...formBalanco, ano: novoAno, mes: novoMes },
+          novoMes,
+        ),
+        dreService.upsert(id, novoAno, { ...formDre, ano: novoAno, mes: novoMes }, novoMes),
       ])
       toast({
-        title: 'Novo exercício lançado com sucesso!',
-        description: `Balanço e DRE de ${novoAno} foram registrados.`,
+        title: 'Lançamento mensal registrado com sucesso!',
+        description: `Balanço e DRE de ${NOMES_MESES[novoMes - 1]}/${novoAno} foram gravados.`,
       })
       setSelectedAno(novoAno)
       setModalNovoLancamentoOpen(false)
@@ -479,7 +575,7 @@ export default function AnaliseEmpresa() {
       toast({
         variant: 'destructive',
         title: 'Erro ao cadastrar lançamento',
-        description: err?.message || 'Verifique se o ano já não foi cadastrado.',
+        description: err?.message || 'Verifique se o período já não foi cadastrado.',
       })
     } finally {
       setSavingModal(false)
@@ -555,14 +651,15 @@ export default function AnaliseEmpresa() {
 
         {/* Controles de Período e Ações */}
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Seletor de Ano */}
           <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-3 py-1.5 text-xs">
             <Calendar className="w-3.5 h-3.5 text-blue-600" />
-            <span className="font-semibold text-slate-700">Ano de Análise:</span>
+            <span className="font-semibold text-slate-700">Ano:</span>
             <Select
               value={String(selectedAno)}
               onValueChange={(val) => setSelectedAno(Number(val))}
             >
-              <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-bold text-blue-700 p-0 focus:ring-0 w-[65px]">
+              <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-bold text-blue-700 p-0 focus:ring-0 w-[60px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -575,12 +672,41 @@ export default function AnaliseEmpresa() {
             </Select>
           </div>
 
+          {/* Seletor de Período: Consolidado Anual ou Mês Específico */}
+          <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-3 py-1.5 text-xs">
+            <span className="font-semibold text-slate-700">Visão:</span>
+            <Select value={selectedMes} onValueChange={(val) => setSelectedMes(val)}>
+              <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-bold text-blue-700 p-0 focus:ring-0 w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos" className="text-xs font-semibold">
+                  Consolidado Anual
+                </SelectItem>
+                <SelectGroup>
+                  <SelectLabel className="text-[10px] font-semibold text-slate-400 uppercase">
+                    Meses Cadastrados
+                  </SelectLabel>
+                  {NOMES_MESES.map((nomeMes, idx) => {
+                    const mesNum = idx + 1
+                    const temDados = mesesComDadosNoAno.includes(mesNum)
+                    return (
+                      <SelectItem key={mesNum} value={String(mesNum)} className="text-xs">
+                        {nomeMes} {temDados ? '•' : '(vazio)'}
+                      </SelectItem>
+                    )
+                  })}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </div>
+
           <Button
             onClick={openNovoLancamentoModal}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
           >
             <Plus className="w-4 h-4 mr-1.5" />
-            Novo Lançamento
+            Novo Lançamento Mensal
           </Button>
         </div>
       </div>
@@ -994,22 +1120,37 @@ export default function AnaliseEmpresa() {
             ABA 2: BALANÇO PATRIMONIAL
         ========================================================================= */}
         <TabsContent value="balanco" className="space-y-4 focus-visible:outline-none">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <h3 className="text-base font-bold text-[#0B1F3A]">Balanço Patrimonial Completo</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-[#0B1F3A]">Balanço Patrimonial Completo</h3>
+                {selectedMes !== 'todos' ? (
+                  <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold">
+                    Mês de {NOMES_MESES[Number(selectedMes) - 1]} / {selectedAno}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold">
+                    Consolidado Anual ({selectedAno})
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 Valores em R$ mil · Análise Vertical (AV%) sobre grupos e Horizontal (AH%) vs{' '}
                 {anoAnterior}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Button
-                onClick={openEditBalancoModal}
+                onClick={() =>
+                  openEditBalancoModal(selectedMes !== 'todos' ? Number(selectedMes) : 12)
+                }
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
               >
                 <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                Editar Balanço ({selectedAno})
+                {selectedMes !== 'todos'
+                  ? `Editar Balanço (${NOMES_MESES_ABREV[Number(selectedMes) - 1]}/${selectedAno})`
+                  : `Editar Balanço (Dezembro/${selectedAno})`}
               </Button>
             </div>
           </div>
@@ -1580,23 +1721,36 @@ export default function AnaliseEmpresa() {
             ABA 3: DRE (DEMONSTRATIVO DO RESULTADO DO EXERCÍCIO)
         ========================================================================= */}
         <TabsContent value="dre" className="space-y-4 focus-visible:outline-none">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <h3 className="text-base font-bold text-[#0B1F3A]">
-                Demonstrativo do Resultado do Exercício (DRE)
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-[#0B1F3A]">
+                  Demonstrativo do Resultado do Exercício (DRE)
+                </h3>
+                {selectedMes !== 'todos' ? (
+                  <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[11px] font-semibold">
+                    Mês de {NOMES_MESES[Number(selectedMes) - 1]} / {selectedAno}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold">
+                    Consolidado Anual (Soma dos 12 meses de {selectedAno})
+                  </Badge>
+                )}
+              </div>
               <p className="text-xs text-slate-500">
                 Valores em R$ mil · Análise Vertical (AV%) sobre a Receita Líquida e Horizontal
                 (AH%) vs {anoAnterior}
               </p>
             </div>
             <Button
-              onClick={openEditDreModal}
+              onClick={() => openEditDreModal(selectedMes !== 'todos' ? Number(selectedMes) : 12)}
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
             >
               <Pencil className="w-3.5 h-3.5 mr-1.5" />
-              Editar DRE ({selectedAno})
+              {selectedMes !== 'todos'
+                ? `Editar DRE (${NOMES_MESES_ABREV[Number(selectedMes) - 1]}/${selectedAno})`
+                : `Editar DRE (Dezembro/${selectedAno})`}
             </Button>
           </div>
 
@@ -2380,13 +2534,38 @@ export default function AnaliseEmpresa() {
           <form onSubmit={saveBalancoModal}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A]">
-                Editar Balanço Patrimonial ({selectedAno}) — {empresa.nome}
+                Editar Balanço Patrimonial — {empresa.nome}
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Preencha os valores contábeis em R$ mil. Totais de ativo, passivo e PL são
-                calculados ao vivo.
+                Selecione o mês de competência e preencha os valores contábeis em R$ mil.
               </DialogDescription>
             </DialogHeader>
+
+            <div className="py-3 px-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                <span className="font-bold text-slate-800 text-xs">Ano de Competência:</span>
+                <span className="font-extrabold text-blue-800 text-sm">{selectedAno}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="font-bold text-slate-800 text-xs">Mês:</Label>
+                <Select
+                  value={String(modalBalancoMes)}
+                  onValueChange={(val) => handleMudarMesModalBalanco(Number(val))}
+                >
+                  <SelectTrigger className="h-8 w-36 bg-white text-xs font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NOMES_MESES.map((nomeMes, idx) => (
+                      <SelectItem key={idx + 1} value={String(idx + 1)} className="text-xs">
+                        {idx + 1} - {nomeMes}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
             <div className="py-4 space-y-6 text-xs">
               {/* 1. Ativo Circulante */}
@@ -2818,13 +2997,38 @@ export default function AnaliseEmpresa() {
           <form onSubmit={saveDreModal}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A]">
-                Editar DRE ({selectedAno}) — {empresa.nome}
+                Editar DRE — {empresa.nome}
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Preencha os dados do demonstrativo de resultado em R$ mil. Margens e lucro líquido
-                calculados ao vivo.
+                Selecione o mês de competência e preencha as linhas da DRE em R$ mil.
               </DialogDescription>
             </DialogHeader>
+
+            <div className="py-3 px-3 bg-blue-50/80 border border-blue-200 rounded-xl flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                <span className="font-bold text-slate-800 text-xs">Ano de Competência:</span>
+                <span className="font-extrabold text-blue-800 text-sm">{selectedAno}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label className="font-bold text-slate-800 text-xs">Mês:</Label>
+                <Select
+                  value={String(modalDreMes)}
+                  onValueChange={(val) => handleMudarMesModalDre(Number(val))}
+                >
+                  <SelectTrigger className="h-8 w-36 bg-white text-xs font-semibold">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {NOMES_MESES.map((nomeMes, idx) => (
+                      <SelectItem key={idx + 1} value={String(idx + 1)} className="text-xs">
+                        {idx + 1} - {nomeMes}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
             <div className="py-4 space-y-3 text-xs">
               <div>
@@ -2956,35 +3160,53 @@ export default function AnaliseEmpresa() {
       </Dialog>
 
       {/* =========================================================================
-          MODAL: NOVO LANÇAMENTO (ANO NOVO)
+          MODAL: NOVO LANÇAMENTO (MENSAL / ANUAL)
       ========================================================================= */}
       <Dialog open={modalNovoLancamentoOpen} onOpenChange={setModalNovoLancamentoOpen}>
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-white">
           <form onSubmit={saveNovoLancamentoModal}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A]">
-                Novo Lançamento de Exercício — {empresa.nome}
+                Novo Lançamento Mensal — {empresa.nome}
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Cadastre um novo ano de Balanço Patrimonial e DRE para viabilizar análise horizontal
-                instantânea.
+                Cadastre Balanço Patrimonial e DRE para o mês e ano especificados.
               </DialogDescription>
             </DialogHeader>
 
             <div className="py-4 space-y-4 text-xs">
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center gap-3">
-                <Label className="font-bold text-slate-800 text-xs shrink-0">
-                  Ano do Exercício:
-                </Label>
-                <Input
-                  type="number"
-                  min={2000}
-                  max={2100}
-                  value={novoAno}
-                  onChange={(e) => setNovoAno(Number(e.target.value))}
-                  className="h-8 text-xs bg-white w-28 font-bold"
-                  required
-                />
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <Label className="font-bold text-slate-800 text-xs shrink-0">
+                    Ano do Exercício:
+                  </Label>
+                  <Input
+                    type="number"
+                    min={2000}
+                    max={2100}
+                    value={novoAno}
+                    onChange={(e) => setNovoAno(Number(e.target.value))}
+                    className="h-8 text-xs bg-white w-24 font-bold"
+                    required
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="font-bold text-slate-800 text-xs shrink-0">
+                    Mês de Competência:
+                  </Label>
+                  <Select value={String(novoMes)} onValueChange={(val) => setNovoMes(Number(val))}>
+                    <SelectTrigger className="h-8 w-36 bg-white text-xs font-semibold">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NOMES_MESES.map((nomeMes, idx) => (
+                        <SelectItem key={idx + 1} value={String(idx + 1)} className="text-xs">
+                          {idx + 1} - {nomeMes}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* Grupo Ativo */}

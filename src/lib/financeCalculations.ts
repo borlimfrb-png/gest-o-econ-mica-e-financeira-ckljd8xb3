@@ -6,6 +6,90 @@ import type {
   IndicadoresCalculados,
 } from '@/types/finance'
 
+export const NOMES_MESES = [
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
+]
+
+export const NOMES_MESES_ABREV = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+]
+
+/**
+ * Consolida uma lista de balanços para um determinado ano.
+ * Para balanço patrimonial (saldos), utiliza o registro do mês mais recente cadastrado no ano.
+ */
+export function consolidarBalancoAnual(
+  balancos: BalancoRecord[],
+  ano: number,
+): BalancoRecord | null {
+  const doAno = balancos.filter((b) => b.ano === ano)
+  if (doAno.length === 0) return null
+
+  // Ordena por mês decrescente (mes null/undefined vira 12 por padrão de retrocompatibilidade)
+  const sorted = [...doAno].sort((a, b) => {
+    const mesA = a.mes ?? 12
+    const mesB = b.mes ?? 12
+    return mesB - mesA
+  })
+
+  return sorted[0]
+}
+
+/**
+ * Consolida uma lista de DREs para um determinado ano.
+ * Para DRE (fluxo de receitas e despesas), soma os valores de todos os meses cadastrados no ano.
+ */
+export function consolidarDreAnual(dres: DreRecord[], ano: number): DreRecord | null {
+  const doAno = dres.filter((d) => d.ano === ano)
+  if (doAno.length === 0) return null
+
+  // Se tiver apenas 1 registro (ex: anual clássico ou 1 único mês), retorna ele mesmo
+  if (doAno.length === 1) return doAno[0]
+
+  // Se tiver múltiplos meses, soma os campos numéricos
+  const consolidado: DreRecord = {
+    id: `consolidado-${ano}`,
+    collectionId: doAno[0].collectionId,
+    collectionName: doAno[0].collectionName,
+    created: doAno[0].created,
+    updated: doAno[0].updated,
+    empresa: doAno[0].empresa,
+    ano,
+    mes: 12, // Identificador de exercício consolidado
+    receita_bruta: doAno.reduce((acc, d) => acc + (d.receita_bruta || 0), 0),
+    deducoes_receita: doAno.reduce((acc, d) => acc + (d.deducoes_receita || 0), 0),
+    custo_mercadorias: doAno.reduce((acc, d) => acc + (d.custo_mercadorias || 0), 0),
+    despesas_operacionais: doAno.reduce((acc, d) => acc + (d.despesas_operacionais || 0), 0),
+    despesas_financeiras: doAno.reduce((acc, d) => acc + (d.despesas_financeiras || 0), 0),
+    outras_receitas_despesas: doAno.reduce((acc, d) => acc + (d.outras_receitas_despesas || 0), 0),
+    imposto_renda: doAno.reduce((acc, d) => acc + (d.imposto_renda || 0), 0),
+  }
+
+  return consolidado
+}
+
 export function formatBrlMil(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
   const isNegative = val < 0

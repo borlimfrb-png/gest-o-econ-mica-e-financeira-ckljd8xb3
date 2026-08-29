@@ -55,12 +55,13 @@ import {
   calcularBalanco,
   calcularDre,
   calcularIndicadores,
+  consolidarBalancoAnual,
+  consolidarDreAnual,
   formatBrlMil,
-  formatPercent,
   formatNumber,
+  formatPercent,
   formatCnpj,
-} from '@/lib/financeCalculations'
-import { useRealtime } from '@/hooks/use-realtime'
+} from '@/lib/financeCalculations'import { useRealtime } from '@/hooks/use-realtime'
 import type {
   EmpresaRecord,
   BalancoRecord,
@@ -180,12 +181,12 @@ export default function DashboardEmpresa() {
     return Array.from(set).sort((a, b) => b - a)
   }, [balancos, dres, lancamentos, metas])
 
-  // Balanço e DRE do ano selecionado
+  // Balanço e DRE consolidados do ano selecionado
   const balancoAtual = useMemo(
-    () => balancos.find((b) => b.ano === selectedAno),
+    () => consolidarBalancoAnual(balancos, selectedAno),
     [balancos, selectedAno],
   )
-  const dreAtual = useMemo(() => dres.find((d) => d.ano === selectedAno), [dres, selectedAno])
+  const dreAtual = useMemo(() => consolidarDreAnual(dres, selectedAno), [dres, selectedAno])
 
   const calcB = calcularBalanco(balancoAtual)
   const calcInd = calcularIndicadores(balancoAtual, dreAtual)
@@ -216,7 +217,7 @@ export default function DashboardEmpresa() {
 
   const dataEvolucaoPL = useMemo(() => {
     return anosOrdenados.map((ano) => {
-      const b = balancos.find((item) => item.ano === ano)
+      const b = consolidarBalancoAnual(balancos, ano)
       const c = calcularBalanco(b)
       return {
         ano: String(ano),
@@ -228,7 +229,7 @@ export default function DashboardEmpresa() {
 
   const dataEvolucaoReceitaLucro = useMemo(() => {
     return anosOrdenados.map((ano) => {
-      const d = dres.find((item) => item.ano === ano)
+      const d = consolidarDreAnual(dres, ano)
       const c = calcularDre(d)
       return {
         ano: String(ano),
