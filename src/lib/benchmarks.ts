@@ -1,5 +1,10 @@
 import type { SegmentoEmpresa, BalancoRecord, DreRecord } from '@/types/finance'
-import { calcularBalanco, calcularDre, calcularIndicadores } from '@/lib/financeCalculations'
+import {
+  calcularBalanco,
+  calcularDre,
+  calcularIndicadores,
+  calcularKanitz,
+} from '@/lib/financeCalculations'
 
 export type PerfilPesosId = 'industria' | 'comercio' | 'servicos' | 'tecnologia' | 'personalizado'
 
@@ -642,6 +647,11 @@ export interface IndicadoresConsolidadosEmpresa {
   tipoFleuriet: string | null
   tipoFleurietNome?: string | null
   tipoFleurietDescricao?: string | null
+
+  // 9. Kanitz (Termômetro de Insolvência)
+  kanitzFi: number | null
+  kanitzClassificacao: 'solvente' | 'penumbra' | 'insolvente' | 'indefinido'
+  kanitzStatusTexto: string
 }
 
 export function extrairIndicadoresCompletos(
@@ -652,6 +662,7 @@ export function extrairIndicadoresCompletos(
   const calcB = calcularBalanco(balanco)
   const calcD = calcularDre(dre)
   const ind = calcularIndicadores(balanco, dre)
+  const kanitzCalc = calcularKanitz(balanco, dre)
 
   const at = calcB.ativoTotal
   const ac = calcB.ativoCirculante
@@ -824,6 +835,10 @@ export function extrairIndicadoresCompletos(
     tipoFleuriet,
     tipoFleurietNome,
     tipoFleurietDescricao,
+
+    kanitzFi: kanitzCalc.fi,
+    kanitzClassificacao: kanitzCalc.classificacao,
+    kanitzStatusTexto: kanitzCalc.statusTexto,
   }
 }
 

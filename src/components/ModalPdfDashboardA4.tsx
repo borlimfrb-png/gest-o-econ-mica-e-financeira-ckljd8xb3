@@ -81,6 +81,9 @@ export interface ModalPdfDashboardA4Props {
     tipoFleuriet?: string | null
     tipoFleurietNome?: string | null
     tipoFleurietDescricao?: string | null
+    kanitzFi?: number | null
+    kanitzClassificacao?: string | null
+    kanitzStatusTexto?: string | null
   }
   radarItems: GrupoRadarItem[]
   benchmarkAtivo: BenchmarkSetorValores | null

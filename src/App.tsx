@@ -33,6 +33,7 @@ import PainelIndicadores from './pages/PainelIndicadores'
 import IndicadoresEconomicos from './pages/IndicadoresEconomicos'
 import IndicadoresValuation from './pages/IndicadoresValuation'
 import IndicadoresPontoEquilibrio from './pages/IndicadoresPontoEquilibrio'
+import IndicadoresKanitz from './pages/IndicadoresKanitz'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
@@ -118,6 +119,7 @@ const App = () => (
                   path="/indicadores/ponto-equilibrio"
                   element={<IndicadoresPontoEquilibrio />}
                 />
+                <Route path="/indicadores/kanitz" element={<IndicadoresKanitz />} />
                 <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />

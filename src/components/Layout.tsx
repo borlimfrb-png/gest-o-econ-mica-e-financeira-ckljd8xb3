@@ -32,6 +32,7 @@ import {
   FileCheck2,
   Coins,
   Clock,
+  Flame,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -133,6 +134,11 @@ export default function Layout() {
       name: 'Ponto de Equilíbrio',
       path: '/indicadores/ponto-equilibrio',
       icon: Scale,
+    },
+    {
+      name: 'Kanitz (Insolvência)',
+      path: '/indicadores/kanitz',
+      icon: Flame,
     },
   ]
 

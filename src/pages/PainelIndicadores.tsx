@@ -21,6 +21,7 @@ import {
   calcularBalanco,
   calcularDre,
   calcularIndicadores,
+  calcularKanitz,
   formatBrlMil,
   formatCurrency,
   formatNumber,
@@ -101,6 +102,7 @@ import {
   Filter,
   Printer,
   ArrowLeftRight,
+  Flame,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -154,6 +156,7 @@ export default function PainelIndicadores() {
     ebitda: true,
     eficienciaOperacional: true,
     economicos: true,
+    kanitz: true,
   })
 
   const toggleGrupo = (grupoKey: string) => {
@@ -173,6 +176,7 @@ export default function PainelIndicadores() {
       ebitda: true,
       eficienciaOperacional: true,
       economicos: true,
+      kanitz: true,
     })
   }
 
@@ -186,6 +190,7 @@ export default function PainelIndicadores() {
       ebitda: false,
       eficienciaOperacional: false,
       economicos: false,
+      kanitz: false,
     })
   }
 
@@ -476,6 +481,19 @@ export default function PainelIndicadores() {
   )
   const indAno2 = useMemo(
     () => (balancoAno2 || dreAno2 ? extrairIndicadoresCompletos(balancoAno2, dreAno2) : null),
+    [balancoAno2, dreAno2],
+  )
+
+  const kanitzAtual = useMemo(
+    () => calcularKanitz(balancoAtual, dreAtual),
+    [balancoAtual, dreAtual],
+  )
+  const kanitzAno1 = useMemo(
+    () => (balancoAno1 || dreAno1 ? calcularKanitz(balancoAno1, dreAno1) : null),
+    [balancoAno1, dreAno1],
+  )
+  const kanitzAno2 = useMemo(
+    () => (balancoAno2 || dreAno2 ? calcularKanitz(balancoAno2, dreAno2) : null),
     [balancoAno2, dreAno2],
   )
 
@@ -1030,6 +1048,39 @@ export default function PainelIndicadores() {
     ]
   }, [indAtual, indBAtual, benchmarkAtivo])
 
+  // 9. Grupo Kanitz (Decomposição das 5 Variáveis X1-X5 no FI)
+  const chartKanitzData = useMemo(() => {
+    if (!kanitzAtual.dadosDisponiveis || kanitzAtual.fi === null) return []
+    const items = kanitzAtual.variaveis.map((v) => ({
+      indicador: `${v.sigla} - ${v.nome}`,
+      sigla: v.sigla,
+      empresa: v.contribuicao !== null ? Number(v.contribuicao.toFixed(3)) : null,
+      empresaB: null,
+      benchmark: 0,
+      unidade: 'pts',
+      realEmpresa:
+        v.contribuicao !== null
+          ? `${v.contribuicao > 0 ? '+' : ''}${v.contribuicao.toFixed(3)}`
+          : '—',
+      realEmpresaB: '—',
+      realBench: 'Ref: > 0',
+      metaDesc: v.formula,
+    }))
+    items.push({
+      indicador: 'Fator FI Total',
+      sigla: 'FI Final',
+      empresa: Number(kanitzAtual.fi.toFixed(2)),
+      empresaB: null,
+      benchmark: 0,
+      unidade: 'pts',
+      realEmpresa: `${kanitzAtual.fi.toFixed(2)} (${kanitzAtual.statusTexto})`,
+      realEmpresaB: '—',
+      realBench: 'Solvente: FI ≥ 0',
+      metaDesc: 'Zona de Solvência',
+    })
+    return items
+  }, [kanitzAtual])
+
   // 8. Grupo Capital de Giro (CGL, NCG, Saldo Tesouraria, Liquidez Corrente)
   const chartCapitalGiroData = useMemo(() => {
     return [
@@ -1409,8 +1460,24 @@ export default function PainelIndicadores() {
         ),
         peso: pesos.liquidez,
       },
+
+      // 9. Kanitz (Termômetro de Insolvência)
+      {
+        grupo: 'Solvência / Kanitz',
+        indicador: 'Fator de Insolvência (FI)',
+        link: '/indicadores/kanitz',
+        ano2:
+          kanitzAno2?.fi !== null && kanitzAno2?.fi !== undefined ? kanitzAno2.fi.toFixed(2) : '—',
+        ano1:
+          kanitzAno1?.fi !== null && kanitzAno1?.fi !== undefined ? kanitzAno1.fi.toFixed(2) : '—',
+        anoAtual: kanitzAtual.fi !== null ? kanitzAtual.fi.toFixed(2) : '—',
+        setor: 'FI ≥ 0,00 (Solvente)',
+        unidade: '',
+        tendencia: calcularTendencia(kanitzAtual.fi, kanitzAno1?.fi ?? null, false),
+        peso: 15,
+      },
     ]
-  }, [indAtual, indAno1, indAno2, benchmarkAtivo, pesos])
+  }, [indAtual, indAno1, indAno2, kanitzAtual, kanitzAno1, kanitzAno2, benchmarkAtivo, pesos])
 
   const hasHistorico = !!(balancoAno1 || balancoAno2 || dreAno1 || dreAno2)
 
@@ -2257,6 +2324,7 @@ export default function PainelIndicadores() {
               { id: 'ebitda', label: '6. EBITDA' },
               { id: 'eficienciaOperacional', label: '7. Eficiência' },
               { id: 'economicos', label: '8. Econômicos' },
+              { id: 'kanitz', label: '9. Kanitz (Insolvência)' },
             ].map((g) => (
               <Button
                 key={g.id}
@@ -3550,7 +3618,222 @@ export default function PainelIndicadores() {
         )}
 
         {/* ========================================================================= */}
-        {/* GRUPO 7: ECONÔMICOS & CRIAÇÃO DE VALOR */}
+        {/* GRUPO NOVO: TERMÔMETRO DE INSOLVÊNCIA DE KANITZ */}
+        {/* ========================================================================= */}
+        {(gruposVisiveis === null || gruposVisiveis === 'kanitz') && (
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
+            <CardHeader
+              className="p-4 sm:p-5 pb-3 border-b border-slate-100 flex flex-row items-center justify-between cursor-pointer hover:bg-slate-50/70 transition-colors"
+              onClick={() => toggleGrupo('kanitz')}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                  <Flame className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-bold text-[#0B1F3A]">
+                      Termômetro de Insolvência de Kanitz
+                    </CardTitle>
+                    <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-bold">
+                      Fator de Insolvência (FI)
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-500 mt-0.5">
+                    Equação discriminante ponderando Rentabilidade, Liquidez Geral/Seca/Corrente e
+                    Endividamento
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-7 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                >
+                  <Link to="/indicadores/kanitz">
+                    Módulo Detalhado <ArrowRight className="w-3 h-3 ml-1" />
+                  </Link>
+                </Button>
+                <div className="text-slate-400 p-1">
+                  {gruposExpandidos.kanitz ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+
+            {gruposExpandidos.kanitz && (
+              <CardContent className="p-4 sm:p-6 space-y-6 animate-fadeIn">
+                {/* Alerta de Risco de Insolvência ou Penumbra */}
+                {kanitzAtual.classificacao === 'insolvente' && (
+                  <div className="p-3.5 sm:p-4 rounded-xl border border-rose-300 bg-linear-to-r from-rose-50 via-red-50 to-orange-50 shadow-2xs space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-rose-600 text-white font-extrabold text-[11px] px-2 py-0.5">
+                          🔴 ALERTA: EMPRESA NA ZONA DE INSOLVÊNCIA (FI &lt; −3,00)
+                        </Badge>
+                        <Badge className="bg-rose-950 text-rose-200 border border-rose-700 text-[10px] font-bold">
+                          FI: {kanitzAtual.fi !== null ? kanitzAtual.fi.toFixed(2) : '—'}
+                        </Badge>
+                      </div>
+                      <Link
+                        to="/indicadores/kanitz"
+                        className="font-bold text-rose-800 hover:underline text-xs shrink-0"
+                      >
+                        Ver Diagnóstico Completo &rarr;
+                      </Link>
+                    </div>
+                    <p className="text-xs text-rose-950 leading-relaxed text-justify">
+                      {kanitzAtual.descricaoClassificacao}
+                    </p>
+                  </div>
+                )}
+
+                {kanitzAtual.classificacao === 'penumbra' && (
+                  <div className="p-3.5 sm:p-4 rounded-xl border border-amber-300 bg-linear-to-r from-amber-50 via-yellow-50 to-orange-50 shadow-2xs space-y-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-amber-600 text-white font-extrabold text-[11px] px-2 py-0.5">
+                          🟠 ATENÇÃO: EMPRESA NA ZONA DE PENUMBRA (0 &gt; FI ≥ −3,00)
+                        </Badge>
+                        <Badge className="bg-amber-950 text-amber-200 border border-amber-700 text-[10px] font-bold">
+                          FI: {kanitzAtual.fi !== null ? kanitzAtual.fi.toFixed(2) : '—'}
+                        </Badge>
+                      </div>
+                      <Link
+                        to="/indicadores/kanitz"
+                        className="font-bold text-amber-900 hover:underline text-xs shrink-0"
+                      >
+                        Ver Detalhes do Risco &rarr;
+                      </Link>
+                    </div>
+                    <p className="text-xs text-amber-950 leading-relaxed text-justify">
+                      {kanitzAtual.descricaoClassificacao}
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+                  {/* Gráfico de Barras de Contribuição */}
+                  <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-slate-800">
+                        Contribuição das 5 Variáveis Contábeis no Fator de Kanitz (FI)
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        FI Atual: {kanitzAtual.fi !== null ? kanitzAtual.fi.toFixed(2) : '—'}
+                      </span>
+                    </div>
+                    <ResponsiveContainer width="100%" height="88%">
+                      <BarChart
+                        data={chartKanitzData}
+                        margin={{ top: 10, right: 10, left: -10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="sigla"
+                          tick={{ fill: '#0B1F3A', fontSize: 11, fontWeight: 700 }}
+                        />
+                        <YAxis tick={{ fill: '#64748B', fontSize: 10 }} />
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1 border border-slate-700">
+                                <strong className="block font-bold text-sm text-indigo-300">
+                                  {d.indicador}
+                                </strong>
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-300">Contribuição no FI:</span>
+                                  <strong className="text-white font-mono">
+                                    {d.realEmpresa || '—'}
+                                  </strong>
+                                </div>
+                                <div className="text-[10px] text-indigo-300 pt-1 border-t border-slate-800">
+                                  Fórmula: {d.metaDesc}
+                                </div>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Bar dataKey="empresa" fill="#4F46E5" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* 4 Mini Cards de Kanitz */}
+                  <div className="lg:col-span-5 grid grid-cols-2 gap-3">
+                    {renderMiniCard(
+                      'Fator Kanitz (FI)',
+                      'FI',
+                      kanitzAtual.fi !== null ? kanitzAtual.fi.toFixed(2) : '—',
+                      'FI ≥ 0,00',
+                      kanitzAtual.classificacao === 'solvente'
+                        ? 'bom'
+                        : kanitzAtual.classificacao === 'penumbra'
+                          ? 'medio'
+                          : kanitzAtual.classificacao === 'insolvente'
+                            ? 'ruim'
+                            : 'neutro',
+                      'Modelo USP Kanitz',
+                    )}
+                    {renderMiniCard(
+                      'Rentab. PL (X1)',
+                      'X1',
+                      kanitzAtual.variaveis[0]?.valor !== null &&
+                        kanitzAtual.variaveis[0]?.valor !== undefined
+                        ? `${(kanitzAtual.variaveis[0].valor * 100).toFixed(1)}%`
+                        : '—',
+                      'Peso 0,05',
+                      kanitzAtual.variaveis[0]?.valor && kanitzAtual.variaveis[0].valor > 0
+                        ? 'bom'
+                        : 'ruim',
+                      'Lucro Líquido / PL',
+                    )}
+                    {renderMiniCard(
+                      'Liq. Seca (X3)',
+                      'X3',
+                      kanitzAtual.variaveis[2]?.valor !== null &&
+                        kanitzAtual.variaveis[2]?.valor !== undefined
+                        ? `${kanitzAtual.variaveis[2].valor.toFixed(2)}x`
+                        : '—',
+                      'Peso +3,55',
+                      kanitzAtual.variaveis[2]?.valor && kanitzAtual.variaveis[2].valor >= 1.0
+                        ? 'bom'
+                        : 'medio',
+                      '(AC − Est) / PC',
+                    )}
+                    {renderMiniCard(
+                      'Grau Endiv. (X4)',
+                      'X4',
+                      kanitzAtual.variaveis[3]?.valor !== null &&
+                        kanitzAtual.variaveis[3]?.valor !== undefined
+                        ? `${kanitzAtual.variaveis[3].valor.toFixed(2)}x`
+                        : '—',
+                      'Peso −1,06',
+                      kanitzAtual.variaveis[3]?.valor && kanitzAtual.variaveis[3].valor <= 1.0
+                        ? 'bom'
+                        : kanitzAtual.variaveis[3]?.valor && kanitzAtual.variaveis[3].valor <= 2.0
+                          ? 'medio'
+                          : 'ruim',
+                      'Exigível / PL',
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* ========================================================================= */}
+        {/* GRUPO 8: INDICADORES ECONÔMICOS & VALUATION */}
         {/* ========================================================================= */}
         {(gruposVisiveis === null || gruposVisiveis === 'economicos') && (
           <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden transition-all">
@@ -3945,6 +4228,15 @@ export default function PainelIndicadores() {
               color: 'text-rose-600 bg-rose-50',
               destaque: `Spread: ${indAtual.spread !== null ? `${indAtual.spread.toFixed(1)}%` : '—'}`,
             },
+            {
+              title: 'Termômetro de Kanitz',
+              desc: 'Modelo de previsão de insolvência e solvência corporativa clássica de Kanitz',
+              path: '/indicadores/kanitz',
+              icon: Flame,
+              badge: 'Insolvência',
+              color: 'text-orange-600 bg-orange-50',
+              destaque: `FI: ${kanitzAtual.fi !== null ? kanitzAtual.fi.toFixed(2) : '—'} (${kanitzAtual.statusTexto.split(' ')[0]})`,
+            },
           ].map((item, i) => {
             const Icon = item.icon
             return (
@@ -4022,6 +4314,9 @@ export default function PainelIndicadores() {
           tipoFleuriet: indAtual.tipoFleuriet,
           tipoFleurietNome: indAtual.tipoFleurietNome,
           tipoFleurietDescricao: indAtual.tipoFleurietDescricao,
+          kanitzFi: kanitzAtual.fi,
+          kanitzClassificacao: kanitzAtual.classificacao,
+          kanitzStatusTexto: kanitzAtual.statusTexto,
         }}
         radarItems={radarItems}
         benchmarkAtivo={benchmarkAtivo}

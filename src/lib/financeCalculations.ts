@@ -632,3 +632,236 @@ export function gerarAnaliseAutomatica(
     visaoGeral,
   }
 }
+
+// ==========================================
+// TERMÔMETRO DE INSOLVÊNCIA DE KANITZ
+// FI = (0,05 * X1) + (1,65 * X2) + (3,55 * X3) - (1,06 * X4) - (0,33 * X5)
+// ==========================================
+export interface KanitzVariavel {
+  id: 'x1' | 'x2' | 'x3' | 'x4' | 'x5'
+  nome: string
+  sigla: string
+  conceito: string
+  formula: string
+  coeficiente: number
+  valor: number | null
+  contribuicao: number | null
+  descricaoValor: string
+  numerador: { label: string; valor: number }
+  denominador: { label: string; valor: number }
+}
+
+export interface KanitzResultado {
+  fi: number | null
+  classificacao: 'solvente' | 'penumbra' | 'insolvente' | 'indefinido'
+  statusTexto: string
+  corStatus: 'verde' | 'ambar' | 'vermelho' | 'cinza'
+  descricaoClassificacao: string
+  diagnosticoResumido: string
+  variaveis: KanitzVariavel[]
+  termometroPosicaoPercentual: number // 0% (-7 ou menor) a 100% (+7 ou maior), 50% = 0
+  dadosDisponiveis: boolean
+}
+
+export function calcularKanitz(
+  balanco?: Partial<BalancoRecord> | null,
+  dre?: Partial<DreRecord> | null,
+): KanitzResultado {
+  if (!balanco && !dre) {
+    return {
+      fi: null,
+      classificacao: 'indefinido',
+      statusTexto: 'N/D',
+      corStatus: 'cinza',
+      descricaoClassificacao: 'Demonstrações contábeis não disponíveis para o exercício.',
+      diagnosticoResumido: 'Sem dados para cálculo do Índice de Kanitz.',
+      variaveis: [],
+      termometroPosicaoPercentual: 50,
+      dadosDisponiveis: false,
+    }
+  }
+
+  const calcB = calcularBalanco(balanco)
+  const calcD = calcularDre(dre)
+
+  const ac = calcB.ativoCirculante
+  const arlp = balanco?.realizavel_longo_prazo || 0
+  const estoques = balanco?.estoques || 0
+  const pc = calcB.passivoCirculante
+  const pnc = calcB.passivoNaoCirculante
+  const pl = calcB.patrimonioLiquido
+  const lucroLiquido = calcD.lucroLiquido
+
+  const passivoTotalExigivel = pc + pnc
+
+  // X1 = Lucro Líquido ÷ Patrimônio Líquido (Rentabilidade do PL / ROE)
+  const x1Val = pl !== 0 ? lucroLiquido / pl : null
+  const c1 = 0.05
+  const contrib1 = x1Val !== null ? c1 * x1Val : null
+
+  // X2 = (Ativo Circulante + Realizável a Longo Prazo) ÷ (Passivo Circulante + Passivo Não Circulante) — Liquidez Geral
+  const x2Val = passivoTotalExigivel > 0 ? (ac + arlp) / passivoTotalExigivel : null
+  const c2 = 1.65
+  const contrib2 = x2Val !== null ? c2 * x2Val : null
+
+  // X3 = (Ativo Circulante − Estoques) ÷ Passivo Circulante — Liquidez Seca
+  const x3Val = pc > 0 ? (ac - estoques) / pc : null
+  const c3 = 3.55
+  const contrib3 = x3Val !== null ? c3 * x3Val : null
+
+  // X4 = (Passivo Circulante + Passivo Não Circulante) ÷ Patrimônio Líquido — Endividamento / Grau de endividamento
+  const x4Val = pl > 0 ? passivoTotalExigivel / pl : null
+  const c4 = -1.06
+  const contrib4 = x4Val !== null ? c4 * x4Val : null
+
+  // X5 = Ativo Circulante ÷ Passivo Circulante — Liquidez Corrente
+  const x5Val = pc > 0 ? ac / pc : null
+  const c5 = -0.33
+  const contrib5 = x5Val !== null ? c5 * x5Val : null
+
+  const variaveis: KanitzVariavel[] = [
+    {
+      id: 'x1',
+      nome: 'Rentabilidade do Patrimônio Líquido',
+      sigla: 'X1 (ROE)',
+      conceito: 'Lucro Líquido ÷ Patrimônio Líquido',
+      formula: '0,05 × (Lucro Líquido ÷ PL)',
+      coeficiente: 0.05,
+      valor: x1Val,
+      contribuicao: contrib1,
+      descricaoValor:
+        x1Val !== null ? `${formatNumber(x1Val, 4)} (${formatPercent(x1Val * 100, 2)})` : 'N/D',
+      numerador: { label: 'Lucro Líquido', valor: lucroLiquido },
+      denominador: { label: 'Patrimônio Líquido', valor: pl },
+    },
+    {
+      id: 'x2',
+      nome: 'Liquidez Geral',
+      sigla: 'X2 (LG)',
+      conceito: '(Ativo Circulante + ARLP) ÷ Exigível Total',
+      formula: '1,65 × [(AC + ARLP) ÷ (PC + PNC)]',
+      coeficiente: 1.65,
+      valor: x2Val,
+      contribuicao: contrib2,
+      descricaoValor: x2Val !== null ? `${formatNumber(x2Val, 4)}x` : 'N/D',
+      numerador: { label: 'AC + Realizável LP', valor: ac + arlp },
+      denominador: { label: 'Passivo Exigível (PC + PNC)', valor: passivoTotalExigivel },
+    },
+    {
+      id: 'x3',
+      nome: 'Liquidez Seca',
+      sigla: 'X3 (LS)',
+      conceito: '(Ativo Circulante − Estoques) ÷ Passivo Circulante',
+      formula: '3,55 × [(AC − Estoques) ÷ PC]',
+      coeficiente: 3.55,
+      valor: x3Val,
+      contribuicao: contrib3,
+      descricaoValor: x3Val !== null ? `${formatNumber(x3Val, 4)}x` : 'N/D',
+      numerador: { label: 'AC − Estoques', valor: ac - estoques },
+      denominador: { label: 'Passivo Circulante', valor: pc },
+    },
+    {
+      id: 'x4',
+      nome: 'Grau de Endividamento',
+      sigla: 'X4 (GE)',
+      conceito: 'Exigível Total ÷ Patrimônio Líquido',
+      formula: '−1,06 × [(PC + PNC) ÷ PL]',
+      coeficiente: -1.06,
+      valor: x4Val,
+      contribuicao: contrib4,
+      descricaoValor: x4Val !== null ? `${formatNumber(x4Val, 4)}x` : 'N/D',
+      numerador: { label: 'Exigível Total (PC + PNC)', valor: passivoTotalExigivel },
+      denominador: { label: 'Patrimônio Líquido', valor: pl },
+    },
+    {
+      id: 'x5',
+      nome: 'Liquidez Corrente',
+      sigla: 'X5 (LC)',
+      conceito: 'Ativo Circulante ÷ Passivo Circulante',
+      formula: '−0,33 × (AC ÷ PC)',
+      coeficiente: -0.33,
+      valor: x5Val,
+      contribuicao: contrib5,
+      descricaoValor: x5Val !== null ? `${formatNumber(x5Val, 4)}x` : 'N/D',
+      numerador: { label: 'Ativo Circulante', valor: ac },
+      denominador: { label: 'Passivo Circulante', valor: pc },
+    },
+  ]
+
+  // Se não houver dados essenciais para o cálculo
+  if (
+    contrib1 === null ||
+    contrib2 === null ||
+    contrib3 === null ||
+    contrib4 === null ||
+    contrib5 === null
+  ) {
+    return {
+      fi: null,
+      classificacao: 'indefinido',
+      statusTexto: 'N/D (Incompleto)',
+      corStatus: 'cinza',
+      descricaoClassificacao:
+        'Não foi possível apurar o FI integralmente devido à ausência de dados do PL ou de passivos circulantes/exigíveis.',
+      diagnosticoResumido: 'Informações contábeis insuficientes para o Fator de Insolvência.',
+      variaveis,
+      termometroPosicaoPercentual: 50,
+      dadosDisponiveis: false,
+    }
+  }
+
+  // FI = (0,05 * X1) + (1,65 * X2) + (3,55 * X3) - (1,06 * X4) - (0,33 * X5)
+  // Observação: os coeficientes c4 e c5 já estão negativos nas parcelas acima
+  const fi = contrib1 + contrib2 + contrib3 + contrib4 + contrib5
+
+  // Classificação clássica de Kanitz:
+  // FI >= 0: Solvente
+  // -3 <= FI < 0: Penumbra (zona de indefinição/risco moderado)
+  // FI < -3: Insolvente (zona de perigo/risco crítico de descontinuidade)
+  let classificacao: 'solvente' | 'penumbra' | 'insolvente' = 'solvente'
+  let statusTexto = 'Solvente'
+  let corStatus: 'verde' | 'ambar' | 'vermelho' = 'verde'
+  let descricaoClassificacao = ''
+  let diagnosticoResumido = ''
+
+  if (fi >= 0) {
+    classificacao = 'solvente'
+    statusTexto = 'Solvente (Zona de Solvência)'
+    corStatus = 'verde'
+    descricaoClassificacao =
+      'A empresa está situada na Zona de Solvência (FI ≥ 0,00). Apresenta probabilidade muito baixa ou remota de insolvência ou descontinuidade financeira no médio prazo.'
+    diagnosticoResumido = `O Fator de Insolvência de ${formatNumber(fi, 2)} reflete sólida capacidade de pagamento e equilíbrio entre liquidez, rentabilidade e endividamento.`
+  } else if (fi >= -3) {
+    classificacao = 'penumbra'
+    statusTexto = 'Penumbra (Zona de Indefinição)'
+    corStatus = 'ambar'
+    descricaoClassificacao =
+      'A empresa encontra-se na Zona de Penumbra / Indefinição (0 > FI ≥ −3,00). Há sinais de vulnerabilidade operacional e financeira que demandam atenção gerencial e acompanhamento tempestivo.'
+    diagnosticoResumido = `O Fator de Insolvência de ${formatNumber(fi, 2)} sinaliza risco moderado de insolvência. Recomenda-se reforçar a liquidez e controlar o grau de endividamento.`
+  } else {
+    classificacao = 'insolvente'
+    statusTexto = 'Insolvente (Zona de Risco Crítico)'
+    corStatus = 'vermelho'
+    descricaoClassificacao =
+      'A empresa está na Zona de Insolvência (FI < −3,00). Elevada probabilidade de dificuldades financeiras severas e risco de continuidade operacional.'
+    diagnosticoResumido = `O Fator de Insolvência de ${formatNumber(fi, 2)} aponta para alto risco de insolvência. É urgente reestruturar o passivo e recompor o patrimônio líquido.`
+  }
+
+  // Posição no termômetro visual: Escala de -7 a +7 (total 14 pontos)
+  // clamped: Math.max(-7, Math.min(7, fi))
+  // percentual = ((fiClamped + 7) / 14) * 100
+  const fiClamped = Math.max(-7, Math.min(7, fi))
+  const termometroPosicaoPercentual = ((fiClamped + 7) / 14) * 100
+
+  return {
+    fi,
+    classificacao,
+    statusTexto,
+    corStatus,
+    descricaoClassificacao,
+    diagnosticoResumido,
+    variaveis,
+    termometroPosicaoPercentual,
+    dadosDisponiveis: true,
+  }
+}
