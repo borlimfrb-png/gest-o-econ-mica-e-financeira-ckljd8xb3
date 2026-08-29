@@ -14,6 +14,7 @@ export interface GerarParcelasInput {
   valor: number
   meses: number
   lembrete_agendado?: boolean
+  nfse_automatica_agendada?: boolean
 }
 
 export interface ParcelaPreview {
@@ -22,6 +23,7 @@ export interface ParcelaPreview {
   valor: number
   status?: 'Pendente' | 'Pago'
   lembrete_agendado?: boolean
+  nfse_automatica_agendada?: boolean
 }
 export const recebiveisService = {
   /**
@@ -91,9 +93,11 @@ export const recebiveisService = {
           data_inicio_servicos: dateInicioFormatted,
           lembrete_agendado: p.lembrete_agendado ?? input.lembrete_agendado ?? false,
           lembrete_enviado: false,
+          nfse_automatica_agendada:
+            p.nfse_automatica_agendada ?? input.nfse_automatica_agendada ?? false,
         },
         {
-          expand: 'empresa',
+          expand: 'empresa,nota_fiscal',
         },
       )
       createdRecords.push(record)
@@ -109,7 +113,7 @@ export const recebiveisService = {
     return await pb.collection('recebiveis').getFullList<RecebivelRecord>({
       filter: `empresa = '${empresaId}'`,
       sort: 'vencimento,parcela',
-      expand: 'empresa',
+      expand: 'empresa,nota_fiscal',
     })
   },
 
@@ -144,7 +148,7 @@ export const recebiveisService = {
 
     const queryParams: Record<string, unknown> = {
       sort: 'vencimento,parcela',
-      expand: 'empresa',
+      expand: 'empresa,nota_fiscal',
     }
 
     if (filters.length > 0) {
@@ -155,7 +159,8 @@ export const recebiveisService = {
   },
 
   /**
-   * Dá baixa no recebível, atualizando status para 'Pago' e salvando a data de pagamento.
+   * Dá baixa no recebível, atualizando status para 'Pago', salvando a data de pagamento
+   * e realizando CONCILIAÇÃO AUTOMÁTICA com nota fiscal emitida vinculada (nota ↔ parcela).
    */
   async darBaixa(id: string, dataPagamento?: string): Promise<RecebivelRecord> {
     const dataFormatted = dataPagamento
@@ -164,32 +169,141 @@ export const recebiveisService = {
         : `${dataPagamento} 12:00:00`
       : `${new Date().toISOString().slice(0, 10)} 12:00:00`
 
-    return await pb.collection('recebiveis').update<RecebivelRecord>(
-      id,
-      {
-        status: 'Pago',
-        data_pagamento: dataFormatted,
-      },
-      {
-        expand: 'empresa',
-      },
-    )
+    // 1. Busca recebível atual
+    const recebivelAtual = await pb.collection('recebiveis').getOne<RecebivelRecord>(id, {
+      expand: 'empresa,nota_fiscal',
+    })
+
+    let notaVinculadaId = recebivelAtual.nota_fiscal || null
+
+    // 2. Se ainda não tem nota_fiscal explícita vinculada no recebível, procura por notas emitidas do mesmo cliente
+    if (!notaVinculadaId) {
+      try {
+        const userId = currentUserId()
+        const notasCandidatas = await pb.collection('notas_fiscais').getFullList<any>({
+          filter: `user = '${userId}' && empresa = '${recebivelAtual.empresa}' && status != 'Cancelada'`,
+          sort: '-created',
+        })
+
+        // Tenta encontrar por recebivel == id ou por valor exato / parcela
+        const match = notasCandidatas.find(
+          (n) =>
+            n.recebivel === id ||
+            (n.parcela_referencia &&
+              Number(n.parcela_referencia) === Number(recebivelAtual.parcela)) ||
+            Math.abs(Number(n.valor_servicos) - Number(recebivelAtual.valor)) < 0.05,
+        )
+
+        if (match) {
+          notaVinculadaId = match.id
+        }
+      } catch (errFind) {
+        console.warn('Erro ao buscar notas candidatas para conciliação:', errFind)
+      }
+    }
+
+    const updateData: Record<string, any> = {
+      status: 'Pago',
+      data_pagamento: dataFormatted,
+    }
+
+    if (notaVinculadaId) {
+      updateData.nota_fiscal = notaVinculadaId
+      updateData.conciliado = true
+      updateData.conciliado_em = dataFormatted
+
+      // Atualiza também a nota fiscal como conciliada
+      try {
+        await pb.collection('notas_fiscais').update(notaVinculadaId, {
+          recebivel: id,
+          conciliada: true,
+          conciliada_em: dataFormatted,
+        })
+      } catch (errNota) {
+        console.warn('Erro ao atualizar status conciliado na nota fiscal:', errNota)
+      }
+    }
+
+    return await pb.collection('recebiveis').update<RecebivelRecord>(id, updateData, {
+      expand: 'empresa,nota_fiscal',
+    })
   },
 
   /**
-   * Desfaz a baixa do recebível, voltando para 'Pendente' e limpando data_pagamento.
+   * Desfaz a baixa do recebível, voltando para 'Pendente', limpando data_pagamento e estornando a conciliação.
    */
   async desfazerBaixa(id: string): Promise<RecebivelRecord> {
+    const recebivelAtual = await pb.collection('recebiveis').getOne<RecebivelRecord>(id)
+
+    if (recebivelAtual.nota_fiscal) {
+      try {
+        await pb.collection('notas_fiscais').update(recebivelAtual.nota_fiscal, {
+          conciliada: false,
+          conciliada_em: null,
+        })
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+
     return await pb.collection('recebiveis').update<RecebivelRecord>(
       id,
       {
         status: 'Pendente',
         data_pagamento: null,
+        conciliado: false,
+        conciliado_em: null,
       },
       {
-        expand: 'empresa',
+        expand: 'empresa,nota_fiscal',
       },
     )
+  },
+
+  /**
+   * Alterna o agendamento de emissão automática de NFSe para esta parcela.
+   */
+  async toggleAgendamentoNfse(id: string, agendado: boolean): Promise<RecebivelRecord> {
+    return await pb.collection('recebiveis').update<RecebivelRecord>(
+      id,
+      {
+        nfse_automatica_agendada: agendado,
+      },
+      {
+        expand: 'empresa,nota_fiscal',
+      },
+    )
+  },
+
+  /**
+   * Vincula ou desvincula manualmente uma nota fiscal a uma parcela de recebível.
+   */
+  async vincularNotaFiscal(id: string, notaId: string | null): Promise<RecebivelRecord> {
+    const recebivel = await pb.collection('recebiveis').getOne<RecebivelRecord>(id)
+    const isPago = recebivel.status === 'Pago'
+    const hojeFormatted = `${new Date().toISOString().slice(0, 10)} 12:00:00`
+
+    const updateData: Record<string, any> = {
+      nota_fiscal: notaId,
+      conciliado: Boolean(notaId && isPago),
+      conciliado_em: notaId && isPago ? hojeFormatted : null,
+    }
+
+    if (notaId) {
+      try {
+        await pb.collection('notas_fiscais').update(notaId, {
+          recebivel: id,
+          conciliada: Boolean(isPago),
+          conciliada_em: isPago ? hojeFormatted : null,
+        })
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+
+    return await pb.collection('recebiveis').update<RecebivelRecord>(id, updateData, {
+      expand: 'empresa,nota_fiscal',
+    })
   },
 
   /**

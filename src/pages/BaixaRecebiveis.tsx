@@ -53,6 +53,8 @@ import {
   AlertTriangle,
   Edit3,
   FileText,
+  CalendarClock,
+  Link2,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { notasFiscaisService } from '@/services/notasFiscaisService'
@@ -170,6 +172,27 @@ export default function BaixaRecebiveis() {
       setRecebiveis(list)
     })
   })
+
+  // Alternar agendamento de NFSe automática
+  const handleToggleAgendamento = async (r: RecebivelRecord) => {
+    try {
+      const novoValor = !r.nfse_automatica_agendada
+      const atualizado = await recebiveisService.toggleAgendamentoNfse(r.id, novoValor)
+      setRecebiveis((prev) => prev.map((item) => (item.id === atualizado.id ? atualizado : item)))
+      toast({
+        title: novoValor ? 'Emissão automática agendada!' : 'Agendamento desativado',
+        description: novoValor
+          ? `A NFS-e da parcela nº ${r.parcela} será emitida automaticamente no vencimento (${formatarDataBr(r.vencimento)}).`
+          : `A parcela nº ${r.parcela} não emitirá mais nota automática.`,
+      })
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao alterar agendamento',
+        description: err?.message || 'Falha ao salvar configuração.',
+      })
+    }
+  }
 
   // Mapa de lookup de empresas
   const empresaMap = useMemo(() => {
@@ -942,6 +965,7 @@ export default function BaixaRecebiveis() {
                     <th className="py-3 px-3 text-center w-24">Nº Parcela</th>
                     <th className="py-3 px-3">Vencimento</th>
                     <th className="py-3 px-3 text-right">Valor (R$)</th>
+                    <th className="py-3 px-3 text-center">Nota Fiscal &amp; Conciliação</th>
                     <th className="py-3 px-3.5 text-center">Status</th>
                     <th className="py-3 px-3">Data de Pagamento</th>
                     <th className="py-3 px-3 text-right">Ações</th>
@@ -1021,6 +1045,48 @@ export default function BaixaRecebiveis() {
                           }`}
                         >
                           {formatarMoeda(r.valor)}
+                        </td>
+
+                        {/* Nota Fiscal & Conciliação Automática */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <div className="flex flex-col items-center gap-1">
+                            {r.conciliado ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold gap-1 px-2 py-0.5">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Conciliado (NF #{r.expand?.nota_fiscal?.numero || 'OK'})
+                              </Badge>
+                            ) : r.nota_fiscal ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] text-blue-700 border-blue-200 bg-blue-50/50 gap-1 px-1.5 py-0"
+                              >
+                                <Link2 className="w-3 h-3 text-blue-500" />
+                                NF #{r.expand?.nota_fiscal?.numero || 'Vinculada'} (Aguardando
+                                Baixa)
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-slate-400">Sem nota vinculada</span>
+                            )}
+
+                            {/* Botão para Agendar Emissão Automática no Vencimento */}
+                            {!r.nota_fiscal && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleAgendamento(r)}
+                                className={`text-[10px] px-2 py-0.5 rounded-md border flex items-center gap-1 transition-colors ${
+                                  r.nfse_automatica_agendada
+                                    ? 'bg-blue-100 text-blue-800 border-blue-300 font-semibold'
+                                    : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                                }`}
+                                title="Emitir NFSe automaticamente no vencimento desta parcela"
+                              >
+                                <CalendarClock
+                                  className={`w-3 h-3 ${r.nfse_automatica_agendada ? 'text-blue-600' : 'text-slate-400'}`}
+                                />
+                                {r.nfse_automatica_agendada ? 'NFSe Agendada' : '+ Agendar NFSe'}
+                              </button>
+                            )}
+                          </div>
                         </td>
 
                         {/* Status */}

@@ -17,6 +17,7 @@ routerAdd(
       const {
         empresa_id,
         contrato_id,
+        recebivel_id,
         numero,
         serie,
         discriminacao,
@@ -281,6 +282,9 @@ routerAdd(
       if (contrato_id) {
         novaNota.set('contrato', contrato_id)
       }
+      if (recebivel_id) {
+        novaNota.set('recebivel', recebivel_id)
+      }
       novaNota.set('numero', numNota)
       novaNota.set('serie', serieStr)
       novaNota.set('codigo_verificacao', codigoVerificacao)
@@ -325,7 +329,59 @@ routerAdd(
       novaNota.set('protocolo_autorizacao', protocoloAutorizacao)
       novaNota.set('xml_conteudo', xmlMock)
 
+      // Se foi passado recebivel_id ou se conseguirmos localizar um recebível com vencimento/empresa coincidente
+      let recebivelVinculado = null
+      if (recebivel_id) {
+        try {
+          recebivelVinculado = $app.findRecordById('recebiveis', recebivel_id)
+        } catch (_) {}
+      } else {
+        try {
+          // Tenta localizar parcela pendente ou paga para a mesma empresa com valor ou vencimento próximo
+          const recList = $app.findRecordsByFilter(
+            'recebiveis',
+            `user = '${authRecord.id}' && empresa = '${empresa_id}' && nota_fiscal = ''`,
+            'vencimento',
+            5,
+          )
+          if (recList && recList.length > 0) {
+            // Se encontrar com o mesmo valor
+            const match = recList.find(
+              (r) => Math.abs((Number(r.get('valor')) || 0) - (Number(valor_servicos) || 0)) < 0.05,
+            )
+            if (match) {
+              recebivelVinculado = match
+              novaNota.set('recebivel', match.id)
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Se o recebível estiver pago, marca conciliação automática
+      if (recebivelVinculado) {
+        const isPago = recebivelVinculado.get('status') === 'Pago'
+        if (isPago) {
+          novaNota.set('conciliada', true)
+          novaNota.set('conciliada_em', dataEmissaoFormatted)
+        } else {
+          novaNota.set('conciliada', false)
+        }
+      }
+
       $app.save(novaNota)
+
+      // Atualiza o recebível com o vínculo da nota e status de conciliação
+      if (recebivelVinculado) {
+        try {
+          recebivelVinculado.set('nota_fiscal', novaNota.id)
+          recebivelVinculado.set('nfse_emitida_em', dataEmissaoFormatted)
+          if (recebivelVinculado.get('status') === 'Pago') {
+            recebivelVinculado.set('conciliado', true)
+            recebivelVinculado.set('conciliado_em', dataEmissaoFormatted)
+          }
+          $app.save(recebivelVinculado)
+        } catch (_) {}
+      }
 
       return e.json(200, {
         success: true,

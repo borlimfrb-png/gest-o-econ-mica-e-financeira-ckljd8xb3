@@ -75,8 +75,11 @@ import {
   Ban,
   TrendingUp,
   TrendingDown,
+  CalendarClock,
+  Link2,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { ModalRelatorioNotasPeriodo } from '@/components/ModalRelatorioNotasPeriodo'
 
 interface NfseFormData {
   empresa_id: string
@@ -117,6 +120,8 @@ export default function NotasFiscais() {
   // Modal de Emissão
   const [modalEmissaoOpen, setModalEmissaoOpen] = useState(false)
   const [emitindo, setEmitindo] = useState(false)
+  const [modalRelatorioOpen, setModalRelatorioOpen] = useState(false)
+  const [processandoAgendados, setProcessandoAgendados] = useState(false)
   const [proximoNumeroSugerido, setProximoNumeroSugerido] = useState<number>(1)
   const [contratoSelecionado, setContratoSelecionado] = useState<ContratoRecord | null>(null)
   const [buscandoContrato, setBuscandoContrato] = useState(false)
@@ -793,7 +798,62 @@ export default function NotasFiscais() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalRelatorioOpen(true)}
+            className="text-xs font-bold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
+          >
+            <Printer className="w-4 h-4 text-blue-600" />
+            Relatório de Notas (CSV/PDF)
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              try {
+                setProcessandoAgendados(true)
+                const res = await notasFiscaisService.processarAgendados()
+                if (res.success) {
+                  toast({
+                    title: 'Agendamentos Processados',
+                    description: res.message || `${res.processados} nota(s) emitida(s).`,
+                  })
+                  await loadData()
+                }
+              } catch (err: any) {
+                toast({
+                  title: 'Erro no processamento',
+                  description: err?.message || 'Falha ao processar agendamentos de NFSe.',
+                  variant: 'destructive',
+                })
+              } finally {
+                setProcessandoAgendados(false)
+              }
+            }}
+            disabled={processandoAgendados}
+            title="Executar emissão imediata para parcelas agendadas com vencimento chegado"
+            className="text-xs font-semibold text-slate-700 bg-white border-slate-200 hover:border-emerald-300 hover:text-emerald-700 shadow-2xs gap-1.5 h-9"
+          >
+            <CalendarClock
+              className={`w-4 h-4 text-emerald-600 ${processandoAgendados ? 'animate-spin' : ''}`}
+            />
+            Processar Agendamentos
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadData}
+            disabled={loading}
+            className="text-xs font-semibold h-9"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+
           <Button
             onClick={openNewEmissaoModal}
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-sm"
@@ -955,6 +1015,7 @@ export default function NotasFiscais() {
                     <th className="py-3 px-4">CNPJ</th>
                     <th className="py-3 px-4 text-right">Valor Serviços</th>
                     <th className="py-3 px-4 text-right">Valor Líquido</th>
+                    <th className="py-3 px-4 text-center">Conciliação</th>
                     <th className="py-3 px-4 text-center">Status</th>
                     <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
@@ -1021,6 +1082,31 @@ export default function NotasFiscais() {
 
                         <td className="py-3 px-4 text-right font-bold text-emerald-700 whitespace-nowrap">
                           {formatBrlMoeda(nota.valor_liquido)}
+                        </td>
+
+                        {/* Conciliação (nota ↔ parcela) */}
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          {nota.conciliada ? (
+                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold gap-1 px-2 py-0.5">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              Conciliada
+                            </Badge>
+                          ) : nota.recebivel ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] text-blue-700 border-blue-200 bg-blue-50/50 gap-1 px-1.5 py-0"
+                            >
+                              <Link2 className="w-3 h-3 text-blue-500" />
+                              Vinculada
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] text-slate-400">—</span>
+                          )}
+                          {nota.agendamento_automatico && (
+                            <div className="text-[9px] text-slate-400 flex items-center justify-center gap-0.5 mt-0.5">
+                              <CalendarClock className="w-2.5 h-2.5 text-blue-500" /> Auto
+                            </div>
+                          )}
                         </td>
 
                         <td className="py-3 px-4 text-center whitespace-nowrap">
@@ -1575,6 +1661,15 @@ export default function NotasFiscais() {
           }}
         />
       )}
+
+      {/* Modal Relatório de Notas por Período */}
+      <ModalRelatorioNotasPeriodo
+        open={modalRelatorioOpen}
+        onOpenChange={setModalRelatorioOpen}
+        notas={notas}
+        empresas={empresas}
+        minhaEmpresa={minhaEmpresa}
+      />
 
       {/* Diálogo de Confirmação de Exclusão */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

@@ -68,6 +68,7 @@ export interface GerarNotaAjusteInput {
 export interface EmitirNfseInput {
   empresa_id: string
   contrato_id?: string
+  recebivel_id?: string
   numero?: number
   serie?: string
   discriminacao: string
@@ -89,6 +90,19 @@ export interface EmitirNfseInput {
   competencia?: string
   vencimento?: string
   forcar_simulacao?: boolean
+}
+
+export interface ProcessarAgendadosResponse {
+  success: boolean
+  processados: number
+  message: string
+  notas?: Array<{
+    nota_id: string
+    numero: number
+    recebivel_id: string
+    tomador: string
+    valor: number
+  }>
 }
 
 export interface EmitirNfseResponse {
@@ -131,7 +145,7 @@ export const notasFiscaisService = {
     return await pb.collection('notas_fiscais').getFullList<NotaFiscalRecord>({
       filter: `user = '${userId}'`,
       sort: '-data_emissao,-numero',
-      expand: 'empresa,contrato,nota_referencia',
+      expand: 'empresa,contrato,nota_referencia,recebivel',
     })
   },
 
@@ -140,7 +154,49 @@ export const notasFiscaisService = {
    */
   async getById(id: string): Promise<NotaFiscalRecord> {
     return await pb.collection('notas_fiscais').getOne<NotaFiscalRecord>(id, {
-      expand: 'empresa,contrato,nota_referencia',
+      expand: 'empresa,contrato,nota_referencia,recebivel',
+    })
+  },
+
+  /**
+   * Executa o processamento imediato dos agendamentos pendentes de NFSe.
+   */
+  async processarAgendados(recebivelId?: string): Promise<ProcessarAgendadosResponse> {
+    return await pb.send<ProcessarAgendadosResponse>('/api/nfse/processar-agendados', {
+      method: 'POST',
+      body: { recebivel_id: recebivelId || undefined },
+    })
+  },
+
+  /**
+   * Lista notas fiscais filtrando por período (competência ou emissão) e opcionalmente por empresa.
+   */
+  async listarPorPeriodo(options?: {
+    empresaId?: string
+    dataInicio?: string
+    dataFim?: string
+  }): Promise<NotaFiscalRecord[]> {
+    const userId = currentUserId()
+    const filters: string[] = [`user = '${userId}'`]
+
+    if (options?.empresaId && options.empresaId !== 'todas') {
+      filters.push(`empresa = '${options.empresaId}'`)
+    }
+
+    if (options?.dataInicio) {
+      const inicio = options.dataInicio.slice(0, 10)
+      filters.push(`data_emissao >= '${inicio} 00:00:00'`)
+    }
+
+    if (options?.dataFim) {
+      const fim = options.dataFim.slice(0, 10)
+      filters.push(`data_emissao <= '${fim} 23:59:59'`)
+    }
+
+    return await pb.collection('notas_fiscais').getFullList<NotaFiscalRecord>({
+      filter: filters.join(' && '),
+      sort: '-data_emissao,-numero',
+      expand: 'empresa,contrato,nota_referencia,recebivel',
     })
   },
 

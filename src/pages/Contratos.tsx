@@ -622,11 +622,14 @@ export default function Contratos() {
           valor: contratoGerado.valor_parcela,
           meses: contratoGerado.quantidade_meses,
           lembrete_agendado: enviarLembretesContrato,
+          nfse_automatica_agendada: true,
         },
         contratoGerado.parcelas.map((p) => ({
           ...p,
           lembrete_agendado:
             p.lembrete_agendado !== undefined ? p.lembrete_agendado : enviarLembretesContrato,
+          nfse_automatica_agendada:
+            p.nfse_automatica_agendada !== undefined ? p.nfse_automatica_agendada : true,
         })),
       )
 

@@ -90,6 +90,7 @@ export default function Financeiro() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   const [enviarLembreteGlobal, setEnviarLembreteGlobal] = useState<boolean>(false)
+  const [agendarNfseGlobal, setAgendarNfseGlobal] = useState<boolean>(true)
 
   // Parcelas Calculadas (Preview em memória)
   const [parcelasGeradas, setParcelasGeradas] = useState<ParcelaPreview[]>([])
@@ -175,12 +176,13 @@ export default function Financeiro() {
         valor: valorNumerico,
         meses: Number(meses),
         lembrete_agendado: enviarLembreteGlobal,
+        nfse_automatica_agendada: agendarNfseGlobal,
       })
       .map((p) => ({
         ...p,
         lembrete_agendado: enviarLembreteGlobal,
+        nfse_automatica_agendada: agendarNfseGlobal,
       }))
-
     setParcelasGeradas(preview)
 
     toast({
@@ -497,6 +499,35 @@ export default function Financeiro() {
                     <p className="text-[11px] text-slate-600 leading-relaxed">
                       Envia e-mail automático para o cliente 3 dias antes de cada vencimento com os
                       dados bancários e PIX para pagamento.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Checkbox Agendar Emissão Automática de NFSe no Vencimento */}
+                <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 flex items-start gap-2.5">
+                  <Checkbox
+                    id="fin-agendar-nfse"
+                    checked={agendarNfseGlobal}
+                    onCheckedChange={(checked) => {
+                      const v = Boolean(checked)
+                      setAgendarNfseGlobal(v)
+                      setParcelasGeradas((prev) =>
+                        prev.map((p) => ({ ...p, nfse_automatica_agendada: v })),
+                      )
+                    }}
+                    className="mt-0.5 border-emerald-400 data-[state=checked]:bg-emerald-600"
+                  />
+                  <div className="space-y-0.5">
+                    <label
+                      htmlFor="fin-agendar-nfse"
+                      className="text-xs font-bold text-emerald-950 flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      Agendar emissão automática de NFSe no vencimento da parcela
+                    </label>
+                    <p className="text-[11px] text-emerald-800 leading-relaxed">
+                      O cron do sistema transmitirá e autorizará a Nota Fiscal de Serviços
+                      automaticamente na data de vencimento da parcela.
                     </p>
                   </div>
                 </div>

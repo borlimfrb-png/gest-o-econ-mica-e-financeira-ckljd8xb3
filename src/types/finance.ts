@@ -316,8 +316,14 @@ export interface RecebivelRecord extends RecordModel {
   data_inicio_servicos: string
   lembrete_agendado?: boolean
   lembrete_enviado?: boolean
+  nota_fiscal?: string | null
+  conciliado?: boolean
+  conciliado_em?: string | null
+  nfse_automatica_agendada?: boolean
+  nfse_emitida_em?: string | null
   expand?: {
     empresa?: EmpresaRecord
+    nota_fiscal?: NotaFiscalRecord
   }
 }
 
@@ -348,6 +354,7 @@ export interface NotaFiscalRecord extends RecordModel {
   user: string
   empresa: string
   contrato?: string
+  recebivel?: string | null
   numero: number
   serie?: string
   codigo_verificacao?: string
@@ -399,10 +406,16 @@ export interface NotaFiscalRecord extends RecordModel {
   valor_renegociado?: number
   valor_diferenca?: number
 
+  // Conciliação e Agendamento
+  conciliada?: boolean
+  conciliada_em?: string | null
+  agendamento_automatico?: boolean
+
   expand?: {
     empresa?: EmpresaRecord
     contrato?: ContratoRecord
     nota_referencia?: NotaFiscalRecord
+    recebivel?: RecebivelRecord
   }
 }
 

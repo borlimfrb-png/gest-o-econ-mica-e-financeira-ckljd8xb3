@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T03:06:28.873Z",
+  "generatedAt": "2026-08-29T10:36:09.364Z",
   "collections": [
     {
       "name": "users",
@@ -1576,6 +1576,37 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "nota_fiscal",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "notas_fiscais"
+        },
+        {
+          "name": "conciliado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conciliado_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nfse_automatica_agendada",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nfse_emitida_em",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -2020,6 +2051,31 @@
         {
           "name": "valor_diferenca",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "recebivel",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "recebiveis"
+        },
+        {
+          "name": "conciliada",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conciliada_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "agendamento_automatico",
+          "type": "bool",
           "required": false,
           "system": false
         }
