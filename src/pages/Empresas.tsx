@@ -129,6 +129,7 @@ interface EmpresaFormData {
   site: string
   contato_principal: string
   observacoes: string
+  emitir_nota_fiscal: boolean
 }
 
 const EMPTY_FORM: EmpresaFormData = {
@@ -150,6 +151,7 @@ const EMPTY_FORM: EmpresaFormData = {
   site: '',
   contato_principal: '',
   observacoes: '',
+  emitir_nota_fiscal: false,
 }
 
 type FieldErrors = Partial<Record<keyof EmpresaFormData | 'general', string>>
@@ -265,6 +267,7 @@ export default function Empresas() {
       site: empresa.site || '',
       contato_principal: empresa.contato_principal || '',
       observacoes: empresa.observacoes || '',
+      emitir_nota_fiscal: Boolean(empresa.emitir_nota_fiscal),
     })
     setFormErrors({})
     setModalOpen(true)
@@ -356,6 +359,7 @@ export default function Empresas() {
       site: siteVal || undefined,
       contato_principal: formData.contato_principal.trim(),
       observacoes: formData.observacoes.trim(),
+      emitir_nota_fiscal: Boolean(formData.emitir_nota_fiscal),
     }
   }
 
@@ -524,6 +528,7 @@ export default function Empresas() {
                     <th className="py-3 px-4">Segmento</th>
                     <th className="py-3 px-4">Porte</th>
                     <th className="py-3 px-4">Cidade / UF</th>
+                    <th className="py-3 px-4 text-center">NFSe</th>
                     <th className="py-3 px-4 text-center">Último Balanço</th>
                     <th className="py-3 px-4 text-right">Total do Ativo</th>
                     <th className="py-3 px-4 text-right">Ações</th>
@@ -594,6 +599,17 @@ export default function Empresas() {
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          {emp.emitir_nota_fiscal ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              Sim
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500">
+                              Não
+                            </span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center font-semibold text-slate-700">
@@ -1003,6 +1019,58 @@ export default function Empresas() {
                       onChange={(e) => setField('contato_principal', e.target.value)}
                       className="h-9 text-xs"
                     />
+                  </div>
+                </div>
+              </fieldset>
+
+              {/* Seção: Faturamento & Emissão de Nota Fiscal */}
+              <fieldset className="space-y-3 bg-blue-50/50 p-3.5 rounded-xl border border-blue-100">
+                <legend className="flex items-center gap-2 text-xs font-bold text-[#0B1F3A] uppercase tracking-wide px-1">
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  Emissão de Nota Fiscal (NFSe)
+                </legend>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <Label
+                        htmlFor="empresa-emitir-nfse"
+                        className="text-xs font-semibold text-slate-900 cursor-pointer"
+                      >
+                        Emitir Nota Fiscal para este cliente?
+                      </Label>
+                      <p className="text-[11px] text-slate-500">
+                        Quando marcado como "SIM", o cliente estará disponível na tela de Emissão de
+                        NFSe com preenchimento automático de valores do contrato.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={formData.emitir_nota_fiscal ? 'default' : 'outline'}
+                        onClick={() => setField('emitir_nota_fiscal', true)}
+                        className={`h-7 px-3 text-xs font-semibold ${
+                          formData.emitir_nota_fiscal
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'bg-white text-slate-700 border-slate-300'
+                        }`}
+                      >
+                        SIM
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={!formData.emitir_nota_fiscal ? 'default' : 'outline'}
+                        onClick={() => setField('emitir_nota_fiscal', false)}
+                        className={`h-7 px-3 text-xs font-semibold ${
+                          !formData.emitir_nota_fiscal
+                            ? 'bg-slate-700 hover:bg-slate-800 text-white'
+                            : 'bg-white text-slate-700 border-slate-300'
+                        }`}
+                      >
+                        NÃO
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </fieldset>

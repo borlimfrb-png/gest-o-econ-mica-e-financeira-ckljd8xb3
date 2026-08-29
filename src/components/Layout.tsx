@@ -84,12 +84,14 @@ export default function Layout() {
     { name: 'Financeiro', path: '/financeiro', icon: Calendar },
     { name: 'Baixa dos Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
     { name: 'Contratos', path: '/contratos', icon: FileText },
+    { name: 'Nota Fiscal', path: '/notas-fiscais', icon: FileCheck2 },
   ]
 
   const isFinanceiroActive =
     location.pathname === '/financeiro' ||
     location.pathname === '/baixa-recebiveis' ||
-    location.pathname === '/contratos'
+    location.pathname === '/contratos' ||
+    location.pathname === '/notas-fiscais'
 
   // Itens do submenu Indicadores
   const indicadoresSubItems = [
@@ -195,6 +197,7 @@ export default function Layout() {
     location.pathname === '/relatorios' ||
     location.pathname === '/relatorio-anual' ||
     location.pathname === '/analise-tributaria' ||
+    location.pathname === '/notas-fiscais' ||
     location.pathname.startsWith('/empresas/')
 
   return (
@@ -1379,6 +1382,7 @@ export default function Layout() {
                   {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
                   {location.pathname === '/analise-tributaria' &&
                     'Análise Tributária e Planejamento'}
+                  {location.pathname === '/notas-fiscais' && 'Emissão de Nota Fiscal (NFS-e)'}
                   {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
                 </h1>
                 <p className="text-xs text-[#5B6B7F]">
@@ -1390,6 +1394,8 @@ export default function Layout() {
                     'Visão consolidada de 12 meses por tipo de conta com exportação CSV'}
                   {location.pathname === '/analise-tributaria' &&
                     'Comparativo entre Simples Nacional, Lucro Presumido e Lucro Real'}
+                  {location.pathname === '/notas-fiscais' &&
+                    'Emita NFS-e, gere DANFSE em PDF/XML e envie para clientes por e-mail'}
                   {location.pathname.startsWith('/empresas/') &&
                     'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
                 </p>{' '}

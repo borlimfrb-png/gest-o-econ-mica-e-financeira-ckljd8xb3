@@ -19,6 +19,7 @@ import Lancamentos from './pages/Lancamentos'
 import Financeiro from './pages/Financeiro'
 import BaixaRecebiveis from './pages/BaixaRecebiveis'
 import Contratos from './pages/Contratos'
+import NotasFiscais from './pages/NotasFiscais'
 import Relatorios from './pages/Relatorios'
 import RelatorioAnual from './pages/RelatorioAnual'
 import IndicadoresLiquidez from './pages/IndicadoresLiquidez'
@@ -92,6 +93,7 @@ const App = () => (
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/contratos" element={<Contratos />} />
+                <Route path="/notas-fiscais" element={<NotasFiscais />} />
                 <Route path="/indicadores/painel" element={<PainelIndicadores />} />
                 <Route
                   path="/indicadores"

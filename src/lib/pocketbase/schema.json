@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T01:02:39.778Z",
+  "generatedAt": "2026-08-29T01:30:11.669Z",
   "collections": [
     {
       "name": "users",
@@ -228,6 +228,12 @@
         {
           "name": "observacoes",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "emitir_nota_fiscal",
+          "type": "bool",
           "required": false,
           "system": false
         }
@@ -1690,6 +1696,273 @@
         "CREATE INDEX idx_contratos_contratante ON contratos (contratante)",
         "CREATE INDEX idx_contratos_data_inicio ON contratos (data_inicio)"
       ]
+    },
+    {
+      "name": "notas_fiscais",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "contrato",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contratos"
+        },
+        {
+          "name": "numero",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "serie",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo_verificacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "chave_acesso",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Rascunho", "Emitida", "Enviada", "Cancelada", "Erro"]
+        },
+        {
+          "name": "data_emissao",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "competencia",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "vencimento",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "discriminacao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "item_cnae",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo_servico_municipal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "natureza_operacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_servicos",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "aliquota_iss",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_iss",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "iss_retido",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_pis",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_cofins",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_inss",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_ir",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_csll",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outras_retencoes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "desconto_incondicionado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_liquido",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "prestador_cnpj",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prestador_razao_social",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "prestador_inscricao_municipal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tomador_cnpj",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tomador_razao_social",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tomador_email",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modo_emissao",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["Homologação / Simulação", "Produção SEFAZ / Gateway"]
+        },
+        {
+          "name": "gateway_status_resposta",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "protocolo_autorizacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "xml_conteudo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email_enviado_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email_destinatario",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": []
     }
   ]
 }

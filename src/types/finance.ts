@@ -62,6 +62,7 @@ export interface EmpresaRecord extends RecordModel {
   site?: string
   contato_principal?: string
   observacoes?: string
+  emitir_nota_fiscal?: boolean
 }
 
 // Mapeia cada campo do balanço patrimonial (chave = nome do campo) ao id da
@@ -336,6 +337,55 @@ export interface ContratoRecord extends RecordModel {
   parcelas: number
   expand?: {
     contratante?: EmpresaRecord
+  }
+}
+
+export type StatusNotaFiscal = 'Rascunho' | 'Emitida' | 'Enviada' | 'Cancelada' | 'Erro'
+export type ModoEmissaoNFSe = 'Homologação / Simulação' | 'Produção SEFAZ / Gateway'
+
+export interface NotaFiscalRecord extends RecordModel {
+  user: string
+  empresa: string
+  contrato?: string
+  numero: number
+  serie?: string
+  codigo_verificacao?: string
+  chave_acesso?: string
+  status: StatusNotaFiscal
+  data_emissao: string
+  competencia?: string
+  vencimento?: string
+  discriminacao: string
+  item_cnae?: string
+  codigo_servico_municipal?: string
+  natureza_operacao?: string
+  valor_servicos: number
+  aliquota_iss?: number
+  valor_iss?: number
+  iss_retido?: boolean
+  valor_pis?: number
+  valor_cofins?: number
+  valor_inss?: number
+  valor_ir?: number
+  valor_csll?: number
+  outras_retencoes?: number
+  desconto_incondicionado?: number
+  valor_liquido: number
+  prestador_cnpj?: string
+  prestador_razao_social?: string
+  prestador_inscricao_municipal?: string
+  tomador_cnpj?: string
+  tomador_razao_social?: string
+  tomador_email?: string
+  modo_emissao?: ModoEmissaoNFSe
+  gateway_status_resposta?: string
+  protocolo_autorizacao?: string
+  xml_conteudo?: string
+  email_enviado_em?: string
+  email_destinatario?: string
+  expand?: {
+    empresa?: EmpresaRecord
+    contrato?: ContratoRecord
   }
 }
 
