@@ -488,6 +488,7 @@ export interface MateriaPrimaRecord extends RecordModel {
   categoria?: string
   custo_unitario?: number
   estoque_atual?: number
+  estoque_minimo?: number
   observacoes?: string
 }
 

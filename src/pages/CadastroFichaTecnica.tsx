@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import {
   produtosService,
   materiasPrimasService,
@@ -51,13 +51,21 @@ import {
   Calculator,
   Coins,
   TrendingUp,
+  TrendingDown,
   Info,
   DollarSign,
   PlusCircle,
   X,
   Sparkles,
+  Copy,
+  BarChart3,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 function formatBrl(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
@@ -108,7 +116,7 @@ type FichaFormErrors = Partial<
 
 export default function CadastroFichaTecnica() {
   const { toast } = useToast()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
 
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
@@ -117,6 +125,9 @@ export default function CadastroFichaTecnica() {
 
   // Filtros
   const [search, setSearch] = useState('')
+
+  // Aba ativa: 'fichas' | 'relatorio'
+  const [activeTab, setActiveTab] = useState<'fichas' | 'relatorio'>('fichas')
 
   // Modal Novo / Edição
   const [modalOpen, setModalOpen] = useState(false)
@@ -132,6 +143,19 @@ export default function CadastroFichaTecnica() {
 
   // Visualização rápida de detalhes
   const [selectedFicha, setSelectedFicha] = useState<FichaTecnicaRecord | null>(null)
+
+  // Modal Clonar Ficha
+  const [cloneOpen, setCloneOpen] = useState(false)
+  const [fichaToClone, setFichaToClone] = useState<FichaTecnicaRecord | null>(null)
+  const [cloneNovoNome, setCloneNovoNome] = useState('')
+  const [cloneNovoCodigo, setCloneNovoCodigo] = useState('')
+  const [cloning, setCloning] = useState(false)
+
+  // Filtros específicos do Relatório de Margem Real
+  const [relatorioSearch, setRelatorioSearch] = useState('')
+  const [filtroStatusMargem, setFiltroStatusMargem] = useState<
+    'todos' | 'acima' | 'abaixo' | 'alerta'
+  >('todos')
 
   const loadData = async () => {
     try {
@@ -152,7 +176,7 @@ export default function CadastroFichaTecnica() {
         const found = fList.find((f) => f.produto === prodParam)
         if (found) setSelectedFicha(found)
       } else if (novoParaParam) {
-        handleOpenNewWithProduct(novoParaParam, pList, mList)
+        handleOpenNewWithProduct(novoParaParam, pList)
       }
     } catch (err) {
       console.error('Erro ao carregar fichas técnicas:', err)
@@ -208,7 +232,117 @@ export default function CadastroFichaTecnica() {
     })
   }, [fichas, produtosMap, search])
 
-  // Estatísticas
+  // Dados calculados para o Relatório de Custos e Margem Real
+  const relatorioData = useMemo(() => {
+    return fichas.map((f) => {
+      const prod = produtosMap.get(f.produto)
+      const custoTotal = Number(f.custo_total) || 0
+      const custoMP = Number(f.custo_materia_prima) || 0
+      const outrosCustos = Number(f.outros_custos) || 0
+
+      // Preço de venda praticado no cadastro do produto (ou sugerido se produto não tem preço)
+      const precoVenda = Number(prod?.preco_venda) || Number(f.preco_venda_sugerido) || 0
+      const margemDesejada = Number(f.margem_desejada) || Number(prod?.margem_desejada) || 0
+
+      // Margem Real (%) = ((Preço de Venda - Custo Total) / Preço de Venda) * 100
+      let margemReal = 0
+      let lucroUnitario = 0
+      if (precoVenda > 0) {
+        lucroUnitario = precoVenda - custoTotal
+        margemReal = (lucroUnitario / precoVenda) * 100
+      }
+
+      // Diferença em pontos percentuais (Margem Real - Margem Desejada)
+      const diffMargem = margemReal - margemDesejada
+
+      // Status de desempenho de margem
+      let statusMargem: 'acima' | 'abaixo' | 'critica' | 'atingida' = 'atingida'
+      if (margemReal < 0) {
+        statusMargem = 'critica'
+      } else if (diffMargem >= 0.5) {
+        statusMargem = 'acima'
+      } else if (diffMargem <= -0.5) {
+        statusMargem = 'abaixo'
+      } else {
+        statusMargem = 'atingida'
+      }
+
+      return {
+        ficha: f,
+        produto: prod,
+        produtoNome: prod?.nome || 'Produto não encontrado',
+        produtoCodigo: prod?.codigo || '',
+        unidade: prod?.unidade || 'UN',
+        categoria: prod?.categoria || '',
+        itensCount: f.itens?.length || 0,
+        custoMP,
+        outrosCustos,
+        custoTotal,
+        precoVenda,
+        precoSugerido: Number(f.preco_venda_sugerido) || 0,
+        margemDesejada,
+        margemReal,
+        lucroUnitario,
+        diffMargem,
+        statusMargem,
+      }
+    })
+  }, [fichas, produtosMap])
+
+  // Relatório filtrado
+  const relatorioFiltrado = useMemo(() => {
+    return relatorioData.filter((item) => {
+      const q = relatorioSearch.toLowerCase()
+      const matchText =
+        q === '' ||
+        item.produtoNome.toLowerCase().includes(q) ||
+        item.produtoCodigo.toLowerCase().includes(q) ||
+        item.categoria.toLowerCase().includes(q)
+
+      const matchStatus =
+        filtroStatusMargem === 'todos' ||
+        (filtroStatusMargem === 'acima' &&
+          (item.statusMargem === 'acima' || item.statusMargem === 'atingida')) ||
+        (filtroStatusMargem === 'abaixo' && item.statusMargem === 'abaixo') ||
+        (filtroStatusMargem === 'alerta' && item.statusMargem === 'critica')
+
+      return matchText && matchStatus
+    })
+  }, [relatorioData, relatorioSearch, filtroStatusMargem])
+
+  // Estatísticas do Relatório de Custos e Margem Real
+  const relatorioStats = useMemo(() => {
+    const total = relatorioData.length
+    if (total === 0) {
+      return {
+        total: 0,
+        margemMediaReal: 0,
+        margemMediaDesejada: 0,
+        acimaOuAtingida: 0,
+        abaixoCount: 0,
+        criticaCount: 0,
+      }
+    }
+
+    const somaMargemReal = relatorioData.reduce((acc, it) => acc + it.margemReal, 0)
+    const somaMargemDesejada = relatorioData.reduce((acc, it) => acc + it.margemDesejada, 0)
+    const acimaOuAtingida = relatorioData.filter(
+      (it) => it.statusMargem === 'acima' || it.statusMargem === 'atingida',
+    ).length
+    const abaixoCount = relatorioData.filter((it) => it.statusMargem === 'abaixo').length
+    const criticaCount = relatorioData.filter((it) => it.statusMargem === 'critica').length
+
+    return {
+      total,
+      margemMediaReal: somaMargemReal / total,
+      margemMediaDesejada: somaMargemDesejada / total,
+      acimaOuAtingida,
+      abaixoCount,
+      criticaCount,
+    }
+  }, [relatorioData])
+
+  // Estatísticas de Fichas
   const stats = useMemo(() => {
     const total = fichas.length
     const custoMedioMP =
@@ -286,11 +420,7 @@ export default function CadastroFichaTecnica() {
     setModalOpen(true)
   }
 
-  const handleOpenNewWithProduct = (
-    prodId: string,
-    pList: ProdutoRecord[] = produtos,
-    mList: MateriaPrimaRecord[] = materias,
-  ) => {
+  const handleOpenNewWithProduct = (prodId: string, pList: ProdutoRecord[] = produtos) => {
     setEditingFicha(null)
     const prod = pList.find((p) => p.id === prodId)
     setFormData({
@@ -442,6 +572,56 @@ export default function CadastroFichaTecnica() {
     }
   }
 
+  // Handlers para Clonagem de Ficha
+  const handleOpenClone = (f: FichaTecnicaRecord) => {
+    const prod = produtosMap.get(f.produto)
+    setFichaToClone(f)
+    setCloneNovoNome(prod ? `${prod.nome} (cópia)` : 'Produto (cópia)')
+    setCloneNovoCodigo(prod?.codigo ? `${prod.codigo}-CP` : '')
+    setCloneOpen(true)
+  }
+
+  const handleConfirmClone = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!fichaToClone) return
+    if (!cloneNovoNome.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Nome obrigatório',
+        description: 'Informe o nome para o novo produto da ficha clonada.',
+      })
+      return
+    }
+
+    setCloning(true)
+    try {
+      const novaFicha = await fichasTecnicasService.clone(fichaToClone.id, {
+        criarNovoProduto: true,
+        novoProdutoNome: cloneNovoNome.trim(),
+        novoProdutoCodigo: cloneNovoCodigo.trim() || undefined,
+      })
+
+      toast({
+        title: 'Ficha Técnica clonada com sucesso!',
+        description: `Criada nova ficha e produto "${cloneNovoNome}". Você já pode editar a composição.`,
+      })
+
+      setCloneOpen(false)
+      setFichaToClone(null)
+      await loadData()
+      setSelectedFicha(novaFicha)
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao clonar',
+        description: err?.message || 'Não foi possível clonar a ficha técnica.',
+      })
+    } finally {
+      setCloning(false)
+    }
+  }
+
   const confirmDelete = (f: FichaTecnicaRecord) => {
     setFichaToDelete(f)
     setDeleteOpen(true)
@@ -472,7 +652,7 @@ export default function CadastroFichaTecnica() {
     }
   }
 
-  // Exportar CSV
+  // Exportar CSV de Fichas
   const handleExportCsv = () => {
     if (fichas.length === 0) {
       toast({
@@ -544,231 +724,807 @@ export default function CadastroFichaTecnica() {
     })
   }
 
+  // Exportar CSV do Relatório de Custos e Margem Real
+  const handleExportRelatorioCsv = () => {
+    if (relatorioData.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nada para exportar',
+        description: 'Não há produtos com ficha técnica para gerar relatório.',
+      })
+      return
+    }
+
+    const escapeCsv = (val: string | number | undefined | null): string => {
+      if (val === null || val === undefined) return ''
+      const s = String(val)
+      if (/[;"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }
+
+    const fmtNum = (n?: number) =>
+      n !== undefined && n !== null
+        ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : ''
+
+    const headers = [
+      'Código',
+      'Produto',
+      'Categoria',
+      'Unidade',
+      'Qtd Insumos',
+      'Custo Matéria-Prima (R$)',
+      'Outros Custos (R$)',
+      'Custo Total Unitário (R$)',
+      'Preço de Venda Praticado (R$)',
+      'Preço Sugerido (R$)',
+      'Lucro Unitário (R$)',
+      'Margem Desejada (%)',
+      'Margem Real (%)',
+      'Diferença Margem (p.p.)',
+      'Status Margem',
+    ]
+
+    const linhas = [headers.map(escapeCsv).join(';')]
+
+    for (const item of relatorioFiltrado) {
+      const statusLabel =
+        item.statusMargem === 'critica'
+          ? 'Margem Negativa / Prejuízo'
+          : item.statusMargem === 'abaixo'
+            ? 'Abaixo do Desejado'
+            : item.statusMargem === 'atingida'
+              ? 'Meta Atingida'
+              : 'Acima do Desejado'
+
+      linhas.push(
+        [
+          item.produtoCodigo,
+          item.produtoNome,
+          item.categoria,
+          item.unidade,
+          item.itensCount,
+          fmtNum(item.custoMP),
+          fmtNum(item.outrosCustos),
+          fmtNum(item.custoTotal),
+          fmtNum(item.precoVenda),
+          fmtNum(item.precoSugerido),
+          fmtNum(item.lucroUnitario),
+          item.margemDesejada.toFixed(2) + '%',
+          item.margemReal.toFixed(2) + '%',
+          (item.diffMargem >= 0 ? '+' : '') + item.diffMargem.toFixed(2) + ' p.p.',
+          statusLabel,
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+
+    const csvContent = '\uFEFF' + linhas.join('\n')
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    const dataStr = new Date().toISOString().slice(0, 10)
+    link.setAttribute('download', `relatorio-custos-margem-real-${dataStr}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    toast({
+      title: 'Relatório exportado',
+      description: 'O arquivo CSV do relatório de custos e margem real foi baixado.',
+    })
+  }
+
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Cards de Métricas */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Fichas Cadastradas</p>
-              <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{stats.total}</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Produtos parametrizados</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <ClipboardList className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
+      {/* Abas Superiores: Gestão de Fichas vs Relatório de Custos e Margem Real */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h2 className="text-lg font-bold text-[#0B1F3A] flex items-center gap-2">
+            <ClipboardList className="w-5 h-5 text-blue-600" />
+            Fichas Técnicas & Formação de Custo
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Gerencie composições de produtos, clone fichas e acompanhe a margem real praticada vs
+            desejada.
+          </p>
+        </div>
 
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Custo Médio MP</p>
-              <h3 className="text-xl font-bold text-amber-700 mt-1">
-                {formatBrl(stats.custoMedioMP)}
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Matérias-primas</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Layers className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Custo Total Médio</p>
-              <h3 className="text-xl font-bold text-slate-900 mt-1">
-                {formatBrl(stats.custoTotalMedio)}
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">MP + Outros custos</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
-              <Coins className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Preço Sugerido Médio</p>
-              <h3 className="text-xl font-bold text-emerald-700 mt-1">
-                {formatBrl(stats.precoMedioSugerido)}
-              </h3>
-              <p className="text-[11px] text-emerald-600 font-medium mt-0.5">Com margem aplicada</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => setActiveTab(v as any)}
+          className="w-full sm:w-auto"
+        >
+          <TabsList className="bg-slate-100 p-1 w-full sm:w-auto grid grid-cols-2">
+            <TabsTrigger
+              value="fichas"
+              className="text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs gap-1.5"
+            >
+              <ClipboardList className="w-3.5 h-3.5" />
+              Fichas Técnicas ({fichas.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="relatorio"
+              className="text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-xs gap-1.5"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              Relatório de Margem Real
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
-      {/* Lista de Fichas Técnicas */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-        {/* Coluna 1 & 2: Tabela Principal de Fichas */}
-        <div className="xl:col-span-2 space-y-6">
+      {activeTab === 'fichas' ? (
+        <>
+          {/* Cards de Métricas de Fichas */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Fichas Cadastradas</p>
+                  <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{stats.total}</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Produtos parametrizados</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Custo Médio MP</p>
+                  <h3 className="text-xl font-bold text-amber-700 mt-1">
+                    {formatBrl(stats.custoMedioMP)}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Matérias-primas</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <Layers className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Custo Total Médio</p>
+                  <h3 className="text-xl font-bold text-slate-900 mt-1">
+                    {formatBrl(stats.custoTotalMedio)}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">MP + Outros custos</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+                  <Coins className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Preço Sugerido Médio</p>
+                  <h3 className="text-xl font-bold text-emerald-700 mt-1">
+                    {formatBrl(stats.precoMedioSugerido)}
+                  </h3>
+                  <p className="text-[11px] text-emerald-600 font-medium mt-0.5">
+                    Com margem aplicada
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Lista de Fichas Técnicas */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+            {/* Coluna 1 & 2: Tabela Principal de Fichas */}
+            <div className="xl:col-span-2 space-y-6">
+              <Card className="bg-white border-slate-200 shadow-xs">
+                <CardHeader className="pb-3 border-b border-slate-100">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 text-blue-600" />
+                        Fichas Técnicas de Produtos
+                      </CardTitle>
+                      <CardDescription className="text-xs">
+                        Estrutura de custo, lista de insumos e preço de venda sugerido.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Button
+                        type="button"
+                        onClick={handleExportCsv}
+                        variant="outline"
+                        size="sm"
+                        className="h-9 text-xs font-semibold border-slate-200 text-slate-700 hover:bg-slate-50"
+                      >
+                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                        Exportar CSV
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleOpenNew}
+                        size="sm"
+                        className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        Nova Ficha Técnica
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-4">
+                  <div className="mb-4">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Input
+                        placeholder="Buscar ficha por produto ou código..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9 h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {loading ? (
+                    <div className="py-16 flex justify-center items-center">
+                      <div className="w-7 h-7 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                  ) : fichasFiltradas.length === 0 ? (
+                    <div className="py-16 text-center">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                        <ClipboardList className="w-6 h-6" />
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-800">
+                        Nenhuma ficha técnica cadastrada
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                        {fichas.length === 0
+                          ? 'Crie a primeira ficha técnica vinculando um produto aos seus insumos de fabricação.'
+                          : 'Nenhum resultado para os termos pesquisados.'}
+                      </p>
+                      {fichas.length === 0 && (
+                        <Button
+                          onClick={handleOpenNew}
+                          size="sm"
+                          className="mt-4 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1.5" />
+                          Criar Primeira Ficha Técnica
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-slate-200">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-semibold">
+                            <th className="py-3 px-3.5">Produto</th>
+                            <th className="py-3 px-3.5 text-center">Itens</th>
+                            <th className="py-3 px-3.5 text-right">Custo MP (R$)</th>
+                            <th className="py-3 px-3.5 text-right">Outros (R$)</th>
+                            <th className="py-3 px-3.5 text-right">Custo Total (R$)</th>
+                            <th className="py-3 px-3.5 text-right">Margem (%)</th>
+                            <th className="py-3 px-3.5 text-right">Preço Sugerido (R$)</th>
+                            <th className="py-3 px-3.5 text-right">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {fichasFiltradas.map((f) => {
+                            const prod = produtosMap.get(f.produto)
+                            const isSel = selectedFicha?.id === f.id
+
+                            return (
+                              <tr
+                                key={f.id}
+                                onClick={() => setSelectedFicha(f)}
+                                className={`cursor-pointer transition-colors ${
+                                  isSel ? 'bg-blue-50/90' : 'hover:bg-slate-50/70'
+                                }`}
+                              >
+                                <td className="py-3 px-3.5">
+                                  <div className="font-semibold text-slate-900">
+                                    {prod?.nome || 'Produto não encontrado'}
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 font-mono">
+                                    {prod?.codigo || 'Sem código'} · {prod?.unidade || 'UN'}
+                                  </div>
+                                </td>
+                                <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                                  <Badge variant="outline" className="text-[10px] bg-slate-50">
+                                    {f.itens?.length || 0} item(ns)
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-3.5 text-right font-medium text-slate-700 whitespace-nowrap">
+                                  {formatBrl(f.custo_materia_prima)}
+                                </td>
+                                <td className="py-3 px-3.5 text-right text-slate-500 whitespace-nowrap">
+                                  {formatBrl(f.outros_custos)}
+                                </td>
+                                <td className="py-3 px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
+                                  {formatBrl(f.custo_total)}
+                                </td>
+                                <td className="py-3 px-3.5 text-right font-semibold text-amber-700 whitespace-nowrap">
+                                  {formatPct(f.margem_desejada)}
+                                </td>
+                                <td className="py-3 px-3.5 text-right font-bold text-emerald-700 whitespace-nowrap">
+                                  {formatBrl(f.preco_venda_sugerido)}
+                                </td>
+                                <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleOpenClone(f)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
+                                      title="Clonar ficha técnica (criar variação)"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleOpenEdit(f)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Editar ficha técnica"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        confirmDelete(f)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                      title="Excluir ficha técnica"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Coluna 3: Detalhamento da Ficha Selecionada */}
+            <div className="space-y-6">
+              {!selectedFicha ? (
+                <Card className="bg-white border-dashed border-slate-300 shadow-xs">
+                  <CardContent className="py-16 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+                      <Calculator className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-sm font-semibold text-slate-800">Selecione uma Ficha</h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                      Clique em qualquer ficha técnica da tabela para visualizar a composição
+                      detalhada de insumos e fórmula de precificação.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                (() => {
+                  const prod = produtosMap.get(selectedFicha.produto)
+                  const itens = selectedFicha.itens || []
+
+                  return (
+                    <Card className="bg-white border-slate-200 shadow-xs">
+                      <CardHeader className="pb-3 border-b border-slate-100">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                              Ficha Técnica
+                            </span>
+                            <CardTitle className="text-base font-bold text-[#0B1F3A] mt-1.5">
+                              {prod?.nome || 'Produto'}
+                            </CardTitle>
+                            <CardDescription className="text-xs">
+                              {prod?.codigo ? `Código: ${prod.codigo} · ` : ''}Unidade:{' '}
+                              {prod?.unidade || 'UN'}
+                            </CardDescription>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              onClick={() => handleOpenClone(selectedFicha)}
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                              title="Clonar esta ficha técnica"
+                            >
+                              <Copy className="w-3 h-3 mr-1" />
+                              Clonar
+                            </Button>
+                            <Button
+                              onClick={() => handleOpenEdit(selectedFicha)}
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs font-semibold"
+                            >
+                              <Pencil className="w-3 h-3 mr-1" />
+                              Editar
+                            </Button>
+                          </div>
+                        </div>
+                      </CardHeader>
+
+                      <CardContent className="p-4 space-y-4">
+                        {/* Lista de Matérias-Primas da Ficha */}
+                        <div>
+                          <h4 className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                            <Layers className="w-3.5 h-3.5 text-amber-600" />
+                            Composição de Insumos ({itens.length})
+                          </h4>
+
+                          <div className="space-y-1.5">
+                            {itens.map((it, idx) => {
+                              const mp = materiasMap.get(it.materia_prima_id)
+                              return (
+                                <div
+                                  key={idx}
+                                  className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                                >
+                                  <div>
+                                    <p className="font-semibold text-slate-800">
+                                      {it.materia_prima_nome || mp?.nome || 'Insumo'}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500">
+                                      {it.quantidade} {it.unidade || mp?.unidade || 'UN'} ×{' '}
+                                      {formatBrl(it.custo_unitario)}
+                                    </p>
+                                  </div>
+                                  <span className="font-bold text-slate-900">
+                                    {formatBrl(it.subtotal)}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Resumo de Custos e Formação de Preço */}
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                          <div className="flex justify-between text-xs text-slate-600">
+                            <span>Subtotal Matéria-Prima:</span>
+                            <span className="font-semibold text-slate-800">
+                              {formatBrl(selectedFicha.custo_materia_prima)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs text-slate-600">
+                            <span>Outros Custos (MOD/Despesas):</span>
+                            <span className="font-semibold text-slate-800">
+                              {formatBrl(selectedFicha.outros_custos)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs font-bold text-slate-900 border-t border-slate-200 pt-1.5">
+                            <span>Custo Total Unitário:</span>
+                            <span>{formatBrl(selectedFicha.custo_total)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-amber-700 font-semibold">
+                            <span>Margem de Lucro Desejada:</span>
+                            <span>{formatPct(selectedFicha.margem_desejada)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm font-bold text-emerald-800 border-t border-slate-200 pt-2 bg-emerald-50/70 p-2 rounded">
+                            <span>Preço de Venda Sugerido:</span>
+                            <span>{formatBrl(selectedFicha.preco_venda_sugerido)}</span>
+                          </div>
+                        </div>
+
+                        {selectedFicha.observacoes && (
+                          <div className="text-xs text-slate-600 bg-blue-50/50 p-2.5 rounded border border-blue-100">
+                            <span className="font-semibold text-blue-900 block mb-0.5">
+                              Observações:
+                            </span>
+                            {selectedFicha.observacoes}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })()
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ABA DO RELATÓRIO DE CUSTOS E MARGEM REAL */
+        <div className="space-y-6">
+          {/* Métricas do Relatório */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Margem Real Média</p>
+                  <h3
+                    className={`text-xl font-bold mt-1 ${
+                      relatorioStats.margemMediaReal >= relatorioStats.margemMediaDesejada
+                        ? 'text-emerald-700'
+                        : 'text-amber-700'
+                    }`}
+                  >
+                    {formatPct(relatorioStats.margemMediaReal)}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Meta média: {formatPct(relatorioStats.margemMediaDesejada)}
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Produtos na Meta / Acima</p>
+                  <h3 className="text-xl font-bold text-emerald-700 mt-1">
+                    {relatorioStats.acimaOuAtingida}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {relatorioStats.total > 0
+                      ? Math.round((relatorioStats.acimaOuAtingida / relatorioStats.total) * 100)
+                      : 0}
+                    % das fichas técnicas
+                  </p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Abaixo da Margem Desejada</p>
+                  <h3 className="text-xl font-bold text-amber-700 mt-1">
+                    {relatorioStats.abaixoCount}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Requer ajuste de preço/custo</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Margem Negativa (Prejuízo)</p>
+                  <h3 className="text-xl font-bold text-rose-600 mt-1">
+                    {relatorioStats.criticaCount}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Preço menor que custo total</p>
+                </div>
+                <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+                  <TrendingDown className="w-5 h-5" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Card Principal do Relatório */}
           <Card className="bg-white border-slate-200 shadow-xs">
             <CardHeader className="pb-3 border-b border-slate-100">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4 text-blue-600" />
-                    Fichas Técnicas de Produtos
+                    <BarChart3 className="w-4 h-4 text-emerald-700" />
+                    Relatório Comparativo de Custos e Margem Real
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Estrutura de custo, lista de insumos e preço de venda sugerido.
+                    Comparação produto a produto: Custo Total da Ficha × Preço de Venda Praticado ×
+                    Margem Real vs Margem Desejada.
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     type="button"
-                    onClick={handleExportCsv}
-                    variant="outline"
+                    onClick={handleExportRelatorioCsv}
                     size="sm"
-                    className="h-9 text-xs font-semibold border-slate-200 text-slate-700 hover:bg-slate-50"
+                    className="h-9 text-xs font-semibold bg-emerald-700 hover:bg-emerald-800 text-white shadow-xs"
                   >
                     <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Exportar CSV
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleOpenNew}
-                    size="sm"
-                    className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
-                  >
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    Nova Ficha Técnica
+                    Exportar Relatório CSV
                   </Button>
                 </div>
               </div>
             </CardHeader>
 
             <CardContent className="p-4">
-              <div className="mb-4">
-                <div className="relative">
+              <div className="flex flex-col sm:flex-row items-center gap-3 mb-4">
+                <div className="relative flex-1 w-full">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <Input
-                    placeholder="Buscar ficha por produto ou código..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Buscar por produto, código ou categoria..."
+                    value={relatorioSearch}
+                    onChange={(e) => setRelatorioSearch(e.target.value)}
                     className="pl-9 h-9 text-xs"
                   />
                 </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-xs text-slate-500 shrink-0 font-medium">Status:</span>
+                  <select
+                    value={filtroStatusMargem}
+                    onChange={(e) => setFiltroStatusMargem(e.target.value as any)}
+                    className="h-9 text-xs bg-white border border-slate-200 rounded-md px-2.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-600 w-full sm:w-48"
+                  >
+                    <option value="todos">Todos os desempenhos</option>
+                    <option value="acima">🟢 Meta Atingida ou Acima</option>
+                    <option value="abaixo">🟡 Abaixo do Desejado</option>
+                    <option value="alerta">🔴 Margem Negativa (Prejuízo)</option>
+                  </select>
+                </div>
               </div>
 
-              {loading ? (
-                <div className="py-16 flex justify-center items-center">
-                  <div className="w-7 h-7 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                </div>
-              ) : fichasFiltradas.length === 0 ? (
+              {relatorioFiltrado.length === 0 ? (
                 <div className="py-16 text-center">
                   <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
-                    <ClipboardList className="w-6 h-6" />
+                    <BarChart3 className="w-6 h-6" />
                   </div>
                   <h4 className="text-sm font-semibold text-slate-800">
-                    Nenhuma ficha técnica cadastrada
+                    Nenhum dado encontrado no relatório
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                    {fichas.length === 0
-                      ? 'Crie a primeira ficha técnica vinculando um produto aos seus insumos de fabricação.'
-                      : 'Nenhum resultado para os termos pesquisados.'}
+                    {relatorioData.length === 0
+                      ? 'Cadastre fichas técnicas para gerar a análise comparativa de margem real.'
+                      : 'Nenhum produto corresponde aos filtros aplicados.'}
                   </p>
-                  {fichas.length === 0 && (
-                    <Button
-                      onClick={handleOpenNew}
-                      size="sm"
-                      className="mt-4 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1.5" />
-                      Criar Primeira Ficha Técnica
-                    </Button>
-                  )}
                 </div>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-semibold">
+                        <th className="py-3 px-3.5">Código</th>
                         <th className="py-3 px-3.5">Produto</th>
-                        <th className="py-3 px-3.5 text-center">Itens</th>
-                        <th className="py-3 px-3.5 text-right">Custo MP (R$)</th>
-                        <th className="py-3 px-3.5 text-right">Outros (R$)</th>
-                        <th className="py-3 px-3.5 text-right">Custo Total (R$)</th>
-                        <th className="py-3 px-3.5 text-right">Margem (%)</th>
-                        <th className="py-3 px-3.5 text-right">Preço Sugerido (R$)</th>
+                        <th className="py-3 px-3.5">Categoria</th>
+                        <th className="py-3 px-3.5 text-right">Custo MP</th>
+                        <th className="py-3 px-3.5 text-right">Outros Custos</th>
+                        <th className="py-3 px-3.5 text-right">Custo Total</th>
+                        <th className="py-3 px-3.5 text-right">Preço de Venda</th>
+                        <th className="py-3 px-3.5 text-right">Lucro Unitário</th>
+                        <th className="py-3 px-3.5 text-right">Margem Desejada</th>
+                        <th className="py-3 px-3.5 text-right">Margem Real</th>
+                        <th className="py-3 px-3.5 text-center">Desempenho</th>
                         <th className="py-3 px-3.5 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {fichasFiltradas.map((f) => {
-                        const prod = produtosMap.get(f.produto)
-                        const isSel = selectedFicha?.id === f.id
+                      {relatorioFiltrado.map((item) => {
+                        const isAtingida = item.statusMargem === 'atingida'
+                        const isAbaixo = item.statusMargem === 'abaixo'
+                        const isCritica = item.statusMargem === 'critica'
 
                         return (
                           <tr
-                            key={f.id}
-                            onClick={() => setSelectedFicha(f)}
-                            className={`cursor-pointer transition-colors ${
-                              isSel ? 'bg-blue-50/90' : 'hover:bg-slate-50/70'
-                            }`}
+                            key={item.ficha.id}
+                            className="hover:bg-slate-50/70 transition-colors"
                           >
+                            <td className="py-3 px-3.5 font-mono text-slate-600 font-semibold">
+                              {item.produtoCodigo ? (
+                                <Badge variant="outline" className="text-[10px] bg-slate-50">
+                                  {item.produtoCodigo}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 italic">—</span>
+                              )}
+                            </td>
                             <td className="py-3 px-3.5">
-                              <div className="font-semibold text-slate-900">
-                                {prod?.nome || 'Produto não encontrado'}
-                              </div>
-                              <div className="text-[11px] text-slate-400 font-mono">
-                                {prod?.codigo || 'Sem código'} · {prod?.unidade || 'UN'}
+                              <div className="font-semibold text-slate-900">{item.produtoNome}</div>
+                              <div className="text-[11px] text-slate-400">
+                                {item.itensCount} insumo(s) · Unidade: {item.unidade}
                               </div>
                             </td>
-                            <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                              <Badge variant="outline" className="text-[10px] bg-slate-50">
-                                {f.itens?.length || 0} item(ns)
-                              </Badge>
+                            <td className="py-3 px-3.5 text-slate-600">
+                              {item.categoria ? (
+                                <Badge className="text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                  {item.categoria}
+                                </Badge>
+                              ) : (
+                                <span className="text-slate-400 italic">—</span>
+                              )}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-medium text-slate-700 whitespace-nowrap">
-                              {formatBrl(f.custo_materia_prima)}
+                            <td className="py-3 px-3.5 text-right text-slate-600 whitespace-nowrap">
+                              {formatBrl(item.custoMP)}
                             </td>
                             <td className="py-3 px-3.5 text-right text-slate-500 whitespace-nowrap">
-                              {formatBrl(f.outros_custos)}
+                              {formatBrl(item.outrosCustos)}
                             </td>
                             <td className="py-3 px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
-                              {formatBrl(f.custo_total)}
+                              {formatBrl(item.custoTotal)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-semibold text-amber-700 whitespace-nowrap">
-                              {formatPct(f.margem_desejada)}
+                            <td className="py-3 px-3.5 text-right font-bold text-blue-900 whitespace-nowrap">
+                              {formatBrl(item.precoVenda)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-emerald-700 whitespace-nowrap">
-                              {formatBrl(f.preco_venda_sugerido)}
+                            <td className="py-3 px-3.5 text-right font-semibold whitespace-nowrap">
+                              <span
+                                className={
+                                  item.lucroUnitario < 0
+                                    ? 'text-rose-600'
+                                    : item.lucroUnitario > 0
+                                      ? 'text-emerald-700'
+                                      : 'text-slate-600'
+                                }
+                              >
+                                {formatBrl(item.lucroUnitario)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-medium text-slate-600 whitespace-nowrap">
+                              {formatPct(item.margemDesejada)}
+                            </td>
+                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                              <span
+                                className={`font-bold ${
+                                  isCritica
+                                    ? 'text-rose-600'
+                                    : isAbaixo
+                                      ? 'text-amber-700'
+                                      : 'text-emerald-700'
+                                }`}
+                              >
+                                {formatPct(item.margemReal)}
+                              </span>
+                            </td>
+                            <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                              {isCritica ? (
+                                <Badge className="text-[10px] bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-300 gap-1 font-bold">
+                                  <ArrowDownRight className="w-3 h-3" />
+                                  Negativa ({item.diffMargem.toFixed(1)} p.p.)
+                                </Badge>
+                              ) : isAbaixo ? (
+                                <Badge className="text-[10px] bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-300 gap-1 font-bold">
+                                  <ArrowDownRight className="w-3 h-3" />
+                                  Abaixo ({item.diffMargem.toFixed(1)} p.p.)
+                                </Badge>
+                              ) : isAtingida ? (
+                                <Badge className="text-[10px] bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 gap-1 font-semibold">
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  Meta Atingida
+                                </Badge>
+                              ) : (
+                                <Badge className="text-[10px] bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 gap-1 font-bold">
+                                  <ArrowUpRight className="w-3 h-3" />
+                                  Acima (+{item.diffMargem.toFixed(1)} p.p.)
+                                </Badge>
+                              )}
                             </td>
                             <td className="py-3 px-3.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
                                 <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleOpenEdit(f)
+                                  onClick={() => {
+                                    setSelectedFicha(item.ficha)
+                                    setActiveTab('fichas')
                                   }}
                                   size="sm"
                                   variant="ghost"
-                                  className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                  title="Editar ficha técnica"
+                                  className="h-7 text-[11px] text-blue-600 hover:bg-blue-50 px-2 font-medium"
+                                  title="Ver ficha técnica"
                                 >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    confirmDelete(f)
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                  title="Excluir ficha técnica"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Ver Ficha
                                 </Button>
                               </div>
                             </td>
@@ -782,132 +1538,7 @@ export default function CadastroFichaTecnica() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Coluna 3: Detalhamento da Ficha Selecionada */}
-        <div className="space-y-6">
-          {!selectedFicha ? (
-            <Card className="bg-white border-dashed border-slate-300 shadow-xs">
-              <CardContent className="py-16 text-center">
-                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
-                  <Calculator className="w-6 h-6" />
-                </div>
-                <h4 className="text-sm font-semibold text-slate-800">Selecione uma Ficha</h4>
-                <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                  Clique em qualquer ficha técnica da tabela para visualizar a composição detalhada
-                  de insumos e fórmula de precificação.
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            (() => {
-              const prod = produtosMap.get(selectedFicha.produto)
-              const itens = selectedFicha.itens || []
-
-              return (
-                <Card className="bg-white border-slate-200 shadow-xs">
-                  <CardHeader className="pb-3 border-b border-slate-100">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                          Ficha Técnica
-                        </span>
-                        <CardTitle className="text-base font-bold text-[#0B1F3A] mt-1.5">
-                          {prod?.nome || 'Produto'}
-                        </CardTitle>
-                        <CardDescription className="text-xs">
-                          {prod?.codigo ? `Código: ${prod.codigo} · ` : ''}Unidade:{' '}
-                          {prod?.unidade || 'UN'}
-                        </CardDescription>
-                      </div>
-                      <Button
-                        onClick={() => handleOpenEdit(selectedFicha)}
-                        size="sm"
-                        variant="outline"
-                        className="h-8 text-xs font-semibold"
-                      >
-                        <Pencil className="w-3 h-3 mr-1" />
-                        Editar
-                      </Button>
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="p-4 space-y-4">
-                    {/* Lista de Matérias-Primas da Ficha */}
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
-                        <Layers className="w-3.5 h-3.5 text-amber-600" />
-                        Composição de Insumos ({itens.length})
-                      </h4>
-
-                      <div className="space-y-1.5">
-                        {itens.map((it, idx) => {
-                          const mp = materiasMap.get(it.materia_prima_id)
-                          return (
-                            <div
-                              key={idx}
-                              className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
-                            >
-                              <div>
-                                <p className="font-semibold text-slate-800">
-                                  {it.materia_prima_nome || mp?.nome || 'Insumo'}
-                                </p>
-                                <p className="text-[11px] text-slate-500">
-                                  {it.quantidade} {it.unidade || mp?.unidade || 'UN'} ×{' '}
-                                  {formatBrl(it.custo_unitario)}
-                                </p>
-                              </div>
-                              <span className="font-bold text-slate-900">
-                                {formatBrl(it.subtotal)}
-                              </span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Resumo de Custos e Formação de Preço */}
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
-                      <div className="flex justify-between text-xs text-slate-600">
-                        <span>Subtotal Matéria-Prima:</span>
-                        <span className="font-semibold text-slate-800">
-                          {formatBrl(selectedFicha.custo_materia_prima)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs text-slate-600">
-                        <span>Outros Custos (MOD/Despesas):</span>
-                        <span className="font-semibold text-slate-800">
-                          {formatBrl(selectedFicha.outros_custos)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs font-bold text-slate-900 border-t border-slate-200 pt-1.5">
-                        <span>Custo Total Unitário:</span>
-                        <span>{formatBrl(selectedFicha.custo_total)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-amber-700 font-semibold">
-                        <span>Margem de Lucro Desejada:</span>
-                        <span>{formatPct(selectedFicha.margem_desejada)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm font-bold text-emerald-800 border-t border-slate-200 pt-2 bg-emerald-50/70 p-2 rounded">
-                        <span>Preço de Venda Sugerido:</span>
-                        <span>{formatBrl(selectedFicha.preco_venda_sugerido)}</span>
-                      </div>
-                    </div>
-
-                    {selectedFicha.observacoes && (
-                      <div className="text-xs text-slate-600 bg-blue-50/50 p-2.5 rounded border border-blue-100">
-                        <span className="font-semibold text-blue-900 block mb-0.5">
-                          Observações:
-                        </span>
-                        {selectedFicha.observacoes}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })()
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Modal Criar / Editar Ficha Técnica */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -1229,6 +1860,86 @@ export default function CadastroFichaTecnica() {
                   : editingFicha
                     ? 'Salvar Alterações'
                     : 'Criar Ficha Técnica'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Clonar Ficha Técnica */}
+      <Dialog open={cloneOpen} onOpenChange={setCloneOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-white">
+          <form onSubmit={handleConfirmClone}>
+            <DialogHeader>
+              <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                <Copy className="w-4 h-4 text-emerald-700" />
+                Clonar Ficha Técnica
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Uma cópia exata de todos os insumos, quantidades, custos e parâmetros de formação de
+                preço será criada com um novo produto para que você possa criar variações.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-4">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+                <div className="text-slate-500">Ficha Técnica Original:</div>
+                <div className="font-bold text-slate-900">
+                  {produtosMap.get(fichaToClone?.produto || '')?.nome || 'Produto Original'}
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {fichaToClone?.itens?.length || 0} insumo(s) cadastrado(s) · Custo Total:{' '}
+                  <strong>{formatBrl(fichaToClone?.custo_total)}</strong>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="clone-nome" className="text-xs font-semibold text-slate-700">
+                  Nome do Novo Produto (Variação) *
+                </Label>
+                <Input
+                  id="clone-nome"
+                  required
+                  placeholder="Ex: Gabinete Metálico Slim - Cor Preta"
+                  value={cloneNovoNome}
+                  onChange={(e) => setCloneNovoNome(e.target.value)}
+                  className="h-9 text-xs"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Um novo produto será cadastrado automaticamente com este nome.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="clone-codigo" className="text-xs font-semibold text-slate-700">
+                  Código / SKU do Novo Produto (Opcional)
+                </Label>
+                <Input
+                  id="clone-codigo"
+                  placeholder="Ex: PRD-001-B"
+                  value={cloneNovoCodigo}
+                  onChange={(e) => setCloneNovoCodigo(e.target.value)}
+                  className="h-9 text-xs uppercase"
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCloneOpen(false)}
+                disabled={cloning}
+                className="text-xs h-9"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={cloning}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs h-9 shadow-xs"
+              >
+                {cloning ? 'Clonando...' : 'Confirmar e Clonar Ficha'}
               </Button>
             </DialogFooter>
           </form>

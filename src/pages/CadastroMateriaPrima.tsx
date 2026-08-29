@@ -38,9 +38,11 @@ import {
   Coins,
   Boxes,
   Tag,
-  BoxesIcon,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldAlert,
 } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 function formatBrl(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
@@ -65,6 +67,7 @@ interface MateriaPrimaFormData {
   categoria: string
   custo_unitario: string
   estoque_atual: string
+  estoque_minimo: string
   observacoes: string
 }
 
@@ -75,7 +78,58 @@ const EMPTY_MP: MateriaPrimaFormData = {
   categoria: '',
   custo_unitario: '',
   estoque_atual: '',
+  estoque_minimo: '',
   observacoes: '',
+}
+
+export type StatusEstoqueMP = 'critico' | 'atencao' | 'ok' | 'indefinido'
+
+export function getStatusEstoque(m: MateriaPrimaRecord): {
+  status: StatusEstoqueMP
+  label: string
+  badgeVariant: 'destructive' | 'default' | 'outline' | 'secondary'
+  badgeClass: string
+} {
+  const atual = Number(m.estoque_atual)
+  const min = Number(m.estoque_minimo)
+
+  if (isNaN(min) || min <= 0 || m.estoque_minimo === undefined || m.estoque_minimo === null) {
+    return {
+      status: 'indefinido',
+      label: 'Não def.',
+      badgeVariant: 'outline',
+      badgeClass: 'text-slate-500 border-slate-200 bg-slate-50',
+    }
+  }
+
+  const estoqueAtualNum = isNaN(atual) ? 0 : atual
+
+  if (estoqueAtualNum < min) {
+    return {
+      status: 'critico',
+      label: 'Crítico',
+      badgeVariant: 'destructive',
+      badgeClass: 'bg-rose-100 text-rose-700 hover:bg-rose-100 border-rose-300 font-bold',
+    }
+  }
+
+  // Atenção quando o estoque está até 20% acima do mínimo (entre min e 1.2 * min)
+  if (estoqueAtualNum <= min * 1.2) {
+    return {
+      status: 'atencao',
+      label: 'Atenção',
+      badgeVariant: 'outline',
+      badgeClass: 'bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-300 font-bold',
+    }
+  }
+
+  return {
+    status: 'ok',
+    label: 'OK',
+    badgeVariant: 'outline',
+    badgeClass:
+      'bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border-emerald-300 font-semibold',
+  }
 }
 
 type MPFormErrors = Partial<Record<keyof MateriaPrimaFormData | 'general', string>>
@@ -89,6 +143,7 @@ export default function CadastroMateriaPrima() {
   // Filtros
   const [search, setSearch] = useState('')
   const [categoriaFilter, setCategoriaFilter] = useState('todas')
+  const [statusFilter, setStatusFilter] = useState<'todos' | 'critico' | 'atencao' | 'ok'>('todos')
 
   // Modal Novo / Edição
   const [modalOpen, setModalOpen] = useState(false)
@@ -134,6 +189,21 @@ export default function CadastroMateriaPrima() {
     return Array.from(set).sort()
   }, [materias])
 
+  // Matérias com estoque abaixo do mínimo (críticas) ou em atenção
+  const materiasCriticas = useMemo(() => {
+    return materias.filter((m) => {
+      const st = getStatusEstoque(m).status
+      return st === 'critico'
+    })
+  }, [materias])
+
+  const materiasAtencao = useMemo(() => {
+    return materias.filter((m) => {
+      const st = getStatusEstoque(m).status
+      return st === 'atencao'
+    })
+  }, [materias])
+
   // Filtradas
   const materiasFiltradas = useMemo(() => {
     return materias.filter((m) => {
@@ -146,9 +216,16 @@ export default function CadastroMateriaPrima() {
       const matchCat =
         categoriaFilter === 'todas' || (m.categoria && m.categoria.trim() === categoriaFilter)
 
-      return matchSearch && matchCat
+      const st = getStatusEstoque(m).status
+      const matchStatus =
+        statusFilter === 'todos' ||
+        (statusFilter === 'critico' && st === 'critico') ||
+        (statusFilter === 'atencao' && st === 'atencao') ||
+        (statusFilter === 'ok' && st === 'ok')
+
+      return matchSearch && matchCat && matchStatus
     })
-  }, [materias, search, categoriaFilter])
+  }, [materias, search, categoriaFilter, statusFilter])
 
   // Estatísticas
   const stats = useMemo(() => {
@@ -163,7 +240,17 @@ export default function CadastroMateriaPrima() {
         ? materias.reduce((acc, m) => acc + (Number(m.custo_unitario) || 0), 0) / materias.length
         : 0
 
-    return { total, valorTotalEstoque, custoMedio, categoriasCount: categorias.length }
+    const totalCriticos = materias.filter((m) => getStatusEstoque(m).status === 'critico').length
+    const totalAtencao = materias.filter((m) => getStatusEstoque(m).status === 'atencao').length
+
+    return {
+      total,
+      valorTotalEstoque,
+      custoMedio,
+      categoriasCount: categorias.length,
+      totalCriticos,
+      totalAtencao,
+    }
   }, [materias, categorias])
 
   const setField = <K extends keyof MateriaPrimaFormData>(
@@ -190,6 +277,10 @@ export default function CadastroMateriaPrima() {
       const e = Number(form.estoque_atual.replace(',', '.'))
       if (isNaN(e) || e < 0) errs.estoque_atual = 'Informe uma quantidade de estoque válida'
     }
+    if (form.estoque_minimo.trim() !== '') {
+      const min = Number(form.estoque_minimo.replace(',', '.'))
+      if (isNaN(min) || min < 0) errs.estoque_minimo = 'Informe um estoque mínimo válido'
+    }
 
     setErrors(errs)
     return Object.keys(errs).length === 0
@@ -213,6 +304,8 @@ export default function CadastroMateriaPrima() {
         m.custo_unitario !== undefined && m.custo_unitario !== null ? String(m.custo_unitario) : '',
       estoque_atual:
         m.estoque_atual !== undefined && m.estoque_atual !== null ? String(m.estoque_atual) : '',
+      estoque_minimo:
+        m.estoque_minimo !== undefined && m.estoque_minimo !== null ? String(m.estoque_minimo) : '',
       observacoes: m.observacoes || '',
     })
     setErrors({})
@@ -233,6 +326,10 @@ export default function CadastroMateriaPrima() {
         formData.estoque_atual.trim() !== ''
           ? Number(formData.estoque_atual.replace(',', '.'))
           : undefined
+      const estoqueMinNum =
+        formData.estoque_minimo.trim() !== ''
+          ? Number(formData.estoque_minimo.replace(',', '.'))
+          : undefined
 
       const payload = {
         codigo: formData.codigo.trim() || undefined,
@@ -241,6 +338,7 @@ export default function CadastroMateriaPrima() {
         categoria: formData.categoria.trim() || undefined,
         custo_unitario: custoNum,
         estoque_atual: estoqueNum,
+        estoque_minimo: estoqueMinNum,
         observacoes: formData.observacoes.trim() || undefined,
       }
 
@@ -326,10 +424,12 @@ export default function CadastroMateriaPrima() {
     const headers = [
       'Código',
       'Matéria-Prima',
+      'Status Estoque',
       'Unidade',
       'Categoria',
       'Custo Unitário (R$)',
       'Estoque Atual',
+      'Estoque Mínimo',
       'Valor Total em Estoque (R$)',
       'Observações',
     ]
@@ -341,14 +441,22 @@ export default function CadastroMateriaPrima() {
       const est = m.estoque_atual || 0
       const totalEstoque = custo * est
 
+      const st = getStatusEstoque(m)
+      const estMin =
+        m.estoque_minimo !== undefined && m.estoque_minimo !== null
+          ? m.estoque_minimo.toLocaleString('pt-BR')
+          : ''
+
       linhas.push(
         [
           m.codigo || '',
           m.nome,
+          st.label,
           m.unidade,
           m.categoria || '',
           fmtNum(m.custo_unitario),
           est.toLocaleString('pt-BR'),
+          estMin,
           fmtNum(totalEstoque),
           m.observacoes || '',
         ]
@@ -375,6 +483,39 @@ export default function CadastroMateriaPrima() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Alerta de Estoque Mínimo no Topo */}
+      {materiasCriticas.length > 0 && (
+        <Alert className="border-rose-300 bg-rose-50 text-rose-900 shadow-xs">
+          <ShieldAlert className="h-5 w-5 text-rose-600" />
+          <div className="ml-2">
+            <AlertTitle className="text-sm font-bold text-rose-900 flex items-center gap-2">
+              Alerta de Reposição Urgente: {materiasCriticas.length}{' '}
+              {materiasCriticas.length === 1 ? 'insumo abaixo' : 'insumos abaixo'} do estoque
+              mínimo!
+            </AlertTitle>
+            <AlertDescription className="text-xs text-rose-800 mt-1">
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {materiasCriticas.map((m) => {
+                  const atual = Number(m.estoque_atual) || 0
+                  const min = Number(m.estoque_minimo) || 0
+                  return (
+                    <span
+                      key={m.id}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-white border border-rose-300 text-rose-900 text-xs font-semibold shadow-2xs"
+                    >
+                      <span className="font-bold">{m.nome}</span>
+                      <span className="text-rose-600 font-normal">
+                        ({formatQty(atual, m.unidade)} / min: {formatQty(min, m.unidade)})
+                      </span>
+                    </span>
+                  )
+                })}
+              </div>
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
       {/* Cards de Métricas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-white border-slate-200 shadow-xs">
@@ -423,12 +564,36 @@ export default function CadastroMateriaPrima() {
         <Card className="bg-white border-slate-200 shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500 font-medium">Categorias de Insumos</p>
-              <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{stats.categoriasCount}</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Grupos de materiais</p>
+              <p className="text-xs text-slate-500 font-medium">Status do Estoque</p>
+              <div className="flex items-center gap-2 mt-1">
+                <span
+                  className={`text-xl font-bold ${stats.totalCriticos > 0 ? 'text-rose-600' : 'text-emerald-700'}`}
+                >
+                  {stats.totalCriticos > 0
+                    ? `${stats.totalCriticos} Crítico${stats.totalCriticos > 1 ? 's' : ''}`
+                    : 'Estoque Regular'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {stats.totalAtencao > 0
+                  ? `${stats.totalAtencao} em atenção`
+                  : `${stats.categoriasCount} categorias cadastradas`}
+              </p>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Tag className="w-5 h-5" />
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                stats.totalCriticos > 0
+                  ? 'bg-rose-50 text-rose-600'
+                  : stats.totalAtencao > 0
+                    ? 'bg-amber-50 text-amber-600'
+                    : 'bg-emerald-50 text-emerald-600'
+              }`}
+            >
+              {stats.totalCriticos > 0 ? (
+                <AlertTriangle className="w-5 h-5" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5" />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -482,9 +647,21 @@ export default function CadastroMateriaPrima() {
                 className="pl-9 h-9 text-xs"
               />
             </div>
-            {categorias.length > 0 && (
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-xs text-slate-500 shrink-0 font-medium">Categoria:</span>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap sm:flex-nowrap">
+              {/* Filtro por Status do Estoque */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as any)}
+                className="h-9 text-xs bg-white border border-slate-200 rounded-md px-2.5 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-600 w-full sm:w-36"
+              >
+                <option value="todos">Todos os status</option>
+                <option value="critico">🔴 Crítico (Abaixo do Mín.)</option>
+                <option value="atencao">🟡 Atenção (Próximo)</option>
+                <option value="ok">🟢 OK (Suficiente)</option>
+              </select>
+
+              {categorias.length > 0 && (
                 <select
                   value={categoriaFilter}
                   onChange={(e) => setCategoriaFilter(e.target.value)}
@@ -497,8 +674,8 @@ export default function CadastroMateriaPrima() {
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Tabela de Matérias-Primas */}
@@ -537,10 +714,12 @@ export default function CadastroMateriaPrima() {
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-semibold">
                     <th className="py-3 px-3.5">Código</th>
                     <th className="py-3 px-3.5">Matéria-Prima</th>
+                    <th className="py-3 px-3.5 text-center">Status Estoque</th>
                     <th className="py-3 px-3.5">Unidade</th>
                     <th className="py-3 px-3.5">Categoria</th>
                     <th className="py-3 px-3.5 text-right">Custo Unitário (R$)</th>
                     <th className="py-3 px-3.5 text-right">Estoque Atual</th>
+                    <th className="py-3 px-3.5 text-right">Estoque Mínimo</th>
                     <th className="py-3 px-3.5 text-right">Valor em Estoque (R$)</th>
                     <th className="py-3 px-3.5 text-right">Ações</th>
                   </tr>
@@ -550,9 +729,19 @@ export default function CadastroMateriaPrima() {
                     const custo = m.custo_unitario || 0
                     const estoque = m.estoque_atual || 0
                     const valorEstoque = custo * estoque
+                    const st = getStatusEstoque(m)
 
                     return (
-                      <tr key={m.id} className="hover:bg-slate-50/70 transition-colors">
+                      <tr
+                        key={m.id}
+                        className={`transition-colors ${
+                          st.status === 'critico'
+                            ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                            : st.status === 'atencao'
+                              ? 'bg-amber-50/20 hover:bg-amber-50/50'
+                              : 'hover:bg-slate-50/70'
+                        }`}
+                      >
                         <td className="py-3 px-3.5 font-mono font-semibold text-slate-600">
                           {m.codigo ? (
                             <Badge
@@ -573,6 +762,17 @@ export default function CadastroMateriaPrima() {
                             </div>
                           )}
                         </td>
+                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          <Badge
+                            variant={st.badgeVariant}
+                            className={`text-[10px] px-2 py-0.5 ${st.badgeClass}`}
+                          >
+                            {st.status === 'critico' && '● '}
+                            {st.status === 'atencao' && '▲ '}
+                            {st.status === 'ok' && '✓ '}
+                            {st.label}
+                          </Badge>
+                        </td>
                         <td className="py-3 px-3.5">
                           <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-semibold">
                             {m.unidade}
@@ -592,8 +792,25 @@ export default function CadastroMateriaPrima() {
                         </td>
                         <td className="py-3 px-3.5 text-right whitespace-nowrap">
                           {m.estoque_atual !== undefined && m.estoque_atual !== null ? (
-                            <span className="font-medium text-slate-700">
+                            <span
+                              className={`font-semibold ${
+                                st.status === 'critico'
+                                  ? 'text-rose-700 font-bold'
+                                  : st.status === 'atencao'
+                                    ? 'text-amber-700'
+                                    : 'text-slate-700'
+                              }`}
+                            >
                               {formatQty(m.estoque_atual, m.unidade)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                          {m.estoque_minimo !== undefined && m.estoque_minimo !== null ? (
+                            <span className="font-medium text-slate-500">
+                              {formatQty(m.estoque_minimo, m.unidade)}
                             </span>
                           ) : (
                             <span className="text-slate-400 italic">—</span>
@@ -723,7 +940,7 @@ export default function CadastroMateriaPrima() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="mp-custo" className="text-xs font-semibold text-slate-700">
                     Custo Unitário (R$)
@@ -761,6 +978,26 @@ export default function CadastroMateriaPrima() {
                   />
                   {errors.estoque_atual && (
                     <p className="text-[11px] text-red-600 font-medium">{errors.estoque_atual}</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="mp-estoque-min" className="text-xs font-semibold text-slate-700">
+                    Estoque Mínimo (Qtd)
+                  </Label>
+                  <Input
+                    id="mp-estoque-min"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                    value={formData.estoque_minimo}
+                    onChange={(e) => setField('estoque_minimo', e.target.value)}
+                    className={`h-9 text-xs ${errors.estoque_minimo ? 'border-red-500' : ''}`}
+                  />
+                  {errors.estoque_minimo && (
+                    <p className="text-[11px] text-red-600 font-medium">{errors.estoque_minimo}</p>
                   )}
                 </div>
               </div>

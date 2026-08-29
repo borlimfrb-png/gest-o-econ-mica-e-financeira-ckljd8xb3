@@ -24,6 +24,7 @@ export interface MateriaPrimaInput {
   categoria?: string
   custo_unitario?: number
   estoque_atual?: number
+  estoque_minimo?: number
   observacoes?: string
 }
 
@@ -191,5 +192,69 @@ export const fichasTecnicasService = {
 
   async delete(id: string): Promise<boolean> {
     return pb.collection('fichas_tecnicas').delete(id)
+  },
+
+  async clone(
+    id: string,
+    options?: {
+      criarNovoProduto?: boolean
+      novoProdutoNome?: string
+      novoProdutoCodigo?: string
+      targetProdutoId?: string
+    },
+  ): Promise<FichaTecnicaRecord> {
+    const userId = getUserId()
+    const originalFicha = await this.getById(id)
+    let targetProdutoId = options?.targetProdutoId
+
+    // Se solicitado criar novo produto como cópia do produto original
+    if (options?.criarNovoProduto || !targetProdutoId) {
+      const originalProd =
+        originalFicha.expand?.produto ||
+        (await pb.collection('produtos').getOne<ProdutoRecord>(originalFicha.produto))
+
+      const novoNome = options?.novoProdutoNome?.trim() || `${originalProd.nome} (cópia)`
+      const novoCodigo =
+        options?.novoProdutoCodigo?.trim() ||
+        (originalProd.codigo ? `${originalProd.codigo}-CP` : undefined)
+
+      const novoProduto = await pb.collection('produtos').create<ProdutoRecord>({
+        user: userId,
+        codigo: novoCodigo,
+        nome: novoNome,
+        unidade: originalProd.unidade || 'UN',
+        categoria: originalProd.categoria || undefined,
+        custo: originalFicha.custo_total,
+        preco_venda: originalFicha.preco_venda_sugerido ?? originalProd.preco_venda,
+        margem_desejada: originalFicha.margem_desejada ?? originalProd.margem_desejada,
+        observacoes: originalProd.observacoes
+          ? `Cópia de ${originalProd.nome}. ${originalProd.observacoes}`
+          : `Cópia de ${originalProd.nome}`,
+      })
+
+      targetProdutoId = novoProduto.id
+    }
+
+    // Cria a nova ficha técnica clonada vinculada ao produto destino
+    const novaFicha = await pb.collection('fichas_tecnicas').create<FichaTecnicaRecord>(
+      {
+        user: userId,
+        produto: targetProdutoId,
+        itens: originalFicha.itens ? JSON.parse(JSON.stringify(originalFicha.itens)) : [],
+        custo_materia_prima: originalFicha.custo_materia_prima || 0,
+        outros_custos: originalFicha.outros_custos || 0,
+        custo_total: originalFicha.custo_total || 0,
+        margem_desejada: originalFicha.margem_desejada || 0,
+        preco_venda_sugerido: originalFicha.preco_venda_sugerido || 0,
+        observacoes: originalFicha.observacoes
+          ? `[Clonada] ${originalFicha.observacoes}`
+          : 'Ficha técnica clonada.',
+      },
+      {
+        expand: 'produto',
+      },
+    )
+
+    return novaFicha
   },
 }
