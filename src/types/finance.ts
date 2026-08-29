@@ -468,6 +468,53 @@ export interface CapitalGiroCalculado {
   tipoFleurietDescricao: string
 }
 
+export interface ProdutoRecord extends RecordModel {
+  user: string
+  codigo?: string
+  nome: string
+  unidade: string
+  categoria?: string
+  custo?: number
+  preco_venda?: number
+  margem_desejada?: number
+  observacoes?: string
+}
+
+export interface MateriaPrimaRecord extends RecordModel {
+  user: string
+  codigo?: string
+  nome: string
+  unidade: string
+  categoria?: string
+  custo_unitario?: number
+  estoque_atual?: number
+  observacoes?: string
+}
+
+export interface ItemFichaTecnica {
+  materia_prima_id: string
+  materia_prima_nome?: string
+  unidade?: string
+  custo_unitario: number
+  quantidade: number
+  subtotal: number
+}
+
+export interface FichaTecnicaRecord extends RecordModel {
+  user: string
+  produto: string
+  itens: ItemFichaTecnica[]
+  custo_materia_prima: number
+  outros_custos?: number
+  custo_total: number
+  margem_desejada?: number
+  preco_venda_sugerido?: number
+  observacoes?: string
+  expand?: {
+    produto?: ProdutoRecord
+  }
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null

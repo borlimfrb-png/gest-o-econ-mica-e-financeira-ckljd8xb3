@@ -33,6 +33,9 @@ import {
   Coins,
   Clock,
   Flame,
+  Package,
+  Layers,
+  ClipboardList,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -71,6 +74,19 @@ export default function Layout() {
     { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
     { name: 'Minha Empresa', path: '/minha-empresa', icon: Building },
   ]
+
+  // Itens do submenu Formação de Preço - Custo
+  const formacaoPrecoSubItems = [
+    { name: 'Cadastro de Produtos', path: '/formacao-preco/produtos', icon: Package },
+    { name: 'Cadastro de Matéria Prima', path: '/formacao-preco/materia-prima', icon: Layers },
+    {
+      name: 'Cadastro da Ficha Técnica',
+      path: '/formacao-preco/fichas-tecnicas',
+      icon: ClipboardList,
+    },
+  ]
+
+  const isFormacaoPrecoActive = location.pathname.startsWith('/formacao-preco')
 
   const isCadastroActive =
     (location.pathname.startsWith('/empresas') && !location.search.includes('novo=balanco-dre')) ||
@@ -154,7 +170,6 @@ export default function Layout() {
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
 
   // Grupo "Cadastros" expansível/colapsável
-  // Quando o usuário está em qualquer página dentro de "Cadastros", o grupo fica expandido automaticamente
   const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
 
   // Grupo "Lançamentos" expansível/colapsável
@@ -162,6 +177,9 @@ export default function Layout() {
 
   // Grupo "Financeiro" expansível/colapsável
   const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroActive)
+
+  // Grupo "Formação de Preço - Custo" expansível/colapsável
+  const [formacaoPrecoOpen, setFormacaoPrecoOpen] = useState<boolean>(isFormacaoPrecoActive || true)
 
   // Grupo "Indicadores" expansível/colapsável
   const [indicadoresOpen, setIndicadoresOpen] = useState<boolean>(isIndicadoresActive || true)
@@ -183,6 +201,12 @@ export default function Layout() {
       setFinanceiroOpen(true)
     }
   }, [isFinanceiroActive])
+
+  React.useEffect(() => {
+    if (isFormacaoPrecoActive) {
+      setFormacaoPrecoOpen(true)
+    }
+  }, [isFormacaoPrecoActive])
 
   React.useEffect(() => {
     if (isIndicadoresActive) {
@@ -222,7 +246,8 @@ export default function Layout() {
     location.pathname === '/relatorio-anual' ||
     location.pathname === '/analise-tributaria' ||
     location.pathname === '/notas-fiscais' ||
-    location.pathname.startsWith('/empresas/')
+    location.pathname.startsWith('/empresas/') ||
+    location.pathname.startsWith('/formacao-preco')
 
   return (
     <div className="min-h-screen bg-[#F5F7FA] flex flex-col antialiased text-slate-800">
@@ -553,6 +578,77 @@ export default function Layout() {
                               <SubIcon
                                 className={`w-3.5 h-3.5 ${
                                   isSubActive ? 'text-emerald-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4.5. Formação de Preço - Custo (Expansível / Colapsável Mobile) */}
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setFormacaoPrecoOpen((prev) => !prev)}
+                    style={
+                      isFormacaoPrecoActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isFormacaoPrecoActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Calculator
+                        className={`w-4 h-4 ${isFormacaoPrecoActive ? 'text-amber-300' : 'text-amber-400'}`}
+                      />
+                      <span className="truncate">Formação de Preço - Custo</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                        formacaoPrecoOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu Formação de Preço */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      formacaoPrecoOpen
+                        ? 'grid-rows-[1fr] opacity-100'
+                        : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-3 pl-3 border-l border-amber-500/30 space-y-1 py-1">
+                        {formacaoPrecoSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive = location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              onClick={() => setMobileDrawerOpen(false)}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-3.5 h-3.5 ${
+                                  isSubActive ? 'text-amber-300' : 'text-slate-400'
                                 }`}
                               />
                               <span className="truncate">{sub.name}</span>
@@ -1134,6 +1230,107 @@ export default function Layout() {
                 </div>
               </div>
 
+              {/* 4.5. Formação de Preço - Custo (Tablet & Desktop) */}
+              <div className="space-y-1">
+                {/* Visualização Tablet */}
+                <div className="lg:hidden">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <NavLink
+                        to="/formacao-preco/produtos"
+                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                          isFormacaoPrecoActive
+                            ? 'bg-amber-600/30 text-white font-semibold shadow-sm border border-amber-500/40'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <Calculator
+                          className={`w-5 h-5 ${isFormacaoPrecoActive ? 'text-amber-300' : 'text-slate-400'}`}
+                        />
+                      </NavLink>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="right"
+                      className="bg-[#0B1F3A] text-white border-blue-900"
+                    >
+                      Formação de Preço - Custo (Produtos, MP, Ficha Técnica)
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+
+                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                <div className="hidden lg:block">
+                  <button
+                    type="button"
+                    onClick={() => setFormacaoPrecoOpen((prev) => !prev)}
+                    style={
+                      isFormacaoPrecoActive
+                        ? {
+                            backgroundColor: `${corSecundaria}33`,
+                            borderColor: `${corSecundaria}66`,
+                          }
+                        : undefined
+                    }
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                      isFormacaoPrecoActive
+                        ? 'text-white font-semibold border'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Calculator
+                        className={`w-5 h-5 shrink-0 ${
+                          isFormacaoPrecoActive ? 'text-amber-300' : 'text-amber-400'
+                        }`}
+                      />
+                      <span className="truncate font-medium">Formação de Preço - Custo</span>
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                        formacaoPrecoOpen ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </button>
+
+                  {/* Submenu com animação suave via grid template rows */}
+                  <div
+                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                      formacaoPrecoOpen
+                        ? 'grid-rows-[1fr] opacity-100'
+                        : 'grid-rows-[0fr] opacity-0'
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="ml-4 pl-3 border-l border-amber-500/30 space-y-1 py-1 mt-1">
+                        {formacaoPrecoSubItems.map((sub) => {
+                          const SubIcon = sub.icon
+                          const isSubActive = location.pathname === sub.path
+
+                          return (
+                            <NavLink
+                              key={sub.path}
+                              to={sub.path}
+                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                isSubActive
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <SubIcon
+                                className={`w-4 h-4 shrink-0 ${
+                                  isSubActive ? 'text-amber-300' : 'text-slate-400'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </NavLink>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Novo Grupo: Indicadores - Abaixo de Financeiro */}
               <div className="space-y-1">
                 {/* Visualização Tablet */}
@@ -1539,6 +1736,11 @@ export default function Layout() {
                   {location.pathname === '/analise-tributaria' &&
                     'Análise Tributária e Planejamento'}
                   {location.pathname === '/notas-fiscais' && 'Emissão de Nota Fiscal (NFS-e)'}
+                  {location.pathname === '/formacao-preco/produtos' && 'Cadastro de Produtos'}
+                  {location.pathname === '/formacao-preco/materia-prima' &&
+                    'Cadastro de Matéria Prima'}
+                  {location.pathname === '/formacao-preco/fichas-tecnicas' &&
+                    'Cadastro da Ficha Técnica'}
                   {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
                 </h1>
                 <p className="text-xs text-[#5B6B7F]">
@@ -1552,6 +1754,12 @@ export default function Layout() {
                     'Comparativo entre Simples Nacional, Lucro Presumido e Lucro Real'}
                   {location.pathname === '/notas-fiscais' &&
                     'Emita NFS-e, gere DANFSE em PDF/XML e envie para clientes por e-mail'}
+                  {location.pathname === '/formacao-preco/produtos' &&
+                    'Gerencie os produtos comercializados, custos, preços de venda e margens de lucro'}
+                  {location.pathname === '/formacao-preco/materia-prima' &&
+                    'Cadastre insumos, matérias-primas, custos unitários e controle de estoque'}
+                  {location.pathname === '/formacao-preco/fichas-tecnicas' &&
+                    'Composição da ficha técnica, custo de matéria-prima, outros custos e cálculo do preço sugerido com margem'}
                   {location.pathname.startsWith('/empresas/') &&
                     'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
                 </p>{' '}

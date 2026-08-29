@@ -21,6 +21,9 @@ import BaixaRecebiveis from './pages/BaixaRecebiveis'
 import Contratos from './pages/Contratos'
 import NotasFiscais from './pages/NotasFiscais'
 import Relatorios from './pages/Relatorios'
+import CadastroProdutos from './pages/CadastroProdutos'
+import CadastroMateriaPrima from './pages/CadastroMateriaPrima'
+import CadastroFichaTecnica from './pages/CadastroFichaTecnica'
 import RelatorioAnual from './pages/RelatorioAnual'
 import IndicadoresLiquidez from './pages/IndicadoresLiquidez'
 import IndicadoresCapitalGiro from './pages/IndicadoresCapitalGiro'
@@ -95,6 +98,12 @@ const App = () => (
                 <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/contratos" element={<Contratos />} />
                 <Route path="/notas-fiscais" element={<NotasFiscais />} />
+
+                {/* Formação de Preço - Custo */}
+                <Route path="/formacao-preco/produtos" element={<CadastroProdutos />} />
+                <Route path="/formacao-preco/materia-prima" element={<CadastroMateriaPrima />} />
+                <Route path="/formacao-preco/fichas-tecnicas" element={<CadastroFichaTecnica />} />
+
                 <Route path="/indicadores/painel" element={<PainelIndicadores />} />
                 <Route
                   path="/indicadores"
