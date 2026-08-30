@@ -41,6 +41,7 @@ import {
   formatPercent,
   formatCnpj,
 } from '@/lib/financeCalculations'
+import { analisarAlertasProativos } from '@/lib/alertasProativos'
 import { useRealtime } from '@/hooks/use-realtime'
 import { AnimatedCounter } from '@/components/AnimatedCounter'
 import {
@@ -1449,8 +1450,46 @@ export default function Dashboard() {
 
   // Combina alertas de meses em aberto, contratos e metas em risco
   const todosAlertasInteligentes = useMemo(() => {
-    return [...alertasMesesEmAberto, ...alertasContratosRenovacao, ...alertasMetasEmRisco]
-  }, [alertasMesesEmAberto, alertasContratosRenovacao, alertasMetasEmRisco])
+    // Alertas proativos de saúde financeira (Kanitz, Liquidez, Fleuriet, Margem, Endividamento)
+    const alertasIndicadores: AlertaMetaRiscoItem[] = []
+    const empresasParaAnalise = selectedEmpresaId
+      ? empresas.filter((e) => e.id === selectedEmpresaId)
+      : empresas
+
+    for (const emp of empresasParaAnalise) {
+      const bList = allBalancos.filter((b) => b.empresa === emp.id)
+      const dList = dres.filter((d) => d.empresa === emp.id)
+      const proativo = analisarAlertasProativos(bList, dList, selectedAno, emp)
+
+      for (const a of proativo.alertasCriticos) {
+        alertasIndicadores.push({
+          id: `proativo-${emp.id}-${a.id}`,
+          titulo: `${a.indicadorNome}: ${a.titulo} (${emp.nome})`,
+          descricao: a.descricao,
+          severidade: a.nivel === 'critico' ? 'red' : 'amber',
+          diasRestantes: 0,
+          tipoAlerta: 'meta',
+          empresaId: emp.id,
+        })
+      }
+    }
+
+    return [
+      ...alertasIndicadores,
+      ...alertasMesesEmAberto,
+      ...alertasContratosRenovacao,
+      ...alertasMetasEmRisco,
+    ]
+  }, [
+    empresas,
+    selectedEmpresaId,
+    allBalancos,
+    dres,
+    selectedAno,
+    alertasMesesEmAberto,
+    alertasContratosRenovacao,
+    alertasMetasEmRisco,
+  ])
 
   const [mostrarTodosAlertas, setMostrarTodosAlertas] = useState(false)
   const alertasVisiveis = mostrarTodosAlertas
@@ -1821,6 +1860,56 @@ export default function Dashboard() {
               const iconBoxBg = isRed ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
               const titleColor = isRed ? 'text-red-950' : 'text-amber-950'
               const descColor = isRed ? 'text-red-800' : 'text-amber-800'
+
+              if (alerta.id.startsWith('proativo-')) {
+                return (
+                  <div
+                    key={alerta.id}
+                    className={`text-left p-3.5 rounded-xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-2.5 ${cardBg}`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${iconBoxBg}`}
+                      >
+                        <Bot className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Badge
+                            className={`text-[9px] font-bold px-1.5 py-0 ${
+                              isRed
+                                ? 'bg-red-200/60 text-red-900 border-red-300'
+                                : 'bg-amber-200/60 text-amber-900 border-amber-300'
+                            }`}
+                          >
+                            Indicador Crítico (IA)
+                          </Badge>
+                        </div>
+                        <p className={`text-xs font-bold leading-snug line-clamp-2 ${titleColor}`}>
+                          {alerta.titulo}
+                        </p>
+                        <p className={`text-[11px] mt-1 line-clamp-2 ${descColor}`}>
+                          {alerta.descricao}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-black/5 text-[10px] font-semibold">
+                      <span className="text-slate-600 font-bold">Exercício {selectedAno}</span>
+                      <Button
+                        asChild
+                        size="sm"
+                        className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-bold px-2.5 shadow-xs gap-1"
+                      >
+                        <Link to="/agente-ia">
+                          <Bot className="w-3.5 h-3.5" />
+                          Diagnóstico IA <ArrowRight className="w-3 h-3 ml-0.5" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
 
               if (isMesAberto) {
                 return (

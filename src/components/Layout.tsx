@@ -940,27 +940,7 @@ export default function Layout() {
                     <div className="flex items-center justify-between flex-1">
                       <span>Agente de IA</span>
                       <span className="text-[9px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.2 rounded">
-                        NOVO
-                      </span>
-                    </div>
-                  </NavLink>
-                  <NavLink
-                    to="/agente-ia"
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                      location.pathname === '/agente-ia'
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
-                        : 'text-blue-200 bg-blue-950/30 border border-blue-900/30 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <Bot
-                      className={`w-4 h-4 ${
-                        location.pathname === '/agente-ia' ? 'text-blue-200' : 'text-blue-400'
-                      }`}
-                    />
-                    <div className="flex items-center justify-between flex-1">
-                      <span>Agente de IA</span>
-                      <span className="text-[9px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.2 rounded">
-                        NOVO
+                        Skip AI
                       </span>
                     </div>
                   </NavLink>

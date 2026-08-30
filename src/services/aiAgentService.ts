@@ -23,7 +23,9 @@ export interface SendMessageOptions {
   title?: string
   empresa?: EmpresaRecord | null
   ano?: number
+  anoComparacao?: number | null
   mes?: number | null
+  dadosContextoExtra?: string | null
   handlers?: StreamAgentChatHandlers
   signal?: AbortSignal
 }
@@ -44,6 +46,14 @@ export const PROMPTS_SUGERIDOS: PromptSugestao[] = [
     prompt:
       'Faça uma análise diagnóstica completa 360° da empresa no período selecionado: avalie Balanço Patrimonial, DRE, todos os índices de Liquidez, Endividamento, Rentabilidade, Modelo Fleuriet e Kanitz. Dê a classificação geral da situação (Saudável, Atenção ou Crítica), aponte os pontos fortes, pontos fracos e qual é o melhor caminho prático para melhorar os resultados operacionais e de caixa.',
     icone: 'Gauge',
+  },
+  {
+    id: 'comparar-periodos',
+    titulo: 'Comparar Períodos',
+    categoria: 'geral',
+    prompt:
+      'Compare detalhadamente o desempenho econômico-financeiro dos dois períodos selecionados: avalie a evolução de Receita, Custos, Lucro Líquido, Margens, EBITDA, Ativo Total, Patrimônio Líquido, índices de Liquidez, Endividamento, evolução no Modelo Fleuriet e no Termômetro de Kanitz. Destaque os avanços, retrocessos e recomende o plano de ação corretivo.',
+    icone: 'Scale',
   },
   {
     id: 'fleuriet-capital-giro',
@@ -103,20 +113,29 @@ export const aiAgentService = {
 
     // Adiciona metadados de contexto financeiro da tela caso disponíveis
     let contextualizedMessage = message.trim()
+    const { anoComparacao, dadosContextoExtra } = options
     if (empresa) {
-      const contextoExtra = [
+      const contextoExtraLinhas = [
         `\n\n[CONTEXTO ATUAL DA SESSÃO:`,
         `- Empresa: "${empresa.nome}" (ID: ${empresa.id}, CNPJ: ${empresa.cnpj || 'N/D'}, Segmento: ${empresa.segmento || 'Geral'})`,
-        ano ? `- Ano de Referência: ${ano}` : '',
+        ano ? `- Ano Principal de Referência: ${ano}` : '',
+        anoComparacao ? `- Ano de Comparação Selecionado: ${anoComparacao}` : '',
         mes ? `- Mês de Referência: ${mes}` : '',
-        `Consulte diretamente os registros de balancos, dre e demais coleções da empresa "${empresa.nome}" para fundamentar as respostas com números reais.]`,
+        dadosContextoExtra
+          ? `\n[DEMONSTRAÇÕES E INDICADORES CONSOLIDADOS]:\n${dadosContextoExtra}`
+          : '',
+        `Consulte diretamente os registros de balancos, dre e demais coleções da empresa "${empresa.nome}" para fundamentar as respostas com números reais comparativos.]`,
       ]
         .filter(Boolean)
         .join('\n')
 
-      // Se o usuário não mencionou o nome da empresa expressamente, contextualizamos no prompt
-      if (!contextualizedMessage.toLowerCase().includes(empresa.nome.toLowerCase())) {
-        contextualizedMessage = `${contextualizedMessage}${contextoExtra}`
+      // Se o usuário não mencionou o nome da empresa expressamente ou se há contexto comparativo, contextualizamos no prompt
+      if (
+        !contextualizedMessage.toLowerCase().includes(empresa.nome.toLowerCase()) ||
+        anoComparacao ||
+        dadosContextoExtra
+      ) {
+        contextualizedMessage = `${contextualizedMessage}${contextoExtraLinhas}`
       }
     }
 
@@ -156,8 +175,9 @@ export const aiAgentService = {
     conversationId?: string | null
     empresa?: EmpresaRecord | null
     ano?: number
+    anoComparacao?: number | null
   }) {
-    const { message, conversationId, empresa, ano } = options
+    const { message, conversationId, empresa, ano, anoComparacao } = options
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''
     const token = pb.authStore.token
 
@@ -167,7 +187,7 @@ export const aiAgentService = {
 
     let contextualizedMessage = message.trim()
     if (empresa) {
-      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}), Exercício: ${ano || 'Atual'}]`
+      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}]`
     }
 
     const res = await fetch(`${backendUrl}/backend/v1/agent-diagnostico/ask`, {

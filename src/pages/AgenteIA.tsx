@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import {
   aiAgentService,
   PROMPTS_SUGERIDOS,
@@ -18,7 +19,10 @@ import {
   formatBrlMil,
   formatNumber,
   formatPercent,
+  formatCurrency,
 } from '@/lib/financeCalculations'
+import { analisarAlertasProativos, type AlertaProativoItem } from '@/lib/alertasProativos'
+import { ModalPdfDiagnosticoA4 } from '@/components/ModalPdfDiagnosticoA4'
 import type { DisplayMessage, AgentCitation } from '@/lib/skipAi'
 import type { BalancoRecord, DreRecord } from '@/types/finance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,6 +41,7 @@ import {
   Building,
   Calendar,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   TrendingUp,
   Activity,
@@ -56,6 +61,10 @@ import {
   Sliders,
   Maximize2,
   Minimize2,
+  FileText,
+  Printer,
+  ArrowLeftRight,
+  X,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
@@ -70,6 +79,8 @@ export default function AgenteIA() {
     selectedEmpresa,
   } = useFilter()
 
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
+
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<DisplayMessage[]>([])
@@ -82,16 +93,33 @@ export default function AgenteIA() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null)
   const [expandedStats, setExpandedStats] = useState(true)
 
-  // Resumo financeiro rápido do período selecionado
+  // Comparação de períodos
+  const [modoComparacao, setModoComparacao] = useState(false)
+  const [anoComparacao, setAnoComparacao] = useState<number>(() => {
+    const anos = anosDisponiveis.filter((a) => a !== selectedAno)
+    return anos.length > 0 ? anos[0] : selectedAno - 1
+  })
+
+  // Modal de Exportação em PDF (Laudo A4)
+  const [modalPdfOpen, setModalPdfOpen] = useState(false)
+  const [pdfDiagnosticoTexto, setPdfDiagnosticoTexto] = useState('')
+  const [pdfCitations, setPdfCitations] = useState<AgentCitation[]>([])
+  const [pdfDataGeracao, setPdfDataGeracao] = useState<string>('')
+
+  // Resumo financeiro rápido do período selecionado e do período de comparação
+  const [balancosRaw, setBalancosRaw] = useState<BalancoRecord[]>([])
+  const [dresRaw, setDresRaw] = useState<DreRecord[]>([])
   const [balancoAno, setBalancoAno] = useState<BalancoRecord | null>(null)
   const [dreAno, setDreAno] = useState<DreRecord | null>(null)
+  const [balancoComp, setBalancoComp] = useState<BalancoRecord | null>(null)
+  const [dreComp, setDreComp] = useState<DreRecord | null>(null)
   const [loadingFinancials, setLoadingFinancials] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  // Rolagem automática suave para última mensagem
+  // Rolagem suave para última mensagem
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -100,12 +128,24 @@ export default function AgenteIA() {
     scrollToBottom()
   }, [messages, streamDelta, activeTool])
 
-  // Carregar dados contábeis consolidados da empresa/ano para o painel de contexto
+  // Ajustar ano de comparação caso o selectedAno mude
+  useEffect(() => {
+    if (anoComparacao === selectedAno) {
+      const outroAno = anosDisponiveis.find((a) => a !== selectedAno) || selectedAno - 1
+      setAnoComparacao(outroAno)
+    }
+  }, [selectedAno, anosDisponiveis, anoComparacao])
+
+  // Carregar dados contábeis consolidados da empresa/ano
   useEffect(() => {
     async function loadFinancialContext() {
       if (!selectedEmpresaId) {
         setBalancoAno(null)
         setDreAno(null)
+        setBalancoComp(null)
+        setDreComp(null)
+        setBalancosRaw([])
+        setDresRaw([])
         return
       }
       try {
@@ -114,10 +154,20 @@ export default function AgenteIA() {
           balancosService.getByEmpresa(selectedEmpresaId),
           dreService.getByEmpresa(selectedEmpresaId),
         ])
+        setBalancosRaw(bList)
+        setDresRaw(dList)
+
         const bConsolidado = consolidarBalancoAnual(bList, selectedAno)
         const dConsolidado = consolidarDreAnual(dList, selectedAno)
         setBalancoAno(bConsolidado)
         setDreAno(dConsolidado)
+
+        if (anoComparacao) {
+          const bComp = consolidarBalancoAnual(bList, anoComparacao)
+          const dComp = consolidarDreAnual(dList, anoComparacao)
+          setBalancoComp(bComp)
+          setDreComp(dComp)
+        }
       } catch (err) {
         console.warn('Erro ao carregar contexto financeiro da empresa:', err)
       } finally {
@@ -126,7 +176,12 @@ export default function AgenteIA() {
     }
 
     loadFinancialContext()
-  }, [selectedEmpresaId, selectedAno])
+  }, [selectedEmpresaId, selectedAno, anoComparacao])
+
+  // Alertas proativos de indicadores críticos
+  const analiseProativa = useMemo(() => {
+    return analisarAlertasProativos(balancosRaw, dresRaw, selectedAno, selectedEmpresa)
+  }, [balancosRaw, dresRaw, selectedAno, selectedEmpresa])
 
   // Carregar lista de conversas do backend
   const refreshConversations = async () => {
@@ -174,6 +229,46 @@ export default function AgenteIA() {
     }, 100)
   }
 
+  // Prepara o bloco comparativo consolidado para injeção no prompt do agente
+  const montarContextoComparativo = () => {
+    if (!modoComparacao || !anoComparacao) return null
+
+    const b1 = balancoAno
+    const d1 = dreAno
+    const b2 = balancoComp
+    const d2 = dreComp
+
+    const ind1 = calcularIndicadores(b1, d1)
+    const ind2 = calcularIndicadores(b2, d2)
+    const k1 = calcularKanitz(b1, d1)
+    const k2 = calcularKanitz(b2, d2)
+    const f1 = calcularCapitalGiro(b1, d1)
+    const f2 = calcularCapitalGiro(b2, d2)
+
+    return `
+--- DADOS CONSOLIDADOS PARA COMPARAÇÃO ---
+* ANO BASE: ${selectedAno}
+  - Receita Líquida: ${formatBrlMil(d1?.receita_liquida || 0)}
+  - Lucro Líquido: ${formatBrlMil(d1?.lucro_liquido || 0)} (Margem Líquida: ${formatPercent(ind1.margemLiquida, 1)})
+  - EBITDA: ${formatBrlMil(d1?.ebitda || 0)}
+  - Ativo Total: ${formatBrlMil(b1?.ativo_total || 0)} | Patrimônio Líquido: ${formatBrlMil(b1?.patrimonio_liquido || 0)}
+  - Liquidez Corrente: ${formatNumber(ind1.liquidezCorrente, 2)} | Liquidez Seca: ${formatNumber(ind1.liquidezSeca, 2)}
+  - Endividamento Geral: ${formatPercent(ind1.endividamentoGeral, 1)}
+  - Fleuriet: ${f1.tipoFleurietNome} (CGL: ${formatBrlMil(f1.cgl || 0)}, NCG: ${formatBrlMil(f1.ncg || 0)}, ST: ${formatBrlMil(f1.saldoTesouraria || 0)})
+  - Kanitz: FI = ${formatNumber(k1.fi, 2)} (${k1.statusTexto})
+
+* ANO DE COMPARAÇÃO: ${anoComparacao}
+  - Receita Líquida: ${formatBrlMil(d2?.receita_liquida || 0)}
+  - Lucro Líquido: ${formatBrlMil(d2?.lucro_liquido || 0)} (Margem Líquida: ${formatPercent(ind2.margemLiquida, 1)})
+  - EBITDA: ${formatBrlMil(d2?.ebitda || 0)}
+  - Ativo Total: ${formatBrlMil(b2?.ativo_total || 0)} | Patrimônio Líquido: ${formatBrlMil(b2?.patrimonio_liquido || 0)}
+  - Liquidez Corrente: ${formatNumber(ind2.liquidezCorrente, 2)} | Liquidez Seca: ${formatNumber(ind2.liquidezSeca, 2)}
+  - Endividamento Geral: ${formatPercent(ind2.endividamentoGeral, 1)}
+  - Fleuriet: ${f2.tipoFleurietNome} (CGL: ${formatBrlMil(f2.cgl || 0)}, NCG: ${formatBrlMil(f2.ncg || 0)}, ST: ${formatBrlMil(f2.saldoTesouraria || 0)})
+  - Kanitz: FI = ${formatNumber(k2.fi, 2)} (${k2.statusTexto})
+------------------------------------------`
+  }
+
   // Envio de mensagem (streaming com agente nativo Skip Cloud)
   const handleSendMessage = async (customText?: string) => {
     const textToSend = (customText ?? inputMessage).trim()
@@ -185,7 +280,6 @@ export default function AgenteIA() {
     setActiveTool(null)
     setActiveCitations([])
 
-    // Adiciona a mensagem do usuário na tela de imediato
     const userMsg: DisplayMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -197,12 +291,16 @@ export default function AgenteIA() {
     const abortCtrl = new AbortController()
     abortControllerRef.current = abortCtrl
 
+    const contextoComparativo = modoComparacao ? montarContextoComparativo() : null
+
     try {
       const result = await aiAgentService.sendMessageStream({
         message: textToSend,
         conversationId: activeConversationId,
         empresa: selectedEmpresa,
         ano: selectedAno,
+        anoComparacao: modoComparacao ? anoComparacao : null,
+        dadosContextoExtra: contextoComparativo,
         signal: abortCtrl.signal,
         handlers: {
           onChunk: (_delta, full) => {
@@ -223,13 +321,11 @@ export default function AgenteIA() {
         },
       })
 
-      // Fixa o ID da conversa retornado pelo backend
       if (result.conversationId) {
         setActiveConversationId(result.conversationId)
         refreshConversations()
       }
 
-      // Adiciona mensagem final do assistente ao histórico da tela
       const assistantMsg: DisplayMessage = {
         id: result.messageId || `asst-${Date.now()}`,
         role: 'assistant',
@@ -256,6 +352,43 @@ export default function AgenteIA() {
       setActiveTool(null)
       abortControllerRef.current = null
     }
+  }
+
+  // Abertura do Modal de PDF para exportar laudo A4
+  const handleOpenPdfExport = (
+    mensagemConteudo?: string,
+    citacoes?: AgentCitation[],
+    dataMsg?: string,
+  ) => {
+    let texto = mensagemConteudo
+
+    // Se não veio mensagem específica, pega a última resposta do agente
+    if (!texto) {
+      const ultimaDoAgente = [...messages].reverse().find((m) => m.role === 'assistant')
+      if (ultimaDoAgente) {
+        texto = ultimaDoAgente.content
+        citacoes = ultimaDoAgente.citations
+        dataMsg = ultimaDoAgente.created
+      } else if (streamDelta) {
+        texto = streamDelta
+        citacoes = activeCitations
+      }
+    }
+
+    if (!texto) {
+      toast({
+        title: 'Nenhum diagnóstico disponível',
+        description:
+          'Gere primeiro uma análise com o Agente de IA para poder exportar o Laudo A4 em PDF.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setPdfDiagnosticoTexto(texto)
+    setPdfCitations(citacoes || [])
+    setPdfDataGeracao(dataMsg || new Date().toISOString())
+    setModalPdfOpen(true)
   }
 
   const handleCopyMessage = (text: string, index: number) => {
@@ -306,6 +439,13 @@ export default function AgenteIA() {
   const saude = getSaudeEmpresa()
   const SaudeIcon = saude.icon
 
+  // Prompt rápido de comparação entre os dois anos selecionados
+  const handlePromptComparacao = () => {
+    setModoComparacao(true)
+    const promptTexto = `Faça uma análise comparativa aprofundada dos exercícios de ${selectedAno} e ${anoComparacao} para ${selectedEmpresa?.nome || 'a empresa'}: compare a evolução da Receita Líquida, Margem Bruta, Margem EBITDA, Margem Líquida, Liquidez Corrente, Endividamento Geral, a dinâmica de Capital de Giro pelo Modelo Fleuriet e a evolução do Fator de Insolvência de Kanitz. Destaque os avanços, gargalos e qual o melhor plano de ação para os próximos períodos.`
+    handleSendMessage(promptTexto)
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] min-h-[640px] max-w-7xl mx-auto gap-3">
       {/* 1. Header Superior com Contexto da Empresa e Indicadores Chave */}
@@ -317,7 +457,7 @@ export default function AgenteIA() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-base sm:text-lg font-bold text-[#0B1F3A] leading-tight">
-                Agente de Diagnóstico & Estratégia Financeira
+                Agente de Diagnóstico &amp; Estratégia Financeira
               </h1>
               <Badge
                 variant="outline"
@@ -328,14 +468,14 @@ export default function AgenteIA() {
               </Badge>
             </div>
             <p className="text-xs text-slate-500 line-clamp-1">
-              Assistente persistente com leitura direta de Balanço, DRE, Indicadores, Fleuriet e
-              Kanitz
+              Assistente persistente com leitura de Balanço, DRE, Fleuriet, Kanitz e laudo A4 em PDF
             </p>
           </div>
         </div>
 
-        {/* Seletores Rápidos de Empresa e Ano integrados */}
+        {/* Seletores Rápidos de Empresa, Ano Principal e Ano de Comparação */}
         <div className="flex items-center gap-2 flex-wrap justify-between md:justify-end">
+          {/* Seletor de Empresa */}
           <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
             <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
             <select
@@ -351,8 +491,10 @@ export default function AgenteIA() {
             </select>
           </div>
 
+          {/* Seletor de Ano Principal */}
           <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
             <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">Ano:</span>
             <select
               value={String(selectedAno)}
               onChange={(e) => setSelectedAno(Number(e.target.value))}
@@ -365,6 +507,57 @@ export default function AgenteIA() {
               ))}
             </select>
           </div>
+
+          {/* Botão de Toggle do Modo Comparação de Períodos */}
+          <button
+            type="button"
+            onClick={() => setModoComparacao((prev) => !prev)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
+              modoComparacao
+                ? 'bg-indigo-50 border-indigo-300 text-indigo-900 shadow-2xs'
+                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+            title="Ativar comparação entre dois anos contábeis"
+          >
+            <ArrowLeftRight
+              className={`w-3.5 h-3.5 ${modoComparacao ? 'text-indigo-600' : 'text-slate-500'}`}
+            />
+            <span>Comparar</span>
+          </button>
+
+          {/* Seletor de Ano de Comparação (se modo comparação ativo) */}
+          {modoComparacao && (
+            <div className="flex items-center gap-1 bg-indigo-50 border border-indigo-300 rounded-lg px-2 py-1 text-xs animate-in fade-in duration-200">
+              <span className="text-[10px] text-indigo-700 font-bold uppercase">vs:</span>
+              <select
+                value={String(anoComparacao)}
+                onChange={(e) => setAnoComparacao(Number(e.target.value))}
+                className="bg-transparent border-none text-xs font-bold text-indigo-950 focus:outline-none cursor-pointer"
+              >
+                {anosDisponiveis
+                  .filter((a) => a !== selectedAno)
+                  .map((ano) => (
+                    <option key={ano} value={String(ano)}>
+                      {ano}
+                    </option>
+                  ))}
+                {!anosDisponiveis.some((a) => a !== selectedAno) && (
+                  <option value={String(selectedAno - 1)}>{selectedAno - 1}</option>
+                )}
+              </select>
+            </div>
+          )}
+
+          {/* Botão Exportar PDF A4 */}
+          <Button
+            size="sm"
+            onClick={() => handleOpenPdfExport()}
+            className="h-7 text-xs font-bold bg-[#0B1F3A] hover:bg-blue-900 text-white gap-1.5 shadow-2xs"
+            title="Exportar laudo de diagnóstico financeiro em PDF padrão A4"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Exportar</span> Laudo PDF
+          </Button>
 
           <button
             onClick={() => setExpandedStats((prev) => !prev)}
@@ -381,7 +574,51 @@ export default function AgenteIA() {
         </div>
       </div>
 
-      {/* 2. Mini-Painel de Indicadores Vivos (Retrátil) */}
+      {/* 2. Banner de Alertas Proativos de Indicadores Críticos (se houver) */}
+      {analiseProativa.temAlertas && (
+        <div className="bg-gradient-to-r from-rose-50 via-amber-50 to-rose-50 border border-rose-200/80 rounded-xl p-3 shrink-0 shadow-2xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-start sm:items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                <AlertTriangle className="w-4 h-4 animate-pulse" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-rose-950">
+                    Alerta Proativo: {analiseProativa.totalCriticos} indicador(es) crítico(s)
+                    detectado(s) em {selectedAno}
+                  </span>
+                  <Badge className="bg-rose-600 text-white text-[10px] px-1.5 py-0">
+                    Zona Crítica
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-0.5 line-clamp-1 sm:line-clamp-none">
+                  {analiseProativa.alertasCriticos.map((a) => a.indicadorNome).join(' · ')}
+                </p>
+              </div>
+            </div>
+
+            {/* Ações rápidas dos alertas */}
+            <div className="flex items-center gap-1.5 flex-wrap self-end sm:self-center">
+              {analiseProativa.alertasCriticos.slice(0, 2).map((alerta) => (
+                <Button
+                  key={alerta.id}
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleSendMessage(alerta.acaoPrompt)}
+                  disabled={isStreaming}
+                  className="h-6.5 text-[11px] px-2.5 bg-white border-rose-300 text-rose-900 hover:bg-rose-100 font-semibold gap-1 shadow-2xs"
+                >
+                  <Zap className="w-3 h-3 text-rose-600" />
+                  Diagnosticar {alerta.indicadorNome}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Mini-Painel de Indicadores Vivos (Retrátil) */}
       {expandedStats && (
         <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-xs shrink-0 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 transition-all text-xs">
           {/* Status Geral */}
@@ -433,7 +670,13 @@ export default function AgenteIA() {
             </span>
             <div className="flex items-center gap-1">
               <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-              <span className="font-bold text-slate-800 text-sm">
+              <span
+                className={`font-bold text-sm ${
+                  indCalc.liquidezCorrente !== null && indCalc.liquidezCorrente < 0.8
+                    ? 'text-rose-600 font-extrabold'
+                    : 'text-slate-800'
+                }`}
+              >
                 {formatNumber(indCalc.liquidezCorrente, 2)}
               </span>
             </div>
@@ -465,7 +708,13 @@ export default function AgenteIA() {
             <div className="flex items-center gap-1">
               <Flame className="w-3.5 h-3.5 text-purple-600 shrink-0" />
               <span
-                className={`font-bold text-sm ${kanitzCalc.corStatus === 'verde' ? 'text-emerald-700' : kanitzCalc.corStatus === 'vermelho' ? 'text-rose-600' : 'text-amber-600'}`}
+                className={`font-bold text-sm ${
+                  kanitzCalc.corStatus === 'verde'
+                    ? 'text-emerald-700'
+                    : kanitzCalc.corStatus === 'vermelho'
+                      ? 'text-rose-600'
+                      : 'text-amber-600'
+                }`}
               >
                 {kanitzCalc.fi !== null ? formatNumber(kanitzCalc.fi, 2) : '—'}
               </span>
@@ -474,7 +723,7 @@ export default function AgenteIA() {
         </div>
       )}
 
-      {/* 3. Área Principal: Sidebar de Conversas + Chat Stream Interativo */}
+      {/* 4. Área Principal: Sidebar de Conversas + Chat Stream Interativo */}
       <div className="flex-1 min-h-0 flex gap-3 overflow-hidden">
         {/* Sidebar Esquerda (Histórico de Conversas e Prompts Sugeridos) */}
         <div className="hidden md:flex flex-col w-72 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden shrink-0">
@@ -559,7 +808,8 @@ export default function AgenteIA() {
                   </h2>
                   <p className="text-xs text-slate-500 mt-1 max-w-lg mx-auto">
                     Sou o Agente de IA nativo com acesso direto a todo o histórico de Balanços,
-                    DREs, lançamentos, impostos e indicadores da empresa em {selectedAno}. Escolha
+                    DREs, lançamentos, impostos e indicadores da empresa em {selectedAno}
+                    {modoComparacao ? ` (com comparação ativa a ${anoComparacao})` : ''}. Escolha
                     uma das análises prontas abaixo ou digite sua dúvida.
                   </p>
                 </div>
@@ -567,18 +817,41 @@ export default function AgenteIA() {
                 {/* Grid de Prompts Prontos */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {PROMPTS_SUGERIDOS.map((sugestao) => {
+                    const isComparar = sugestao.id === 'comparar-periodos'
                     return (
                       <button
                         key={sugestao.id}
-                        onClick={() => handleSendMessage(sugestao.prompt)}
-                        className="text-left p-3 rounded-xl border border-slate-200 hover:border-blue-300 hover:bg-blue-50/40 transition-all group flex items-start gap-3 bg-white shadow-2xs"
+                        onClick={() => {
+                          if (isComparar) {
+                            handlePromptComparacao()
+                          } else {
+                            handleSendMessage(sugestao.prompt)
+                          }
+                        }}
+                        className={`text-left p-3 rounded-xl border transition-all group flex items-start gap-3 bg-white shadow-2xs ${
+                          isComparar
+                            ? 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/40 bg-indigo-50/10'
+                            : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/40'
+                        }`}
                       >
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
+                            isComparar
+                              ? 'bg-indigo-100 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
+                              : 'bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'
+                          }`}
+                        >
                           <Zap className="w-4 h-4" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-xs text-slate-800 group-hover:text-blue-900">
+                            <span
+                              className={`font-semibold text-xs ${
+                                isComparar
+                                  ? 'text-indigo-950 group-hover:text-indigo-900'
+                                  : 'text-slate-800 group-hover:text-blue-900'
+                              }`}
+                            >
                               {sugestao.titulo}
                             </span>
                             <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 transition-transform group-hover:translate-x-0.5" />
@@ -625,19 +898,29 @@ export default function AgenteIA() {
                         : 'bg-[#F8FAFC] text-slate-800 border border-slate-200 rounded-tl-xs'
                     }`}
                   >
-                    {/* Botão de cópia rápida para mensagens do assistente */}
+                    {/* Botões de Ação para mensagens do assistente (Copiar e Exportar PDF) */}
                     {!isUser && (
-                      <button
-                        onClick={() => handleCopyMessage(m.content, idx)}
-                        className="absolute top-2 right-2 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Copiar texto"
-                      >
-                        {copiedIndex === idx ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleOpenPdfExport(m.content, m.citations, m.created)}
+                          className="p-1 rounded-md text-slate-500 hover:text-[#0B1F3A] hover:bg-slate-200/60 transition-colors flex items-center gap-1 text-[11px] font-semibold bg-white border border-slate-200 shadow-2xs px-1.5"
+                          title="Exportar esta análise em laudo PDF A4"
+                        >
+                          <Printer className="w-3 h-3 text-blue-600" />
+                          <span>PDF A4</span>
+                        </button>
+                        <button
+                          onClick={() => handleCopyMessage(m.content, idx)}
+                          className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors bg-white border border-slate-200 shadow-2xs"
+                          title="Copiar texto"
+                        >
+                          {copiedIndex === idx ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     )}
 
                     {/* Conteúdo formatado */}
@@ -744,42 +1027,51 @@ export default function AgenteIA() {
 
           {/* Barra de Entrada de Mensagem */}
           <div className="p-3 sm:p-4 bg-white border-t border-slate-200">
-            {/* Sugestões rápidas acima do input se houver mensagens */}
-            {messages.length > 0 && !isStreaming && (
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-1 scrollbar-none">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase shrink-0">
-                  Perguntar:
-                </span>
-                <button
-                  onClick={() =>
-                    handleSendMessage(
-                      'Qual é o melhor caminho prático para melhorar os resultados e estancar perdas de caixa?',
-                    )
-                  }
-                  className="px-2 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] text-slate-600 transition-colors shrink-0"
-                >
-                  💡 Plano para melhorar resultados
-                </button>
-                <button
-                  onClick={() =>
-                    handleSendMessage(
-                      'Como está o risco de insolvência segundo o Termômetro de Kanitz?',
-                    )
-                  }
-                  className="px-2 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] text-slate-600 transition-colors shrink-0"
-                >
-                  🔥 Diagnóstico Kanitz
-                </button>
-                <button
-                  onClick={() =>
-                    handleSendMessage('A empresa corre risco de Efeito Tesoura no Capital de Giro?')
-                  }
-                  className="px-2 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] text-slate-600 transition-colors shrink-0"
-                >
-                  ⚠️ Risco Efeito Tesoura
-                </button>
-              </div>
-            )}
+            {/* Sugestões rápidas acima do input */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2 mb-1 scrollbar-none">
+              <span className="text-[10px] font-semibold text-slate-400 uppercase shrink-0">
+                Atalhos:
+              </span>
+              <button
+                type="button"
+                onClick={handlePromptComparacao}
+                className="px-2 py-1 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-[11px] font-semibold transition-colors shrink-0 flex items-center gap-1"
+              >
+                <ArrowLeftRight className="w-3 h-3 text-indigo-600" />
+                Comparar {selectedAno} vs {anoComparacao}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSendMessage(
+                    'Qual é o melhor caminho prático para melhorar os resultados e estancar perdas de caixa?',
+                  )
+                }
+                className="px-2 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] text-slate-600 transition-colors shrink-0"
+              >
+                💡 Plano para melhorar resultados
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSendMessage(
+                    'Como está o risco de insolvência segundo o Termômetro de Kanitz?',
+                  )
+                }
+                className="px-2 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] text-slate-600 transition-colors shrink-0"
+              >
+                🔥 Diagnóstico Kanitz
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  handleSendMessage('A empresa corre risco de Efeito Tesoura no Capital de Giro?')
+                }
+                className="px-2 py-1 rounded-full bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] text-slate-600 transition-colors shrink-0"
+              >
+                ⚠️ Risco Efeito Tesoura
+              </button>
+            </div>
 
             <form
               onSubmit={(e) => {
@@ -798,7 +1090,7 @@ export default function AgenteIA() {
                     handleSendMessage()
                   }
                 }}
-                placeholder={`Pergunte sobre Balanço, DRE, Liquidez, Kanitz ou melhorias para ${selectedEmpresa?.nome || 'a empresa'}...`}
+                placeholder={`Pergunte sobre Balanço, DRE, Liquidez, Kanitz, Comparação ${selectedAno} vs ${anoComparacao} para ${selectedEmpresa?.nome || 'a empresa'}...`}
                 className="min-h-[44px] max-h-[140px] resize-none border-none shadow-none bg-transparent text-xs sm:text-sm focus-visible:ring-0 p-1 placeholder:text-slate-400 text-slate-800"
                 rows={1}
                 disabled={isStreaming}
@@ -828,21 +1120,41 @@ export default function AgenteIA() {
                 )}
               </div>
             </form>
-            <div className="flex items-center justify-between text-[10px] text-slate-400 px-1 mt-1.5">
+            <div className="flex items-center justify-between text-[10px] text-slate-400 px-1 mt-1.5 flex-wrap gap-1">
               <span>
                 Pressione <strong>Enter</strong> para enviar, <strong>Shift+Enter</strong> para
                 quebrar linha.
               </span>
               <span>
-                Contexto ativo:{' '}
+                Contexto:{' '}
                 <strong>
-                  {selectedEmpresa?.nome || 'Nenhuma'} ({selectedAno})
+                  {selectedEmpresa?.nome || 'Nenhuma'} ({selectedAno}
+                  {modoComparacao ? ` vs ${anoComparacao}` : ''})
                 </strong>
               </span>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 5. Modal de Exportação do Laudo A4 em PDF */}
+      <ModalPdfDiagnosticoA4
+        open={modalPdfOpen}
+        onOpenChange={setModalPdfOpen}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        anoComparacao={modoComparacao ? anoComparacao : null}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+        diagnosticoTexto={pdfDiagnosticoTexto}
+        citations={pdfCitations}
+        dataGeracao={pdfDataGeracao}
+        balancoAno={balancoAno}
+        dreAno={dreAno}
+        balancoComp={balancoComp}
+        dreComp={dreComp}
+        todasMensagens={messages}
+      />
     </div>
   )
 }
