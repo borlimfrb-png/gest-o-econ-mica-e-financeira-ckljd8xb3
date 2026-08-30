@@ -216,22 +216,16 @@ export default function CadastroFichaTecnica() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [fList, pList, mList] = await Promise.all([
+      const [fList, pList, mList, cfg] = await Promise.all([
         fichasTecnicasService.getAll(),
         produtosService.getAll(),
         materiasPrimasService.getAll(),
+        selectedEmpresaId
+          ? configuracoesTributariasService.getByEmpresa(selectedEmpresaId).catch(() => null)
+          : Promise.resolve(null),
       ])
 
-      // Carregar tributos da empresa ativa se houver
-      if (selectedEmpresaId) {
-        try {
-          const cfg = await configuracoesTributariasService.getByEmpresa(selectedEmpresaId)
-          setConfigTributaria(cfg)
-        } catch {
-          setConfigTributaria(null)
-        }
-      }
-
+      setConfigTributaria(cfg)
       setFichas(fList)
       setProdutos(pList)
       setMaterias(mList)
@@ -259,7 +253,7 @@ export default function CadastroFichaTecnica() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [selectedEmpresaId])
 
   useRealtime<FichaTecnicaRecord>('fichas_tecnicas', () => loadData())
   useRealtime<ProdutoRecord>('produtos', () => loadData())

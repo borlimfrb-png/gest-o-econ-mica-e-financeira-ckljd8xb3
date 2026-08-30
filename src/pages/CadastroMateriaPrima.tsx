@@ -1,6 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { materiasPrimasService, fichasTecnicasService } from '@/services/formacaoPrecoService'
-import type { MateriaPrimaRecord, FichaTecnicaRecord } from '@/types/finance'
+import {
+  materiasPrimasService,
+  fichasTecnicasService,
+  configuracoesTributariasService,
+} from '@/services/formacaoPrecoService'
+import { useFilter } from '@/contexts/FilterContext'
+import type {
+  MateriaPrimaRecord,
+  FichaTecnicaRecord,
+  ConfiguracaoTributariaRecord,
+} from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -164,6 +173,7 @@ export interface ItemCurvaABC {
   unidade: string
   categoria: string
   custo_unitario: number
+  custo_com_impostos: number
   quantidade: number
   valor_total: number
   percentual_individual: number
@@ -175,9 +185,13 @@ export interface ItemCurvaABC {
 
 export default function CadastroMateriaPrima() {
   const { toast } = useToast()
+  const { selectedEmpresaId } = useFilter()
 
   const [materias, setMaterias] = useState<MateriaPrimaRecord[]>([])
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
+  const [configTributaria, setConfigTributaria] = useState<ConfiguracaoTributariaRecord | null>(
+    null,
+  )
   const [loading, setLoading] = useState(true)
 
   // Aba ativa: 'catalogo' | 'curva-abc'
@@ -211,14 +225,18 @@ export default function CadastroMateriaPrima() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [mList, fList] = await Promise.all([
+      const [mList, fList, cfg] = await Promise.all([
         materiasPrimasService.getAll(),
         fichasTecnicasService.getAll(),
+        selectedEmpresaId
+          ? configuracoesTributariasService.getByEmpresa(selectedEmpresaId)
+          : Promise.resolve(null),
       ])
       setMaterias(mList)
       setFichas(fList)
+      setConfigTributaria(cfg)
     } catch (err) {
-      console.error('Erro ao carregar matérias-primas:', err)
+      console.error('Erro ao carregar matérias-primas/tributos:', err)
       toast({
         variant: 'destructive',
         title: 'Erro ao carregar',
@@ -231,7 +249,7 @@ export default function CadastroMateriaPrima() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [selectedEmpresaId])
 
   useRealtime<MateriaPrimaRecord>('materias_primas', () => loadData())
   useRealtime<FichaTecnicaRecord>('fichas_tecnicas', () => loadData())
@@ -264,9 +282,13 @@ export default function CadastroMateriaPrima() {
       }
     }
 
-    // 2. Calcula valor consumido (quantidade × custo unitário) por item
+    // 2. Calcula valor consumido (quantidade × custo unitário) por item e custo com impostos
+    const cargaTrib = Number(configTributaria?.carga_tributaria_total) || 0
+    const fatorGrossUp = cargaTrib > 0 && cargaTrib < 100 ? 1 / (1 - cargaTrib / 100) : 1
+
     const itensCalculados = materias.map((m) => {
       const custoUnit = Number(m.custo_unitario) || 0
+      const custoComImpostos = custoUnit > 0 ? Number((custoUnit * fatorGrossUp).toFixed(4)) : 0
       const consumoInfo = consumoFichasMap.get(m.id)
       const qtdConsumoFichas = consumoInfo ? consumoInfo.qtd : 0
       const qtdEstoque = Number(m.estoque_atual) || 0
@@ -284,6 +306,7 @@ export default function CadastroMateriaPrima() {
         unidade: m.unidade || 'UN',
         categoria: m.categoria || 'Geral',
         custo_unitario: custoUnit,
+        custo_com_impostos: custoComImpostos,
         quantidade: qtdBase,
         valor_total: valorTotal,
         percentual_individual: 0,
@@ -368,7 +391,7 @@ export default function CadastroMateriaPrima() {
         pctItens: pctItensC,
       },
     }
-  }, [materias, fichas, baseCalculoABC])
+  }, [materias, fichas, baseCalculoABC, configTributaria])
 
   // Itens da Curva ABC filtrados para a tabela
   const curvaABCFiltrada = useMemo(() => {
@@ -698,6 +721,7 @@ export default function CadastroMateriaPrima() {
         ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : ''
 
+    const cargaTrib = Number(configTributaria?.carga_tributaria_total) || 0
     const headers = [
       'Ranking (Posição)',
       'Classe ABC',
@@ -705,7 +729,8 @@ export default function CadastroMateriaPrima() {
       'Matéria-Prima',
       'Unidade',
       'Categoria',
-      'Custo Unitário (R$)',
+      'Custo Unitário s/ Impostos (R$)',
+      `Custo Unitário c/ Impostos (${cargaTrib.toFixed(2)}%) (R$)`,
       baseCalculoABC === 'consumo_fichas' ? 'Qtd Consumo em Fichas' : 'Estoque Atual (Qtd)',
       'Fichas Técnicas Atendidas',
       'Valor Total Consumido / Valorizado (R$)',
@@ -764,6 +789,7 @@ export default function CadastroMateriaPrima() {
           it.unidade,
           it.categoria,
           fmtNum(it.custo_unitario),
+          fmtNum(it.custo_com_impostos),
           it.quantidade.toLocaleString('pt-BR', {
             minimumFractionDigits: 0,
             maximumFractionDigits: 3,
@@ -1757,13 +1783,19 @@ export default function CadastroMateriaPrima() {
                         <th className="py-3 px-3 text-center">Classe</th>
                         <th className="py-3 px-3.5">Matéria-Prima</th>
                         <th className="py-3 px-3">Unid.</th>
-                        <th className="py-3 px-3.5 text-right">Custo Unitário</th>
+                        <th className="py-3 px-3 text-right">Custo s/ Imp.</th>
+                        <th className="py-3 px-3 text-right text-amber-700">
+                          Custo c/ Imp.{' '}
+                          {configTributaria?.carga_tributaria_total
+                            ? `(${Number(configTributaria.carga_tributaria_total).toFixed(1)}%)`
+                            : ''}
+                        </th>
                         <th className="py-3 px-3.5 text-right">
                           {baseCalculoABC === 'consumo_fichas' ? 'Qtd em Fichas' : 'Estoque Atual'}
                         </th>
                         <th className="py-3 px-3.5 text-right">Valor Total (R$)</th>
-                        <th className="py-3 px-3.5 text-right">% Individual</th>
-                        <th className="py-3 px-3.5 text-right">% Acumulado</th>
+                        <th className="py-3 px-3 text-right">% Indiv.</th>
+                        <th className="py-3 px-3 text-right">% Acum.</th>
                         <th className="py-3 px-4">Diretriz de Negociação / Estratégia</th>
                       </tr>
                     </thead>
@@ -1810,8 +1842,11 @@ export default function CadastroMateriaPrima() {
                             <td className="py-3 px-3 font-semibold text-slate-600">
                               {item.unidade}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-medium text-slate-700 font-mono whitespace-nowrap">
+                            <td className="py-3 px-3 text-right font-medium text-slate-700 font-mono whitespace-nowrap">
                               {formatBrl(item.custo_unitario)}
+                            </td>
+                            <td className="py-3 px-3 text-right font-bold text-amber-700 font-mono whitespace-nowrap bg-amber-50/30">
+                              {formatBrl(item.custo_com_impostos)}
                             </td>
                             <td className="py-3 px-3.5 text-right font-semibold text-slate-800 font-mono whitespace-nowrap">
                               {item.quantidade.toLocaleString('pt-BR', {
@@ -1822,10 +1857,10 @@ export default function CadastroMateriaPrima() {
                             <td className="py-3 px-3.5 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
                               {formatBrl(item.valor_total)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-medium text-slate-700 font-mono whitespace-nowrap">
+                            <td className="py-3 px-3 text-right font-medium text-slate-700 font-mono whitespace-nowrap">
                               {item.percentual_individual.toFixed(2)}%
                             </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-blue-700 font-mono whitespace-nowrap">
+                            <td className="py-3 px-3 text-right font-bold text-blue-700 font-mono whitespace-nowrap">
                               {item.percentual_acumulado.toFixed(2)}%
                             </td>
                             <td className="py-3 px-4 text-xs text-slate-600 min-w-[260px]">
@@ -1852,14 +1887,14 @@ export default function CadastroMateriaPrima() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-900">
-                        <td colSpan={6} className="py-3 px-3.5 uppercase text-xs">
+                        <td colSpan={7} className="py-3 px-3.5 uppercase text-xs">
                           Total Geral Apurado ({curvaABCData.totalItens} insumos)
                         </td>
                         <td className="py-3 px-3.5 text-right font-mono text-sm">
                           {formatBrl(curvaABCData.valorGeralConsumido)}
                         </td>
-                        <td className="py-3 px-3.5 text-right font-mono">100.00%</td>
-                        <td className="py-3 px-3.5 text-right font-mono text-blue-700">100.00%</td>
+                        <td className="py-3 px-3 text-right font-mono">100.00%</td>
+                        <td className="py-3 px-3 text-right font-mono text-blue-700">100.00%</td>
                         <td className="py-3 px-4 text-slate-400">—</td>
                       </tr>
                     </tfoot>

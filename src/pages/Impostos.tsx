@@ -63,6 +63,11 @@ import {
   AlertCircle,
   CheckCircle,
   BarChart3,
+  FileText,
+  Printer,
+  GitCompare,
+  ArrowUpDown,
+  ShieldCheck,
 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -76,6 +81,7 @@ import {
   Cell,
   Legend,
 } from 'recharts'
+import { ModalPdfImpostos } from '@/components/ModalPdfImpostos'
 
 export default function Impostos() {
   const { toast } = useToast()
@@ -115,6 +121,23 @@ export default function Impostos() {
   // Estados específicos para Análise de Sensibilidade
   const [passoCargaSensibilidade, setPassoCargaSensibilidade] = useState<number>(3) // ex: +/- 3%
   const [passoMargemSensibilidade, setPassoMargemSensibilidade] = useState<number>(5) // ex: +/- 5%
+
+  // Estados para o Modal de Exportação PDF Executivo
+  const [pdfModalOpen, setPdfModalOpen] = useState(false)
+  const [pdfTipo, setPdfTipo] = useState<'comparativo_regimes' | 'enquadramento_rbt12'>(
+    'comparativo_regimes',
+  )
+
+  // Estados para Comparativo de Carga Tributária entre 2 Empresas
+  const [empresaCompAId, setEmpresaCompAId] = useState<string>('')
+  const [empresaCompBId, setEmpresaCompBId] = useState<string>('')
+  const [configEmpresaCompA, setConfigEmpresaCompA] = useState<ConfiguracaoTributariaRecord | null>(
+    null,
+  )
+  const [configEmpresaCompB, setConfigEmpresaCompB] = useState<ConfiguracaoTributariaRecord | null>(
+    null,
+  )
+  const [loadingCompEmpresas, setLoadingCompEmpresas] = useState(false)
 
   // Empresa atual selecionada
   const empresaAtual = useMemo(() => {
@@ -199,6 +222,145 @@ export default function Impostos() {
       carregarProdutosEFichas()
     }
   }, [selectedEmpresaId, carregarConfiguracaoEDre, carregarProdutosEFichas])
+
+  // Inicializar seleção das duas empresas para comparação
+  useEffect(() => {
+    if (empresas.length >= 2) {
+      if (!empresaCompAId || !empresas.some((e) => e.id === empresaCompAId)) {
+        setEmpresaCompAId(selectedEmpresaId || empresas[0]?.id || '')
+      }
+      if (!empresaCompBId || !empresas.some((e) => e.id === empresaCompBId)) {
+        const outra = empresas.find((e) => e.id !== (selectedEmpresaId || empresas[0]?.id))
+        setEmpresaCompBId(outra?.id || empresas[1]?.id || '')
+      }
+    } else if (empresas.length === 1) {
+      setEmpresaCompAId(empresas[0]?.id || '')
+      setEmpresaCompBId('')
+    }
+  }, [empresas, selectedEmpresaId])
+
+  // Carregar dados tributários das duas empresas selecionadas
+  useEffect(() => {
+    async function loadCompEmpresas() {
+      if (!empresaCompAId && !empresaCompBId) return
+      setLoadingCompEmpresas(true)
+      try {
+        const [cfgA, cfgB] = await Promise.all([
+          empresaCompAId
+            ? configuracoesTributariasService.getByEmpresa(empresaCompAId)
+            : Promise.resolve(null),
+          empresaCompBId
+            ? configuracoesTributariasService.getByEmpresa(empresaCompBId)
+            : Promise.resolve(null),
+        ])
+        setConfigEmpresaCompA(cfgA)
+        setConfigEmpresaCompB(cfgB)
+      } catch (err) {
+        console.error('Erro ao carregar comparação entre empresas:', err)
+      } finally {
+        setLoadingCompEmpresas(false)
+      }
+    }
+    loadCompEmpresas()
+  }, [empresaCompAId, empresaCompBId])
+
+  // Cálculos do comparativo entre 2 empresas
+  const comparativoDuasEmpresas = useMemo(() => {
+    const empA = empresas.find((e) => e.id === empresaCompAId) || null
+    const empB = empresas.find((e) => e.id === empresaCompBId) || null
+
+    const hasConfigA = Boolean(configEmpresaCompA)
+    const hasConfigB = Boolean(configEmpresaCompB)
+
+    const cargaA = hasConfigA ? Number(configEmpresaCompA?.carga_tributaria_total) || 0 : 0
+    const cargaB = hasConfigB ? Number(configEmpresaCompB?.carga_tributaria_total) || 0 : 0
+
+    const regimeA = hasConfigA
+      ? configEmpresaCompA?.regime_tributario || 'Não configurado'
+      : 'Sem configuração'
+    const regimeB = hasConfigB
+      ? configEmpresaCompB?.regime_tributario || 'Não configurado'
+      : 'Sem configuração'
+
+    const fatorA = cargaA < 100 ? Number((1 / Math.max(0.01, 1 - cargaA / 100)).toFixed(4)) : 1
+    const fatorB = cargaB < 100 ? Number((1 / Math.max(0.01, 1 - cargaB / 100)).toFixed(4)) : 1
+
+    const precoCalcA = calcularPrecoPorDentro(
+      custoBaseSimulacao,
+      margemDesejadaSimulacao,
+      cargaA,
+      despesasVariaveisSimulacao,
+    )
+    const precoCalcB = calcularPrecoPorDentro(
+      custoBaseSimulacao,
+      margemDesejadaSimulacao,
+      cargaB,
+      despesasVariaveisSimulacao,
+    )
+
+    const precoA = precoCalcA.precoFinal
+    const precoB = precoCalcB.precoFinal
+
+    const diffCarga = cargaB - cargaA // B vs A
+    const diffPreco = precoB - precoA // B vs A
+
+    let maisEconomica: 'A' | 'B' | 'iguais' = 'iguais'
+    if (hasConfigA && hasConfigB) {
+      if (cargaA < cargaB) maisEconomica = 'A'
+      else if (cargaB < cargaA) maisEconomica = 'B'
+      else maisEconomica = 'iguais'
+    } else if (hasConfigA && !hasConfigB) {
+      maisEconomica = 'A'
+    } else if (!hasConfigA && hasConfigB) {
+      maisEconomica = 'B'
+    }
+
+    const economiaRs = Math.abs(diffPreco)
+    const economiaPctCarga = Math.abs(diffCarga)
+    const maiorPreco = Math.max(precoA, precoB)
+    const pctEconomiaPreco = maiorPreco > 0 ? (economiaRs / maiorPreco) * 100 : 0
+
+    const nomeA = empA?.razao_social || empA?.nome_fantasia || empA?.nome || 'Empresa A'
+    const nomeB = empB?.razao_social || empB?.nome_fantasia || empB?.nome || 'Empresa B'
+
+    return {
+      empA,
+      empB,
+      nomeA,
+      nomeB,
+      hasConfigA,
+      hasConfigB,
+      configA: configEmpresaCompA,
+      configB: configEmpresaCompB,
+      cargaA,
+      cargaB,
+      regimeA,
+      regimeB,
+      fatorA,
+      fatorB,
+      precoA,
+      precoB,
+      impostosA: precoCalcA.impostosTotal,
+      impostosB: precoCalcB.impostosTotal,
+      margemA: precoCalcA.margemLiquida,
+      margemB: precoCalcB.margemLiquida,
+      diffCarga,
+      diffPreco,
+      maisEconomica,
+      economiaRs,
+      economiaPctCarga,
+      pctEconomiaPreco,
+    }
+  }, [
+    empresas,
+    empresaCompAId,
+    empresaCompBId,
+    configEmpresaCompA,
+    configEmpresaCompB,
+    custoBaseSimulacao,
+    margemDesejadaSimulacao,
+    despesasVariaveisSimulacao,
+  ])
 
   // Ao mudar o regime para preset comum
   const aplicarPresetRegime = (novoRegime: RegimeTributarioFormacaoPreco) => {
@@ -694,7 +856,7 @@ export default function Impostos() {
 
       {/* Navegação por Abas para as 3 Melhorias + Configuração Base */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-slate-100 p-1 border border-slate-200/80 grid grid-cols-2 md:grid-cols-4 h-auto">
+        <TabsList className="bg-slate-100 p-1 border border-slate-200/80 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 h-auto gap-1">
           <TabsTrigger
             value="configuracao"
             className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
@@ -715,11 +877,22 @@ export default function Impostos() {
           </TabsTrigger>
 
           <TabsTrigger
+            value="comparar_empresas"
+            className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-xs py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
+          >
+            <GitCompare className="w-3.5 h-3.5 text-indigo-600" />
+            3. Comparar 2 Empresas
+            <Badge className="ml-1 bg-indigo-100 text-indigo-700 border-none text-[10px] px-1 py-0">
+              Setor
+            </Badge>
+          </TabsTrigger>
+
+          <TabsTrigger
             value="sensibilidade"
             className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
           >
             <Grid3X3 className="w-3.5 h-3.5" />
-            3. Sensibilidade de Preço
+            4. Sensibilidade de Preço
           </TabsTrigger>
 
           <TabsTrigger
@@ -727,7 +900,7 @@ export default function Impostos() {
             className="data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs py-2 text-xs font-semibold flex items-center justify-center gap-1.5"
           >
             <Activity className="w-3.5 h-3.5" />
-            4. Enquadramento RBT12 (DRE)
+            5. Enquadramento RBT12 (DRE)
           </TabsTrigger>
         </TabsList>
 
@@ -1413,7 +1586,7 @@ export default function Impostos() {
             ABA 2: MELHORIA 1 - COMPARATIVO DOS 3 REGIMES TRIBUTÁRIOS LADO A LADO
            ========================================================================= */}
         <TabsContent value="comparativo" className="space-y-6 mt-0">
-          {/* Card de Alerta Resumo do Melhor Regime */}
+          {/* Card de Alerta Resumo do Melhor Regime + Ação de Gerar PDF */}
           <div className="p-5 rounded-xl bg-linear-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -1440,7 +1613,19 @@ export default function Impostos() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPdfTipo('comparativo_regimes')
+                  setPdfModalOpen(true)
+                }}
+                className="text-xs bg-white border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold gap-1.5 shadow-2xs"
+              >
+                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                Gerar PDF (A4)
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -1448,7 +1633,7 @@ export default function Impostos() {
                   aplicarPresetRegime(menorCargaRegime.regime)
                   setActiveTab('configuracao')
                 }}
-                className="text-xs bg-white text-emerald-800 border-emerald-300 hover:bg-emerald-50"
+                className="text-xs bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 font-semibold"
               >
                 Aplicar {menorCargaRegime.regime}
                 <ArrowRight className="w-3.5 h-3.5 ml-1.5" />
@@ -1653,7 +1838,438 @@ export default function Impostos() {
         </TabsContent>
 
         {/* =========================================================================
-            ABA 3: MELHORIA 2 - ANÁLISE DE SENSIBILIDADE DE PREÇO (CARGA % × MARGEM %)
+            ABA 3: MELHORIA 1 - COMPARAR CARGA TRIBUTÁRIA ENTRE DUAS EMPRESAS
+           ========================================================================= */}
+        <TabsContent value="comparar_empresas" className="space-y-6 mt-0">
+          {/* Header e Seleção de Empresas */}
+          <Card className="border-slate-200/80 shadow-xs">
+            <CardHeader className="pb-4 border-b border-slate-100">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <GitCompare className="w-4 h-4 text-indigo-600" />
+                    Comparativo Setorial: Carga Tributária Entre Duas Empresas
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Identifique assimetrias de carga tributária, gross-up e preços de venda entre
+                    empresas do mesmo grupo ou setor para capturar oportunidades de economia e
+                    arbitragem fiscal.
+                  </CardDescription>
+                </div>
+
+                {empresas.length < 2 && (
+                  <Badge
+                    variant="outline"
+                    className="bg-amber-50 text-amber-800 border-amber-300 text-xs"
+                  >
+                    Requer ao menos 2 empresas cadastradas
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="pt-5 space-y-6">
+              {/* Seletores das Duas Empresas */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+                {/* Empresa A */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-bold">
+                        A
+                      </span>
+                      Primeira Empresa (Base de Análise)
+                    </Label>
+                    {comparativoDuasEmpresas.hasConfigA ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
+                        Configurada
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-50 text-amber-700 border-amber-300 text-[10px]"
+                      >
+                        Sem Tributos Salvos
+                      </Badge>
+                    )}
+                  </div>
+                  <Select value={empresaCompAId} onValueChange={setEmpresaCompAId}>
+                    <SelectTrigger className="bg-white border-slate-300">
+                      <SelectValue placeholder="Selecione a empresa A" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresas.map((emp) => (
+                        <SelectItem
+                          key={emp.id}
+                          value={emp.id}
+                          disabled={emp.id === empresaCompBId}
+                        >
+                          {emp.razao_social || emp.nome_fantasia || emp.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Empresa B */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+                        B
+                      </span>
+                      Segunda Empresa (Comparação)
+                    </Label>
+                    {comparativoDuasEmpresas.hasConfigB ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]">
+                        Configurada
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="bg-amber-50 text-amber-700 border-amber-300 text-[10px]"
+                      >
+                        Sem Tributos Salvos
+                      </Badge>
+                    )}
+                  </div>
+                  <Select value={empresaCompBId} onValueChange={setEmpresaCompBId}>
+                    <SelectTrigger className="bg-white border-slate-300">
+                      <SelectValue placeholder="Selecione a empresa B" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresas.map((emp) => (
+                        <SelectItem
+                          key={emp.id}
+                          value={emp.id}
+                          disabled={emp.id === empresaCompAId}
+                        >
+                          {emp.razao_social || emp.nome_fantasia || emp.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Alerta de Proteção: Quando uma ou ambas não têm configuração */}
+              {(!comparativoDuasEmpresas.hasConfigA || !comparativoDuasEmpresas.hasConfigB) && (
+                <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-amber-950">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>Atenção: Configuração tributária incompleta</span>
+                  </div>
+                  <p className="leading-relaxed">
+                    {!comparativoDuasEmpresas.hasConfigA && !comparativoDuasEmpresas.hasConfigB
+                      ? 'Nenhuma das duas empresas selecionadas possui alíquotas de impostos salvas. Acesse a aba "Configuração & Simulador" para definir as alíquotas de cada uma.'
+                      : !comparativoDuasEmpresas.hasConfigA
+                        ? `A empresa ${comparativoDuasEmpresas.nomeA} ainda não possui alíquotas salvas (carga considerada como 0,00%).`
+                        : `A empresa ${comparativoDuasEmpresas.nomeB} ainda não possui alíquotas salvas (carga considerada como 0,00%).`}
+                  </p>
+                </div>
+              )}
+
+              {/* Card Destaque de Economia e Veredicto Executivo */}
+              <div
+                className={`p-5 rounded-xl border-2 flex flex-col md:flex-row md:items-center justify-between gap-4 ${
+                  comparativoDuasEmpresas.maisEconomica === 'iguais'
+                    ? 'bg-slate-50 border-slate-300 text-slate-800'
+                    : 'bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border-emerald-500/80 text-emerald-950'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                      comparativoDuasEmpresas.maisEconomica === 'iguais'
+                        ? 'bg-slate-700 text-white'
+                        : 'bg-emerald-600 text-white'
+                    }`}
+                  >
+                    {comparativoDuasEmpresas.maisEconomica === 'iguais' ? (
+                      <Scale className="w-5 h-5" />
+                    ) : (
+                      <Award className="w-5 h-5" />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-extrabold text-sm">
+                        {comparativoDuasEmpresas.maisEconomica === 'iguais'
+                          ? 'Cargas Tributárias Equivalentes'
+                          : `Menor Carga Tributária: ${
+                              comparativoDuasEmpresas.maisEconomica === 'A'
+                                ? comparativoDuasEmpresas.nomeA
+                                : comparativoDuasEmpresas.nomeB
+                            }`}
+                      </h3>
+                      {comparativoDuasEmpresas.maisEconomica !== 'iguais' && (
+                        <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 text-[10px] font-bold">
+                          🏆 Mais Competitiva
+                        </Badge>
+                      )}
+                    </div>
+
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      {comparativoDuasEmpresas.maisEconomica === 'iguais' ? (
+                        <>
+                          Ambas as empresas operam com a mesma carga tributária ou sem dados
+                          preenchidos.
+                        </>
+                      ) : (
+                        <>
+                          A empresa{' '}
+                          <strong>
+                            {comparativoDuasEmpresas.maisEconomica === 'A'
+                              ? comparativoDuasEmpresas.nomeA
+                              : comparativoDuasEmpresas.nomeB}
+                          </strong>{' '}
+                          possui carga tributária de{' '}
+                          <strong className="text-emerald-700">
+                            {(comparativoDuasEmpresas.maisEconomica === 'A'
+                              ? comparativoDuasEmpresas.cargaA
+                              : comparativoDuasEmpresas.cargaB
+                            ).toFixed(2)}
+                            %
+                          </strong>
+                          , gerando uma economia de{' '}
+                          <strong className="text-emerald-700">
+                            R$ {comparativoDuasEmpresas.economiaRs.toFixed(2)} por unidade vendida
+                          </strong>{' '}
+                          ({comparativoDuasEmpresas.economiaPctCarga.toFixed(2)} p.p. a menos de
+                          tributação) para o custo simulado de R$ {custoBaseSimulacao.toFixed(2)}.
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                {comparativoDuasEmpresas.maisEconomica !== 'iguais' && (
+                  <div className="text-right shrink-0 bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
+                    <span className="text-[10px] text-slate-500 block uppercase font-bold tracking-wider">
+                      Diferencial por Unidade
+                    </span>
+                    <span className="text-xl font-extrabold text-emerald-700 font-mono">
+                      -R$ {comparativoDuasEmpresas.economiaRs.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 block font-semibold">
+                      ({comparativoDuasEmpresas.pctEconomiaPreco.toFixed(1)}% de vantagem no preço)
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Tabela Comparativa Estruturada Lado a Lado */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Card Empresa A */}
+                <div
+                  className={`p-5 rounded-xl border-2 space-y-4 ${
+                    comparativoDuasEmpresas.maisEconomica === 'A'
+                      ? 'border-emerald-500 bg-emerald-50/20 shadow-md ring-4 ring-emerald-500/10'
+                      : 'border-slate-200 bg-white shadow-xs'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider block">
+                        Empresa A
+                      </span>
+                      <h4 className="text-base font-bold text-slate-900 line-clamp-1">
+                        {comparativoDuasEmpresas.nomeA}
+                      </h4>
+                    </div>
+                    {comparativoDuasEmpresas.maisEconomica === 'A' && (
+                      <Badge className="bg-emerald-600 text-white text-[10px]">
+                        🏆 Menor Carga
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-900 text-white space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Preço de Venda Sugerido</span>
+                      <span className="text-amber-400 font-bold">
+                        Carga: {comparativoDuasEmpresas.cargaA.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="text-2xl font-extrabold text-white">
+                      R$ {comparativoDuasEmpresas.precoA.toFixed(2)}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                      <span>Regime: {comparativoDuasEmpresas.regimeA}</span>
+                      <span>Fator Gross-up: {comparativoDuasEmpresas.fatorA.toFixed(4)}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/60">
+                      <span className="text-slate-600">Custo Base Simulado:</span>
+                      <span className="font-semibold text-slate-900">
+                        R$ {custoBaseSimulacao.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
+                      <span className="text-emerald-900">
+                        Margem Líquida ({margemDesejadaSimulacao}%):
+                      </span>
+                      <span className="font-bold text-emerald-700">
+                        R$ {comparativoDuasEmpresas.margemA.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2 rounded-lg bg-amber-50/60 border border-amber-100">
+                      <span className="text-amber-900">Tributos Embutidos no Preço:</span>
+                      <span className="font-bold text-amber-700">
+                        R$ {comparativoDuasEmpresas.impostosA.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Empresa B */}
+                <div
+                  className={`p-5 rounded-xl border-2 space-y-4 ${
+                    comparativoDuasEmpresas.maisEconomica === 'B'
+                      ? 'border-emerald-500 bg-emerald-50/20 shadow-md ring-4 ring-emerald-500/10'
+                      : 'border-slate-200 bg-white shadow-xs'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <div>
+                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider block">
+                        Empresa B
+                      </span>
+                      <h4 className="text-base font-bold text-slate-900 line-clamp-1">
+                        {comparativoDuasEmpresas.nomeB}
+                      </h4>
+                    </div>
+                    {comparativoDuasEmpresas.maisEconomica === 'B' && (
+                      <Badge className="bg-emerald-600 text-white text-[10px]">
+                        🏆 Menor Carga
+                      </Badge>
+                    )}
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-900 text-white space-y-1.5">
+                    <div className="flex items-center justify-between text-xs text-slate-400">
+                      <span>Preço de Venda Sugerido</span>
+                      <span className="text-amber-400 font-bold">
+                        Carga: {comparativoDuasEmpresas.cargaB.toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="text-2xl font-extrabold text-white">
+                      R$ {comparativoDuasEmpresas.precoB.toFixed(2)}
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                      <span>Regime: {comparativoDuasEmpresas.regimeB}</span>
+                      <span>Fator Gross-up: {comparativoDuasEmpresas.fatorB.toFixed(4)}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/60">
+                      <span className="text-slate-600">Custo Base Simulado:</span>
+                      <span className="font-semibold text-slate-900">
+                        R$ {custoBaseSimulacao.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
+                      <span className="text-emerald-900">
+                        Margem Líquida ({margemDesejadaSimulacao}%):
+                      </span>
+                      <span className="font-bold text-emerald-700">
+                        R$ {comparativoDuasEmpresas.margemB.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between p-2 rounded-lg bg-amber-50/60 border border-amber-100">
+                      <span className="text-amber-900">Tributos Embutidos no Preço:</span>
+                      <span className="font-bold text-amber-700">
+                        R$ {comparativoDuasEmpresas.impostosB.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Gráfico Recharts de Barras Comparativas Entre as 2 Empresas */}
+              <Card className="border-slate-200/80 shadow-xs">
+                <CardHeader className="pb-3 border-b border-slate-100">
+                  <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-indigo-600" />
+                    Gráfico Comparativo: Preço Sugerido & Carga Tributária
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Comparação visual direta do preço sugerido (R$) e da carga tributária total (%)
+                    entre as duas empresas.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <div className="h-[280px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={[
+                          {
+                            empresa: comparativoDuasEmpresas.nomeA,
+                            precoFinal: comparativoDuasEmpresas.precoA,
+                            impostos: comparativoDuasEmpresas.impostosA,
+                            carga: comparativoDuasEmpresas.cargaA,
+                            isMaisEconomica: comparativoDuasEmpresas.maisEconomica === 'A',
+                          },
+                          {
+                            empresa: comparativoDuasEmpresas.nomeB,
+                            precoFinal: comparativoDuasEmpresas.precoB,
+                            impostos: comparativoDuasEmpresas.impostosB,
+                            carga: comparativoDuasEmpresas.cargaB,
+                            isMaisEconomica: comparativoDuasEmpresas.maisEconomica === 'B',
+                          },
+                        ]}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="empresa" tick={{ fontSize: 12 }} />
+                        <YAxis
+                          tick={{ fontSize: 11 }}
+                          tickFormatter={(val) => `R$ ${val}`}
+                          domain={[0, 'auto']}
+                        />
+                        <RechartsTooltip
+                          formatter={(val: any, name: string) => {
+                            if (name === 'precoFinal')
+                              return [`R$ ${Number(val).toFixed(2)}`, 'Preço Final']
+                            if (name === 'impostos')
+                              return [`R$ ${Number(val).toFixed(2)}`, 'Tributos Embutidos']
+                            return [val, name]
+                          }}
+                        />
+                        <Legend
+                          formatter={(value) => {
+                            if (value === 'precoFinal') return 'Preço de Venda Sugerido (R$)'
+                            if (value === 'impostos') return 'Tributos Embutidos (R$)'
+                            return value
+                          }}
+                        />
+                        <Bar
+                          dataKey="precoFinal"
+                          name="precoFinal"
+                          fill="#4f46e5"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="impostos"
+                          name="impostos"
+                          fill="#f59e0b"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* =========================================================================
+            ABA 4: MELHORIA 2 - ANÁLISE DE SENSIBILIDADE DE PREÇO (CARGA % × MARGEM %)
            ========================================================================= */}
         <TabsContent value="sensibilidade" className="space-y-6 mt-0">
           <Card className="border-slate-200/80 shadow-xs">
@@ -1902,6 +2518,18 @@ export default function Impostos() {
                         cadastrados na DRE da empresa.
                       </CardDescription>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setPdfTipo('enquadramento_rbt12')
+                        setPdfModalOpen(true)
+                      }}
+                      className="text-xs bg-white border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold gap-1.5 shadow-2xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-blue-600" />
+                      Gerar PDF (A4)
+                    </Button>
                   </div>
                 </CardHeader>
 
@@ -2097,6 +2725,22 @@ export default function Impostos() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Modal de Exportação PDF Executivo A4 */}
+      <ModalPdfImpostos
+        open={pdfModalOpen}
+        onOpenChange={setPdfModalOpen}
+        tipo={pdfTipo}
+        empresa={empresaAtual}
+        anoBase={selectedAno || new Date().getFullYear()}
+        comparativoRegimes={comparativoRegimes}
+        custoBaseSimulado={custoBaseSimulacao}
+        margemDesejadaSimulada={margemDesejadaSimulacao}
+        despesasVariaveisSimuladas={despesasVariaveisSimulacao}
+        regimeAtualConfigurado={regime}
+        simulacaoRbt12={simulacaoRbt12}
+        anexoSimples={anexoSimples}
+      />
     </div>
   )
 }
