@@ -38,6 +38,7 @@ import IndicadoresEconomicos from './pages/IndicadoresEconomicos'
 import IndicadoresValuation from './pages/IndicadoresValuation'
 import IndicadoresPontoEquilibrio from './pages/IndicadoresPontoEquilibrio'
 import IndicadoresKanitz from './pages/IndicadoresKanitz'
+import AgenteIA from './pages/AgenteIA'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
@@ -134,6 +135,7 @@ const App = () => (
                 <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
                 <Route path="/relatorios" element={<Relatorios />} />
                 <Route path="/relatorio-anual" element={<RelatorioAnual />} />
+                <Route path="/agente-ia" element={<AgenteIA />} />
                 <Route path="/importacao" element={<Importacao />} />
                 <Route path="/configuracoes" element={<Configuracoes />} />
               </Route>

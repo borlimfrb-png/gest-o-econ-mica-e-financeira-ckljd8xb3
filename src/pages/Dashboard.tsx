@@ -87,11 +87,15 @@ import {
   AlertCircle,
   Eye,
   Plus,
+  Bot,
+  Sparkles,
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const CHART_COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899']
 
 export default function Dashboard() {
+  const navigate = useNavigate()
   const { empresas, selectedEmpresaId, selectedAno, selectedEmpresa, isLoadingEmpresas } =
     useFilter()
 
@@ -1510,6 +1514,38 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Banner Destaque: Agente de Diagnóstico IA */}
+      <div className="bg-gradient-to-r from-[#0B1F3A] via-[#132E54] to-blue-900 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-blue-800/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-blue-600/30 border border-blue-400/30 text-blue-300 flex items-center justify-center shrink-0 shadow-inner">
+            <Bot className="w-6 h-6 text-blue-200" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-base sm:text-lg tracking-tight">
+                Diagnóstico & Estratégia de Resultados com IA
+              </span>
+              <span className="text-[10px] uppercase font-bold bg-blue-400/20 text-blue-200 border border-blue-400/30 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-blue-300" />
+                Skip Cloud Native Agent
+              </span>
+            </div>
+            <p className="text-xs text-blue-200/80 mt-0.5 max-w-2xl leading-relaxed">
+              Consulte nosso Agente de IA para uma análise holística do Balanço, DRE, Modelo
+              Fleuriet, Termômetro de Kanitz e saiba exatamente qual é o melhor plano para alavancar
+              os resultados da sua empresa.
+            </p>
+          </div>
+        </div>
+        <Button
+          onClick={() => navigate('/agente-ia')}
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold text-xs h-9 px-4 rounded-xl gap-2 shadow-sm shrink-0 w-full md:w-auto"
+        >
+          <Bot className="w-4 h-4" />
+          <span>Falar com o Agente de IA</span>
+        </Button>
+      </div>
+
       {/* Modal Gerenciar Metas */}
       <ModalGerenciarMetas
         open={modalMetasOpen}

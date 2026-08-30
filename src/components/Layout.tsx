@@ -37,6 +37,8 @@ import {
   Layers,
   ClipboardList,
   Percent,
+  Bot,
+  Sparkles,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -250,6 +252,7 @@ export default function Layout() {
     location.pathname === '/dashboard' ||
     location.pathname === '/relatorios' ||
     location.pathname === '/relatorio-anual' ||
+    location.pathname === '/agente-ia' ||
     location.pathname === '/analise-tributaria' ||
     location.pathname === '/notas-fiscais' ||
     location.pathname.startsWith('/empresas/') ||
@@ -360,18 +363,35 @@ export default function Layout() {
               <nav className="mt-6 space-y-1.5 overflow-y-auto max-h-[calc(100vh-210px)] pr-1">
                 {/* 1. Dashboard */}
                 <NavLink
-                  to="/dashboard"
+                  to="/agente-ia"
                   onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/dashboard'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    location.pathname === '/agente-ia'
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
+                      : 'text-blue-300 bg-blue-950/40 border border-blue-900/40 hover:bg-slate-800 hover:text-white'
                   }`}
                 >
-                  <LayoutDashboard className="w-4 h-4 text-blue-400" />
-                  Dashboard
+                  <Bot className="w-4 h-4 text-blue-400" />
+                  <div className="flex items-center justify-between flex-1">
+                    <span>Agente de IA</span>
+                    <span className="text-[10px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.5 rounded">
+                      Skip AI
+                    </span>
+                  </div>
                 </NavLink>
 
+                <NavLink
+                  to="/relatorios"
+                  onClick={() => setMobileDrawerOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    location.pathname === '/relatorios'
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-slate-400" />
+                  <span>Relatórios e Pareceres</span>
+                </NavLink>
                 {/* 2. Cadastros (Expansível / Colapsável) */}
                 <div className="space-y-1">
                   <button
@@ -905,20 +925,60 @@ export default function Layout() {
                 </div>
                 <div className="hidden lg:block">
                   <NavLink
-                    to="/dashboard"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/dashboard'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    to="/agente-ia"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                      location.pathname === '/agente-ia'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
+                        : 'text-blue-200 bg-blue-950/30 border border-blue-900/30 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
-                    <LayoutDashboard
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
+                    <Bot
+                      className={`w-4 h-4 ${
+                        location.pathname === '/agente-ia' ? 'text-blue-200' : 'text-blue-400'
                       }`}
                     />
-                    <span className="truncate">Dashboard</span>
+                    <div className="flex items-center justify-between flex-1">
+                      <span>Agente de IA</span>
+                      <span className="text-[9px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.2 rounded">
+                        NOVO
+                      </span>
+                    </div>
                   </NavLink>
+                  <NavLink
+                    to="/agente-ia"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                      location.pathname === '/agente-ia'
+                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
+                        : 'text-blue-200 bg-blue-950/30 border border-blue-900/30 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <Bot
+                      className={`w-4 h-4 ${
+                        location.pathname === '/agente-ia' ? 'text-blue-200' : 'text-blue-400'
+                      }`}
+                    />
+                    <div className="flex items-center justify-between flex-1">
+                      <span>Agente de IA</span>
+                      <span className="text-[9px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.2 rounded">
+                        NOVO
+                      </span>
+                    </div>
+                  </NavLink>
+                  <NavLink
+                    to="/relatorios"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      location.pathname === '/relatorios'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <FileText
+                      className={`w-4 h-4 ${
+                        location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
+                      }`}
+                    />
+                    <span>Relatórios e Pareceres</span>
+                  </NavLink>{' '}
                 </div>
               </div>
 
@@ -1517,20 +1577,20 @@ export default function Layout() {
                 </div>
                 <div className="hidden lg:block">
                   <NavLink
-                    to="/importacao"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/importacao'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    to="/relatorios"
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                      location.pathname === '/relatorios'
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
                     }`}
                   >
-                    <Upload
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
+                    <FileText
+                      className={`w-4 h-4 ${
+                        location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
                       }`}
                     />
-                    <span className="truncate">Importação</span>
-                  </NavLink>
+                    <span>Relatórios e Pareceres</span>
+                  </NavLink>{' '}
                 </div>
               </div>
               {/* 5. Relatório Anual */}
@@ -1737,6 +1797,7 @@ export default function Layout() {
               <div>
                 <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
                   {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
+                  {location.pathname === '/agente-ia' && 'Agente de Diagnóstico & Estratégia de IA'}
                   {location.pathname === '/relatorios' && 'Relatórios e Pareceres'}
                   {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
                   {location.pathname === '/analise-tributaria' &&
