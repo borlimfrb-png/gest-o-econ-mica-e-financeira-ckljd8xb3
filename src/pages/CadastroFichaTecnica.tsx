@@ -7,6 +7,7 @@ import {
   fichasTecnicasService,
   configuracoesTributariasService,
 } from '@/services/formacaoPrecoService'
+import { calcularPrecoPorDentro } from '@/lib/taxCalculations'
 import {
   ProdutoRecord,
   MateriaPrimaRecord,
@@ -939,6 +940,39 @@ export default function CadastroFichaTecnica() {
       (custoTotal_B > 0 ? custoTotal_B * (1 + markup_B / 100) : custoTotal_B)
     const precoPraticado_B = Number(prodB?.preco_venda) || precoMargem_B
 
+    // Carga Tributária e Fator Gross-up (Por Dentro)
+    const cargaTrib = Number(configTributaria?.carga_tributaria_total) || 0
+    const fatorGrossUp =
+      configTributaria?.fator_por_dentro !== undefined &&
+      configTributaria?.fator_por_dentro !== null &&
+      Number(configTributaria.fator_por_dentro) > 0
+        ? Number(configTributaria.fator_por_dentro)
+        : cargaTrib > 0 && cargaTrib < 100
+          ? Number((1 / (1 - cargaTrib / 100)).toFixed(4))
+          : 1
+    const regimeNome = configTributaria?.regime_tributario || 'Regime Padrão'
+
+    // Cálculo do Preço com Impostos por Dentro para Ficha A e Ficha B
+    // Fórmula padrão de tributação por dentro: Custo / (1 - (Margem + Carga)/100)
+    let precoComImpostos_A = precoMargem_A
+    const divisorComImpostos_A = 1 - (margem_A + cargaTrib) / 100
+    if (cargaTrib > 0 && divisorComImpostos_A > 0.01 && custoTotal_A > 0) {
+      precoComImpostos_A = custoTotal_A / divisorComImpostos_A
+    } else if (cargaTrib > 0 && custoTotal_A > 0) {
+      precoComImpostos_A = precoMargem_A * fatorGrossUp
+    }
+
+    let precoComImpostos_B = precoMargem_B
+    const divisorComImpostos_B = 1 - (margem_B + cargaTrib) / 100
+    if (cargaTrib > 0 && divisorComImpostos_B > 0.01 && custoTotal_B > 0) {
+      precoComImpostos_B = custoTotal_B / divisorComImpostos_B
+    } else if (cargaTrib > 0 && custoTotal_B > 0) {
+      precoComImpostos_B = precoMargem_B * fatorGrossUp
+    }
+
+    const valorImpostos_A = Math.max(0, precoComImpostos_A * (cargaTrib / 100))
+    const valorImpostos_B = Math.max(0, precoComImpostos_B * (cargaTrib / 100))
+
     // Diferenças (B vs A)
     const diffCustoTotal = custoTotal_B - custoTotal_A
     const pctDiffCustoTotal = custoTotal_A > 0 ? (diffCustoTotal / custoTotal_A) * 100 : 0
@@ -955,6 +989,16 @@ export default function CadastroFichaTecnica() {
     const diffPrecoMarkup = precoMarkup_B - precoMarkup_A
     const pctDiffPrecoMarkup = precoMarkup_A > 0 ? (diffPrecoMarkup / precoMarkup_A) * 100 : 0
 
+    const diffPrecoComImpostos = precoComImpostos_B - precoComImpostos_A
+    const pctDiffPrecoComImpostos =
+      precoComImpostos_A > 0 ? (diffPrecoComImpostos / precoComImpostos_A) * 100 : 0
+
+    // Identificar inversão de vantagem devido a tributos/margens
+    // Virada ocorre quando diffCustoTotal e diffPrecoComImpostos têm sinais opostos (ex: A tem menor custo bruto, mas B fica com menor preço com impostos ou vice-versa)
+    const viradaImpostos =
+      (diffCustoTotal < 0 && diffPrecoComImpostos > 0) ||
+      (diffCustoTotal > 0 && diffPrecoComImpostos < 0)
+
     // Conclusão de qual é mais barata / econômica
     let conclusao = {
       maisEconomica: diffCustoTotal === 0 ? 'iguais' : diffCustoTotal < 0 ? 'B' : 'A',
@@ -963,6 +1007,14 @@ export default function CadastroFichaTecnica() {
       produtoEconomicoNome:
         diffCustoTotal < 0 ? prodB?.nome || 'Produto B' : prodA?.nome || 'Produto A',
       produtoCaroNome: diffCustoTotal < 0 ? prodA?.nome || 'Produto A' : prodB?.nome || 'Produto B',
+      // Conclusão com impostos
+      maisEconomicaImpostos:
+        diffPrecoComImpostos === 0 ? 'iguais' : diffPrecoComImpostos < 0 ? 'B' : 'A',
+      diferencaAbsolutaImpostos: Math.abs(diffPrecoComImpostos),
+      diferencaPercentualImpostos: Math.abs(pctDiffPrecoComImpostos),
+      produtoEconomicoImpostosNome:
+        diffPrecoComImpostos < 0 ? prodB?.nome || 'Produto B' : prodA?.nome || 'Produto A',
+      viradaImpostos,
     }
 
     // Comparativo de Insumos (Em Comum vs Divergentes)
@@ -1063,6 +1115,8 @@ export default function CadastroFichaTecnica() {
       precoMargem_A,
       precoMarkup_A,
       precoPraticado_A,
+      precoComImpostos_A,
+      valorImpostos_A,
       custoMP_B,
       outrosCustos_B,
       custoTotal_B,
@@ -1071,6 +1125,11 @@ export default function CadastroFichaTecnica() {
       precoMargem_B,
       precoMarkup_B,
       precoPraticado_B,
+      precoComImpostos_B,
+      valorImpostos_B,
+      cargaTrib,
+      fatorGrossUp,
+      regimeNome,
       diffCustoTotal,
       pctDiffCustoTotal,
       diffCustoMP,
@@ -1081,12 +1140,14 @@ export default function CadastroFichaTecnica() {
       pctDiffPrecoMargem,
       diffPrecoMarkup,
       pctDiffPrecoMarkup,
+      diffPrecoComImpostos,
+      pctDiffPrecoComImpostos,
       conclusao,
       insumosEmComum,
       insumosApenasA,
       insumosApenasB,
     }
-  }, [fichas, fichaComparadaAId, fichaComparadaBId, produtosMap, materiasMap])
+  }, [fichas, fichaComparadaAId, fichaComparadaBId, produtosMap, materiasMap, configTributaria])
 
   const confirmDelete = (f: FichaTecnicaRecord) => {
     setFichaToDelete(f)
@@ -2340,25 +2401,40 @@ export default function CadastroFichaTecnica() {
           {/* PAINEL DE RESULTADOS DA COMPARAÇÃO */}
           {comparacaoData && (
             <div className="space-y-6">
-              {/* 1. CARD DE CONCLUSÃO EXECUTIVA / VEREDICTO DE ECONOMIA */}
+              {/* 1. CARD DE CONCLUSÃO EXECUTIVA / VEREDICTO DE ECONOMIA & PREÇO COM IMPOSTOS */}
               <div
                 className={`p-4 rounded-xl border shadow-xs transition-all ${
-                  comparacaoData.conclusao.maisEconomica === 'iguais'
-                    ? 'bg-slate-50 border-slate-300 text-slate-800'
-                    : comparacaoData.conclusao.maisEconomica === 'B'
-                      ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white border-emerald-500/50'
-                      : 'bg-gradient-to-r from-blue-950 via-indigo-900 to-slate-900 text-white border-blue-500/50'
+                  comparacaoData.conclusao.viradaImpostos
+                    ? 'bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950 text-white border-amber-500/60 ring-1 ring-amber-400/30'
+                    : comparacaoData.conclusao.maisEconomica === 'iguais'
+                      ? 'bg-slate-50 border-slate-300 text-slate-800'
+                      : comparacaoData.conclusao.maisEconomica === 'B'
+                        ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white border-emerald-500/50'
+                        : 'bg-gradient-to-r from-blue-950 via-indigo-900 to-slate-900 text-white border-blue-500/50'
                 }`}
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider border border-emerald-400/30">
                         Veredicto de Custo & Competitividade
                       </span>
+                      {comparacaoData.cargaTrib > 0 && (
+                        <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold uppercase tracking-wider border border-amber-400/30 flex items-center gap-1">
+                          <Receipt className="w-3 h-3" />
+                          {comparacaoData.regimeNome} ({formatPct(comparacaoData.cargaTrib)} por
+                          dentro)
+                        </span>
+                      )}
+                      {comparacaoData.conclusao.viradaImpostos && (
+                        <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[10px] font-bold uppercase tracking-wider border border-rose-400/40 animate-pulse">
+                          ⚠️ Inversão de Vantagem no Preço Final
+                        </span>
+                      )}
                     </div>
+
                     <h3 className="text-base font-bold flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                      <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
                       {comparacaoData.conclusao.maisEconomica === 'iguais' ? (
                         'Ambas as fichas possuem o mesmo Custo Total exato'
                       ) : (
@@ -2366,37 +2442,84 @@ export default function CadastroFichaTecnica() {
                           <span className="text-emerald-300 font-extrabold">
                             {comparacaoData.conclusao.produtoEconomicoNome}
                           </span>{' '}
-                          é a opção mais econômica (
-                          {formatBrl(comparacaoData.conclusao.diferencaAbsoluta)} mais barata ·{' '}
-                          {comparacaoData.conclusao.diferencaPercentual.toFixed(1)}% de economia)
+                          tem o menor custo de fabricação (
+                          {formatBrl(comparacaoData.conclusao.diferencaAbsoluta)} mais barato ·{' '}
+                          {comparacaoData.conclusao.diferencaPercentual.toFixed(1)}% de economia no
+                          custo)
                         </>
                       )}
                     </h3>
-                    <p className="text-xs text-slate-200">
-                      Comparação entre <strong>"{comparacaoData.prodA?.nome}"</strong> (
-                      {formatBrl(comparacaoData.custoTotal_A)}) e{' '}
-                      <strong>"{comparacaoData.prodB?.nome}"</strong> (
-                      {formatBrl(comparacaoData.custoTotal_B)}).
-                    </p>
+
+                    {/* Destaque com Impostos & Virada se houver */}
+                    {comparacaoData.conclusao.viradaImpostos ? (
+                      <div className="bg-amber-950/60 border border-amber-400/40 rounded-lg p-2.5 text-xs text-amber-100 space-y-1">
+                        <p className="font-semibold text-amber-200">
+                          Atenção Executiva: A composição de margem e gross-up tributário inverteu o
+                          menor preço final!
+                        </p>
+                        <p className="text-[11px] text-slate-200">
+                          Embora <strong>"{comparacaoData.conclusao.produtoEconomicoNome}"</strong>{' '}
+                          tenha menor custo bruto (
+                          {formatBrl(
+                            Math.min(comparacaoData.custoTotal_A, comparacaoData.custoTotal_B),
+                          )}
+                          ), o produto{' '}
+                          <strong>"{comparacaoData.conclusao.produtoEconomicoImpostosNome}"</strong>{' '}
+                          atinge o menor preço com impostos (
+                          {formatBrl(
+                            Math.min(
+                              comparacaoData.precoComImpostos_A,
+                              comparacaoData.precoComImpostos_B,
+                            ),
+                          )}{' '}
+                          vs{' '}
+                          {formatBrl(
+                            Math.max(
+                              comparacaoData.precoComImpostos_A,
+                              comparacaoData.precoComImpostos_B,
+                            ),
+                          )}
+                          ).
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-200">
+                        Comparação entre <strong>"{comparacaoData.prodA?.nome}"</strong> (Custo:{' '}
+                        {formatBrl(comparacaoData.custoTotal_A)} | Preço c/ Impostos:{' '}
+                        {formatBrl(comparacaoData.precoComImpostos_A)}) e{' '}
+                        <strong>"{comparacaoData.prodB?.nome}"</strong> (Custo:{' '}
+                        {formatBrl(comparacaoData.custoTotal_B)} | Preço c/ Impostos:{' '}
+                        {formatBrl(comparacaoData.precoComImpostos_B)}).
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="bg-white/10 backdrop-blur-xs p-2.5 rounded-lg border border-white/20 text-center min-w-[140px]">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+                    <div className="bg-white/10 backdrop-blur-xs p-2.5 rounded-lg border border-white/20 text-center min-w-[130px] flex-1 sm:flex-initial">
                       <span className="text-[10px] text-slate-300 uppercase font-medium block">
-                        Diferença em R$
+                        Dif. Custo (R$)
                       </span>
-                      <span className="text-sm font-black font-mono">
+                      <span className="text-sm font-black font-mono block">
                         {comparacaoData.diffCustoTotal > 0 ? '+' : ''}
                         {formatBrl(comparacaoData.diffCustoTotal)}
                       </span>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-xs p-2.5 rounded-lg border border-white/20 text-center min-w-[120px]">
-                      <span className="text-[10px] text-slate-300 uppercase font-medium block">
-                        Variação %
-                      </span>
-                      <span className="text-sm font-black font-mono">
+                      <span className="text-[10px] text-slate-300 block font-mono">
                         {comparacaoData.pctDiffCustoTotal > 0 ? '+' : ''}
                         {comparacaoData.pctDiffCustoTotal.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    <div className="bg-amber-500/15 backdrop-blur-xs p-2.5 rounded-lg border border-amber-400/30 text-center min-w-[140px] flex-1 sm:flex-initial">
+                      <span className="text-[10px] text-amber-200 uppercase font-semibold block">
+                        Dif. Preço c/ Impostos
+                      </span>
+                      <span className="text-sm font-black font-mono text-amber-300 block">
+                        {comparacaoData.diffPrecoComImpostos > 0 ? '+' : ''}
+                        {formatBrl(comparacaoData.diffPrecoComImpostos)}
+                      </span>
+                      <span className="text-[10px] text-amber-200 block font-mono">
+                        {comparacaoData.pctDiffPrecoComImpostos > 0 ? '+' : ''}
+                        {comparacaoData.pctDiffPrecoComImpostos.toFixed(1)}%
                       </span>
                     </div>
                   </div>
@@ -2638,6 +2761,66 @@ export default function CadastroFichaTecnica() {
                             {comparacaoData.diffPrecoMarkup > 0 ? '+' : ''}
                             {formatBrl(comparacaoData.diffPrecoMarkup)}
                           </span>
+                        </td>
+                      </tr>
+
+                      {/* Carga Tributária Vigente & Fator Gross-up */}
+                      <tr className="bg-amber-50/30">
+                        <td className="py-2.5 px-4 font-semibold text-amber-900 flex items-center gap-1.5">
+                          <Receipt className="w-3.5 h-3.5 text-amber-600" />
+                          Carga Tributária & Gross-up ({comparacaoData.regimeNome})
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-amber-50/20 text-amber-900 font-semibold">
+                          {formatPct(comparacaoData.cargaTrib)} (Fator{' '}
+                          {comparacaoData.fatorGrossUp.toFixed(4)})
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-amber-50/20 text-amber-900 font-semibold">
+                          {formatPct(comparacaoData.cargaTrib)} (Fator{' '}
+                          {comparacaoData.fatorGrossUp.toFixed(4)})
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-500 text-[11px]">
+                          Mesmo Regime
+                        </td>
+                      </tr>
+
+                      {/* PREÇO SUGERIDO COM IMPOSTOS (POR DENTRO / GROSS-UP) */}
+                      <tr className="bg-amber-100/60 font-black text-amber-950 border-t-2 border-amber-300 hover:bg-amber-100/80 transition-colors">
+                        <td className="py-3 px-4 text-xs font-bold text-amber-950">
+                          <div className="flex items-center gap-1.5">
+                            <Percent className="w-4 h-4 text-amber-700" />
+                            <span>Preço Sugerido com Impostos (Por Dentro)</span>
+                          </div>
+                          <span className="text-[10px] text-amber-800 font-normal block mt-0.5">
+                            Gross-up: Custo / (1 - (Margem + {formatPct(comparacaoData.cargaTrib)}))
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-sm bg-blue-100/60 text-blue-950 font-black">
+                          {formatBrl(comparacaoData.precoComImpostos_A)}
+                          <span className="text-[10px] text-slate-600 font-normal block">
+                            Tributos: {formatBrl(comparacaoData.valorImpostos_A)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-sm bg-purple-100/60 text-purple-950 font-black">
+                          {formatBrl(comparacaoData.precoComImpostos_B)}
+                          <span className="text-[10px] text-slate-600 font-normal block">
+                            Tributos: {formatBrl(comparacaoData.valorImpostos_B)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-sm whitespace-nowrap">
+                          <Badge
+                            className={`text-xs font-black px-2 py-0.5 ${
+                              comparacaoData.diffPrecoComImpostos < 0
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : comparacaoData.diffPrecoComImpostos > 0
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {comparacaoData.diffPrecoComImpostos > 0 ? '+' : ''}
+                            {formatBrl(comparacaoData.diffPrecoComImpostos)} (
+                            {comparacaoData.pctDiffPrecoComImpostos > 0 ? '+' : ''}
+                            {comparacaoData.pctDiffPrecoComImpostos.toFixed(1)}%)
+                          </Badge>
                         </td>
                       </tr>
                     </tbody>
