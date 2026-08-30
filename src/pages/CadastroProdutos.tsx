@@ -44,6 +44,9 @@ import {
   Tag,
   DollarSign,
   Info,
+  Link as LinkIcon,
+  Check,
+  AlertTriangle,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -108,6 +111,13 @@ export default function CadastroProdutos() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [produtoToDelete, setProdutoToDelete] = useState<ProdutoRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Modal Vincular Preço Sugerido da Ficha ao Produto
+  const [vincularOpen, setVincularOpen] = useState(false)
+  const [produtoParaVincular, setProdutoParaVincular] = useState<ProdutoRecord | null>(null)
+  const [fichaParaVincular, setFichaParaVincular] = useState<FichaTecnicaRecord | null>(null)
+  const [tipoPrecoVinculo, setTipoPrecoVinculo] = useState<'margem' | 'markup'>('margem')
+  const [vinculandoPreco, setVinculandoPreco] = useState(false)
 
   const loadData = async () => {
     try {
@@ -347,6 +357,72 @@ export default function CadastroProdutos() {
       }))
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Vincular Preço Sugerido
+  const handleOpenVincular = (p: ProdutoRecord) => {
+    const ficha = fichasMap.get(p.id)
+    if (!ficha) return
+    setProdutoParaVincular(p)
+    setFichaParaVincular(ficha)
+    setTipoPrecoVinculo('margem')
+    setVincularOpen(true)
+  }
+
+  const handleConfirmarVinculoPreco = async () => {
+    if (!produtoParaVincular || !fichaParaVincular) return
+
+    const custoTotal = Number(fichaParaVincular.custo_total) || 0
+    const margem = Number(fichaParaVincular.margem_desejada) || 0
+    const markup =
+      fichaParaVincular.markup_desejado !== undefined && fichaParaVincular.markup_desejado !== null
+        ? Number(fichaParaVincular.markup_desejado)
+        : margem < 100 && margem > 0
+          ? (margem / (100 - margem)) * 100
+          : 50
+
+    const precoMargem =
+      Number(fichaParaVincular.preco_venda_sugerido) ||
+      (margem < 100 && custoTotal > 0 ? custoTotal / (1 - margem / 100) : custoTotal)
+    const precoMarkup =
+      Number(fichaParaVincular.preco_venda_markup) ||
+      (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
+
+    const precoFinal = tipoPrecoVinculo === 'margem' ? precoMargem : precoMarkup
+    const margemFinal =
+      tipoPrecoVinculo === 'margem'
+        ? margem
+        : precoFinal > 0
+          ? ((precoFinal - custoTotal) / precoFinal) * 100
+          : margem
+
+    setVinculandoPreco(true)
+    try {
+      await fichasTecnicasService.vincularPrecoAoProduto(
+        produtoParaVincular.id,
+        precoFinal,
+        margemFinal,
+      )
+      toast({
+        title: 'Preço vinculado com sucesso!',
+        description: `O preço de "${produtoParaVincular.nome}" foi atualizado para ${formatBrl(
+          precoFinal,
+        )} (${tipoPrecoVinculo === 'margem' ? 'por margem' : 'por markup'}).`,
+      })
+      setVincularOpen(false)
+      setProdutoParaVincular(null)
+      setFichaParaVincular(null)
+      await loadData()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao vincular preço',
+        description: err?.message || 'Não foi possível atualizar o preço do produto.',
+      })
+    } finally {
+      setVinculandoPreco(false)
     }
   }
 
@@ -707,13 +783,27 @@ export default function CadastroProdutos() {
                         </td>
                         <td className="py-3 px-3.5 text-center whitespace-nowrap">
                           {ficha ? (
-                            <Link
-                              to={`/formacao-preco/fichas-tecnicas?produto=${p.id}`}
-                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md transition-colors"
-                            >
-                              <ClipboardList className="w-3 h-3" />
-                              {ficha.itens?.length || 0} item(ns)
-                            </Link>
+                            <div className="inline-flex items-center gap-1.5">
+                              <Link
+                                to={`/formacao-preco/fichas-tecnicas?produto=${p.id}`}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2 py-1 rounded-md transition-colors"
+                                title="Ver ficha técnica"
+                              >
+                                <ClipboardList className="w-3 h-3" />
+                                {ficha.itens?.length || 0} insumos
+                              </Link>
+                              <Button
+                                type="button"
+                                onClick={() => handleOpenVincular(p)}
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-1.5 text-[10px] text-blue-700 bg-blue-50/50 hover:bg-blue-100 border-blue-200 font-medium"
+                                title="Vincular preço sugerido da ficha técnica ao produto"
+                              >
+                                <LinkIcon className="w-2.5 h-2.5 mr-1 text-blue-600" />
+                                Vincular
+                              </Button>
+                            </div>
                           ) : (
                             <Link
                               to={`/formacao-preco/fichas-tecnicas?novoPara=${p.id}`}
@@ -950,6 +1040,160 @@ export default function CadastroProdutos() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Vincular Preço Sugerido da Ficha Técnica */}
+      <Dialog open={vincularOpen} onOpenChange={setVincularOpen}>
+        <DialogContent className="sm:max-w-[480px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-blue-600" />
+              Vincular Preço Sugerido da Ficha ao Produto
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Escolha qual preço sugerido pela ficha técnica você deseja aplicar ao produto{' '}
+              <strong className="text-slate-800">"{produtoParaVincular?.nome}"</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fichaParaVincular &&
+            produtoParaVincular &&
+            (() => {
+              const custoTotal = Number(fichaParaVincular.custo_total) || 0
+              const margem = Number(fichaParaVincular.margem_desejada) || 0
+              const markup =
+                fichaParaVincular.markup_desejado !== undefined &&
+                fichaParaVincular.markup_desejado !== null
+                  ? Number(fichaParaVincular.markup_desejado)
+                  : margem < 100 && margem > 0
+                    ? (margem / (100 - margem)) * 100
+                    : 50
+
+              const precoMargem =
+                Number(fichaParaVincular.preco_venda_sugerido) ||
+                (margem < 100 && custoTotal > 0 ? custoTotal / (1 - margem / 100) : custoTotal)
+              const precoMarkup =
+                Number(fichaParaVincular.preco_venda_markup) ||
+                (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
+
+              return (
+                <div className="space-y-4 py-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Custo Total da Ficha:</span>
+                      <span className="font-bold text-slate-900">{formatBrl(custoTotal)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Preço de Venda Atual no Produto:</span>
+                      <span className="font-bold text-slate-700">
+                        {formatBrl(produtoParaVincular.preco_venda)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Selecione o Preço Sugerido para o Produto:
+                    </Label>
+
+                    {/* Opção 1: Margem */}
+                    <div
+                      onClick={() => setTipoPrecoVinculo('margem')}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                        tipoPrecoVinculo === 'margem'
+                          ? 'bg-emerald-50/80 border-emerald-500 ring-1 ring-emerald-500'
+                          : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            tipoPrecoVinculo === 'margem'
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {tipoPrecoVinculo === 'margem' && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Preço Sugerido por Margem ({formatPct(margem)})
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Fórmula divisor: Custo / (1 - Margem)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-800">
+                        {formatBrl(precoMargem)}
+                      </span>
+                    </div>
+
+                    {/* Opção 2: Markup */}
+                    <div
+                      onClick={() => setTipoPrecoVinculo('markup')}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                        tipoPrecoVinculo === 'markup'
+                          ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500'
+                          : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            tipoPrecoVinculo === 'markup'
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {tipoPrecoVinculo === 'markup' && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Preço Sugerido por Markup ({formatPct(markup)})
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Fórmula multiplicador: Custo × (1 + Mk/100)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-blue-800">
+                        {formatBrl(precoMarkup)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded border border-amber-200 flex items-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>
+                      O preço de venda do produto será atualizado para o valor selecionado e
+                      sincronizado em tempo real com todas as telas do sistema.
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setVincularOpen(false)}
+              disabled={vinculandoPreco}
+              className="text-xs h-9"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmarVinculoPreco}
+              disabled={vinculandoPreco}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
+            >
+              {vinculandoPreco ? 'Atualizando...' : 'Confirmar e Atualizar Preço'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

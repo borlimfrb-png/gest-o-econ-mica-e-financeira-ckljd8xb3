@@ -36,6 +36,8 @@ export interface FichaTecnicaInput {
   custo_total: number
   margem_desejada?: number
   preco_venda_sugerido?: number
+  markup_desejado?: number
+  preco_venda_markup?: number
   observacoes?: string
 }
 
@@ -156,15 +158,14 @@ export const fichasTecnicasService = {
       },
     )
 
-    // Sincroniza o custo e preço sugerido no produto vinculado para facilidade de consulta
+    // Sincroniza o custo no produto vinculado
     try {
       await pb.collection('produtos').update(data.produto, {
         custo: data.custo_total,
-        preco_venda: data.preco_venda_sugerido ?? undefined,
         margem_desejada: data.margem_desejada ?? undefined,
       })
     } catch (err) {
-      console.warn('Não foi possível sincronizar o produto com a ficha técnica:', err)
+      console.warn('Não foi possível sincronizar o custo do produto com a ficha técnica:', err)
     }
 
     return record
@@ -179,15 +180,28 @@ export const fichasTecnicasService = {
       try {
         await pb.collection('produtos').update(data.produto, {
           custo: data.custo_total,
-          preco_venda: data.preco_venda_sugerido ?? undefined,
           margem_desejada: data.margem_desejada ?? undefined,
         })
       } catch (err) {
-        console.warn('Não foi possível sincronizar o produto com a ficha técnica:', err)
+        console.warn('Não foi possível sincronizar o custo do produto com a ficha técnica:', err)
       }
     }
 
     return record
+  },
+
+  async vincularPrecoAoProduto(
+    produtoId: string,
+    precoVenda: number,
+    margem?: number,
+  ): Promise<ProdutoRecord> {
+    const payload: Partial<ProdutoInput> = {
+      preco_venda: Math.round(precoVenda * 100) / 100,
+    }
+    if (margem !== undefined && margem !== null && !isNaN(margem)) {
+      payload.margem_desejada = Math.round(margem * 10) / 10
+    }
+    return pb.collection('produtos').update<ProdutoRecord>(produtoId, payload)
   },
 
   async delete(id: string): Promise<boolean> {
@@ -246,6 +260,8 @@ export const fichasTecnicasService = {
         custo_total: originalFicha.custo_total || 0,
         margem_desejada: originalFicha.margem_desejada || 0,
         preco_venda_sugerido: originalFicha.preco_venda_sugerido || 0,
+        markup_desejado: originalFicha.markup_desejado || 0,
+        preco_venda_markup: originalFicha.preco_venda_markup || 0,
         observacoes: originalFicha.observacoes
           ? `[Clonada] ${originalFicha.observacoes}`
           : 'Ficha técnica clonada.',

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T23:50:14.610Z",
+  "generatedAt": "2026-08-29T23:58:53.601Z",
   "collections": [
     {
       "name": "users",
@@ -2384,6 +2384,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "markup_desejado",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "preco_venda_markup",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

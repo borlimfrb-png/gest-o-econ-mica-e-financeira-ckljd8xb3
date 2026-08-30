@@ -510,6 +510,8 @@ export interface FichaTecnicaRecord extends RecordModel {
   custo_total: number
   margem_desejada?: number
   preco_venda_sugerido?: number
+  markup_desejado?: number
+  preco_venda_markup?: number
   observacoes?: string
   expand?: {
     produto?: ProdutoRecord

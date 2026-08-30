@@ -63,7 +63,24 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ArrowDownRight,
+  Link as LinkIcon,
+  PieChart as PieChartIcon,
+  Check,
+  Zap,
 } from 'lucide-react'
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
+} from 'recharts'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -92,6 +109,7 @@ interface FichaFormData {
   produto_id: string
   outros_custos: string
   margem_desejada: string
+  markup_desejado: string
   observacoes: string
   itens: ItemFormState[]
 }
@@ -100,6 +118,7 @@ const EMPTY_FICHA: FichaFormData = {
   produto_id: '',
   outros_custos: '0.00',
   margem_desejada: '40',
+  markup_desejado: '66.67',
   observacoes: '',
   itens: [
     {
@@ -111,7 +130,7 @@ const EMPTY_FICHA: FichaFormData = {
 }
 
 type FichaFormErrors = Partial<
-  Record<'produto_id' | 'itens' | 'general' | 'margem_desejada', string>
+  Record<'produto_id' | 'itens' | 'general' | 'margem_desejada' | 'markup_desejado', string>
 >
 
 export default function CadastroFichaTecnica() {
@@ -150,6 +169,15 @@ export default function CadastroFichaTecnica() {
   const [cloneNovoNome, setCloneNovoNome] = useState('')
   const [cloneNovoCodigo, setCloneNovoCodigo] = useState('')
   const [cloning, setCloning] = useState(false)
+
+  // Modal Vincular Preço ao Produto
+  const [vincularModalOpen, setVincularModalOpen] = useState(false)
+  const [fichaParaVincular, setFichaParaVincular] = useState<FichaTecnicaRecord | null>(null)
+  const [tipoPrecoVinculo, setTipoPrecoVinculo] = useState<'margem' | 'markup'>('margem')
+  const [vinculandoPreco, setVinculandoPreco] = useState(false)
+
+  // Modo de visualização do gráfico de composição de custo: 'donut' | 'bar'
+  const [tipoGraficoComposicao, setTipoGraficoComposicao] = useState<'donut' | 'bar'>('donut')
 
   // Filtros específicos do Relatório de Margem Real
   const [relatorioSearch, setRelatorioSearch] = useState('')
@@ -390,24 +418,36 @@ export default function CadastroFichaTecnica() {
     const outros = Number(formData.outros_custos.replace(',', '.')) || 0
     const custoTotal = custoMP + outros
     const margem = Number(formData.margem_desejada.replace(',', '.')) || 0
+    const markup = Number(formData.markup_desejado.replace(',', '.')) || 0
 
-    let precoSugerido = 0
+    let precoSugeridoMargem = 0
     if (margem < 100 && margem >= 0 && custoTotal > 0) {
-      // Fórmula de Markup divisor: Custo / (1 - Margem/100)
-      precoSugerido = custoTotal / (1 - margem / 100)
+      // Fórmula por Margem (divisor): Custo / (1 - Margem/100)
+      precoSugeridoMargem = custoTotal / (1 - margem / 100)
     } else if (custoTotal > 0) {
-      precoSugerido = custoTotal
+      precoSugeridoMargem = custoTotal
     }
 
-    const lucroBruto = precoSugerido - custoTotal
+    // Fórmula por Markup sobre custo total (multiplicador): Custo Total * (1 + markup/100)
+    let precoSugeridoMarkup = 0
+    if (custoTotal > 0) {
+      precoSugeridoMarkup = custoTotal * (1 + (markup >= 0 ? markup : 0) / 100)
+    }
+
+    const lucroBrutoMargem = precoSugeridoMargem - custoTotal
+    const lucroBrutoMarkup = precoSugeridoMarkup - custoTotal
 
     return {
       custoMP,
       outros,
       custoTotal,
       margem,
-      precoSugerido,
-      lucroBruto,
+      markup,
+      precoSugeridoMargem,
+      precoSugeridoMarkup,
+      precoSugerido: precoSugeridoMargem,
+      lucroBrutoMargem,
+      lucroBrutoMarkup,
       itensValidos,
     }
   }, [formData, materiasMap])
@@ -423,13 +463,18 @@ export default function CadastroFichaTecnica() {
   const handleOpenNewWithProduct = (prodId: string, pList: ProdutoRecord[] = produtos) => {
     setEditingFicha(null)
     const prod = pList.find((p) => p.id === prodId)
+    const margemDefault =
+      prod?.margem_desejada !== undefined && prod?.margem_desejada !== null
+        ? Number(prod.margem_desejada)
+        : 40
+    const markupDefault =
+      margemDefault < 100 && margemDefault > 0 ? (margemDefault / (100 - margemDefault)) * 100 : 50
+
     setFormData({
       ...EMPTY_FICHA,
       produto_id: prodId,
-      margem_desejada:
-        prod?.margem_desejada !== undefined && prod?.margem_desejada !== null
-          ? String(prod.margem_desejada)
-          : '40',
+      margem_desejada: String(margemDefault),
+      markup_desejado: markupDefault.toFixed(2),
     })
     setErrors({})
     setModalOpen(true)
@@ -446,14 +491,21 @@ export default function CadastroFichaTecnica() {
           }))
         : [{ materia_prima_id: '', quantidade: '1', custo_unitario: '0' }]
 
+    const margemVal =
+      f.margem_desejada !== undefined && f.margem_desejada !== null ? Number(f.margem_desejada) : 40
+    const markupVal =
+      f.markup_desejado !== undefined && f.markup_desejado !== null
+        ? Number(f.markup_desejado)
+        : margemVal < 100 && margemVal > 0
+          ? (margemVal / (100 - margemVal)) * 100
+          : 50
+
     setFormData({
       produto_id: f.produto,
       outros_custos:
         f.outros_custos !== undefined && f.outros_custos !== null ? String(f.outros_custos) : '0',
-      margem_desejada:
-        f.margem_desejada !== undefined && f.margem_desejada !== null
-          ? String(f.margem_desejada)
-          : '40',
+      margem_desejada: String(margemVal),
+      markup_desejado: markupVal.toFixed(2),
       observacoes: f.observacoes || '',
       itens: itensForm,
     })
@@ -522,6 +574,11 @@ export default function CadastroFichaTecnica() {
       errs.margem_desejada = 'A margem desejada deve estar entre 0% e 99.9%'
     }
 
+    const markup = Number(formData.markup_desejado.replace(',', '.'))
+    if (isNaN(markup) || markup < 0) {
+      errs.markup_desejado = 'Informe um percentual de markup válido (>= 0%)'
+    }
+
     setErrors(errs)
     return Object.keys(errs).length === 0
   }
@@ -532,7 +589,16 @@ export default function CadastroFichaTecnica() {
 
     setSaving(true)
     try {
-      const { custoMP, outros, custoTotal, margem, precoSugerido, itensValidos } = formCalculations
+      const {
+        custoMP,
+        outros,
+        custoTotal,
+        margem,
+        markup,
+        precoSugeridoMargem,
+        precoSugeridoMarkup,
+        itensValidos,
+      } = formCalculations
 
       const payload = {
         produto: formData.produto_id,
@@ -541,7 +607,9 @@ export default function CadastroFichaTecnica() {
         outros_custos: outros,
         custo_total: custoTotal,
         margem_desejada: margem,
-        preco_venda_sugerido: Math.round(precoSugerido * 100) / 100,
+        preco_venda_sugerido: Math.round(precoSugeridoMargem * 100) / 100,
+        markup_desejado: markup,
+        preco_venda_markup: Math.round(precoSugeridoMarkup * 100) / 100,
         observacoes: formData.observacoes.trim() || undefined,
       }
 
@@ -569,6 +637,66 @@ export default function CadastroFichaTecnica() {
       }))
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Handlers para Vincular Preço ao Produto
+  const handleOpenVincularPreco = (f: FichaTecnicaRecord) => {
+    setFichaParaVincular(f)
+    setTipoPrecoVinculo('margem')
+    setVincularModalOpen(true)
+  }
+
+  const handleConfirmarVinculoPreco = async () => {
+    if (!fichaParaVincular) return
+    const prod = produtosMap.get(fichaParaVincular.produto)
+    if (!prod) return
+
+    const custoTotal = Number(fichaParaVincular.custo_total) || 0
+    const margem = Number(fichaParaVincular.margem_desejada) || 0
+    const markup =
+      fichaParaVincular.markup_desejado !== undefined && fichaParaVincular.markup_desejado !== null
+        ? Number(fichaParaVincular.markup_desejado)
+        : margem < 100 && margem > 0
+          ? (margem / (100 - margem)) * 100
+          : 50
+
+    const precoMargem =
+      Number(fichaParaVincular.preco_venda_sugerido) ||
+      (margem < 100 && custoTotal > 0 ? custoTotal / (1 - margem / 100) : custoTotal)
+    const precoMarkup =
+      Number(fichaParaVincular.preco_venda_markup) ||
+      (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
+
+    const precoFinal = tipoPrecoVinculo === 'margem' ? precoMargem : precoMarkup
+    const margemFinal =
+      tipoPrecoVinculo === 'margem'
+        ? margem
+        : precoFinal > 0
+          ? ((precoFinal - custoTotal) / precoFinal) * 100
+          : margem
+
+    setVinculandoPreco(true)
+    try {
+      await fichasTecnicasService.vincularPrecoAoProduto(prod.id, precoFinal, margemFinal)
+      toast({
+        title: 'Preço vinculado com sucesso!',
+        description: `O preço de venda de "${prod.nome}" foi atualizado para ${formatBrl(
+          precoFinal,
+        )} (${tipoPrecoVinculo === 'margem' ? 'por margem' : 'por markup'}).`,
+      })
+      setVincularModalOpen(false)
+      setFichaParaVincular(null)
+      await loadData()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao vincular preço',
+        description: err?.message || 'Não foi possível atualizar o preço do produto.',
+      })
+    } finally {
+      setVinculandoPreco(false)
     }
   }
 
@@ -683,7 +811,9 @@ export default function CadastroFichaTecnica() {
       'Outros Custos (R$)',
       'Custo Total (R$)',
       'Margem Desejada (%)',
-      'Preço de Venda Sugerido (R$)',
+      'Preço Sugerido por Margem (R$)',
+      'Markup Desejado (%)',
+      'Preço Sugerido por Markup (R$)',
       'Observações',
     ]
 
@@ -691,6 +821,16 @@ export default function CadastroFichaTecnica() {
 
     for (const f of fichasFiltradas) {
       const prod = produtosMap.get(f.produto)
+      const custoTotal = Number(f.custo_total) || 0
+      const markupVal =
+        f.markup_desejado !== undefined && f.markup_desejado !== null
+          ? f.markup_desejado
+          : f.margem_desejada && f.margem_desejada < 100
+            ? (f.margem_desejada / (100 - f.margem_desejada)) * 100
+            : 50
+      const precoMarkup =
+        f.preco_venda_markup || (custoTotal > 0 ? custoTotal * (1 + markupVal / 100) : 0)
+
       linhas.push(
         [
           prod?.codigo || '',
@@ -701,6 +841,8 @@ export default function CadastroFichaTecnica() {
           fmtNum(f.custo_total),
           f.margem_desejada !== undefined ? f.margem_desejada.toFixed(1) + '%' : '',
           fmtNum(f.preco_venda_sugerido),
+          markupVal !== undefined ? markupVal.toFixed(1) + '%' : '',
+          fmtNum(precoMarkup),
           f.observacoes || '',
         ]
           .map(escapeCsv)
@@ -757,7 +899,9 @@ export default function CadastroFichaTecnica() {
       'Outros Custos (R$)',
       'Custo Total Unitário (R$)',
       'Preço de Venda Praticado (R$)',
-      'Preço Sugerido (R$)',
+      'Preço Sugerido por Margem (R$)',
+      'Preço Sugerido por Markup (R$)',
+      'Markup Desejado (%)',
       'Lucro Unitário (R$)',
       'Margem Desejada (%)',
       'Margem Real (%)',
@@ -777,6 +921,17 @@ export default function CadastroFichaTecnica() {
               ? 'Meta Atingida'
               : 'Acima do Desejado'
 
+      const mkDesejado =
+        item.ficha.markup_desejado !== undefined && item.ficha.markup_desejado !== null
+          ? item.ficha.markup_desejado
+          : item.margemDesejada < 100 && item.margemDesejada > 0
+            ? (item.margemDesejada / (100 - item.margemDesejada)) * 100
+            : 50
+
+      const precoMk =
+        item.ficha.preco_venda_markup ||
+        (item.custoTotal > 0 ? item.custoTotal * (1 + mkDesejado / 100) : 0)
+
       linhas.push(
         [
           item.produtoCodigo,
@@ -789,6 +944,8 @@ export default function CadastroFichaTecnica() {
           fmtNum(item.custoTotal),
           fmtNum(item.precoVenda),
           fmtNum(item.precoSugerido),
+          fmtNum(precoMk),
+          mkDesejado.toFixed(1) + '%',
           fmtNum(item.lucroUnitario),
           item.margemDesejada.toFixed(2) + '%',
           item.margemReal.toFixed(2) + '%',
@@ -1052,13 +1209,57 @@ export default function CadastroFichaTecnica() {
                                   {formatBrl(f.custo_total)}
                                 </td>
                                 <td className="py-3 px-3.5 text-right font-semibold text-amber-700 whitespace-nowrap">
-                                  {formatPct(f.margem_desejada)}
+                                  <div>{formatPct(f.margem_desejada)}</div>
+                                  <div className="text-[10px] text-slate-400 font-normal">
+                                    Mk:{' '}
+                                    {formatPct(
+                                      f.markup_desejado ??
+                                        (f.margem_desejada && f.margem_desejada < 100
+                                          ? (f.margem_desejada / (100 - f.margem_desejada)) * 100
+                                          : 50),
+                                    )}
+                                  </div>
                                 </td>
-                                <td className="py-3 px-3.5 text-right font-bold text-emerald-700 whitespace-nowrap">
-                                  {formatBrl(f.preco_venda_sugerido)}
+                                <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                                  <div className="font-bold text-emerald-700">
+                                    {formatBrl(f.preco_venda_sugerido)}
+                                  </div>
+                                  <div
+                                    className="text-[10px] text-blue-600 font-medium"
+                                    title="Preço Sugerido por Markup"
+                                  >
+                                    Mk:{' '}
+                                    {formatBrl(
+                                      f.preco_venda_markup ||
+                                        (Number(f.custo_total) > 0
+                                          ? Number(f.custo_total) *
+                                            (1 +
+                                              (f.markup_desejado ??
+                                                (f.margem_desejada && f.margem_desejada < 100
+                                                  ? (f.margem_desejada /
+                                                      (100 - f.margem_desejada)) *
+                                                    100
+                                                  : 50)) /
+                                                100)
+                                          : 0),
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="py-3 px-3.5 text-right whitespace-nowrap">
                                   <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleOpenVincularPreco(f)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-[11px] text-blue-700 hover:text-blue-800 hover:bg-blue-50 font-semibold"
+                                      title="Vincular preço sugerido ao produto"
+                                    >
+                                      <LinkIcon className="w-3 h-3 mr-1" />
+                                      Vincular
+                                    </Button>
                                     <Button
                                       onClick={(e) => {
                                         e.stopPropagation()
@@ -1127,6 +1328,77 @@ export default function CadastroFichaTecnica() {
                 (() => {
                   const prod = produtosMap.get(selectedFicha.produto)
                   const itens = selectedFicha.itens || []
+                  const custoTotal = Number(selectedFicha.custo_total) || 0
+                  const custoMP = Number(selectedFicha.custo_materia_prima) || 0
+                  const outrosCustos = Number(selectedFicha.outros_custos) || 0
+                  const margem = Number(selectedFicha.margem_desejada) || 0
+                  const markup =
+                    selectedFicha.markup_desejado !== undefined &&
+                    selectedFicha.markup_desejado !== null
+                      ? Number(selectedFicha.markup_desejado)
+                      : margem < 100 && margem > 0
+                        ? (margem / (100 - margem)) * 100
+                        : 50
+
+                  const precoMargem =
+                    Number(selectedFicha.preco_venda_sugerido) ||
+                    (margem < 100 && custoTotal > 0 ? custoTotal / (1 - margem / 100) : custoTotal)
+
+                  const precoMarkup =
+                    Number(selectedFicha.preco_venda_markup) ||
+                    (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
+
+                  // Preparação de dados categorizados para o gráfico de composição
+                  // Agrupa insumos por categoria (ex: Insumos principais, Embalagem, etc.) ou lista itens + outros custos
+                  const categoriasInsumosMap = new Map<string, number>()
+                  for (const it of itens) {
+                    const mp = materiasMap.get(it.materia_prima_id)
+                    const catName = mp?.categoria?.trim() || 'Matéria-Prima Direta'
+                    const prev = categoriasInsumosMap.get(catName) || 0
+                    categoriasInsumosMap.set(catName, prev + (it.subtotal || 0))
+                  }
+
+                  const chartDataList: Array<{ name: string; value: number; color: string }> = []
+                  const PALETTE = ['#2563EB', '#0D9488', '#F59E0B', '#8B5CF6', '#EC4899', '#06B6D4']
+                  let pIdx = 0
+
+                  if (categoriasInsumosMap.size > 0) {
+                    categoriasInsumosMap.forEach((val, key) => {
+                      if (val > 0) {
+                        chartDataList.push({
+                          name: key,
+                          value: Math.round(val * 100) / 100,
+                          color: PALETTE[pIdx % PALETTE.length],
+                        })
+                        pIdx++
+                      }
+                    })
+                  } else if (custoMP > 0) {
+                    chartDataList.push({
+                      name: 'Matéria-Prima',
+                      value: Math.round(custoMP * 100) / 100,
+                      color: '#2563EB',
+                    })
+                  }
+
+                  if (outrosCustos > 0) {
+                    chartDataList.push({
+                      name: 'Outros Custos / MOD',
+                      value: Math.round(outrosCustos * 100) / 100,
+                      color: '#F97316',
+                    })
+                  }
+
+                  // Se tudo estiver zerado
+                  if (chartDataList.length === 0) {
+                    chartDataList.push({
+                      name: 'Sem custo apurado',
+                      value: 1,
+                      color: '#CBD5E1',
+                    })
+                  }
+
+                  const precoVendaAtualProd = Number(prod?.preco_venda) || 0
 
                   return (
                     <Card className="bg-white border-slate-200 shadow-xs">
@@ -1134,7 +1406,7 @@ export default function CadastroFichaTecnica() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                              Ficha Técnica
+                              Ficha Técnica Detalhada
                             </span>
                             <CardTitle className="text-base font-bold text-[#0B1F3A] mt-1.5">
                               {prod?.nome || 'Produto'}
@@ -1142,6 +1414,7 @@ export default function CadastroFichaTecnica() {
                             <CardDescription className="text-xs">
                               {prod?.codigo ? `Código: ${prod.codigo} · ` : ''}Unidade:{' '}
                               {prod?.unidade || 'UN'}
+                              {prod?.categoria ? ` · Categoria: ${prod.categoria}` : ''}
                             </CardDescription>
                           </div>
                           <div className="flex items-center gap-1">
@@ -1168,15 +1441,187 @@ export default function CadastroFichaTecnica() {
                         </div>
                       </CardHeader>
 
-                      <CardContent className="p-4 space-y-4">
-                        {/* Lista de Matérias-Primas da Ficha */}
+                      <CardContent className="p-4 space-y-5">
+                        {/* 1. GRÁFICO DE COMPOSIÇÃO DE CUSTO DA FICHA TÉCNICA */}
+                        <div className="p-3.5 bg-slate-50/90 border border-slate-200 rounded-xl space-y-3">
+                          <div className="flex items-center justify-between">
+                            <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <PieChartIcon className="w-3.5 h-3.5 text-blue-600" />
+                              Composição do Custo Total
+                            </h4>
+                            <div className="flex items-center bg-white border border-slate-200 rounded p-0.5 text-[10px]">
+                              <button
+                                type="button"
+                                onClick={() => setTipoGraficoComposicao('donut')}
+                                className={`px-2 py-0.5 rounded font-semibold transition-colors ${
+                                  tipoGraficoComposicao === 'donut'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Rosca
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setTipoGraficoComposicao('bar')}
+                                className={`px-2 py-0.5 rounded font-semibold transition-colors ${
+                                  tipoGraficoComposicao === 'bar'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-slate-600 hover:text-slate-900'
+                                }`}
+                              >
+                                Barras
+                              </button>
+                            </div>
+                          </div>
+
+                          {custoTotal > 0 ? (
+                            <>
+                              <div className="h-44 w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  {tipoGraficoComposicao === 'donut' ? (
+                                    <PieChart>
+                                      <Tooltip
+                                        formatter={(val: any, name: any) => [
+                                          `${formatBrl(Number(val))} (${(
+                                            (Number(val) / custoTotal) *
+                                            100
+                                          ).toFixed(1)}%)`,
+                                          name,
+                                        ]}
+                                        contentStyle={{
+                                          backgroundColor: '#0F172A',
+                                          color: '#fff',
+                                          borderRadius: '8px',
+                                          fontSize: '11px',
+                                          border: 'none',
+                                        }}
+                                      />
+                                      <Pie
+                                        data={chartDataList}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={36}
+                                        outerRadius={65}
+                                        paddingAngle={3}
+                                      >
+                                        {chartDataList.map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                      </Pie>
+                                    </PieChart>
+                                  ) : (
+                                    <BarChart
+                                      data={chartDataList}
+                                      layout="vertical"
+                                      margin={{ top: 5, right: 20, left: 20, bottom: 5 }}
+                                    >
+                                      <CartesianGrid
+                                        strokeDasharray="3 3"
+                                        horizontal={false}
+                                        stroke="#E2E8F0"
+                                      />
+                                      <XAxis
+                                        type="number"
+                                        tickFormatter={(v) => `R$ ${v}`}
+                                        fontSize={10}
+                                      />
+                                      <YAxis
+                                        type="category"
+                                        dataKey="name"
+                                        width={80}
+                                        fontSize={10}
+                                      />
+                                      <Tooltip
+                                        formatter={(val: any) => [formatBrl(Number(val)), 'Custo']}
+                                        contentStyle={{
+                                          backgroundColor: '#0F172A',
+                                          color: '#fff',
+                                          borderRadius: '8px',
+                                          fontSize: '11px',
+                                        }}
+                                      />
+                                      <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                                        {chartDataList.map((entry, index) => (
+                                          <Cell key={`cell-bar-${index}`} fill={entry.color} />
+                                        ))}
+                                      </Bar>
+                                    </BarChart>
+                                  )}
+                                </ResponsiveContainer>
+                              </div>
+
+                              {/* Legenda com R$ e % */}
+                              <div className="space-y-1.5 pt-1 border-t border-slate-200">
+                                {chartDataList.map((item, idx) => {
+                                  const pct = custoTotal > 0 ? (item.value / custoTotal) * 100 : 0
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="flex items-center justify-between text-xs text-slate-700"
+                                    >
+                                      <div className="flex items-center gap-1.5 truncate pr-2">
+                                        <span
+                                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                                          style={{ backgroundColor: item.color }}
+                                        />
+                                        <span className="truncate">{item.name}</span>
+                                      </div>
+                                      <div className="font-semibold shrink-0 text-slate-900">
+                                        {formatBrl(item.value)}{' '}
+                                        <span className="text-[11px] text-slate-400 font-normal">
+                                          ({pct.toFixed(1)}%)
+                                        </span>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="py-6 text-center text-xs text-slate-400">
+                              Nenhum custo cadastrado nesta ficha para gerar gráfico.
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 2. BOTÃO E PAINEL: VINCULAR PREÇO AO PRODUTO */}
+                        <div className="p-3.5 bg-gradient-to-br from-blue-50/80 to-indigo-50/70 border border-blue-200 rounded-xl space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider block">
+                                Integração Produto
+                              </span>
+                              <span className="text-xs font-bold text-slate-900">
+                                Preço no Catálogo: {formatBrl(precoVendaAtualProd)}
+                              </span>
+                            </div>
+                            <Button
+                              type="button"
+                              onClick={() => handleOpenVincularPreco(selectedFicha)}
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8 shadow-xs gap-1.5"
+                            >
+                              <LinkIcon className="w-3.5 h-3.5" />
+                              Vincular Preço ao Produto
+                            </Button>
+                          </div>
+                          <p className="text-[11px] text-slate-600">
+                            Atualize o preço de venda do cadastro do produto com o preço sugerido
+                            por margem ou markup.
+                          </p>
+                        </div>
+
+                        {/* 3. COMPOSIÇÃO DE INSUMOS */}
                         <div>
                           <h4 className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
                             <Layers className="w-3.5 h-3.5 text-amber-600" />
                             Composição de Insumos ({itens.length})
                           </h4>
 
-                          <div className="space-y-1.5">
+                          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                             {itens.map((it, idx) => {
                               const mp = materiasMap.get(it.materia_prima_id)
                               return (
@@ -1202,31 +1647,50 @@ export default function CadastroFichaTecnica() {
                           </div>
                         </div>
 
-                        {/* Resumo de Custos e Formação de Preço */}
-                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2">
+                        {/* 4. COMPARATIVO DE PREÇOS SUGERIDOS: MARGEM VS MARKUP */}
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
                           <div className="flex justify-between text-xs text-slate-600">
                             <span>Subtotal Matéria-Prima:</span>
                             <span className="font-semibold text-slate-800">
-                              {formatBrl(selectedFicha.custo_materia_prima)}
+                              {formatBrl(custoMP)}
                             </span>
                           </div>
                           <div className="flex justify-between text-xs text-slate-600">
                             <span>Outros Custos (MOD/Despesas):</span>
                             <span className="font-semibold text-slate-800">
-                              {formatBrl(selectedFicha.outros_custos)}
+                              {formatBrl(outrosCustos)}
                             </span>
                           </div>
                           <div className="flex justify-between text-xs font-bold text-slate-900 border-t border-slate-200 pt-1.5">
                             <span>Custo Total Unitário:</span>
-                            <span>{formatBrl(selectedFicha.custo_total)}</span>
+                            <span>{formatBrl(custoTotal)}</span>
                           </div>
-                          <div className="flex justify-between text-xs text-amber-700 font-semibold">
-                            <span>Margem de Lucro Desejada:</span>
-                            <span>{formatPct(selectedFicha.margem_desejada)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm font-bold text-emerald-800 border-t border-slate-200 pt-2 bg-emerald-50/70 p-2 rounded">
-                            <span>Preço de Venda Sugerido:</span>
-                            <span>{formatBrl(selectedFicha.preco_venda_sugerido)}</span>
+
+                          {/* Comparativo dos Dois Preços Sugeridos */}
+                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
+                            <div className="bg-emerald-50/90 border border-emerald-200 rounded-lg p-2.5 text-center">
+                              <span className="text-[10px] font-bold text-emerald-800 block">
+                                Por Margem ({formatPct(margem)})
+                              </span>
+                              <span className="text-xs text-slate-500 block text-[10px]">
+                                Divisor: Custo / (1 - M)
+                              </span>
+                              <span className="text-sm font-extrabold text-emerald-800 mt-1 block">
+                                {formatBrl(precoMargem)}
+                              </span>
+                            </div>
+
+                            <div className="bg-blue-50/90 border border-blue-200 rounded-lg p-2.5 text-center">
+                              <span className="text-[10px] font-bold text-blue-800 block">
+                                Por Markup ({formatPct(markup)})
+                              </span>
+                              <span className="text-xs text-slate-500 block text-[10px]">
+                                Custo × (1 + Mk/100)
+                              </span>
+                              <span className="text-sm font-extrabold text-blue-800 mt-1 block">
+                                {formatBrl(precoMarkup)}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
@@ -1405,8 +1869,9 @@ export default function CadastroFichaTecnica() {
                         <th className="py-3 px-3.5 text-right">Custo MP</th>
                         <th className="py-3 px-3.5 text-right">Outros Custos</th>
                         <th className="py-3 px-3.5 text-right">Custo Total</th>
-                        <th className="py-3 px-3.5 text-right">Preço de Venda</th>
-                        <th className="py-3 px-3.5 text-right">Lucro Unitário</th>
+                        <th className="py-3 px-3.5 text-right">Preço Venda</th>
+                        <th className="py-3 px-3.5 text-right">Preço Sug. (Margem)</th>
+                        <th className="py-3 px-3.5 text-right">Preço Sug. (Markup)</th>
                         <th className="py-3 px-3.5 text-right">Margem Desejada</th>
                         <th className="py-3 px-3.5 text-right">Margem Real</th>
                         <th className="py-3 px-3.5 text-center">Desempenho</th>
@@ -1418,6 +1883,16 @@ export default function CadastroFichaTecnica() {
                         const isAtingida = item.statusMargem === 'atingida'
                         const isAbaixo = item.statusMargem === 'abaixo'
                         const isCritica = item.statusMargem === 'critica'
+                        const markupVal =
+                          item.ficha.markup_desejado !== undefined &&
+                          item.ficha.markup_desejado !== null
+                            ? item.ficha.markup_desejado
+                            : item.margemDesejada < 100 && item.margemDesejada > 0
+                              ? (item.margemDesejada / (100 - item.margemDesejada)) * 100
+                              : 50
+                        const precoMk =
+                          item.ficha.preco_venda_markup ||
+                          (item.custoTotal > 0 ? item.custoTotal * (1 + markupVal / 100) : 0)
 
                         return (
                           <tr
@@ -1457,24 +1932,20 @@ export default function CadastroFichaTecnica() {
                             <td className="py-3 px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
                               {formatBrl(item.custoTotal)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-blue-900 whitespace-nowrap">
+                            <td className="py-3 px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
                               {formatBrl(item.precoVenda)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-semibold whitespace-nowrap">
-                              <span
-                                className={
-                                  item.lucroUnitario < 0
-                                    ? 'text-rose-600'
-                                    : item.lucroUnitario > 0
-                                      ? 'text-emerald-700'
-                                      : 'text-slate-600'
-                                }
-                              >
-                                {formatBrl(item.lucroUnitario)}
-                              </span>
+                            <td className="py-3 px-3.5 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                              {formatBrl(item.precoSugerido)}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-semibold text-blue-700 whitespace-nowrap">
+                              {formatBrl(precoMk)}
                             </td>
                             <td className="py-3 px-3.5 text-right font-medium text-slate-600 whitespace-nowrap">
-                              {formatPct(item.margemDesejada)}
+                              <div>{formatPct(item.margemDesejada)}</div>
+                              <div className="text-[10px] text-slate-400">
+                                Mk: {formatPct(markupVal)}
+                              </div>
                             </td>
                             <td className="py-3 px-3.5 text-right whitespace-nowrap">
                               <span
@@ -1729,11 +2200,11 @@ export default function CadastroFichaTecnica() {
                 </div>
               </div>
 
-              {/* Seção Outros Custos e Margem */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+              {/* Seção Outros Custos, Margem e Markup */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-100 pt-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="ficha-outros" className="text-xs font-semibold text-slate-700">
-                    Outros Custos / Mão de Obra (R$)
+                    Outros Custos / MOD (R$)
                   </Label>
                   <Input
                     id="ficha-outros"
@@ -1748,14 +2219,12 @@ export default function CadastroFichaTecnica() {
                     }
                     className="h-9 text-xs"
                   />
-                  <p className="text-[11px] text-slate-400">
-                    Mão de obra direta, energia, embalagem etc.
-                  </p>
+                  <p className="text-[10px] text-slate-400">Mão de obra, energia, embalagem etc.</p>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label htmlFor="ficha-margem" className="text-xs font-semibold text-slate-700">
-                    Margem de Lucro Desejada (%) *
+                    Margem Desejada (%) *
                   </Label>
                   <Input
                     id="ficha-margem"
@@ -1766,30 +2235,66 @@ export default function CadastroFichaTecnica() {
                     max="99.9"
                     placeholder="Ex: 40.0"
                     value={formData.margem_desejada}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, margem_desejada: e.target.value }))
-                    }
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const m = Number(val.replace(',', '.'))
+                      // Se usuário altera margem, auto-atualiza markup equivalente para conveniência
+                      let mkEquivalent = formData.markup_desejado
+                      if (!isNaN(m) && m >= 0 && m < 100) {
+                        mkEquivalent = ((m / (100 - m)) * 100).toFixed(2)
+                      }
+                      setFormData((prev) => ({
+                        ...prev,
+                        margem_desejada: val,
+                        markup_desejado: mkEquivalent,
+                      }))
+                    }}
                     className={`h-9 text-xs ${errors.margem_desejada ? 'border-red-500' : ''}`}
                   />
                   {errors.margem_desejada ? (
-                    <p className="text-[11px] text-red-600 font-medium">{errors.margem_desejada}</p>
+                    <p className="text-[10px] text-red-600 font-medium">{errors.margem_desejada}</p>
                   ) : (
-                    <p className="text-[11px] text-slate-400">
-                      Markup sobre o preço final: PV = Custo / (1 - Margem)
+                    <p className="text-[10px] text-slate-400">Divisor: PV = Custo / (1 - Margem)</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="ficha-markup" className="text-xs font-semibold text-slate-700">
+                    Markup sobre Custo Total (%) *
+                  </Label>
+                  <Input
+                    id="ficha-markup"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    min="0"
+                    placeholder="Ex: 66.7"
+                    value={formData.markup_desejado}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setFormData((prev) => ({ ...prev, markup_desejado: val }))
+                    }}
+                    className={`h-9 text-xs ${errors.markup_desejado ? 'border-red-500' : ''}`}
+                  />
+                  {errors.markup_desejado ? (
+                    <p className="text-[10px] text-red-600 font-medium">{errors.markup_desejado}</p>
+                  ) : (
+                    <p className="text-[10px] text-slate-400">
+                      Multiplicador: PV = Custo × (1 + Mk)
                     </p>
                   )}
                 </div>
               </div>
 
-              {/* Painel de Apuração e Preço Sugerido */}
-              <div className="p-4 bg-gradient-to-r from-blue-50/70 to-emerald-50/70 border border-blue-200/70 rounded-xl space-y-3">
+              {/* Painel de Apuração e Preços Sugeridos (Margem vs Markup) */}
+              <div className="p-4 bg-gradient-to-r from-blue-50/70 via-indigo-50/50 to-emerald-50/70 border border-blue-200/70 rounded-xl space-y-3">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#0B1F3A]">
                   <Sparkles className="w-4 h-4 text-blue-600" />
-                  Apuração Automática de Preço
+                  Apuração de Custos & Preços Sugeridos
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-500 font-medium block">
                       Custo Matéria-Prima
                     </span>
@@ -1797,7 +2302,7 @@ export default function CadastroFichaTecnica() {
                       {formatBrl(formCalculations.custoMP)}
                     </span>
                   </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-500 font-medium block">
                       Outros Custos
                     </span>
@@ -1805,7 +2310,7 @@ export default function CadastroFichaTecnica() {
                       {formatBrl(formCalculations.outros)}
                     </span>
                   </div>
-                  <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-500 font-medium block">
                       Custo Total
                     </span>
@@ -1813,12 +2318,20 @@ export default function CadastroFichaTecnica() {
                       {formatBrl(formCalculations.custoTotal)}
                     </span>
                   </div>
-                  <div className="bg-emerald-600 text-white p-2.5 rounded-lg shadow-xs">
+                  <div className="bg-emerald-700 text-white p-2 rounded-lg shadow-xs">
                     <span className="text-[10px] font-medium block text-emerald-100">
-                      Preço Sugerido
+                      Preço Sugerido (Margem)
                     </span>
                     <span className="text-xs font-extrabold mt-0.5 block">
-                      {formatBrl(formCalculations.precoSugerido)}
+                      {formatBrl(formCalculations.precoSugeridoMargem)}
+                    </span>
+                  </div>
+                  <div className="bg-blue-700 text-white p-2 rounded-lg shadow-xs col-span-2 sm:col-span-1">
+                    <span className="text-[10px] font-medium block text-blue-100">
+                      Preço Sugerido (Markup)
+                    </span>
+                    <span className="text-xs font-extrabold mt-0.5 block">
+                      {formatBrl(formCalculations.precoSugeridoMarkup)}
                     </span>
                   </div>
                 </div>
@@ -1943,6 +2456,160 @@ export default function CadastroFichaTecnica() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Vincular Preço ao Produto */}
+      <Dialog open={vincularModalOpen} onOpenChange={setVincularModalOpen}>
+        <DialogContent className="sm:max-w-[480px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-blue-600" />
+              Vincular Preço Sugerido ao Produto
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Escolha qual preço sugerido pela ficha técnica você deseja aplicar como preço de venda
+              oficial do produto.
+            </DialogDescription>
+          </DialogHeader>
+
+          {fichaParaVincular &&
+            (() => {
+              const prod = produtosMap.get(fichaParaVincular.produto)
+              const custoTotal = Number(fichaParaVincular.custo_total) || 0
+              const margem = Number(fichaParaVincular.margem_desejada) || 0
+              const markup =
+                fichaParaVincular.markup_desejado !== undefined &&
+                fichaParaVincular.markup_desejado !== null
+                  ? Number(fichaParaVincular.markup_desejado)
+                  : margem < 100 && margem > 0
+                    ? (margem / (100 - margem)) * 100
+                    : 50
+
+              const precoMargem =
+                Number(fichaParaVincular.preco_venda_sugerido) ||
+                (margem < 100 && custoTotal > 0 ? custoTotal / (1 - margem / 100) : custoTotal)
+              const precoMarkup =
+                Number(fichaParaVincular.preco_venda_markup) ||
+                (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
+
+              return (
+                <div className="space-y-4 py-3">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+                    <div className="text-slate-500">Produto selecionado:</div>
+                    <div className="font-bold text-slate-900 text-sm">
+                      {prod?.nome || 'Produto'}
+                    </div>
+                    <div className="text-slate-500 flex items-center justify-between pt-1 border-t border-slate-200 mt-1">
+                      <span>Preço de venda atual:</span>
+                      <span className="font-semibold text-slate-800">
+                        {formatBrl(prod?.preco_venda)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700">
+                      Selecione o Preço Sugerido a Aplicar:
+                    </Label>
+
+                    {/* Opção 1: Preço por Margem */}
+                    <div
+                      onClick={() => setTipoPrecoVinculo('margem')}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                        tipoPrecoVinculo === 'margem'
+                          ? 'bg-emerald-50/80 border-emerald-500 ring-1 ring-emerald-500'
+                          : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            tipoPrecoVinculo === 'margem'
+                              ? 'border-emerald-600 bg-emerald-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {tipoPrecoVinculo === 'margem' && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Preço Sugerido por Margem ({formatPct(margem)})
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Fórmula divisor: Custo / (1 - Margem)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-emerald-800">
+                        {formatBrl(precoMargem)}
+                      </span>
+                    </div>
+
+                    {/* Opção 2: Preço por Markup */}
+                    <div
+                      onClick={() => setTipoPrecoVinculo('markup')}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                        tipoPrecoVinculo === 'markup'
+                          ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500'
+                          : 'bg-white border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
+                            tipoPrecoVinculo === 'markup'
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : 'border-slate-300 bg-white'
+                          }`}
+                        >
+                          {tipoPrecoVinculo === 'markup' && <Check className="w-2.5 h-2.5" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            Preço Sugerido por Markup ({formatPct(markup)})
+                          </p>
+                          <p className="text-[11px] text-slate-500">
+                            Fórmula multiplicador: Custo × (1 + Mk/100)
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-sm font-bold text-blue-800">
+                        {formatBrl(precoMarkup)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded border border-amber-200 flex items-start gap-1.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                    <span>
+                      Ao confirmar, o preço de venda do produto <strong>"{prod?.nome}"</strong> será
+                      atualizado no catálogo e refletirá imediatamente nas listagens e relatórios.
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setVincularModalOpen(false)}
+              disabled={vinculandoPreco}
+              className="text-xs h-9"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmarVinculoPreco}
+              disabled={vinculandoPreco}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
+            >
+              {vinculandoPreco ? 'Vinculando...' : 'Confirmar e Atualizar Preço'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
