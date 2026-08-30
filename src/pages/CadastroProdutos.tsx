@@ -47,7 +47,9 @@ import {
   Link as LinkIcon,
   Check,
   AlertTriangle,
+  History,
 } from 'lucide-react'
+import { ModalHistoricoPrecos } from '@/components/ModalHistoricoPrecos'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 function formatBrl(val: number | null | undefined): string {
@@ -118,6 +120,10 @@ export default function CadastroProdutos() {
   const [fichaParaVincular, setFichaParaVincular] = useState<FichaTecnicaRecord | null>(null)
   const [tipoPrecoVinculo, setTipoPrecoVinculo] = useState<'margem' | 'markup'>('margem')
   const [vinculandoPreco, setVinculandoPreco] = useState(false)
+
+  // Modal Histórico de Preços
+  const [historicoModalOpen, setHistoricoModalOpen] = useState(false)
+  const [produtoParaHistorico, setProdutoParaHistorico] = useState<ProdutoRecord | null>(null)
 
   const loadData = async () => {
     try {
@@ -370,6 +376,11 @@ export default function CadastroProdutos() {
     setVincularOpen(true)
   }
 
+  const handleOpenHistorico = (p: ProdutoRecord) => {
+    setProdutoParaHistorico(p)
+    setHistoricoModalOpen(true)
+  }
+
   const handleConfirmarVinculoPreco = async () => {
     if (!produtoParaVincular || !fichaParaVincular) return
 
@@ -403,6 +414,8 @@ export default function CadastroProdutos() {
         produtoParaVincular.id,
         precoFinal,
         margemFinal,
+        tipoPrecoVinculo === 'margem' ? 'Preço Sugerido Margem' : 'Preço Sugerido Markup',
+        `Preço vinculado a partir do preço sugerido por ${tipoPrecoVinculo === 'margem' ? 'Margem' : 'Markup'} da Ficha Técnica`,
       )
       toast({
         title: 'Preço vinculado com sucesso!',
@@ -817,6 +830,15 @@ export default function CadastroProdutos() {
                         <td className="py-3 px-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
                             <Button
+                              onClick={() => handleOpenHistorico(p)}
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                              title="Histórico de alterações de preço"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
                               onClick={() => handleOpenEdit(p)}
                               size="sm"
                               variant="ghost"
@@ -1196,6 +1218,14 @@ export default function CadastroProdutos() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Histórico de Preços */}
+      <ModalHistoricoPrecos
+        open={historicoModalOpen}
+        onOpenChange={setHistoricoModalOpen}
+        produto={produtoParaHistorico}
+        onPrecoUpdated={loadData}
+      />
 
       {/* Confirmação de Exclusão */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

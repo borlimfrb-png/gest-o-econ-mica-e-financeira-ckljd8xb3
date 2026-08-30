@@ -4,6 +4,8 @@ import type {
   MateriaPrimaRecord,
   FichaTecnicaRecord,
   ItemFichaTecnica,
+  HistoricoPrecoProdutoRecord,
+  OrigemAlteracaoPreco,
 } from '@/types/finance'
 
 export interface ProdutoInput {
@@ -15,6 +17,17 @@ export interface ProdutoInput {
   preco_venda?: number
   margem_desejada?: number
   observacoes?: string
+}
+
+export interface HistoricoPrecoInput {
+  produto: string
+  preco_anterior?: number | null
+  preco_novo: number
+  margem_anterior?: number | null
+  margem_nova?: number | null
+  custo_momento?: number | null
+  origem: OrigemAlteracaoPreco
+  observacao?: string
 }
 
 export interface MateriaPrimaInput {
@@ -48,6 +61,37 @@ function getUserId(): string {
 }
 
 // -------------------------------------------------------------
+// SERVIÇO: HISTÓRICO DE PREÇOS
+// -------------------------------------------------------------
+export const historicoPrecosService = {
+  async getByProduto(produtoId: string): Promise<HistoricoPrecoProdutoRecord[]> {
+    const userId = getUserId()
+    return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
+      filter: `user = "${userId}" && produto = "${produtoId}"`,
+      sort: '-created',
+      expand: 'produto',
+    })
+  },
+
+  async getAll(): Promise<HistoricoPrecoProdutoRecord[]> {
+    const userId = getUserId()
+    return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
+      filter: `user = "${userId}"`,
+      sort: '-created',
+      expand: 'produto',
+    })
+  },
+
+  async recordChange(data: HistoricoPrecoInput): Promise<HistoricoPrecoProdutoRecord> {
+    const userId = getUserId()
+    return pb.collection('historico_precos_produtos').create<HistoricoPrecoProdutoRecord>({
+      ...data,
+      user: userId,
+    })
+  },
+}
+
+// -------------------------------------------------------------
 // SERVIÇO: PRODUTOS
 // -------------------------------------------------------------
 export const produtosService = {
@@ -65,14 +109,77 @@ export const produtosService = {
 
   async create(data: ProdutoInput): Promise<ProdutoRecord> {
     const userId = getUserId()
-    return pb.collection('produtos').create<ProdutoRecord>({
+    const record = await pb.collection('produtos').create<ProdutoRecord>({
       ...data,
       user: userId,
     })
+
+    // Se cadastrou com preço de venda inicial, registra no histórico
+    if (data.preco_venda !== undefined && data.preco_venda !== null && data.preco_venda > 0) {
+      try {
+        await pb.collection('historico_precos_produtos').create({
+          user: userId,
+          produto: record.id,
+          preco_anterior: null,
+          preco_novo: data.preco_venda,
+          margem_anterior: null,
+          margem_nova: data.margem_desejada ?? null,
+          custo_momento: data.custo ?? null,
+          origem: 'Cadastro Inicial',
+          observacao: 'Preço inicial definido no cadastro do produto',
+        })
+      } catch (e) {
+        console.warn('Não foi possível gravar histórico inicial de preço:', e)
+      }
+    }
+
+    return record
   },
 
-  async update(id: string, data: Partial<ProdutoInput>): Promise<ProdutoRecord> {
-    return pb.collection('produtos').update<ProdutoRecord>(id, data)
+  async update(
+    id: string,
+    data: Partial<ProdutoInput>,
+    options?: {
+      origem?: OrigemAlteracaoPreco
+      observacao?: string
+    },
+  ): Promise<ProdutoRecord> {
+    const userId = getUserId()
+    let produtoAnterior: ProdutoRecord | null = null
+
+    try {
+      produtoAnterior = await pb.collection('produtos').getOne<ProdutoRecord>(id)
+    } catch {
+      // Ignora erro se não encontrar
+    }
+
+    const record = await pb.collection('produtos').update<ProdutoRecord>(id, data)
+
+    // Se houve alteração no preco_venda, registra no histórico
+    if (
+      data.preco_venda !== undefined &&
+      data.preco_venda !== null &&
+      produtoAnterior &&
+      Number(produtoAnterior.preco_venda) !== Number(data.preco_venda)
+    ) {
+      try {
+        await pb.collection('historico_precos_produtos').create({
+          user: userId,
+          produto: record.id,
+          preco_anterior: produtoAnterior.preco_venda ?? null,
+          preco_novo: data.preco_venda,
+          margem_anterior: produtoAnterior.margem_desejada ?? null,
+          margem_nova: data.margem_desejada ?? produtoAnterior.margem_desejada ?? null,
+          custo_momento: data.custo ?? produtoAnterior.custo ?? null,
+          origem: options?.origem || 'Edição Manual',
+          observacao: options?.observacao || 'Alteração manual no cadastro do produto',
+        })
+      } catch (e) {
+        console.warn('Não foi possível registrar histórico de alteração de preço:', e)
+      }
+    }
+
+    return record
   },
 
   async delete(id: string): Promise<boolean> {
@@ -194,14 +301,49 @@ export const fichasTecnicasService = {
     produtoId: string,
     precoVenda: number,
     margem?: number,
+    tipoOrigem: 'Preço Sugerido Margem' | 'Preço Sugerido Markup' = 'Preço Sugerido Margem',
+    observacaoExtra?: string,
   ): Promise<ProdutoRecord> {
+    const userId = getUserId()
+    const precoArredondado = Math.round(precoVenda * 100) / 100
     const payload: Partial<ProdutoInput> = {
-      preco_venda: Math.round(precoVenda * 100) / 100,
+      preco_venda: precoArredondado,
     }
     if (margem !== undefined && margem !== null && !isNaN(margem)) {
       payload.margem_desejada = Math.round(margem * 10) / 10
     }
-    return pb.collection('produtos').update<ProdutoRecord>(produtoId, payload)
+
+    let produtoAnterior: ProdutoRecord | null = null
+    try {
+      produtoAnterior = await pb.collection('produtos').getOne<ProdutoRecord>(produtoId)
+    } catch {
+      // Ignora erro
+    }
+
+    const updated = await pb.collection('produtos').update<ProdutoRecord>(produtoId, payload)
+
+    // Registra alteração no histórico de preços
+    try {
+      await pb.collection('historico_precos_produtos').create({
+        user: userId,
+        produto: produtoId,
+        preco_anterior: produtoAnterior?.preco_venda ?? null,
+        preco_novo: precoArredondado,
+        margem_anterior: produtoAnterior?.margem_desejada ?? null,
+        margem_nova: payload.margem_desejada ?? produtoAnterior?.margem_desejada ?? null,
+        custo_momento: updated.custo ?? produtoAnterior?.custo ?? null,
+        origem: tipoOrigem,
+        observacao:
+          observacaoExtra ||
+          (tipoOrigem === 'Preço Sugerido Margem'
+            ? 'Vínculo do Preço Sugerido por Margem da Ficha Técnica'
+            : 'Vínculo do Preço Sugerido por Markup da Ficha Técnica'),
+      })
+    } catch (e) {
+      console.warn('Não foi possível gravar histórico de preço do vínculo:', e)
+    }
+
+    return updated
   },
 
   async delete(id: string): Promise<boolean> {

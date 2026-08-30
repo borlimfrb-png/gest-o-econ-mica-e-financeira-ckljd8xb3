@@ -480,6 +480,30 @@ export interface ProdutoRecord extends RecordModel {
   observacoes?: string
 }
 
+export type OrigemAlteracaoPreco =
+  | 'Edição Manual'
+  | 'Preço Sugerido Margem'
+  | 'Preço Sugerido Markup'
+  | 'Cadastro Inicial'
+  | 'Outro'
+
+export interface HistoricoPrecoProdutoRecord extends RecordModel {
+  user: string
+  produto: string
+  preco_anterior?: number | null
+  preco_novo: number
+  margem_anterior?: number | null
+  margem_nova?: number | null
+  custo_momento?: number | null
+  origem: OrigemAlteracaoPreco
+  observacao?: string
+  created: string
+  updated: string
+  expand?: {
+    produto?: ProdutoRecord
+  }
+}
+
 export interface MateriaPrimaRecord extends RecordModel {
   user: string
   codigo?: string

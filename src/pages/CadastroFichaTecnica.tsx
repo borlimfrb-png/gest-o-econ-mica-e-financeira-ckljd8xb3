@@ -67,7 +67,10 @@ import {
   PieChart as PieChartIcon,
   Check,
   Zap,
+  Printer,
+  FileText,
 } from 'lucide-react'
+import { ModalPdfFichaTecnica } from '@/components/ModalPdfFichaTecnica'
 import {
   PieChart,
   Pie,
@@ -184,6 +187,10 @@ export default function CadastroFichaTecnica() {
   const [filtroStatusMargem, setFiltroStatusMargem] = useState<
     'todos' | 'acima' | 'abaixo' | 'alerta'
   >('todos')
+
+  // Modal de PDF da Ficha Técnica
+  const [pdfModalOpen, setPdfModalOpen] = useState(false)
+  const [fichaParaPdf, setFichaParaPdf] = useState<FichaTecnicaRecord | null>(null)
 
   const loadData = async () => {
     try {
@@ -360,6 +367,12 @@ export default function CadastroFichaTecnica() {
     const abaixoCount = relatorioData.filter((it) => it.statusMargem === 'abaixo').length
     const criticaCount = relatorioData.filter((it) => it.statusMargem === 'critica').length
 
+    const totalCustoMPGeral = relatorioData.reduce((acc, it) => acc + it.custoMP, 0)
+    const totalOutrosCustosGeral = relatorioData.reduce((acc, it) => acc + it.outrosCustos, 0)
+    const totalCustoTotalGeral = relatorioData.reduce((acc, it) => acc + it.custoTotal, 0)
+    const totalPrecoVendaGeral = relatorioData.reduce((acc, it) => acc + it.precoVenda, 0)
+    const totalLucroGeral = relatorioData.reduce((acc, it) => acc + it.lucroUnitario, 0)
+
     return {
       total,
       margemMediaReal: somaMargemReal / total,
@@ -367,9 +380,73 @@ export default function CadastroFichaTecnica() {
       acimaOuAtingida,
       abaixoCount,
       criticaCount,
+      totalCustoMPGeral,
+      totalOutrosCustosGeral,
+      totalCustoTotalGeral,
+      totalPrecoVendaGeral,
+      totalLucroGeral,
     }
   }, [relatorioData])
 
+  // Composição consolidada de Custo por Categoria de Matéria-Prima no Relatório
+  const composicaoCategoriasRelatorio = useMemo(() => {
+    let custoMPGlobal = 0
+    let custoTotalGlobal = 0
+    let outrosCustosGlobal = 0
+    const catMap = new Map<
+      string,
+      {
+        categoria: string
+        totalCusto: number
+        itensCount: number
+        produtosCount: Set<string>
+      }
+    >()
+
+    for (const item of relatorioData) {
+      custoMPGlobal += item.custoMP
+      custoTotalGlobal += item.custoTotal
+      outrosCustosGlobal += item.outrosCustos
+
+      const itensFicha = item.ficha.itens || []
+      for (const it of itensFicha) {
+        const mp = materiasMap.get(it.materia_prima_id)
+        const subtotal =
+          Number(it.subtotal) || Number(it.quantidade) * Number(it.custo_unitario) || 0
+        const catNome = mp?.categoria?.trim() || 'Geral / Não categorizado'
+
+        const cur = catMap.get(catNome) || {
+          categoria: catNome,
+          totalCusto: 0,
+          itensCount: 0,
+          produtosCount: new Set<string>(),
+        }
+
+        cur.totalCusto += subtotal
+        cur.itensCount += 1
+        cur.produtosCount.add(item.ficha.produto)
+        catMap.set(catNome, cur)
+      }
+    }
+
+    const lista = Array.from(catMap.values())
+      .map((c) => ({
+        categoria: c.categoria,
+        totalCusto: c.totalCusto,
+        itensCount: c.itensCount,
+        produtosCount: c.produtosCount.size,
+        pctSobreMP: custoMPGlobal > 0 ? (c.totalCusto / custoMPGlobal) * 100 : 0,
+        pctSobreTotal: custoTotalGlobal > 0 ? (c.totalCusto / custoTotalGlobal) * 100 : 0,
+      }))
+      .sort((a, b) => b.totalCusto - a.totalCusto)
+
+    return {
+      categorias: lista,
+      custoMPGlobal,
+      custoTotalGlobal,
+      outrosCustosGlobal,
+    }
+  }, [relatorioData, materiasMap])
   // Estatísticas de Fichas
   const stats = useMemo(() => {
     const total = fichas.length
@@ -867,6 +944,11 @@ export default function CadastroFichaTecnica() {
   }
 
   // Exportar CSV do Relatório de Custos e Margem Real
+  const handleOpenPdfModal = (f: FichaTecnicaRecord) => {
+    setFichaParaPdf(f)
+    setPdfModalOpen(true)
+  }
+
   const handleExportRelatorioCsv = () => {
     if (relatorioData.length === 0) {
       toast({
@@ -909,7 +991,13 @@ export default function CadastroFichaTecnica() {
       'Status Margem',
     ]
 
-    const linhas = [headers.map(escapeCsv).join(';')]
+    const linhas: string[] = [
+      ['RELATÓRIO COMPARATIVO DE CUSTOS E MARGEM REAL'].map(escapeCsv).join(';'),
+      ['Data de Exportação:', new Date().toLocaleDateString('pt-BR')].map(escapeCsv).join(';'),
+      '',
+      ['1. PRODUTOS E COMPARAÇÃO DE MARGEM'].map(escapeCsv).join(';'),
+      headers.map(escapeCsv).join(';'),
+    ]
 
     for (const item of relatorioFiltrado) {
       const statusLabel =
@@ -957,6 +1045,92 @@ export default function CadastroFichaTecnica() {
       )
     }
 
+    // Seção de Totais Consolidados por Categoria de Matéria-Prima no CSV
+    linhas.push('')
+    linhas.push(
+      ['2. COMPOSIÇÃO CONSOLIDADA DE CUSTO POR CATEGORIA DE MATÉRIA-PRIMA']
+        .map(escapeCsv)
+        .join(';'),
+    )
+    linhas.push(
+      [
+        'Categoria de Matéria-Prima',
+        'Produtos Atendidos',
+        'Total de Usos (Itens)',
+        'Custo Consolidado (R$)',
+        '% sobre Custo MP Total',
+        '% sobre Custo Geral Total',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    for (const cat of composicaoCategoriasRelatorio.categorias) {
+      linhas.push(
+        [
+          cat.categoria,
+          cat.produtosCount,
+          cat.itensCount,
+          fmtNum(cat.totalCusto),
+          cat.pctSobreMP.toFixed(2) + '%',
+          cat.pctSobreTotal.toFixed(2) + '%',
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+
+    linhas.push(
+      [
+        'SUBTOTAL MATÉRIAS-PRIMAS',
+        '-',
+        '-',
+        fmtNum(composicaoCategoriasRelatorio.custoMPGlobal),
+        '100,00%',
+        (composicaoCategoriasRelatorio.custoTotalGlobal > 0
+          ? (
+              (composicaoCategoriasRelatorio.custoMPGlobal /
+                composicaoCategoriasRelatorio.custoTotalGlobal) *
+              100
+            ).toFixed(2)
+          : '100.00') + '%',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    linhas.push(
+      [
+        'OUTROS CUSTOS / MOD',
+        '-',
+        '-',
+        fmtNum(composicaoCategoriasRelatorio.outrosCustosGlobal),
+        '-',
+        (composicaoCategoriasRelatorio.custoTotalGlobal > 0
+          ? (
+              (composicaoCategoriasRelatorio.outrosCustosGlobal /
+                composicaoCategoriasRelatorio.custoTotalGlobal) *
+              100
+            ).toFixed(2)
+          : '0.00') + '%',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    linhas.push(
+      [
+        'CUSTO TOTAL GERAL',
+        '-',
+        '-',
+        fmtNum(composicaoCategoriasRelatorio.custoTotalGlobal),
+        '-',
+        '100,00%',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+
     const csvContent = '\uFEFF' + linhas.join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
@@ -969,7 +1143,8 @@ export default function CadastroFichaTecnica() {
 
     toast({
       title: 'Relatório exportado',
-      description: 'O arquivo CSV do relatório de custos e margem real foi baixado.',
+      description:
+        'O arquivo CSV do relatório de custos, margem real e composição por categoria foi baixado.',
     })
   }
 
@@ -1263,12 +1438,25 @@ export default function CadastroFichaTecnica() {
                                     <Button
                                       onClick={(e) => {
                                         e.stopPropagation()
+                                        handleOpenPdfModal(f)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2 text-[11px] text-[#0B1F3A] hover:bg-slate-100 font-semibold gap-1"
+                                      title="Gerar PDF da Ficha Técnica (A4)"
+                                    >
+                                      <Printer className="w-3.5 h-3.5 text-blue-600" />
+                                      PDF
+                                    </Button>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
                                         handleOpenClone(f)
                                       }}
                                       size="sm"
                                       variant="ghost"
                                       className="h-7 w-7 p-0 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"
-                                      title="Clonar ficha técnica (criar variação)"
+                                      title="Clonar ficha técnica para outro produto"
                                     >
                                       <Copy className="w-3.5 h-3.5" />
                                     </Button>
@@ -1295,7 +1483,7 @@ export default function CadastroFichaTecnica() {
                                       title="Excluir ficha técnica"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
+                                    </Button>{' '}
                                   </div>
                                 </td>
                               </tr>
@@ -1417,7 +1605,16 @@ export default function CadastroFichaTecnica() {
                               {prod?.categoria ? ` · Categoria: ${prod.categoria}` : ''}
                             </CardDescription>
                           </div>
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Button
+                              onClick={() => handleOpenPdfModal(selectedFicha)}
+                              size="sm"
+                              className="h-8 text-xs font-semibold bg-[#0B1F3A] hover:bg-[#15325b] text-white gap-1 shadow-xs"
+                              title="Gerar PDF A4 Profissional desta Ficha Técnica"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              Gerar PDF
+                            </Button>
                             <Button
                               onClick={() => handleOpenClone(selectedFicha)}
                               size="sm"
@@ -1789,6 +1986,166 @@ export default function CadastroFichaTecnica() {
             </Card>
           </div>
 
+          {/* ========================================================= */}
+          {/* SEÇÃO: COMPOSIÇÃO DE CUSTO POR CATEGORIA DE MATÉRIA-PRIMA */}
+          {/* ========================================================= */}
+          {composicaoCategoriasRelatorio.categorias.length > 0 && (
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                      <PieChartIcon className="w-4 h-4 text-blue-600" />
+                      Composição de Custo por Categoria de Matéria-Prima
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Totais consolidados de custo agrupados por categoria de insumo (R$ e % sobre o
+                      custo total de fabricação).
+                    </CardDescription>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-xs bg-slate-50 font-semibold text-slate-700 w-fit"
+                  >
+                    {composicaoCategoriasRelatorio.categorias.length} categoria(s) de insumo
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {/* Resumo em 3 Mini Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase text-amber-800 block">
+                      Total Matérias-Primas (Todas as Fichas)
+                    </span>
+                    <strong className="text-base font-black font-mono text-amber-900 block">
+                      {formatBrl(composicaoCategoriasRelatorio.custoMPGlobal)}
+                    </strong>
+                    <span className="text-[10px] text-amber-700 block">
+                      {composicaoCategoriasRelatorio.custoTotalGlobal > 0
+                        ? `${((composicaoCategoriasRelatorio.custoMPGlobal / composicaoCategoriasRelatorio.custoTotalGlobal) * 100).toFixed(1)}% do custo total consolidado`
+                        : '100%'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase text-slate-500 block">
+                      Outros Custos / Mão de Obra
+                    </span>
+                    <strong className="text-base font-black font-mono text-slate-800 block">
+                      {formatBrl(composicaoCategoriasRelatorio.outrosCustosGlobal)}
+                    </strong>
+                    <span className="text-[10px] text-slate-500 block">
+                      {composicaoCategoriasRelatorio.custoTotalGlobal > 0
+                        ? `${((composicaoCategoriasRelatorio.outrosCustosGlobal / composicaoCategoriasRelatorio.custoTotalGlobal) * 100).toFixed(1)}% do custo total consolidado`
+                        : '0%'}
+                    </span>
+                  </div>
+
+                  <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl space-y-0.5">
+                    <span className="text-[10px] font-bold uppercase text-blue-900 block">
+                      Custo Total Consolidado
+                    </span>
+                    <strong className="text-base font-black font-mono text-blue-900 block">
+                      {formatBrl(composicaoCategoriasRelatorio.custoTotalGlobal)}
+                    </strong>
+                    <span className="text-[10px] text-blue-700 block">
+                      Soma dos custos de todas as fichas ativas
+                    </span>
+                  </div>
+                </div>
+
+                {/* Tabela de Composição por Categoria */}
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-semibold">
+                        <th className="py-2.5 px-3">Categoria de Matéria-Prima</th>
+                        <th className="py-2.5 px-3 text-center">Produtos Atendidos</th>
+                        <th className="py-2.5 px-3 text-center">Qtd Itens</th>
+                        <th className="py-2.5 px-3 text-right">Total Custo (R$)</th>
+                        <th className="py-2.5 px-3 text-right">% sobre Custo MP</th>
+                        <th className="py-2.5 px-3 text-right">% sobre Custo Total</th>
+                        <th className="py-2.5 px-3 text-left">Representatividade</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {composicaoCategoriasRelatorio.categorias.map((cat, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-2.5 px-3">
+                            <div className="font-semibold text-slate-900 flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-blue-600" />
+                              {cat.categoria}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">
+                            {cat.produtosCount} produto(s)
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-mono text-slate-600">
+                            {cat.itensCount}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
+                            {formatBrl(cat.totalCusto)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-medium text-amber-800 font-mono whitespace-nowrap">
+                            {cat.pctSobreMP.toFixed(1)}%
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-blue-700 font-mono whitespace-nowrap">
+                            {cat.pctSobreTotal.toFixed(1)}%
+                          </td>
+                          <td className="py-2.5 px-3 w-40">
+                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  idx === 0
+                                    ? 'bg-blue-600'
+                                    : idx === 1
+                                      ? 'bg-emerald-600'
+                                      : idx === 2
+                                        ? 'bg-amber-500'
+                                        : 'bg-indigo-500'
+                                }`}
+                                style={{
+                                  width: `${Math.min(100, Math.max(3, cat.pctSobreTotal))}%`,
+                                }}
+                              />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-300 bg-slate-50/90 font-bold text-slate-900">
+                        <td className="py-2.5 px-3 uppercase text-[11px]">
+                          Subtotal Matérias-Primas
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-slate-500">—</td>
+                        <td className="py-2.5 px-3 text-center font-mono">
+                          {composicaoCategoriasRelatorio.categorias.reduce(
+                            (acc, c) => acc + c.itensCount,
+                            0,
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-sm text-slate-900">
+                          {formatBrl(composicaoCategoriasRelatorio.custoMPGlobal)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-[11px] text-amber-800">
+                          100,0%
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-[11px] text-blue-700">
+                          {composicaoCategoriasRelatorio.custoTotalGlobal > 0
+                            ? `${((composicaoCategoriasRelatorio.custoMPGlobal / composicaoCategoriasRelatorio.custoTotalGlobal) * 100).toFixed(1)}%`
+                            : '100%'}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-400">—</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Card Principal do Relatório */}
           <Card className="bg-white border-slate-200 shadow-xs">
             <CardHeader className="pb-3 border-b border-slate-100">
@@ -1985,6 +2342,16 @@ export default function CadastroFichaTecnica() {
                             </td>
                             <td className="py-3 px-3.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  onClick={() => handleOpenPdfModal(item.ficha)}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 text-[11px] text-[#0B1F3A] hover:bg-slate-100 px-2 font-medium gap-1"
+                                  title="Gerar PDF A4 da ficha"
+                                >
+                                  <Printer className="w-3 h-3 text-blue-600" />
+                                  PDF
+                                </Button>
                                 <Button
                                   onClick={() => {
                                     setSelectedFicha(item.ficha)
@@ -2458,6 +2825,15 @@ export default function CadastroFichaTecnica() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modal PDF A4 da Ficha Técnica */}
+      <ModalPdfFichaTecnica
+        open={pdfModalOpen}
+        onOpenChange={setPdfModalOpen}
+        ficha={fichaParaPdf}
+        produto={fichaParaPdf ? produtosMap.get(fichaParaPdf.produto) || null : null}
+        materiasMap={materiasMap}
+      />
 
       {/* Modal Vincular Preço ao Produto */}
       <Dialog open={vincularModalOpen} onOpenChange={setVincularModalOpen}>

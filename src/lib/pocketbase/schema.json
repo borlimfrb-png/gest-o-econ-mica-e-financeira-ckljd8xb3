@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-29T23:58:53.601Z",
+  "generatedAt": "2026-08-30T00:05:19.802Z",
   "collections": [
     {
       "name": "users",
@@ -2401,6 +2401,101 @@
       "indexes": [
         "CREATE INDEX idx_fichas_tecnicas_user ON fichas_tecnicas (user)",
         "CREATE INDEX idx_fichas_tecnicas_produto ON fichas_tecnicas (user, produto)"
+      ]
+    },
+    {
+      "name": "historico_precos_produtos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "produto",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "produtos"
+        },
+        {
+          "name": "preco_anterior",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "preco_novo",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "margem_anterior",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "margem_nova",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "custo_momento",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "origem",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Edição Manual",
+            "Preço Sugerido Margem",
+            "Preço Sugerido Markup",
+            "Cadastro Inicial",
+            "Outro"
+          ]
+        },
+        {
+          "name": "observacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_hist_preco_user ON historico_precos_produtos (user)",
+        "CREATE INDEX idx_hist_preco_produto ON historico_precos_produtos (produto)",
+        "CREATE INDEX idx_hist_preco_produto_created ON historico_precos_produtos (produto, created DESC)"
       ]
     }
   ]
