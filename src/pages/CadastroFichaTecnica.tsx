@@ -79,6 +79,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   ArrowUpDown,
+  Receipt,
 } from 'lucide-react'
 import { ModalPdfFichaTecnica } from '@/components/ModalPdfFichaTecnica'
 import {

@@ -85,7 +85,8 @@ import { ModalPdfImpostos } from '@/components/ModalPdfImpostos'
 
 export default function Impostos() {
   const { toast } = useToast()
-  const { empresas, selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa } = useFilter()
+  const { empresas, selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, selectedAno } =
+    useFilter()
 
   const [activeTab, setActiveTab] = useState<string>('configuracao')
   const [loading, setLoading] = useState(false)
@@ -332,24 +333,24 @@ export default function Impostos() {
       hasConfigB,
       configA: configEmpresaCompA,
       configB: configEmpresaCompB,
-      cargaA,
-      cargaB,
+      cargaA: Number(cargaA) || 0,
+      cargaB: Number(cargaB) || 0,
       regimeA,
       regimeB,
-      fatorA,
-      fatorB,
-      precoA,
-      precoB,
-      impostosA: precoCalcA.impostosTotal,
-      impostosB: precoCalcB.impostosTotal,
-      margemA: precoCalcA.margemLiquida,
-      margemB: precoCalcB.margemLiquida,
-      diffCarga,
-      diffPreco,
+      fatorA: Number(fatorA) || 1,
+      fatorB: Number(fatorB) || 1,
+      precoA: Number(precoA) || 0,
+      precoB: Number(precoB) || 0,
+      impostosA: Number(precoCalcA.valorImpostos) || 0,
+      impostosB: Number(precoCalcB.valorImpostos) || 0,
+      margemA: Number(precoCalcA.valorMargem) || 0,
+      margemB: Number(precoCalcB.valorMargem) || 0,
+      diffCarga: Number(diffCarga) || 0,
+      diffPreco: Number(diffPreco) || 0,
       maisEconomica,
-      economiaRs,
-      economiaPctCarga,
-      pctEconomiaPreco,
+      economiaRs: Number(economiaRs) || 0,
+      economiaPctCarga: Number(economiaPctCarga) || 0,
+      pctEconomiaPreco: Number(pctEconomiaPreco) || 0,
     }
   }, [
     empresas,
@@ -2026,18 +2027,23 @@ export default function Impostos() {
                           </strong>{' '}
                           possui carga tributária de{' '}
                           <strong className="text-emerald-700">
-                            {(comparativoDuasEmpresas.maisEconomica === 'A'
-                              ? comparativoDuasEmpresas.cargaA
-                              : comparativoDuasEmpresas.cargaB
+                            {(
+                              Number(
+                                comparativoDuasEmpresas.maisEconomica === 'A'
+                                  ? comparativoDuasEmpresas.cargaA
+                                  : comparativoDuasEmpresas.cargaB,
+                              ) || 0
                             ).toFixed(2)}
                             %
                           </strong>
                           , gerando uma economia de{' '}
                           <strong className="text-emerald-700">
-                            R$ {comparativoDuasEmpresas.economiaRs.toFixed(2)} por unidade vendida
+                            R$ {(Number(comparativoDuasEmpresas.economiaRs) || 0).toFixed(2)} por
+                            unidade vendida
                           </strong>{' '}
-                          ({comparativoDuasEmpresas.economiaPctCarga.toFixed(2)} p.p. a menos de
-                          tributação) para o custo simulado de R$ {custoBaseSimulacao.toFixed(2)}.
+                          ({(Number(comparativoDuasEmpresas.economiaPctCarga) || 0).toFixed(2)} p.p.
+                          a menos de tributação) para o custo simulado de R${' '}
+                          {(Number(custoBaseSimulacao) || 0).toFixed(2)}.
                         </>
                       )}
                     </p>
@@ -2050,10 +2056,11 @@ export default function Impostos() {
                       Diferencial por Unidade
                     </span>
                     <span className="text-xl font-extrabold text-emerald-700 font-mono">
-                      -R$ {comparativoDuasEmpresas.economiaRs.toFixed(2)}
+                      -R$ {(Number(comparativoDuasEmpresas.economiaRs) || 0).toFixed(2)}
                     </span>
                     <span className="text-[10px] text-emerald-600 block font-semibold">
-                      ({comparativoDuasEmpresas.pctEconomiaPreco.toFixed(1)}% de vantagem no preço)
+                      ({(Number(comparativoDuasEmpresas.pctEconomiaPreco) || 0).toFixed(1)}% de
+                      vantagem no preço)
                     </span>
                   </div>
                 )}
@@ -2089,15 +2096,17 @@ export default function Impostos() {
                     <div className="flex items-center justify-between text-xs text-slate-400">
                       <span>Preço de Venda Sugerido</span>
                       <span className="text-amber-400 font-bold">
-                        Carga: {comparativoDuasEmpresas.cargaA.toFixed(2)}%
+                        Carga: {(Number(comparativoDuasEmpresas.cargaA) || 0).toFixed(2)}%
                       </span>
                     </div>
                     <div className="text-2xl font-extrabold text-white">
-                      R$ {comparativoDuasEmpresas.precoA.toFixed(2)}
+                      R$ {(Number(comparativoDuasEmpresas.precoA) || 0).toFixed(2)}
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800">
                       <span>Regime: {comparativoDuasEmpresas.regimeA}</span>
-                      <span>Fator Gross-up: {comparativoDuasEmpresas.fatorA.toFixed(4)}</span>
+                      <span>
+                        Fator Gross-up: {(Number(comparativoDuasEmpresas.fatorA) || 1).toFixed(4)}
+                      </span>
                     </div>
                   </div>
 
@@ -2105,7 +2114,7 @@ export default function Impostos() {
                     <div className="flex justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/60">
                       <span className="text-slate-600">Custo Base Simulado:</span>
                       <span className="font-semibold text-slate-900">
-                        R$ {custoBaseSimulacao.toFixed(2)}
+                        R$ {(Number(custoBaseSimulacao) || 0).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
@@ -2113,13 +2122,13 @@ export default function Impostos() {
                         Margem Líquida ({margemDesejadaSimulacao}%):
                       </span>
                       <span className="font-bold text-emerald-700">
-                        R$ {comparativoDuasEmpresas.margemA.toFixed(2)}
+                        R$ {(Number(comparativoDuasEmpresas.margemA) || 0).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between p-2 rounded-lg bg-amber-50/60 border border-amber-100">
                       <span className="text-amber-900">Tributos Embutidos no Preço:</span>
                       <span className="font-bold text-amber-700">
-                        R$ {comparativoDuasEmpresas.impostosA.toFixed(2)}
+                        R$ {(Number(comparativoDuasEmpresas.impostosA) || 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -2153,15 +2162,17 @@ export default function Impostos() {
                     <div className="flex items-center justify-between text-xs text-slate-400">
                       <span>Preço de Venda Sugerido</span>
                       <span className="text-amber-400 font-bold">
-                        Carga: {comparativoDuasEmpresas.cargaB.toFixed(2)}%
+                        Carga: {(Number(comparativoDuasEmpresas.cargaB) || 0).toFixed(2)}%
                       </span>
                     </div>
                     <div className="text-2xl font-extrabold text-white">
-                      R$ {comparativoDuasEmpresas.precoB.toFixed(2)}
+                      R$ {(Number(comparativoDuasEmpresas.precoB) || 0).toFixed(2)}
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-800">
                       <span>Regime: {comparativoDuasEmpresas.regimeB}</span>
-                      <span>Fator Gross-up: {comparativoDuasEmpresas.fatorB.toFixed(4)}</span>
+                      <span>
+                        Fator Gross-up: {(Number(comparativoDuasEmpresas.fatorB) || 1).toFixed(4)}
+                      </span>
                     </div>
                   </div>
 
@@ -2169,7 +2180,7 @@ export default function Impostos() {
                     <div className="flex justify-between p-2 rounded-lg bg-slate-50 border border-slate-200/60">
                       <span className="text-slate-600">Custo Base Simulado:</span>
                       <span className="font-semibold text-slate-900">
-                        R$ {custoBaseSimulacao.toFixed(2)}
+                        R$ {(Number(custoBaseSimulacao) || 0).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between p-2 rounded-lg bg-emerald-50/60 border border-emerald-100">
@@ -2177,13 +2188,13 @@ export default function Impostos() {
                         Margem Líquida ({margemDesejadaSimulacao}%):
                       </span>
                       <span className="font-bold text-emerald-700">
-                        R$ {comparativoDuasEmpresas.margemB.toFixed(2)}
+                        R$ {(Number(comparativoDuasEmpresas.margemB) || 0).toFixed(2)}
                       </span>
                     </div>
                     <div className="flex justify-between p-2 rounded-lg bg-amber-50/60 border border-amber-100">
                       <span className="text-amber-900">Tributos Embutidos no Preço:</span>
                       <span className="font-bold text-amber-700">
-                        R$ {comparativoDuasEmpresas.impostosB.toFixed(2)}
+                        R$ {(Number(comparativoDuasEmpresas.impostosB) || 0).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -2209,16 +2220,16 @@ export default function Impostos() {
                         data={[
                           {
                             empresa: comparativoDuasEmpresas.nomeA,
-                            precoFinal: comparativoDuasEmpresas.precoA,
-                            impostos: comparativoDuasEmpresas.impostosA,
-                            carga: comparativoDuasEmpresas.cargaA,
+                            precoFinal: Number(comparativoDuasEmpresas.precoA) || 0,
+                            impostos: Number(comparativoDuasEmpresas.impostosA) || 0,
+                            carga: Number(comparativoDuasEmpresas.cargaA) || 0,
                             isMaisEconomica: comparativoDuasEmpresas.maisEconomica === 'A',
                           },
                           {
                             empresa: comparativoDuasEmpresas.nomeB,
-                            precoFinal: comparativoDuasEmpresas.precoB,
-                            impostos: comparativoDuasEmpresas.impostosB,
-                            carga: comparativoDuasEmpresas.cargaB,
+                            precoFinal: Number(comparativoDuasEmpresas.precoB) || 0,
+                            impostos: Number(comparativoDuasEmpresas.impostosB) || 0,
+                            carga: Number(comparativoDuasEmpresas.cargaB) || 0,
                             isMaisEconomica: comparativoDuasEmpresas.maisEconomica === 'B',
                           },
                         ]}
@@ -2682,19 +2693,19 @@ export default function Impostos() {
                       <div className="flex items-center justify-between text-slate-600">
                         <span>Alíquota Nominal da Faixa:</span>
                         <span className="font-semibold text-slate-800">
-                          {simulacaoRbt12.aliquotaNominalSimples.toFixed(2)}%
+                          {(Number(simulacaoRbt12.aliquotaNominalSimples) || 0).toFixed(2)}%
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-slate-600">
                         <span>Parcela a Deduzir:</span>
                         <span className="font-semibold text-slate-800">
-                          R$ {simulacaoRbt12.deducaoSimples.toLocaleString('pt-BR')}
+                          R$ {(Number(simulacaoRbt12.deducaoSimples) || 0).toLocaleString('pt-BR')}
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-blue-900 bg-blue-50/70 p-2 rounded-lg font-bold">
                         <span>Alíquota Efetiva do DAS:</span>
                         <span className="text-sm text-blue-700">
-                          {simulacaoRbt12.aliquotaEfetivaSimples.toFixed(2)}%
+                          {(Number(simulacaoRbt12.aliquotaEfetivaSimples) || 0).toFixed(2)}%
                         </span>
                       </div>
                     </div>
