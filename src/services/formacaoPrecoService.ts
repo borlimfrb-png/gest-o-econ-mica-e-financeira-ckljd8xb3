@@ -356,62 +356,117 @@ export const fichasTecnicasService = {
       criarNovoProduto?: boolean
       novoProdutoNome?: string
       novoProdutoCodigo?: string
+      novoProdutoCategoria?: string
+      novoProdutoUnidade?: string
       targetProdutoId?: string
+      observacoes?: string
+      ajustePercentualInsumos?: number // Opcional: ex +10% ou -5% nos custos ou quantidades
     },
   ): Promise<FichaTecnicaRecord> {
     const userId = getUserId()
     const originalFicha = await this.getById(id)
     let targetProdutoId = options?.targetProdutoId
 
-    // Se solicitado criar novo produto como cópia do produto original
+    // Se solicitado criar novo produto como cópia do produto original (ou sem targetProdutoId)
     if (options?.criarNovoProduto || !targetProdutoId) {
-      const originalProd =
-        originalFicha.expand?.produto ||
-        (await pb.collection('produtos').getOne<ProdutoRecord>(originalFicha.produto))
+      let originalProd: ProdutoRecord | null = originalFicha.expand?.produto || null
+      if (!originalProd && originalFicha.produto) {
+        try {
+          originalProd = await pb
+            .collection('produtos')
+            .getOne<ProdutoRecord>(originalFicha.produto)
+        } catch {
+          // Ignora se não encontrar
+        }
+      }
 
-      const novoNome = options?.novoProdutoNome?.trim() || `${originalProd.nome} (cópia)`
+      const originalNome = originalProd?.nome || 'Produto'
+      const novoNome = options?.novoProdutoNome?.trim() || `${originalNome} (Variação)`
       const novoCodigo =
         options?.novoProdutoCodigo?.trim() ||
-        (originalProd.codigo ? `${originalProd.codigo}-CP` : undefined)
+        (originalProd?.codigo ? `${originalProd.codigo}-VAR` : undefined)
+      const novaUnidade = options?.novoProdutoUnidade?.trim() || originalProd?.unidade || 'UN'
+      const novaCategoria =
+        options?.novoProdutoCategoria?.trim() || originalProd?.categoria || undefined
 
       const novoProduto = await pb.collection('produtos').create<ProdutoRecord>({
         user: userId,
         codigo: novoCodigo,
         nome: novoNome,
-        unidade: originalProd.unidade || 'UN',
-        categoria: originalProd.categoria || undefined,
+        unidade: novaUnidade,
+        categoria: novaCategoria,
         custo: originalFicha.custo_total,
-        preco_venda: originalFicha.preco_venda_sugerido ?? originalProd.preco_venda,
-        margem_desejada: originalFicha.margem_desejada ?? originalProd.margem_desejada,
-        observacoes: originalProd.observacoes
-          ? `Cópia de ${originalProd.nome}. ${originalProd.observacoes}`
-          : `Cópia de ${originalProd.nome}`,
+        preco_venda: originalFicha.preco_venda_sugerido ?? originalProd?.preco_venda,
+        margem_desejada: originalFicha.margem_desejada ?? originalProd?.margem_desejada,
+        observacoes:
+          options?.observacoes?.trim() ||
+          (originalProd?.observacoes
+            ? `Variação / Cópia de ${originalNome}. ${originalProd.observacoes}`
+            : `Variação / Cópia de ${originalNome}`),
       })
 
       targetProdutoId = novoProduto.id
     }
+
+    // Clona integralmente todos os insumos em lote com deep copy
+    const itensClonados: ItemFichaTecnica[] = originalFicha.itens
+      ? JSON.parse(JSON.stringify(originalFicha.itens))
+      : []
+
+    // Aplica ajuste se fornecido
+    if (options?.ajustePercentualInsumos && options.ajustePercentualInsumos !== 0) {
+      const fator = 1 + options.ajustePercentualInsumos / 100
+      itensClonados.forEach((it) => {
+        it.custo_unitario = Math.round(it.custo_unitario * fator * 1000) / 1000
+        it.subtotal = Math.round(it.quantidade * it.custo_unitario * 100) / 100
+      })
+    }
+
+    const novoCustoMP = itensClonados.reduce((acc, it) => acc + (it.subtotal || 0), 0)
+    const outrosCustos = originalFicha.outros_custos || 0
+    const novoCustoTotal = novoCustoMP + outrosCustos
+    const margem = originalFicha.margem_desejada || 40
+    const markup =
+      originalFicha.markup_desejado ||
+      (margem < 100 && margem > 0 ? (margem / (100 - margem)) * 100 : 50)
+    const precoSugeridoMargem =
+      margem < 100 && novoCustoTotal > 0 ? novoCustoTotal / (1 - margem / 100) : novoCustoTotal
+    const precoSugeridoMarkup =
+      novoCustoTotal > 0 ? novoCustoTotal * (1 + markup / 100) : novoCustoTotal
 
     // Cria a nova ficha técnica clonada vinculada ao produto destino
     const novaFicha = await pb.collection('fichas_tecnicas').create<FichaTecnicaRecord>(
       {
         user: userId,
         produto: targetProdutoId,
-        itens: originalFicha.itens ? JSON.parse(JSON.stringify(originalFicha.itens)) : [],
-        custo_materia_prima: originalFicha.custo_materia_prima || 0,
-        outros_custos: originalFicha.outros_custos || 0,
-        custo_total: originalFicha.custo_total || 0,
-        margem_desejada: originalFicha.margem_desejada || 0,
-        preco_venda_sugerido: originalFicha.preco_venda_sugerido || 0,
-        markup_desejado: originalFicha.markup_desejado || 0,
-        preco_venda_markup: originalFicha.preco_venda_markup || 0,
-        observacoes: originalFicha.observacoes
-          ? `[Clonada] ${originalFicha.observacoes}`
-          : 'Ficha técnica clonada.',
+        itens: itensClonados,
+        custo_materia_prima: novoCustoMP,
+        outros_custos: outrosCustos,
+        custo_total: novoCustoTotal,
+        margem_desejada: margem,
+        preco_venda_sugerido: Math.round(precoSugeridoMargem * 100) / 100,
+        markup_desejado: markup,
+        preco_venda_markup: Math.round(precoSugeridoMarkup * 100) / 100,
+        observacoes:
+          options?.observacoes?.trim() ||
+          (originalFicha.observacoes
+            ? `[Variação Clonada] ${originalFicha.observacoes}`
+            : 'Ficha técnica duplicada com insumos em lote.'),
       },
       {
         expand: 'produto',
       },
     )
+
+    // Sincroniza custo no produto recém criado/vinculado
+    try {
+      await pb.collection('produtos').update(targetProdutoId, {
+        custo: novoCustoTotal,
+        margem_desejada: margem,
+      })
+    } catch (err) {
+      console.warn('Erro ao sincronizar produto destino:', err)
+    }
 
     return novaFicha
   },

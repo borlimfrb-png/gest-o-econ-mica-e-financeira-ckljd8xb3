@@ -69,6 +69,12 @@ import {
   Zap,
   Printer,
   FileText,
+  Scale,
+  GitCompare,
+  ArrowRight,
+  ShieldCheck,
+  SlidersHorizontal,
+  ArrowUpDown,
 } from 'lucide-react'
 import { ModalPdfFichaTecnica } from '@/components/ModalPdfFichaTecnica'
 import {
@@ -148,8 +154,12 @@ export default function CadastroFichaTecnica() {
   // Filtros
   const [search, setSearch] = useState('')
 
-  // Aba ativa: 'fichas' | 'relatorio'
-  const [activeTab, setActiveTab] = useState<'fichas' | 'relatorio'>('fichas')
+  // Aba ativa: 'fichas' | 'comparacao' | 'relatorio'
+  const [activeTab, setActiveTab] = useState<'fichas' | 'comparacao' | 'relatorio'>('fichas')
+
+  // Estado para Comparação Lado a Lado de Fichas Técnicas
+  const [fichaComparadaAId, setFichaComparadaAId] = useState<string>('')
+  const [fichaComparadaBId, setFichaComparadaBId] = useState<string>('')
 
   // Modal Novo / Edição
   const [modalOpen, setModalOpen] = useState(false)
@@ -166,11 +176,15 @@ export default function CadastroFichaTecnica() {
   // Visualização rápida de detalhes
   const [selectedFicha, setSelectedFicha] = useState<FichaTecnicaRecord | null>(null)
 
-  // Modal Clonar Ficha
+  // Modal Clonar / Duplicar Ficha com Variação e Insumos em Lote
   const [cloneOpen, setCloneOpen] = useState(false)
   const [fichaToClone, setFichaToClone] = useState<FichaTecnicaRecord | null>(null)
   const [cloneNovoNome, setCloneNovoNome] = useState('')
   const [cloneNovoCodigo, setCloneNovoCodigo] = useState('')
+  const [cloneNovaCategoria, setCloneNovaCategoria] = useState('')
+  const [cloneNovaUnidade, setCloneNovaUnidade] = useState('UN')
+  const [cloneObservacoes, setCloneObservacoes] = useState('')
+  const [cloneAjustePercentual, setCloneAjustePercentual] = useState('0')
   const [cloning, setCloning] = useState(false)
 
   // Modal Vincular Preço ao Produto
@@ -781,8 +795,12 @@ export default function CadastroFichaTecnica() {
   const handleOpenClone = (f: FichaTecnicaRecord) => {
     const prod = produtosMap.get(f.produto)
     setFichaToClone(f)
-    setCloneNovoNome(prod ? `${prod.nome} (cópia)` : 'Produto (cópia)')
-    setCloneNovoCodigo(prod?.codigo ? `${prod.codigo}-CP` : '')
+    setCloneNovoNome(prod ? `${prod.nome} (Variação)` : 'Produto (Variação)')
+    setCloneNovoCodigo(prod?.codigo ? `${prod.codigo}-VAR` : '')
+    setCloneNovaCategoria(prod?.categoria || '')
+    setCloneNovaUnidade(prod?.unidade || 'UN')
+    setCloneObservacoes(f.observacoes ? `Cópia/Variação de ${prod?.nome}. ${f.observacoes}` : '')
+    setCloneAjustePercentual('0')
     setCloneOpen(true)
   }
 
@@ -800,15 +818,21 @@ export default function CadastroFichaTecnica() {
 
     setCloning(true)
     try {
+      const ajusteNum = Number(cloneAjustePercentual.replace(',', '.')) || 0
+
       const novaFicha = await fichasTecnicasService.clone(fichaToClone.id, {
         criarNovoProduto: true,
         novoProdutoNome: cloneNovoNome.trim(),
         novoProdutoCodigo: cloneNovoCodigo.trim() || undefined,
+        novoProdutoCategoria: cloneNovaCategoria.trim() || undefined,
+        novoProdutoUnidade: cloneNovaUnidade.trim() || 'UN',
+        observacoes: cloneObservacoes.trim() || undefined,
+        ajustePercentualInsumos: ajusteNum,
       })
 
       toast({
-        title: 'Ficha Técnica clonada com sucesso!',
-        description: `Criada nova ficha e produto "${cloneNovoNome}". Você já pode editar a composição.`,
+        title: 'Ficha Técnica duplicada com sucesso!',
+        description: `Criada variação "${cloneNovoNome}" com todos os ${fichaToClone.itens?.length || 0} insumos copiados em lote.`,
       })
 
       setCloneOpen(false)
@@ -819,13 +843,226 @@ export default function CadastroFichaTecnica() {
       console.error(err)
       toast({
         variant: 'destructive',
-        title: 'Erro ao clonar',
-        description: err?.message || 'Não foi possível clonar a ficha técnica.',
+        title: 'Erro ao duplicar',
+        description: err?.message || 'Não foi possível duplicar a ficha técnica.',
       })
     } finally {
       setCloning(false)
     }
   }
+
+  // Inicializa a comparação com as duas primeiras fichas se não estiverem selecionadas
+  useEffect(() => {
+    if (fichas.length >= 2) {
+      if (!fichaComparadaAId || !fichas.some((f) => f.id === fichaComparadaAId)) {
+        setFichaComparadaAId(fichas[0].id)
+      }
+      if (
+        !fichaComparadaBId ||
+        !fichas.some((f) => f.id === fichaComparadaBId) ||
+        fichaComparadaBId === fichas[0].id
+      ) {
+        setFichaComparadaBId(fichas[1].id)
+      }
+    } else if (fichas.length === 1) {
+      setFichaComparadaAId(fichas[0].id)
+    }
+  }, [fichas])
+
+  // Dados calculados para a Comparação Lado a Lado
+  const comparacaoData = useMemo(() => {
+    const fichaA = fichas.find((f) => f.id === fichaComparadaAId) || null
+    const fichaB = fichas.find((f) => f.id === fichaComparadaBId) || null
+
+    if (!fichaA || !fichaB) return null
+
+    const prodA = produtosMap.get(fichaA.produto)
+    const prodB = produtosMap.get(fichaB.produto)
+
+    const custoMP_A = Number(fichaA.custo_materia_prima) || 0
+    const outrosCustos_A = Number(fichaA.outros_custos) || 0
+    const custoTotal_A = Number(fichaA.custo_total) || 0
+    const margem_A = Number(fichaA.margem_desejada) || 0
+    const markup_A =
+      fichaA.markup_desejado !== undefined && fichaA.markup_desejado !== null
+        ? Number(fichaA.markup_desejado)
+        : margem_A < 100 && margem_A > 0
+          ? (margem_A / (100 - margem_A)) * 100
+          : 50
+    const precoMargem_A =
+      Number(fichaA.preco_venda_sugerido) ||
+      (margem_A < 100 && custoTotal_A > 0 ? custoTotal_A / (1 - margem_A / 100) : custoTotal_A)
+    const precoMarkup_A =
+      Number(fichaA.preco_venda_markup) ||
+      (custoTotal_A > 0 ? custoTotal_A * (1 + markup_A / 100) : custoTotal_A)
+    const precoPraticado_A = Number(prodA?.preco_venda) || precoMargem_A
+
+    const custoMP_B = Number(fichaB.custo_materia_prima) || 0
+    const outrosCustos_B = Number(fichaB.outros_custos) || 0
+    const custoTotal_B = Number(fichaB.custo_total) || 0
+    const margem_B = Number(fichaB.margem_desejada) || 0
+    const markup_B =
+      fichaB.markup_desejado !== undefined && fichaB.markup_desejado !== null
+        ? Number(fichaB.markup_desejado)
+        : margem_B < 100 && margem_B > 0
+          ? (margem_B / (100 - margem_B)) * 100
+          : 50
+    const precoMargem_B =
+      Number(fichaB.preco_venda_sugerido) ||
+      (margem_B < 100 && custoTotal_B > 0 ? custoTotal_B / (1 - margem_B / 100) : custoTotal_B)
+    const precoMarkup_B =
+      Number(fichaB.preco_venda_markup) ||
+      (custoTotal_B > 0 ? custoTotal_B * (1 + markup_B / 100) : custoTotal_B)
+    const precoPraticado_B = Number(prodB?.preco_venda) || precoMargem_B
+
+    // Diferenças (B vs A)
+    const diffCustoTotal = custoTotal_B - custoTotal_A
+    const pctDiffCustoTotal = custoTotal_A > 0 ? (diffCustoTotal / custoTotal_A) * 100 : 0
+
+    const diffCustoMP = custoMP_B - custoMP_A
+    const pctDiffCustoMP = custoMP_A > 0 ? (diffCustoMP / custoMP_A) * 100 : 0
+
+    const diffOutros = outrosCustos_B - outrosCustos_A
+    const pctDiffOutros = outrosCustos_A > 0 ? (diffOutros / outrosCustos_A) * 100 : 0
+
+    const diffPrecoMargem = precoMargem_B - precoMargem_A
+    const pctDiffPrecoMargem = precoMargem_A > 0 ? (diffPrecoMargem / precoMargem_A) * 100 : 0
+
+    const diffPrecoMarkup = precoMarkup_B - precoMarkup_A
+    const pctDiffPrecoMarkup = precoMarkup_A > 0 ? (diffPrecoMarkup / precoMarkup_A) * 100 : 0
+
+    // Conclusão de qual é mais barata / econômica
+    let conclusao = {
+      maisEconomica: diffCustoTotal === 0 ? 'iguais' : diffCustoTotal < 0 ? 'B' : 'A',
+      diferencaAbsoluta: Math.abs(diffCustoTotal),
+      diferencaPercentual: Math.abs(pctDiffCustoTotal),
+      produtoEconomicoNome:
+        diffCustoTotal < 0 ? prodB?.nome || 'Produto B' : prodA?.nome || 'Produto A',
+      produtoCaroNome: diffCustoTotal < 0 ? prodA?.nome || 'Produto A' : prodB?.nome || 'Produto B',
+    }
+
+    // Comparativo de Insumos (Em Comum vs Divergentes)
+    const itensMapA = new Map<string, ItemFichaTecnica>()
+    for (const it of fichaA.itens || []) {
+      itensMapA.set(it.materia_prima_id, it)
+    }
+
+    const itensMapB = new Map<string, ItemFichaTecnica>()
+    for (const it of fichaB.itens || []) {
+      itensMapB.set(it.materia_prima_id, it)
+    }
+
+    // Todos os IDs únicos de insumos envolvidos
+    const allMpIds = Array.from(
+      new Set([...Array.from(itensMapA.keys()), ...Array.from(itensMapB.keys())]),
+    )
+
+    const insumosEmComum: Array<{
+      materia_prima_id: string
+      nome: string
+      unidade: string
+      itemA: ItemFichaTecnica
+      itemB: ItemFichaTecnica
+      diffQtd: number
+      diffCusto: number
+      diffSubtotal: number
+      pctDiffSubtotal: number
+    }> = []
+
+    const insumosApenasA: Array<{
+      materia_prima_id: string
+      nome: string
+      unidade: string
+      item: ItemFichaTecnica
+    }> = []
+
+    const insumosApenasB: Array<{
+      materia_prima_id: string
+      nome: string
+      unidade: string
+      item: ItemFichaTecnica
+    }> = []
+
+    for (const mpId of allMpIds) {
+      const itA = itensMapA.get(mpId)
+      const itB = itensMapB.get(mpId)
+      const mp = materiasMap.get(mpId)
+      const nome = itA?.materia_prima_nome || itB?.materia_prima_nome || mp?.nome || 'Insumo'
+      const unidade = itA?.unidade || itB?.unidade || mp?.unidade || 'UN'
+
+      if (itA && itB) {
+        const diffQtd = Number(itB.quantidade) - Number(itA.quantidade)
+        const diffCusto = Number(itB.custo_unitario) - Number(itA.custo_unitario)
+        const subA = Number(itA.subtotal) || Number(itA.quantidade) * Number(itA.custo_unitario)
+        const subB = Number(itB.subtotal) || Number(itB.quantidade) * Number(itB.custo_unitario)
+        const diffSubtotal = subB - subA
+        const pctDiffSubtotal = subA > 0 ? (diffSubtotal / subA) * 100 : 0
+
+        insumosEmComum.push({
+          materia_prima_id: mpId,
+          nome,
+          unidade,
+          itemA: itA,
+          itemB: itB,
+          diffQtd,
+          diffCusto,
+          diffSubtotal,
+          pctDiffSubtotal,
+        })
+      } else if (itA && !itB) {
+        insumosApenasA.push({
+          materia_prima_id: mpId,
+          nome,
+          unidade,
+          item: itA,
+        })
+      } else if (!itA && itB) {
+        insumosApenasB.push({
+          materia_prima_id: mpId,
+          nome,
+          unidade,
+          item: itB,
+        })
+      }
+    }
+
+    return {
+      fichaA,
+      fichaB,
+      prodA,
+      prodB,
+      custoMP_A,
+      outrosCustos_A,
+      custoTotal_A,
+      margem_A,
+      markup_A,
+      precoMargem_A,
+      precoMarkup_A,
+      precoPraticado_A,
+      custoMP_B,
+      outrosCustos_B,
+      custoTotal_B,
+      margem_B,
+      markup_B,
+      precoMargem_B,
+      precoMarkup_B,
+      precoPraticado_B,
+      diffCustoTotal,
+      pctDiffCustoTotal,
+      diffCustoMP,
+      pctDiffCustoMP,
+      diffOutros,
+      pctDiffOutros,
+      diffPrecoMargem,
+      pctDiffPrecoMargem,
+      diffPrecoMarkup,
+      pctDiffPrecoMarkup,
+      conclusao,
+      insumosEmComum,
+      insumosApenasA,
+      insumosApenasB,
+    }
+  }, [fichas, fichaComparadaAId, fichaComparadaBId, produtosMap, materiasMap])
 
   const confirmDelete = (f: FichaTecnicaRecord) => {
     setFichaToDelete(f)
@@ -1166,27 +1403,35 @@ export default function CadastroFichaTecnica() {
         <Tabs
           value={activeTab}
           onValueChange={(v) => setActiveTab(v as any)}
-          className="w-full sm:w-auto"
+          className="w-full lg:w-auto"
         >
-          <TabsList className="bg-slate-100 p-1 w-full sm:w-auto grid grid-cols-2">
+          <TabsList className="bg-slate-100 p-1 w-full lg:w-auto grid grid-cols-3">
             <TabsTrigger
               value="fichas"
               className="text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs gap-1.5"
             >
               <ClipboardList className="w-3.5 h-3.5" />
-              Fichas Técnicas ({fichas.length})
+              Fichas ({fichas.length})
+            </TabsTrigger>
+            <TabsTrigger
+              value="comparacao"
+              className="text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-xs gap-1.5"
+            >
+              <GitCompare className="w-3.5 h-3.5" />
+              Comparar Fichas
             </TabsTrigger>
             <TabsTrigger
               value="relatorio"
               className="text-xs font-semibold data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-xs gap-1.5"
             >
               <BarChart3 className="w-3.5 h-3.5" />
-              Relatório de Margem Real
+              Margem Real
             </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
+      {/* RENDERIZAÇÃO DAS ABAS */}
       {activeTab === 'fichas' ? (
         <>
           {/* Cards de Métricas de Fichas */}
@@ -1907,6 +2152,634 @@ export default function CadastroFichaTecnica() {
             </div>
           </div>
         </>
+      ) : activeTab === 'comparacao' ? (
+        /* ========================================================= */
+        /* ABA DE COMPARAÇÃO DE DUAS FICHAS TÉCNICAS LADO A LADO    */
+        /* ========================================================= */
+        <div className="space-y-6 animate-fadeIn">
+          {/* Cabeçalho de Seleção dos Dois Produtos para Comparar */}
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardHeader className="pb-3 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                    <GitCompare className="w-4 h-4 text-indigo-600" />
+                    Comparação de Fichas Técnicas Lado a Lado
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Analise dois produtos simultaneamente: custos de matéria-prima, outros custos,
+                    markup, preços sugeridos e divergência de insumos.
+                  </CardDescription>
+                </div>
+                {fichas.length >= 2 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const temp = fichaComparadaAId
+                      setFichaComparadaAId(fichaComparadaBId)
+                      setFichaComparadaBId(temp)
+                    }}
+                    className="h-8 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 border-indigo-200 gap-1.5"
+                  >
+                    <ArrowUpDown className="w-3.5 h-3.5" />
+                    Inverter Lados (A ⇄ B)
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4">
+              {fichas.length < 2 ? (
+                <div className="py-12 text-center">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-semibold text-slate-800">
+                    Você precisa de ao menos 2 fichas técnicas para comparar
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                    Atualmente existem {fichas.length} ficha(s) técnica(s) cadastrada(s). Crie ou
+                    clone mais fichas para habilitar a comparação lado a lado.
+                  </p>
+                  {fichas.length === 1 && (
+                    <Button
+                      onClick={() => handleOpenClone(fichas[0])}
+                      size="sm"
+                      className="mt-4 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <Copy className="w-3.5 h-3.5 mr-1.5" />
+                      Clonar Ficha Existente para Criar Variação
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Seletor Produto A */}
+                  <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="comp-ficha-a"
+                        className="text-xs font-bold text-blue-900 flex items-center gap-1.5"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
+                        Ficha Técnica A (Referência Base)
+                      </Label>
+                      <Badge className="text-[10px] bg-blue-100 text-blue-800 border-blue-300">
+                        Produto A
+                      </Badge>
+                    </div>
+                    <select
+                      id="comp-ficha-a"
+                      value={fichaComparadaAId}
+                      onChange={(e) => setFichaComparadaAId(e.target.value)}
+                      className="w-full h-9 text-xs bg-white border border-blue-300 rounded-md px-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    >
+                      {fichas.map((f) => {
+                        const p = produtosMap.get(f.produto)
+                        return (
+                          <option key={f.id} value={f.id} disabled={f.id === fichaComparadaBId}>
+                            {p?.codigo ? `[${p.codigo}] ` : ''}
+                            {p?.nome || 'Produto'} — Custo: {formatBrl(f.custo_total)}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Seletor Produto B */}
+                  <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="comp-ficha-b"
+                        className="text-xs font-bold text-purple-900 flex items-center gap-1.5"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-600 inline-block" />
+                        Ficha Técnica B (Comparativo)
+                      </Label>
+                      <Badge className="text-[10px] bg-purple-100 text-purple-800 border-purple-300">
+                        Produto B
+                      </Badge>
+                    </div>
+                    <select
+                      id="comp-ficha-b"
+                      value={fichaComparadaBId}
+                      onChange={(e) => setFichaComparadaBId(e.target.value)}
+                      className="w-full h-9 text-xs bg-white border border-purple-300 rounded-md px-2.5 text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    >
+                      {fichas.map((f) => {
+                        const p = produtosMap.get(f.produto)
+                        return (
+                          <option key={f.id} value={f.id} disabled={f.id === fichaComparadaAId}>
+                            {p?.codigo ? `[${p.codigo}] ` : ''}
+                            {p?.nome || 'Produto'} — Custo: {formatBrl(f.custo_total)}
+                          </option>
+                        )
+                      })}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* PAINEL DE RESULTADOS DA COMPARAÇÃO */}
+          {comparacaoData && (
+            <div className="space-y-6">
+              {/* 1. CARD DE CONCLUSÃO EXECUTIVA / VEREDICTO DE ECONOMIA */}
+              <div
+                className={`p-4 rounded-xl border shadow-xs transition-all ${
+                  comparacaoData.conclusao.maisEconomica === 'iguais'
+                    ? 'bg-slate-50 border-slate-300 text-slate-800'
+                    : comparacaoData.conclusao.maisEconomica === 'B'
+                      ? 'bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-900 text-white border-emerald-500/50'
+                      : 'bg-gradient-to-r from-blue-950 via-indigo-900 to-slate-900 text-white border-blue-500/50'
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold uppercase tracking-wider border border-emerald-400/30">
+                        Veredicto de Custo & Competitividade
+                      </span>
+                    </div>
+                    <h3 className="text-base font-bold flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                      {comparacaoData.conclusao.maisEconomica === 'iguais' ? (
+                        'Ambas as fichas possuem o mesmo Custo Total exato'
+                      ) : (
+                        <>
+                          <span className="text-emerald-300 font-extrabold">
+                            {comparacaoData.conclusao.produtoEconomicoNome}
+                          </span>{' '}
+                          é a opção mais econômica (
+                          {formatBrl(comparacaoData.conclusao.diferencaAbsoluta)} mais barata ·{' '}
+                          {comparacaoData.conclusao.diferencaPercentual.toFixed(1)}% de economia)
+                        </>
+                      )}
+                    </h3>
+                    <p className="text-xs text-slate-200">
+                      Comparação entre <strong>"{comparacaoData.prodA?.nome}"</strong> (
+                      {formatBrl(comparacaoData.custoTotal_A)}) e{' '}
+                      <strong>"{comparacaoData.prodB?.nome}"</strong> (
+                      {formatBrl(comparacaoData.custoTotal_B)}).
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="bg-white/10 backdrop-blur-xs p-2.5 rounded-lg border border-white/20 text-center min-w-[140px]">
+                      <span className="text-[10px] text-slate-300 uppercase font-medium block">
+                        Diferença em R$
+                      </span>
+                      <span className="text-sm font-black font-mono">
+                        {comparacaoData.diffCustoTotal > 0 ? '+' : ''}
+                        {formatBrl(comparacaoData.diffCustoTotal)}
+                      </span>
+                    </div>
+                    <div className="bg-white/10 backdrop-blur-xs p-2.5 rounded-lg border border-white/20 text-center min-w-[120px]">
+                      <span className="text-[10px] text-slate-300 uppercase font-medium block">
+                        Variação %
+                      </span>
+                      <span className="text-sm font-black font-mono">
+                        {comparacaoData.pctDiffCustoTotal > 0 ? '+' : ''}
+                        {comparacaoData.pctDiffCustoTotal.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. TABELA COMPARATIVA DE INDICADORES DE CUSTO & PREÇO LADO A LADO */}
+              <Card className="bg-white border-slate-200 shadow-xs">
+                <CardHeader className="pb-3 border-b border-slate-100">
+                  <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                    <Scale className="w-4 h-4 text-indigo-600" />
+                    Quadro Comparativo Estrutural (Valores e Indicadores)
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Comparação direta de custos diretos, indiretos, markup e formação de preço
+                    sugerido.
+                  </CardDescription>
+                </CardHeader>
+
+                <CardContent className="p-0 overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-semibold">
+                        <th className="py-3 px-4 w-1/3">Métrica / Indicador</th>
+                        <th className="py-3 px-4 w-1/4 text-right bg-blue-50/40 text-blue-950">
+                          {comparacaoData.prodA?.nome || 'Produto A'}
+                        </th>
+                        <th className="py-3 px-4 w-1/4 text-right bg-purple-50/40 text-purple-950">
+                          {comparacaoData.prodB?.nome || 'Produto B'}
+                        </th>
+                        <th className="py-3 px-4 w-1/6 text-right">Diferença (B vs A)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {/* Código / Categoria */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Código & Categoria
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10">
+                          {comparacaoData.prodA?.codigo || '—'} ·{' '}
+                          {comparacaoData.prodA?.categoria || 'Geral'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10">
+                          {comparacaoData.prodB?.codigo || '—'} ·{' '}
+                          {comparacaoData.prodB?.categoria || 'Geral'}
+                        </td>
+                        <td className="py-2.5 px-4 text-right text-slate-400">—</td>
+                      </tr>
+
+                      {/* Quantidade de Insumos */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Quantidade de Insumos
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 font-bold">
+                          {comparacaoData.fichaA.itens?.length || 0} itens
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 font-bold">
+                          {comparacaoData.fichaB.itens?.length || 0} itens
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono font-semibold text-slate-700">
+                          {(comparacaoData.fichaB.itens?.length || 0) -
+                            (comparacaoData.fichaA.itens?.length || 0) >
+                          0
+                            ? '+'
+                            : ''}
+                          {(comparacaoData.fichaB.itens?.length || 0) -
+                            (comparacaoData.fichaA.itens?.length || 0)}{' '}
+                          itens
+                        </td>
+                      </tr>
+
+                      {/* Custo Matéria-Prima */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Custo Matéria-Prima (R$)
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 font-bold text-slate-800">
+                          {formatBrl(comparacaoData.custoMP_A)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 font-bold text-slate-800">
+                          {formatBrl(comparacaoData.custoMP_B)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold whitespace-nowrap">
+                          <span
+                            className={
+                              comparacaoData.diffCustoMP < 0
+                                ? 'text-emerald-700'
+                                : comparacaoData.diffCustoMP > 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-600'
+                            }
+                          >
+                            {comparacaoData.diffCustoMP > 0 ? '+' : ''}
+                            {formatBrl(comparacaoData.diffCustoMP)} (
+                            {comparacaoData.pctDiffCustoMP > 0 ? '+' : ''}
+                            {comparacaoData.pctDiffCustoMP.toFixed(1)}%)
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* Outros Custos / MOD */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Outros Custos / MOD (R$)
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 text-slate-700">
+                          {formatBrl(comparacaoData.outrosCustos_A)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 text-slate-700">
+                          {formatBrl(comparacaoData.outrosCustos_B)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono font-semibold whitespace-nowrap">
+                          <span
+                            className={
+                              comparacaoData.diffOutros < 0
+                                ? 'text-emerald-700'
+                                : comparacaoData.diffOutros > 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-600'
+                            }
+                          >
+                            {comparacaoData.diffOutros > 0 ? '+' : ''}
+                            {formatBrl(comparacaoData.diffOutros)}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* CUSTO TOTAL UNITÁRIO (DESTAQUE) */}
+                      <tr className="bg-slate-100/80 font-black text-slate-900 border-y-2 border-slate-300">
+                        <td className="py-3 px-4 text-sm uppercase">Custo Total Unitário (R$)</td>
+                        <td className="py-3 px-4 text-right font-mono text-sm bg-blue-100/50 text-blue-950">
+                          {formatBrl(comparacaoData.custoTotal_A)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-sm bg-purple-100/50 text-purple-950">
+                          {formatBrl(comparacaoData.custoTotal_B)}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono text-sm whitespace-nowrap">
+                          <Badge
+                            className={`text-xs font-black px-2 py-0.5 ${
+                              comparacaoData.diffCustoTotal < 0
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : comparacaoData.diffCustoTotal > 0
+                                  ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                  : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {comparacaoData.diffCustoTotal > 0 ? '+' : ''}
+                            {formatBrl(comparacaoData.diffCustoTotal)} (
+                            {comparacaoData.pctDiffCustoTotal > 0 ? '+' : ''}
+                            {comparacaoData.pctDiffCustoTotal.toFixed(1)}%)
+                          </Badge>
+                        </td>
+                      </tr>
+
+                      {/* Margem Desejada (%) */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Margem Desejada (%)
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 text-amber-800 font-bold">
+                          {formatPct(comparacaoData.margem_A)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 text-amber-800 font-bold">
+                          {formatPct(comparacaoData.margem_B)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-700">
+                          {comparacaoData.margem_B - comparacaoData.margem_A > 0 ? '+' : ''}
+                          {(comparacaoData.margem_B - comparacaoData.margem_A).toFixed(1)} p.p.
+                        </td>
+                      </tr>
+
+                      {/* Markup Desejado (%) */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Markup sobre Custo (%)
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 text-blue-700 font-bold">
+                          {formatPct(comparacaoData.markup_A)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 text-blue-700 font-bold">
+                          {formatPct(comparacaoData.markup_B)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono text-slate-700">
+                          {comparacaoData.markup_B - comparacaoData.markup_A > 0 ? '+' : ''}
+                          {(comparacaoData.markup_B - comparacaoData.markup_A).toFixed(1)} p.p.
+                        </td>
+                      </tr>
+
+                      {/* Preço Sugerido por Margem */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Preço Sugerido (por Margem)
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 font-bold text-emerald-800">
+                          {formatBrl(comparacaoData.precoMargem_A)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 font-bold text-emerald-800">
+                          {formatBrl(comparacaoData.precoMargem_B)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold whitespace-nowrap">
+                          <span
+                            className={
+                              comparacaoData.diffPrecoMargem < 0
+                                ? 'text-emerald-700'
+                                : comparacaoData.diffPrecoMargem > 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-600'
+                            }
+                          >
+                            {comparacaoData.diffPrecoMargem > 0 ? '+' : ''}
+                            {formatBrl(comparacaoData.diffPrecoMargem)}
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* Preço Sugerido por Markup */}
+                      <tr className="hover:bg-slate-50/50">
+                        <td className="py-2.5 px-4 font-semibold text-slate-700">
+                          Preço Sugerido (por Markup)
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-blue-50/10 font-bold text-blue-800">
+                          {formatBrl(comparacaoData.precoMarkup_A)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono bg-purple-50/10 font-bold text-blue-800">
+                          {formatBrl(comparacaoData.precoMarkup_B)}
+                        </td>
+                        <td className="py-2.5 px-4 text-right font-mono font-bold whitespace-nowrap">
+                          <span
+                            className={
+                              comparacaoData.diffPrecoMarkup < 0
+                                ? 'text-emerald-700'
+                                : comparacaoData.diffPrecoMarkup > 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-600'
+                            }
+                          >
+                            {comparacaoData.diffPrecoMarkup > 0 ? '+' : ''}
+                            {formatBrl(comparacaoData.diffPrecoMarkup)}
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+
+              {/* 3. COMPARAÇÃO DETALHADA DE INSUMOS: EM COMUM VS EXCLUSIVOS */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Coluna 1 & 2: Insumos em Comum nas Duas Fichas */}
+                <div className="lg:col-span-2 space-y-4">
+                  <Card className="bg-white border-slate-200 shadow-xs">
+                    <CardHeader className="pb-3 border-b border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                            <Layers className="w-4 h-4 text-amber-600" />
+                            Insumos Presentes em Ambas as Fichas (
+                            {comparacaoData.insumosEmComum.length})
+                          </CardTitle>
+                          <CardDescription className="text-xs">
+                            Comparativo de quantidade utilizada e impacto no subtotal de cada
+                            produto.
+                          </CardDescription>
+                        </div>
+                        <Badge variant="outline" className="text-xs bg-slate-50">
+                          Em Comum
+                        </Badge>
+                      </div>
+                    </CardHeader>
+
+                    <CardContent className="p-0">
+                      {comparacaoData.insumosEmComum.length === 0 ? (
+                        <div className="py-8 text-center text-xs text-slate-400">
+                          Não há insumos em comum compartilhados entre estas duas fichas.
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs border-collapse">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-700 font-semibold">
+                                <th className="py-2.5 px-3.5">Matéria-Prima</th>
+                                <th className="py-2.5 px-3 text-right bg-blue-50/30 text-blue-950">
+                                  Qtd (A)
+                                </th>
+                                <th className="py-2.5 px-3 text-right bg-purple-50/30 text-purple-950">
+                                  Qtd (B)
+                                </th>
+                                <th className="py-2.5 px-3 text-right bg-blue-50/30 text-blue-950">
+                                  Subtotal A
+                                </th>
+                                <th className="py-2.5 px-3 text-right bg-purple-50/30 text-purple-950">
+                                  Subtotal B
+                                </th>
+                                <th className="py-2.5 px-3.5 text-right">Diferença</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {comparacaoData.insumosEmComum.map((item, idx) => {
+                                const subA =
+                                  item.itemA.subtotal ||
+                                  item.itemA.quantidade * item.itemA.custo_unitario
+                                const subB =
+                                  item.itemB.subtotal ||
+                                  item.itemB.quantidade * item.itemB.custo_unitario
+                                const diff = subB - subA
+
+                                return (
+                                  <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                    <td className="py-2.5 px-3.5 font-semibold text-slate-900">
+                                      {item.nome}
+                                      <span className="text-[10px] text-slate-400 font-normal block">
+                                        Custo un: {formatBrl(item.itemA.custo_unitario)}/
+                                        {item.unidade}
+                                      </span>
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-mono bg-blue-50/10">
+                                      {item.itemA.quantidade} {item.unidade}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-mono bg-purple-50/10">
+                                      {item.itemB.quantidade} {item.unidade}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-mono bg-blue-50/10 text-slate-700">
+                                      {formatBrl(subA)}
+                                    </td>
+                                    <td className="py-2.5 px-3 text-right font-mono bg-purple-50/10 text-slate-700">
+                                      {formatBrl(subB)}
+                                    </td>
+                                    <td className="py-2.5 px-3.5 text-right font-mono font-bold whitespace-nowrap">
+                                      <span
+                                        className={
+                                          diff < 0
+                                            ? 'text-emerald-700'
+                                            : diff > 0
+                                              ? 'text-rose-600'
+                                              : 'text-slate-500'
+                                        }
+                                      >
+                                        {diff > 0 ? '+' : ''}
+                                        {formatBrl(diff)}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Coluna 3: Insumos Divergentes / Exclusivos */}
+                <div className="space-y-4">
+                  {/* Exclusivos de A */}
+                  <Card className="bg-white border-blue-200 shadow-xs">
+                    <CardHeader className="py-2.5 px-3.5 border-b border-blue-100 bg-blue-50/40">
+                      <CardTitle className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-blue-600" />
+                        Insumos Apenas em "{comparacaoData.prodA?.nome}" (
+                        {comparacaoData.insumosApenasA.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3">
+                      {comparacaoData.insumosApenasA.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center py-2">
+                          Nenhum insumo exclusivo neste produto.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {comparacaoData.insumosApenasA.map((it, idx) => (
+                            <div
+                              key={idx}
+                              className="p-2 rounded bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <p className="font-semibold text-slate-800">{it.nome}</p>
+                                <p className="text-[10px] text-slate-500">
+                                  {it.item.quantidade} {it.unidade} ×{' '}
+                                  {formatBrl(it.item.custo_unitario)}
+                                </p>
+                              </div>
+                              <span className="font-bold text-slate-900 font-mono">
+                                {formatBrl(it.item.subtotal)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Exclusivos de B */}
+                  <Card className="bg-white border-purple-200 shadow-xs">
+                    <CardHeader className="py-2.5 px-3.5 border-b border-purple-100 bg-purple-50/40">
+                      <CardTitle className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-purple-600" />
+                        Insumos Apenas em "{comparacaoData.prodB?.nome}" (
+                        {comparacaoData.insumosApenasB.length})
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-3">
+                      {comparacaoData.insumosApenasB.length === 0 ? (
+                        <p className="text-xs text-slate-400 italic text-center py-2">
+                          Nenhum insumo exclusivo neste produto.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {comparacaoData.insumosApenasB.map((it, idx) => (
+                            <div
+                              key={idx}
+                              className="p-2 rounded bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                            >
+                              <div>
+                                <p className="font-semibold text-slate-800">{it.nome}</p>
+                                <p className="text-[10px] text-slate-500">
+                                  {it.item.quantidade} {it.unidade} ×{' '}
+                                  {formatBrl(it.item.custo_unitario)}
+                                </p>
+                              </div>
+                              <span className="font-bold text-slate-900 font-mono">
+                                {formatBrl(it.item.subtotal)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
         /* ABA DO RELATÓRIO DE CUSTOS E MARGEM REAL */
         <div className="space-y-6">
@@ -2746,60 +3619,138 @@ export default function CadastroFichaTecnica() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Clonar Ficha Técnica */}
+      {/* Modal Duplicar / Clonar Ficha Técnica Inteira com Insumos em Lote & Variação */}
       <Dialog open={cloneOpen} onOpenChange={setCloneOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white">
+        <DialogContent className="sm:max-w-[560px] bg-white">
           <form onSubmit={handleConfirmClone}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
                 <Copy className="w-4 h-4 text-emerald-700" />
-                Clonar Ficha Técnica
+                Duplicar Ficha Técnica Inteira com Insumos em Lote
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Uma cópia exata de todos os insumos, quantidades, custos e parâmetros de formação de
-                preço será criada com um novo produto para que você possa criar variações.
+                Gera uma cópia integral com todos os insumos, quantidades, custos e parâmetros de
+                precificação para criar um novo produto ou variação.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 py-4">
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
-                <div className="text-slate-500">Ficha Técnica Original:</div>
-                <div className="font-bold text-slate-900">
+            <div className="space-y-3.5 py-3">
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
+                <div className="text-[11px] font-bold text-slate-500 uppercase">
+                  Ficha Técnica Original:
+                </div>
+                <div className="font-bold text-slate-900 text-sm">
                   {produtosMap.get(fichaToClone?.produto || '')?.nome || 'Produto Original'}
                 </div>
-                <div className="text-[11px] text-slate-500">
-                  {fichaToClone?.itens?.length || 0} insumo(s) cadastrado(s) · Custo Total:{' '}
-                  <strong>{formatBrl(fichaToClone?.custo_total)}</strong>
+                <div className="text-[11px] text-slate-600 flex items-center justify-between pt-1 border-t border-slate-200">
+                  <span>
+                    Insumos a copiar em lote:{' '}
+                    <strong>{fichaToClone?.itens?.length || 0} itens</strong>
+                  </span>
+                  <span>
+                    Custo Total original: <strong>{formatBrl(fichaToClone?.custo_total)}</strong>
+                  </span>
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="clone-nome" className="text-xs font-semibold text-slate-700">
-                  Nome do Novo Produto (Variação) *
-                </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="clone-nome" className="text-xs font-semibold text-slate-700">
+                    Nome do Novo Produto / Variação *
+                  </Label>
+                  <Input
+                    id="clone-nome"
+                    required
+                    placeholder="Ex: Mesa de Centro 120cm - Acabamento Carvalho"
+                    value={cloneNovoNome}
+                    onChange={(e) => setCloneNovoNome(e.target.value)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="clone-codigo" className="text-xs font-semibold text-slate-700">
+                    Código / SKU
+                  </Label>
+                  <Input
+                    id="clone-codigo"
+                    placeholder="Ex: PRD-001-VAR"
+                    value={cloneNovoCodigo}
+                    onChange={(e) => setCloneNovoCodigo(e.target.value)}
+                    className="h-9 text-xs uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="clone-categoria" className="text-xs font-semibold text-slate-700">
+                    Categoria do Produto
+                  </Label>
+                  <Input
+                    id="clone-categoria"
+                    placeholder="Ex: Móveis, Usinagem, Linha Premium"
+                    value={cloneNovaCategoria}
+                    onChange={(e) => setCloneNovaCategoria(e.target.value)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="clone-unidade" className="text-xs font-semibold text-slate-700">
+                    Unidade de Medida
+                  </Label>
+                  <Input
+                    id="clone-unidade"
+                    placeholder="UN, KG, M, CX"
+                    value={cloneNovaUnidade}
+                    onChange={(e) => setCloneNovaUnidade(e.target.value)}
+                    className="h-9 text-xs uppercase"
+                  />
+                </div>
+              </div>
+
+              {/* Ajuste Percentual Opcional em Lote nos Custos dos Insumos */}
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="clone-ajuste"
+                    className="text-xs font-bold text-emerald-900 flex items-center gap-1.5"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-700" />
+                    Ajuste Geral de Custo dos Insumos (% Opcional)
+                  </Label>
+                  <span className="text-[10px] text-emerald-700 font-mono font-semibold">
+                    {Number(cloneAjustePercentual) > 0
+                      ? `+${cloneAjustePercentual}%`
+                      : `${cloneAjustePercentual}%`}
+                  </span>
+                </div>
                 <Input
-                  id="clone-nome"
-                  required
-                  placeholder="Ex: Gabinete Metálico Slim - Cor Preta"
-                  value={cloneNovoNome}
-                  onChange={(e) => setCloneNovoNome(e.target.value)}
-                  className="h-9 text-xs"
+                  id="clone-ajuste"
+                  type="number"
+                  step="0.5"
+                  placeholder="0 (Manter custos iguais)"
+                  value={cloneAjustePercentual}
+                  onChange={(e) => setCloneAjustePercentual(e.target.value)}
+                  className="h-8 text-xs bg-white"
                 />
-                <p className="text-[11px] text-slate-400">
-                  Um novo produto será cadastrado automaticamente com este nome.
+                <p className="text-[10px] text-emerald-800">
+                  Ex: Digite <strong>10</strong> para aumentar 10% no custo unitário de todos os
+                  insumos, ou <strong>-5</strong> para aplicar 5% de desconto.
                 </p>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="clone-codigo" className="text-xs font-semibold text-slate-700">
-                  Código / SKU do Novo Produto (Opcional)
+              <div className="space-y-1">
+                <Label htmlFor="clone-obs" className="text-xs font-semibold text-slate-700">
+                  Observações da Nova Ficha Técnica
                 </Label>
-                <Input
-                  id="clone-codigo"
-                  placeholder="Ex: PRD-001-B"
-                  value={cloneNovoCodigo}
-                  onChange={(e) => setCloneNovoCodigo(e.target.value)}
-                  className="h-9 text-xs uppercase"
+                <Textarea
+                  id="clone-obs"
+                  placeholder="Informações sobre a variação de cor, acabamento ou tamanho..."
+                  value={cloneObservacoes}
+                  onChange={(e) => setCloneObservacoes(e.target.value)}
+                  className="min-h-[50px] text-xs resize-y"
                 />
               </div>
             </div>
@@ -2817,9 +3768,10 @@ export default function CadastroFichaTecnica() {
               <Button
                 type="submit"
                 disabled={cloning}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs h-9 shadow-xs"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs h-9 shadow-xs gap-1.5"
               >
-                {cloning ? 'Clonando...' : 'Confirmar e Clonar Ficha'}
+                <Copy className="w-3.5 h-3.5" />
+                {cloning ? 'Duplicando...' : 'Confirmar e Duplicar Ficha Inteira'}
               </Button>
             </DialogFooter>
           </form>
