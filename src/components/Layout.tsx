@@ -36,6 +36,7 @@ import {
   Package,
   Layers,
   ClipboardList,
+  Percent,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -83,6 +84,11 @@ export default function Layout() {
       name: 'Cadastro da Ficha Técnica',
       path: '/formacao-preco/fichas-tecnicas',
       icon: ClipboardList,
+    },
+    {
+      name: 'Impostos',
+      path: '/formacao-preco/impostos',
+      icon: Percent,
     },
   ]
 
@@ -1253,7 +1259,7 @@ export default function Layout() {
                       side="right"
                       className="bg-[#0B1F3A] text-white border-blue-900"
                     >
-                      Formação de Preço - Custo (Produtos, MP, Ficha Técnica)
+                      Formação de Preço - Custo (Produtos, MP, Ficha Técnica, Impostos)
                     </TooltipContent>
                   </Tooltip>
                 </div>

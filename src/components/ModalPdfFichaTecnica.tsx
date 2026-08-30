@@ -89,6 +89,22 @@ export function ModalPdfFichaTecnica({
   }
 
   // Cálculos consolidados da Ficha
+  const [configTributariaModal, setConfigTributariaModal] = React.useState<any>(null)
+
+  React.useEffect(() => {
+    if (selectedEmpresa?.id) {
+      import('@/services/formacaoPrecoService').then(({ configuracoesTributariasService }) => {
+        configuracoesTributariasService
+          .getByEmpresa(selectedEmpresa.id)
+          .then((cfg) => {
+            setConfigTributariaModal(cfg)
+          })
+          .catch(() => {})
+      })
+    }
+  }, [selectedEmpresa?.id])
+
+  // Cálculos consolidados da Ficha
   const stats = React.useMemo(() => {
     if (!ficha) {
       return {
@@ -99,6 +115,8 @@ export function ModalPdfFichaTecnica({
         markupDesejado: 0,
         precoMargem: 0,
         precoMarkup: 0,
+        precoComImpostos: 0,
+        cargaTrib: 0,
         lucroMargem: 0,
         lucroMarkup: 0,
         itensDetalhados: [],
@@ -125,6 +143,15 @@ export function ModalPdfFichaTecnica({
     const precoMarkup =
       Number(ficha.preco_venda_markup) ||
       (custoTotal > 0 ? custoTotal * (1 + markupDesejado / 100) : custoTotal)
+
+    const cargaTrib = Number(configTributariaModal?.carga_tributaria_total) || 0
+    let precoComImpostos = precoMargem
+    const divImp = 1 - (margemDesejada + cargaTrib) / 100
+    if (cargaTrib > 0 && divImp > 0.01 && custoTotal > 0) {
+      precoComImpostos = custoTotal / divImp
+    } else if (cargaTrib > 0 && custoTotal > 0) {
+      precoComImpostos = precoMargem * (1 + cargaTrib / 100)
+    }
 
     const lucroMargem = precoMargem - custoTotal
     const lucroMarkup = precoMarkup - custoTotal
@@ -173,12 +200,14 @@ export function ModalPdfFichaTecnica({
       markupDesejado,
       precoMargem,
       precoMarkup,
+      precoComImpostos,
+      cargaTrib,
       lucroMargem,
       lucroMarkup,
       itensDetalhados: itens,
       porCategoria,
     }
-  }, [ficha, materiasMap])
+  }, [ficha, materiasMap, configTributariaModal])
 
   // Exportar ficha atual em CSV estruturado
   const handleExportCSV = () => {
@@ -235,7 +264,7 @@ export function ModalPdfFichaTecnica({
         .join(';'),
       ['CUSTO TOTAL UNITÁRIO', fmtNum(stats.custoTotal), '100%'].map(escapeCsv).join(';'),
       [
-        'Preço Sugerido por Margem',
+        'Preço Sugerido por Margem (Sem Impostos)',
         fmtNum(stats.precoMargem),
         `Margem: ${stats.margemDesejada.toFixed(1)}%`,
       ]
@@ -248,6 +277,17 @@ export function ModalPdfFichaTecnica({
       ]
         .map(escapeCsv)
         .join(';'),
+      ...(stats.cargaTrib > 0
+        ? [
+            [
+              `Preço com Impostos (${configTributariaModal?.regime_tributario || 'Tributos'} - ${stats.cargaTrib}%)`,
+              fmtNum(stats.precoComImpostos),
+              'Cálculo por dentro',
+            ]
+              .map(escapeCsv)
+              .join(';'),
+          ]
+        : []),
       [
         'Preço Praticado no Cadastro',
         fmtNum(produto.preco_venda || 0),
@@ -655,6 +695,33 @@ export function ModalPdfFichaTecnica({
                     Fórmula: Custo Total × (1 + Markup/100)
                   </p>
                 </div>
+
+                {/* Sugestão com Carga Tributária (Impostos por dentro) */}
+                {stats.cargaTrib > 0 && (
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-300 rounded-xl space-y-2 sm:col-span-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                        <Percent className="w-3.5 h-3.5 text-amber-700" />
+                        Preço Sugerido com Impostos (
+                        {configTributariaModal?.regime_tributario || 'Regime Fiscal'})
+                      </span>
+                      <Badge className="text-[10px] bg-amber-100 text-amber-900 font-bold border-amber-300">
+                        Carga Total: {formatPct(stats.cargaTrib)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-baseline justify-between border-t border-amber-200/80 pt-1.5">
+                      <span className="text-[11px] text-amber-800">
+                        Preço de Venda Final (Por Dentro):
+                      </span>
+                      <strong className="text-lg font-black font-mono text-amber-950">
+                        {formatBrl(stats.precoComImpostos)}
+                      </strong>
+                    </div>
+                    <p className="text-[10px] text-amber-800 italic">
+                      Fórmula por Dentro: Custo ÷ [1 - (Margem% + Carga Tributária%)/100]
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
 

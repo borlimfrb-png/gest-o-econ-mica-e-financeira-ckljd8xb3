@@ -1,15 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useFilter } from '@/contexts/FilterContext'
 import {
   produtosService,
   materiasPrimasService,
   fichasTecnicasService,
+  configuracoesTributariasService,
 } from '@/services/formacaoPrecoService'
-import type {
+import {
   ProdutoRecord,
   MateriaPrimaRecord,
   FichaTecnicaRecord,
   ItemFichaTecnica,
+  ConfiguracaoTributariaRecord,
 } from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
@@ -144,11 +147,15 @@ type FichaFormErrors = Partial<
 
 export default function CadastroFichaTecnica() {
   const { toast } = useToast()
+  const { selectedEmpresaId } = useFilter()
   const [searchParams] = useSearchParams()
 
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [materias, setMaterias] = useState<MateriaPrimaRecord[]>([])
+  const [configTributaria, setConfigTributaria] = useState<ConfiguracaoTributariaRecord | null>(
+    null,
+  )
   const [loading, setLoading] = useState(true)
 
   // Filtros
@@ -214,6 +221,17 @@ export default function CadastroFichaTecnica() {
         produtosService.getAll(),
         materiasPrimasService.getAll(),
       ])
+
+      // Carregar tributos da empresa ativa se houver
+      if (selectedEmpresaId) {
+        try {
+          const cfg = await configuracoesTributariasService.getByEmpresa(selectedEmpresaId)
+          setConfigTributaria(cfg)
+        } catch {
+          setConfigTributaria(null)
+        }
+      }
+
       setFichas(fList)
       setProdutos(pList)
       setMaterias(mList)
@@ -528,20 +546,32 @@ export default function CadastroFichaTecnica() {
     const lucroBrutoMargem = precoSugeridoMargem - custoTotal
     const lucroBrutoMarkup = precoSugeridoMarkup - custoTotal
 
+    // Cálculo com impostos por dentro
+    const cargaTrib = Number(configTributaria?.carga_tributaria_total) || 0
+    let precoSugeridoComImpostos = precoSugeridoMargem
+    const divisorComImpostos = 1 - (margem + cargaTrib) / 100
+    if (cargaTrib > 0 && divisorComImpostos > 0.01 && custoTotal > 0) {
+      precoSugeridoComImpostos = custoTotal / divisorComImpostos
+    } else if (cargaTrib > 0 && custoTotal > 0) {
+      precoSugeridoComImpostos = precoSugeridoMargem * (1 + cargaTrib / 100)
+    }
+
     return {
       custoMP,
       outros,
       custoTotal,
       margem,
       markup,
+      cargaTrib,
       precoSugeridoMargem,
       precoSugeridoMarkup,
+      precoSugeridoComImpostos,
       precoSugerido: precoSugeridoMargem,
       lucroBrutoMargem,
       lucroBrutoMarkup,
       itensValidos,
     }
-  }, [formData, materiasMap])
+  }, [formData, materiasMap, configTributaria])
 
   // Handlers do Form
   const handleOpenNew = () => {
@@ -2108,32 +2138,61 @@ export default function CadastroFichaTecnica() {
                             <span>{formatBrl(custoTotal)}</span>
                           </div>
 
-                          {/* Comparativo dos Dois Preços Sugeridos */}
-                          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
-                            <div className="bg-emerald-50/90 border border-emerald-200 rounded-lg p-2.5 text-center">
-                              <span className="text-[10px] font-bold text-emerald-800 block">
-                                Por Margem ({formatPct(margem)})
-                              </span>
-                              <span className="text-xs text-slate-500 block text-[10px]">
-                                Divisor: Custo / (1 - M)
-                              </span>
-                              <span className="text-sm font-extrabold text-emerald-800 mt-1 block">
-                                {formatBrl(precoMargem)}
-                              </span>
-                            </div>
+                          {/* Comparativo dos Preços Sugeridos com Impostos */}
+                          {(() => {
+                            const cargaTrib = Number(configTributaria?.carga_tributaria_total) || 0
+                            let precoComImpostos = precoMargem
+                            const div = 1 - (margem + cargaTrib) / 100
+                            if (cargaTrib > 0 && div > 0.01 && custoTotal > 0) {
+                              precoComImpostos = custoTotal / div
+                            } else if (cargaTrib > 0 && custoTotal > 0) {
+                              precoComImpostos = precoMargem * (1 + cargaTrib / 100)
+                            }
 
-                            <div className="bg-blue-50/90 border border-blue-200 rounded-lg p-2.5 text-center">
-                              <span className="text-[10px] font-bold text-blue-800 block">
-                                Por Markup ({formatPct(markup)})
-                              </span>
-                              <span className="text-xs text-slate-500 block text-[10px]">
-                                Custo × (1 + Mk/100)
-                              </span>
-                              <span className="text-sm font-extrabold text-blue-800 mt-1 block">
-                                {formatBrl(precoMarkup)}
-                              </span>
-                            </div>
-                          </div>
+                            return (
+                              <div className="space-y-2 pt-2 border-t border-slate-200">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="bg-emerald-50/90 border border-emerald-200 rounded-lg p-2.5 text-center">
+                                    <span className="text-[10px] font-bold text-emerald-800 block">
+                                      Por Margem ({formatPct(margem)})
+                                    </span>
+                                    <span className="text-xs text-slate-500 block text-[10px]">
+                                      Divisor: Custo / (1 - M)
+                                    </span>
+                                    <span className="text-sm font-extrabold text-emerald-800 mt-1 block">
+                                      {formatBrl(precoMargem)}
+                                    </span>
+                                  </div>
+
+                                  <div className="bg-blue-50/90 border border-blue-200 rounded-lg p-2.5 text-center">
+                                    <span className="text-[10px] font-bold text-blue-800 block">
+                                      Por Markup ({formatPct(markup)})
+                                    </span>
+                                    <span className="text-xs text-slate-500 block text-[10px]">
+                                      Custo × (1 + Mk/100)
+                                    </span>
+                                    <span className="text-sm font-extrabold text-blue-800 mt-1 block">
+                                      {formatBrl(precoMarkup)}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {cargaTrib > 0 && (
+                                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-center">
+                                    <div className="flex items-center justify-between text-amber-900">
+                                      <span className="text-[10px] font-bold">
+                                        Com Impostos ({configTributaria?.regime_tributario} -{' '}
+                                        {cargaTrib}% por dentro)
+                                      </span>
+                                      <span className="text-xs font-extrabold text-amber-950">
+                                        {formatBrl(precoComImpostos)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
 
                         {selectedFicha.observacoes && (
@@ -3574,6 +3633,20 @@ export default function CadastroFichaTecnica() {
                       {formatBrl(formCalculations.precoSugeridoMarkup)}
                     </span>
                   </div>
+                  {formCalculations.cargaTrib > 0 && (
+                    <div className="bg-amber-600 text-white p-2 rounded-lg shadow-xs col-span-2 sm:col-span-5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-medium text-amber-100">
+                          Preço Sugerido com Impostos (
+                          {configTributaria?.regime_tributario || 'Tributos'} -{' '}
+                          {formCalculations.cargaTrib}% por dentro)
+                        </span>
+                        <span className="text-xs font-extrabold">
+                          {formatBrl(formCalculations.precoSugeridoComImpostos)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

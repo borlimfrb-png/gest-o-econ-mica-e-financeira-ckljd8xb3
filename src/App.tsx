@@ -24,6 +24,7 @@ import Relatorios from './pages/Relatorios'
 import CadastroProdutos from './pages/CadastroProdutos'
 import CadastroMateriaPrima from './pages/CadastroMateriaPrima'
 import CadastroFichaTecnica from './pages/CadastroFichaTecnica'
+import Impostos from './pages/Impostos'
 import RelatorioAnual from './pages/RelatorioAnual'
 import IndicadoresLiquidez from './pages/IndicadoresLiquidez'
 import IndicadoresCapitalGiro from './pages/IndicadoresCapitalGiro'
@@ -103,6 +104,7 @@ const App = () => (
                 <Route path="/formacao-preco/produtos" element={<CadastroProdutos />} />
                 <Route path="/formacao-preco/materia-prima" element={<CadastroMateriaPrima />} />
                 <Route path="/formacao-preco/fichas-tecnicas" element={<CadastroFichaTecnica />} />
+                <Route path="/formacao-preco/impostos" element={<Impostos />} />
 
                 <Route path="/indicadores/painel" element={<PainelIndicadores />} />
                 <Route

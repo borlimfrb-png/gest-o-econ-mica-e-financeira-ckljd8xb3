@@ -542,6 +542,50 @@ export interface FichaTecnicaRecord extends RecordModel {
   }
 }
 
+export type RegimeTributarioFormacaoPreco = 'Lucro Real' | 'Lucro Presumido' | 'Simples Nacional'
+
+export interface ConfiguracaoTributariaInput {
+  empresa: string
+  regime_tributario: 'Lucro Real' | 'Lucro Presumido' | 'Simples Nacional'
+  aliquota_simples_efetiva?: number
+  anexo_simples?: string
+  faixa_simples?: string
+  aliquota_pis?: number
+  aliquota_cofins?: number
+  aliquota_icms?: number
+  aliquota_ipi?: number
+  aliquota_iss?: number
+  aliquota_irpj?: number
+  aliquota_csll?: number
+  outros_impostos?: number
+  carga_tributaria_total?: number
+  fator_por_dentro?: number
+  observacoes?: string
+}
+
+export interface ConfiguracaoTributariaRecord extends RecordModel {
+  user: string
+  empresa: string
+  regime_tributario: RegimeTributarioFormacaoPreco
+  aliquota_simples_efetiva?: number
+  anexo_simples?: string
+  faixa_simples?: string
+  aliquota_pis?: number
+  aliquota_cofins?: number
+  aliquota_icms?: number
+  aliquota_ipi?: number
+  aliquota_iss?: number
+  aliquota_irpj?: number
+  aliquota_csll?: number
+  outros_impostos?: number
+  carga_tributaria_total?: number
+  fator_por_dentro?: number
+  observacoes?: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null

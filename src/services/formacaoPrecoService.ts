@@ -6,6 +6,7 @@ import type {
   ItemFichaTecnica,
   HistoricoPrecoProdutoRecord,
   OrigemAlteracaoPreco,
+  ConfiguracaoTributariaRecord,
 } from '@/types/finance'
 
 export interface ProdutoInput {
@@ -28,6 +29,25 @@ export interface HistoricoPrecoInput {
   custo_momento?: number | null
   origem: OrigemAlteracaoPreco
   observacao?: string
+}
+
+export interface ConfiguracaoTributariaInput {
+  empresa: string
+  regime_tributario: 'Lucro Real' | 'Lucro Presumido' | 'Simples Nacional'
+  aliquota_simples_efetiva?: number
+  anexo_simples?: string
+  faixa_simples?: string
+  aliquota_pis?: number
+  aliquota_cofins?: number
+  aliquota_icms?: number
+  aliquota_ipi?: number
+  aliquota_iss?: number
+  aliquota_irpj?: number
+  aliquota_csll?: number
+  outros_impostos?: number
+  carga_tributaria_total?: number
+  fator_por_dentro?: number
+  observacoes?: string
 }
 
 export interface MateriaPrimaInput {
@@ -217,6 +237,69 @@ export const materiasPrimasService = {
 
   async delete(id: string): Promise<boolean> {
     return pb.collection('materias_primas').delete(id)
+  },
+}
+
+// -------------------------------------------------------------
+// SERVIÇO: CONFIGURAÇÕES TRIBUTÁRIAS
+// -------------------------------------------------------------
+export const configuracoesTributariasService = {
+  async getAll(): Promise<ConfiguracaoTributariaRecord[]> {
+    const userId = getUserId()
+    return pb.collection('configuracoes_tributarias').getFullList<ConfiguracaoTributariaRecord>({
+      filter: `user = "${userId}"`,
+      sort: '-updated',
+      expand: 'empresa',
+    })
+  },
+
+  async getByEmpresa(empresaId: string): Promise<ConfiguracaoTributariaRecord | null> {
+    const userId = getUserId()
+    if (!empresaId) return null
+    try {
+      const records = await pb
+        .collection('configuracoes_tributarias')
+        .getFullList<ConfiguracaoTributariaRecord>({
+          filter: `user = "${userId}" && empresa = "${empresaId}"`,
+          sort: '-updated',
+          expand: 'empresa',
+        })
+      return records.length > 0 ? records[0] : null
+    } catch {
+      return null
+    }
+  },
+
+  async saveOrUpdate(data: ConfiguracaoTributariaInput): Promise<ConfiguracaoTributariaRecord> {
+    const userId = getUserId()
+    const existing = await this.getByEmpresa(data.empresa)
+
+    if (existing) {
+      return pb.collection('configuracoes_tributarias').update<ConfiguracaoTributariaRecord>(
+        existing.id,
+        {
+          ...data,
+          user: userId,
+        },
+        {
+          expand: 'empresa',
+        },
+      )
+    } else {
+      return pb.collection('configuracoes_tributarias').create<ConfiguracaoTributariaRecord>(
+        {
+          ...data,
+          user: userId,
+        },
+        {
+          expand: 'empresa',
+        },
+      )
+    }
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return pb.collection('configuracoes_tributarias').delete(id)
   },
 }
 

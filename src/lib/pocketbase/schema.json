@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-30T00:13:40.986Z",
+  "generatedAt": "2026-08-30T01:24:36.391Z",
   "collections": [
     {
       "name": "users",
@@ -2496,6 +2496,142 @@
         "CREATE INDEX idx_hist_preco_user ON historico_precos_produtos (user)",
         "CREATE INDEX idx_hist_preco_produto ON historico_precos_produtos (produto)",
         "CREATE INDEX idx_hist_preco_produto_created ON historico_precos_produtos (produto, created DESC)"
+      ]
+    },
+    {
+      "name": "configuracoes_tributarias",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user = @request.auth.id",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "regime_tributario",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["Lucro Real", "Lucro Presumido", "Simples Nacional"]
+        },
+        {
+          "name": "aliquota_simples_efetiva",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "anexo_simples",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "faixa_simples",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_pis",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_cofins",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_icms",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_ipi",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_iss",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_irpj",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_csll",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "outros_impostos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "carga_tributaria_total",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fator_por_dentro",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_config_tributarias_user ON configuracoes_tributarias (user)",
+        "CREATE UNIQUE INDEX idx_config_tributarias_empresa ON configuracoes_tributarias (user, empresa)"
       ]
     }
   ]
