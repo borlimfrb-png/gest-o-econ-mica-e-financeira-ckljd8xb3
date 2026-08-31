@@ -37,6 +37,9 @@ import {
   HelpCircle,
   AlertCircle,
   Layers,
+  Copy,
+  ArrowRight,
+  AlertTriangle,
 } from 'lucide-react'
 
 interface ModalEditarBenchmarksProps {
@@ -91,6 +94,11 @@ export function ModalEditarBenchmarks({
   const [importandoCsv, setImportandoCsv] = useState<boolean>(false)
   const [csvErros, setCsvErros] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Estado de Duplicação de Metas
+  const [modalDuplicarOpen, setModalDuplicarOpen] = useState<boolean>(false)
+  const [empresaDestinoId, setEmpresaDestinoId] = useState<string>('')
+  const [duplicando, setDuplicando] = useState<boolean>(false)
 
   // Encontrar empresa ativa selecionada
   const empresaAtiva = empresas.find((e) => e.id === selectedEmpresaId) || null
@@ -335,6 +343,75 @@ export function ModalEditarBenchmarks({
       })
     } finally {
       setSaving(false)
+    }
+  }
+
+  // ==========================================
+  // DUPLICAÇÃO DE METAS ENTRE EMPRESAS
+  // ==========================================
+  const handleConfirmarDuplicacao = async () => {
+    if (!selectedEmpresaId || !empresaDestinoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Seleção incompleta',
+        description: 'Selecione a empresa de destino para receber a cópia das metas.',
+      })
+      return
+    }
+
+    if (selectedEmpresaId === empresaDestinoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Empresas iguais',
+        description: 'A empresa de destino deve ser diferente da empresa de origem.',
+      })
+      return
+    }
+
+    const destino = empresas.find((e) => e.id === empresaDestinoId)
+    const roicVal = formData.roic ?? 0
+    const waccVal = formData.wacc ?? 12
+    const spreadCalc = Number((roicVal - waccVal).toFixed(2))
+
+    const metasParaDuplicar: Partial<BenchmarkSetorValores> = {
+      ...formData,
+      setor: destino?.segmento || empresaAtiva?.segmento || 'Geral',
+      spread: spreadCalc,
+      empresaId: empresaDestinoId,
+      empresaNome: destino?.nome,
+      descricao: `Metas copiadas de ${empresaAtiva?.nome || 'empresa de origem'} para ${destino?.nome || 'empresa de destino'}`,
+      origemTipo: 'empresa',
+    }
+
+    try {
+      setDuplicando(true)
+      await benchmarksService.duplicateEmpresaMetas(
+        selectedEmpresaId,
+        empresaDestinoId,
+        metasParaDuplicar,
+        destino?.nome,
+      )
+
+      if (onSavedEmpresa) {
+        onSavedEmpresa(empresaDestinoId, metasParaDuplicar as BenchmarkSetorValores)
+      }
+
+      toast({
+        title: 'Metas Duplicadas com Sucesso! 🚀',
+        description: `As 28 metas de "${empresaAtiva?.nome}" foram aplicadas à empresa "${destino?.nome}".`,
+      })
+
+      setModalDuplicarOpen(false)
+    } catch (err: any) {
+      console.error('Erro ao duplicar metas:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao duplicar',
+        description:
+          err?.message || 'Não foi possível duplicar as metas para a empresa de destino.',
+      })
+    } finally {
+      setDuplicando(false)
     }
   }
 
@@ -641,20 +718,42 @@ export function ModalEditarBenchmarks({
                 </p>
               </div>
 
-              {hasEmpresaCustomizada && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleRemoverMetaEmpresa}
-                  disabled={saving}
-                  className="h-8 text-xs border-rose-300 text-rose-700 hover:bg-rose-50 shrink-0 gap-1.5 shadow-2xs font-semibold"
-                  title="Remover meta individual e voltar a herdar do setor"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
-                  Voltar ao Setor
-                </Button>
-              )}
+              <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                {empresas.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Sugere a primeira empresa diferente da atual como destino
+                      const outra = empresas.find((e) => e.id !== selectedEmpresaId)
+                      setEmpresaDestinoId(outra ? outra.id : '')
+                      setModalDuplicarOpen(true)
+                    }}
+                    disabled={saving}
+                    className="h-8 text-xs border-indigo-300 text-indigo-800 hover:bg-indigo-100/70 gap-1.5 shadow-2xs font-semibold"
+                    title="Duplicar estas metas para outra empresa cadastrada"
+                  >
+                    <Copy className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Duplicar Metas</span>
+                  </Button>
+                )}
+
+                {hasEmpresaCustomizada && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoverMetaEmpresa}
+                    disabled={saving}
+                    className="h-8 text-xs border-rose-300 text-rose-700 hover:bg-rose-50 gap-1.5 shadow-2xs font-semibold"
+                    title="Remover meta individual e voltar a herdar do setor"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                    Voltar ao Setor
+                  </Button>
+                )}
+              </div>
             </div>
           )}
 
@@ -1342,6 +1441,149 @@ export function ModalEditarBenchmarks({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* Submodal de Confirmação e Configuração da Duplicação de Metas */}
+      <Dialog open={modalDuplicarOpen} onOpenChange={setModalDuplicarOpen}>
+        <DialogContent className="max-w-md rounded-2xl border-slate-200">
+          <DialogHeader className="pb-3 border-b border-slate-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold">
+                <Copy className="w-4 h-4" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-[#0B1F3A]">
+                  Duplicar Metas entre Empresas
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Copie o conjunto completo de metas configurado na empresa de origem
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="py-3 space-y-4 text-xs">
+            {/* Resumo da Empresa Origem */}
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-medium">Empresa de Origem:</span>
+                <span className="font-bold text-[#0B1F3A]">{empresaAtiva?.nome || '—'}</span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-500">Setor da Origem:</span>
+                <Badge variant="outline" className="bg-white text-slate-700 border-slate-300">
+                  {empresaAtiva?.segmento || 'Geral'}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200">
+                <span className="text-slate-500">Total de Indicadores/Metas:</span>
+                <span className="font-mono font-bold text-indigo-700">28 metas configuradas</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center text-slate-400">
+              <ArrowRight className="w-4 h-4 text-indigo-600" />
+            </div>
+
+            {/* Seleção da Empresa Destino */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700">
+                Selecione a Empresa de Destino:
+              </Label>
+              <Select value={empresaDestinoId} onValueChange={(val) => setEmpresaDestinoId(val)}>
+                <SelectTrigger className="h-9 text-xs font-bold bg-white border-slate-300 w-full text-indigo-950">
+                  <SelectValue placeholder="Escolha a empresa de destino" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas
+                    .filter((emp) => emp.id !== selectedEmpresaId)
+                    .map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id} className="text-xs font-medium">
+                        {emp.nome} ({emp.segmento || 'Geral'})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Alertas contextuais da Empresa de Destino */}
+            {(() => {
+              const destino = empresas.find((e) => e.id === empresaDestinoId)
+              if (!destino) return null
+
+              const mesmoSetor = destino.segmento === empresaAtiva?.segmento
+              const destinoJaTemMetas = Boolean(empresaBenchmarksMap[destino.id])
+
+              return (
+                <div className="space-y-2">
+                  {!mesmoSetor && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        <strong>Aviso de Setores Diferentes:</strong> A origem é do setor{' '}
+                        <strong>{empresaAtiva?.segmento || 'Geral'}</strong> e o destino é do setor{' '}
+                        <strong>{destino.segmento || 'Geral'}</strong>. As metas serão copiadas
+                        exatamente como estão na tela.
+                      </div>
+                    </div>
+                  )}
+
+                  {destinoJaTemMetas && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-blue-900 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                      <div className="text-[11px] leading-relaxed">
+                        <strong>Substituição de Metas (Upsert):</strong> A empresa destino{' '}
+                        <strong>"{destino.nome}"</strong> já possui metas específicas cadastradas.
+                        Ao confirmar, os valores existentes serão sobrescritos pelas novas metas.
+                      </div>
+                    </div>
+                  )}
+
+                  {mesmoSetor && !destinoJaTemMetas && (
+                    <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 flex items-center gap-2 text-[11px]">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Mesmo setor (<strong>{destino.segmento}</strong>). Cópia direta recomendada.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+
+          <DialogFooter className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalDuplicarOpen(false)}
+              disabled={duplicando}
+              className="text-xs h-8"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleConfirmarDuplicacao}
+              disabled={duplicando || !empresaDestinoId}
+              className="text-xs h-8 font-bold bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-xs"
+            >
+              {duplicando ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Duplicando...
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  Confirmar e Gravar Metas
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

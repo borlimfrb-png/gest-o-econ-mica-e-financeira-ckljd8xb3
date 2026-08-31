@@ -658,10 +658,12 @@ function normalizeLowerBetter(
 export interface GrupoRadarItem {
   grupoId: keyof PesosGrupos
   grupoNome: string
-  empresaScore: number // 0-100
-  setorScore: number // 0-100 (normalmente 65 como baseline normalizado)
+  empresaScore: number // 0-100 (resultado real da empresa)
+  setorScore: number // 0-100 (referência do setor: baseline normalizado 65)
+  metaScore?: number | null // 0-100 (meta específica da empresa, se houver)
   empresaValorRealStr: string
   setorValorRealStr: string
+  metaValorRealStr?: string | null
   status: 'acima' | 'em_linha' | 'abaixo'
 }
 
@@ -918,91 +920,197 @@ export function extrairIndicadoresCompletos(
 
 export function calcularScoresRadar(
   empresaInd: IndicadoresConsolidadosEmpresa,
-  benchmark: BenchmarkSetorValores,
+  benchmarkSetor: BenchmarkSetorValores,
+  benchmarkEmpresaMeta?: Partial<BenchmarkSetorValores> | null,
 ): GrupoRadarItem[] {
+  // Referência do setor (padrão ou personalizado)
+  const setBench = benchmarkSetor
+
   // 1. Liquidez: LC (40%), LS (25%), LI (15%), LG (20%)
-  const scoreLC = normalizeHigherBetter(empresaInd.lc, benchmark.liquidezCorrente)
-  const scoreLS = normalizeHigherBetter(empresaInd.ls, benchmark.liquidezSeca)
-  const scoreLI = normalizeHigherBetter(empresaInd.li, benchmark.liquidezImediata)
-  const scoreLG = normalizeHigherBetter(empresaInd.lg, benchmark.liquidezGeral)
+  const scoreLC = normalizeHigherBetter(empresaInd.lc, setBench.liquidezCorrente)
+  const scoreLS = normalizeHigherBetter(empresaInd.ls, setBench.liquidezSeca)
+  const scoreLI = normalizeHigherBetter(empresaInd.li, setBench.liquidezImediata)
+  const scoreLG = normalizeHigherBetter(empresaInd.lg, setBench.liquidezGeral)
   const empresaLiq = Math.round(scoreLC * 0.4 + scoreLS * 0.25 + scoreLI * 0.15 + scoreLG * 0.2)
   const setorLiq = 65
 
   // 2. Endividamento: EG (40%), CE (30%), PCT (30%) - menor é melhor
-  const scoreEG = normalizeLowerBetter(empresaInd.eg, benchmark.endividamentoGeral)
-  const scoreCE = normalizeLowerBetter(empresaInd.ce, benchmark.composicaoEndividamento)
-  const scorePCT = normalizeLowerBetter(empresaInd.pct, benchmark.participacaoCapitalTerceiros)
+  const scoreEG = normalizeLowerBetter(empresaInd.eg, setBench.endividamentoGeral)
+  const scoreCE = normalizeLowerBetter(empresaInd.ce, setBench.composicaoEndividamento)
+  const scorePCT = normalizeLowerBetter(empresaInd.pct, setBench.participacaoCapitalTerceiros)
   const empresaEnd = Math.round(scoreEG * 0.4 + scoreCE * 0.3 + scorePCT * 0.3)
   const setorEnd = 65
 
   // 3. Rentabilidade: ROE (35%), ROA (25%), Margem Líquida (25%), Giro do Ativo (15%)
-  const scoreROE = normalizeHigherBetter(empresaInd.roe, benchmark.roe)
-  const scoreROA = normalizeHigherBetter(empresaInd.roa, benchmark.roa)
-  const scoreML = normalizeHigherBetter(empresaInd.ml, benchmark.margemLiquida)
-  const scoreGiro = normalizeHigherBetter(empresaInd.giroAtivo, benchmark.giroAtivo)
+  const scoreROE = normalizeHigherBetter(empresaInd.roe, setBench.roe)
+  const scoreROA = normalizeHigherBetter(empresaInd.roa, setBench.roa)
+  const scoreML = normalizeHigherBetter(empresaInd.ml, setBench.margemLiquida)
+  const scoreGiro = normalizeHigherBetter(empresaInd.giroAtivo, setBench.giroAtivo)
   const empresaRent = Math.round(
     scoreROE * 0.35 + scoreROA * 0.25 + scoreML * 0.25 + scoreGiro * 0.15,
   )
   const setorRent = 65
 
   // 4. Estrutura de Capital: Autonomia Financeira (50%), D/E (50%)
-  const scoreAF = normalizeHigherBetter(empresaInd.af, benchmark.autonomiaFinanceira)
-  const scoreDE = normalizeLowerBetter(empresaInd.de, benchmark.dividaEquity)
+  const scoreAF = normalizeHigherBetter(empresaInd.af, setBench.autonomiaFinanceira)
+  const scoreDE = normalizeLowerBetter(empresaInd.de, setBench.dividaEquity)
   const empresaEst = Math.round(scoreAF * 0.5 + scoreDE * 0.5)
   const setorEst = 65
 
   // 5. EBITDA: Margem EBITDA (60%), Cobertura Juros (40%)
-  const scoreMargemEb = normalizeHigherBetter(empresaInd.margemEbitda, benchmark.margemEbitda)
-  const scoreCobJuros = normalizeHigherBetter(empresaInd.coberturaJuros, benchmark.coberturaJuros)
+  const scoreMargemEb = normalizeHigherBetter(empresaInd.margemEbitda, setBench.margemEbitda)
+  const scoreCobJuros = normalizeHigherBetter(empresaInd.coberturaJuros, setBench.coberturaJuros)
   const empresaEb = Math.round(scoreMargemEb * 0.6 + scoreCobJuros * 0.4)
   const setorEb = 65
 
   // 6. Eficiência Operacional: Ciclo Financeiro (40%), PME (30%), PMR (30%)
-  const scoreCF = normalizeLowerBetter(empresaInd.cf, benchmark.cicloFinanceiro)
-  const scorePME = normalizeLowerBetter(empresaInd.pme, benchmark.pme)
-  const scorePMR = normalizeLowerBetter(empresaInd.pmr, benchmark.pmr)
+  const scoreCF = normalizeLowerBetter(empresaInd.cf, setBench.cicloFinanceiro)
+  const scorePME = normalizeLowerBetter(empresaInd.pme, setBench.pme)
+  const scorePMR = normalizeLowerBetter(empresaInd.pmr, setBench.pmr)
   const empresaEfic = Math.round(scoreCF * 0.4 + scorePME * 0.3 + scorePMR * 0.3)
   const setorEfic = 65
 
   // 7. Econômicos: ROIC vs WACC (Spread 60%), EVA (40%)
   const scoreSpread = normalizeHigherBetter(
     empresaInd.spread !== null ? empresaInd.spread + 10 : null,
-    benchmark.spread + 10,
+    setBench.spread + 10,
   )
   const scoreEVA = normalizeHigherBetter(empresaInd.eva, 50000)
   const empresaEcon = Math.round(scoreSpread * 0.6 + scoreEVA * 0.4)
   const setorEcon = 65
 
   // 8. Kanitz (Termômetro de Insolvência): Normalização contínua do FI (0-100)
-  // Escala contínua:
-  // FI >= +7 -> score 100
-  // FI = 0 (fronteira solvente) -> score 70
-  // FI = -3 (fronteira insolvente) -> score 35
-  // FI <= -7 -> score 0
   let empresaKanitzScore = 50
   if (empresaInd.kanitzFi !== null && empresaInd.kanitzFi !== undefined) {
     const fi = empresaInd.kanitzFi
     if (fi >= 0) {
-      // 0 a +7 mapeado para 70 a 100
       const ratio = Math.min(fi / 7, 1)
       empresaKanitzScore = Math.round(70 + ratio * 30)
     } else if (fi >= -3) {
-      // -3 a 0 mapeado para 35 a 70
-      const ratio = (fi - -3) / 3 // 0 em -3, 1 em 0
+      const ratio = (fi - -3) / 3
       empresaKanitzScore = Math.round(35 + ratio * 35)
     } else {
-      // -7 a -3 mapeado para 0 a 35 (clamped)
-      const ratio = Math.max((fi - -7) / 4, 0) // 0 em -7, 1 em -3
+      const ratio = Math.max((fi - -7) / 4, 0)
       empresaKanitzScore = Math.min(35, Math.max(0, Math.round(ratio * 35)))
     }
   }
   const setorKanitz = 70
 
-  const getStatus = (emp: number, set: number): 'acima' | 'em_linha' | 'abaixo' => {
-    if (emp > set + 5) return 'acima'
-    if (emp < set - 5) return 'abaixo'
+  // Se houver meta específica individual cadastrada para a empresa, calculamos o score da meta em relação à escala do setor
+  const hasMeta =
+    benchmarkEmpresaMeta &&
+    Object.keys(benchmarkEmpresaMeta).length > 0 &&
+    (benchmarkEmpresaMeta.liquidezCorrente !== undefined ||
+      benchmarkEmpresaMeta.roe !== undefined ||
+      benchmarkEmpresaMeta.endividamentoGeral !== undefined ||
+      benchmarkEmpresaMeta.margemEbitda !== undefined)
+
+  let metaLiq: number | null = null
+  let metaEnd: number | null = null
+  let metaRent: number | null = null
+  let metaEst: number | null = null
+  let metaEb: number | null = null
+  let metaEfic: number | null = null
+  let metaEcon: number | null = null
+  let metaKanitz: number | null = null
+
+  if (hasMeta && benchmarkEmpresaMeta) {
+    // 1. Meta Liquidez
+    const mLC = normalizeHigherBetter(
+      benchmarkEmpresaMeta.liquidezCorrente ?? setBench.liquidezCorrente,
+      setBench.liquidezCorrente,
+    )
+    const mLS = normalizeHigherBetter(
+      benchmarkEmpresaMeta.liquidezSeca ?? setBench.liquidezSeca,
+      setBench.liquidezSeca,
+    )
+    const mLI = normalizeHigherBetter(
+      benchmarkEmpresaMeta.liquidezImediata ?? setBench.liquidezImediata,
+      setBench.liquidezImediata,
+    )
+    const mLG = normalizeHigherBetter(
+      benchmarkEmpresaMeta.liquidezGeral ?? setBench.liquidezGeral,
+      setBench.liquidezGeral,
+    )
+    metaLiq = Math.round(mLC * 0.4 + mLS * 0.25 + mLI * 0.15 + mLG * 0.2)
+
+    // 2. Meta Endividamento
+    const mEG = normalizeLowerBetter(
+      benchmarkEmpresaMeta.endividamentoGeral ?? setBench.endividamentoGeral,
+      setBench.endividamentoGeral,
+    )
+    const mCE = normalizeLowerBetter(
+      benchmarkEmpresaMeta.composicaoEndividamento ?? setBench.composicaoEndividamento,
+      setBench.composicaoEndividamento,
+    )
+    const mPCT = normalizeLowerBetter(
+      benchmarkEmpresaMeta.participacaoCapitalTerceiros ?? setBench.participacaoCapitalTerceiros,
+      setBench.participacaoCapitalTerceiros,
+    )
+    metaEnd = Math.round(mEG * 0.4 + mCE * 0.3 + mPCT * 0.3)
+
+    // 3. Meta Rentabilidade
+    const mROE = normalizeHigherBetter(benchmarkEmpresaMeta.roe ?? setBench.roe, setBench.roe)
+    const mROA = normalizeHigherBetter(benchmarkEmpresaMeta.roa ?? setBench.roa, setBench.roa)
+    const mML = normalizeHigherBetter(
+      benchmarkEmpresaMeta.margemLiquida ?? setBench.margemLiquida,
+      setBench.margemLiquida,
+    )
+    const mGiro = normalizeHigherBetter(
+      benchmarkEmpresaMeta.giroAtivo ?? setBench.giroAtivo,
+      setBench.giroAtivo,
+    )
+    metaRent = Math.round(mROE * 0.35 + mROA * 0.25 + mML * 0.25 + mGiro * 0.15)
+
+    // 4. Meta Estrutura
+    const mAF = normalizeHigherBetter(
+      benchmarkEmpresaMeta.autonomiaFinanceira ?? setBench.autonomiaFinanceira,
+      setBench.autonomiaFinanceira,
+    )
+    const mDE = normalizeLowerBetter(
+      benchmarkEmpresaMeta.dividaEquity ?? setBench.dividaEquity,
+      setBench.dividaEquity,
+    )
+    metaEst = Math.round(mAF * 0.5 + mDE * 0.5)
+
+    // 5. Meta EBITDA
+    const mMEb = normalizeHigherBetter(
+      benchmarkEmpresaMeta.margemEbitda ?? setBench.margemEbitda,
+      setBench.margemEbitda,
+    )
+    const mCobJ = normalizeHigherBetter(
+      benchmarkEmpresaMeta.coberturaJuros ?? setBench.coberturaJuros,
+      setBench.coberturaJuros,
+    )
+    metaEb = Math.round(mMEb * 0.6 + mCobJ * 0.4)
+
+    // 6. Meta Eficiência
+    const mCF = normalizeLowerBetter(
+      benchmarkEmpresaMeta.cicloFinanceiro ?? setBench.cicloFinanceiro,
+      setBench.cicloFinanceiro,
+    )
+    const mPME = normalizeLowerBetter(benchmarkEmpresaMeta.pme ?? setBench.pme, setBench.pme)
+    const mPMR = normalizeLowerBetter(benchmarkEmpresaMeta.pmr ?? setBench.pmr, setBench.pmr)
+    metaEfic = Math.round(mCF * 0.4 + mPME * 0.3 + mPMR * 0.3)
+
+    // 7. Meta Econômicos
+    const mSpread = normalizeHigherBetter(
+      (benchmarkEmpresaMeta.spread ?? setBench.spread) + 10,
+      setBench.spread + 10,
+    )
+    metaEcon = Math.round(mSpread * 0.6 + 65 * 0.4)
+
+    // 8. Meta Kanitz
+    metaKanitz = 75
+  }
+
+  const getStatus = (emp: number, target: number): 'acima' | 'em_linha' | 'abaixo' => {
+    if (emp > target + 5) return 'acima'
+    if (emp < target - 5) return 'abaixo'
     return 'em_linha'
   }
+
+  const benchmarkEfetivo = hasMeta && benchmarkEmpresaMeta ? benchmarkEmpresaMeta : setBench
 
   return [
     {
@@ -1010,72 +1118,109 @@ export function calcularScoresRadar(
       grupoNome: 'Liquidez',
       empresaScore: empresaLiq,
       setorScore: setorLiq,
+      metaScore: metaLiq,
       empresaValorRealStr: `LC: ${empresaInd.lc ? empresaInd.lc.toFixed(2) : '—'}`,
-      setorValorRealStr: `LC: ${benchmark.liquidezCorrente.toFixed(2)}`,
-      status: getStatus(empresaLiq, setorLiq),
+      setorValorRealStr: `LC: ${setBench.liquidezCorrente.toFixed(2)}`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.liquidezCorrente !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.liquidezCorrente.toFixed(2)}`
+          : null,
+      status: getStatus(empresaLiq, metaLiq ?? setorLiq),
     },
     {
       grupoId: 'endividamento',
       grupoNome: 'Endividamento',
       empresaScore: empresaEnd,
       setorScore: setorEnd,
+      metaScore: metaEnd,
       empresaValorRealStr: `End. Geral: ${empresaInd.eg ? `${empresaInd.eg.toFixed(1)}%` : '—'}`,
-      setorValorRealStr: `End. Geral: ${benchmark.endividamentoGeral.toFixed(1)}%`,
-      status: getStatus(empresaEnd, setorEnd),
+      setorValorRealStr: `End. Geral: ${setBench.endividamentoGeral.toFixed(1)}%`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.endividamentoGeral !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.endividamentoGeral.toFixed(1)}%`
+          : null,
+      status: getStatus(empresaEnd, metaEnd ?? setorEnd),
     },
     {
       grupoId: 'rentabilidade',
       grupoNome: 'Rentabilidade',
       empresaScore: empresaRent,
       setorScore: setorRent,
+      metaScore: metaRent,
       empresaValorRealStr: `ROE: ${empresaInd.roe ? `${empresaInd.roe.toFixed(1)}%` : '—'}`,
-      setorValorRealStr: `ROE: ${benchmark.roe.toFixed(1)}%`,
-      status: getStatus(empresaRent, setorRent),
+      setorValorRealStr: `ROE: ${setBench.roe.toFixed(1)}%`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.roe !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.roe.toFixed(1)}%`
+          : null,
+      status: getStatus(empresaRent, metaRent ?? setorRent),
     },
     {
       grupoId: 'estruturaCapital',
       grupoNome: 'Estrutura Capital',
       empresaScore: empresaEst,
       setorScore: setorEst,
+      metaScore: metaEst,
       empresaValorRealStr: `Autonomia: ${empresaInd.af ? `${empresaInd.af.toFixed(1)}%` : '—'}`,
-      setorValorRealStr: `Autonomia: ${benchmark.autonomiaFinanceira.toFixed(1)}%`,
-      status: getStatus(empresaEst, setorEst),
+      setorValorRealStr: `Autonomia: ${setBench.autonomiaFinanceira.toFixed(1)}%`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.autonomiaFinanceira !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.autonomiaFinanceira.toFixed(1)}%`
+          : null,
+      status: getStatus(empresaEst, metaEst ?? setorEst),
     },
     {
       grupoId: 'ebitda',
       grupoNome: 'EBITDA',
       empresaScore: empresaEb,
       setorScore: setorEb,
+      metaScore: metaEb,
       empresaValorRealStr: `Mg. EBITDA: ${empresaInd.margemEbitda ? `${empresaInd.margemEbitda.toFixed(1)}%` : '—'}`,
-      setorValorRealStr: `Mg. EBITDA: ${benchmark.margemEbitda.toFixed(1)}%`,
-      status: getStatus(empresaEb, setorEb),
+      setorValorRealStr: `Mg. EBITDA: ${setBench.margemEbitda.toFixed(1)}%`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.margemEbitda !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.margemEbitda.toFixed(1)}%`
+          : null,
+      status: getStatus(empresaEb, metaEb ?? setorEb),
     },
     {
       grupoId: 'eficienciaOperacional',
       grupoNome: 'Eficiência Operacional',
       empresaScore: empresaEfic,
       setorScore: setorEfic,
+      metaScore: metaEfic,
       empresaValorRealStr: `Ciclo Fin.: ${empresaInd.cf !== null ? `${Math.round(empresaInd.cf)}d` : '—'}`,
-      setorValorRealStr: `Ciclo Fin.: ${benchmark.cicloFinanceiro}d`,
-      status: getStatus(empresaEfic, setorEfic),
+      setorValorRealStr: `Ciclo Fin.: ${setBench.cicloFinanceiro}d`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.cicloFinanceiro !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.cicloFinanceiro}d`
+          : null,
+      status: getStatus(empresaEfic, metaEfic ?? setorEfic),
     },
     {
       grupoId: 'economicos',
       grupoNome: 'Econômicos',
       empresaScore: empresaEcon,
       setorScore: setorEcon,
+      metaScore: metaEcon,
       empresaValorRealStr: `Spread: ${empresaInd.spread !== null ? `${empresaInd.spread.toFixed(1)}%` : '—'}`,
-      setorValorRealStr: `Spread: ${benchmark.spread.toFixed(1)}%`,
-      status: getStatus(empresaEcon, setorEcon),
+      setorValorRealStr: `Spread: ${setBench.spread.toFixed(1)}%`,
+      metaValorRealStr:
+        hasMeta && benchmarkEmpresaMeta?.spread !== undefined
+          ? `Meta: ${benchmarkEmpresaMeta.spread.toFixed(1)}%`
+          : null,
+      status: getStatus(empresaEcon, metaEcon ?? setorEcon),
     },
     {
       grupoId: 'kanitz',
       grupoNome: 'Solvência (Kanitz)',
       empresaScore: empresaKanitzScore,
       setorScore: setorKanitz,
+      metaScore: metaKanitz,
       empresaValorRealStr: `FI: ${empresaInd.kanitzFi !== null && empresaInd.kanitzFi !== undefined ? empresaInd.kanitzFi.toFixed(2) : '—'}`,
       setorValorRealStr: `FI ≥ 0,00`,
-      status: getStatus(empresaKanitzScore, setorKanitz),
+      metaValorRealStr: hasMeta ? `FI ≥ 0,50` : null,
+      status: getStatus(empresaKanitzScore, metaKanitz ?? setorKanitz),
     },
   ]
 }

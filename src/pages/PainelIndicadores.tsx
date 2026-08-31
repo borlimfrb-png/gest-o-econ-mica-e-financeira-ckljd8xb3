@@ -47,6 +47,7 @@ import type { BenchmarkSetorialRecord, BenchmarkEmpresaRecord } from '@/types/fi
 import { Coins } from 'lucide-react'
 import { ModalPesosRelatorio } from '@/components/ModalPesosRelatorio'
 import { ModalPdfDashboardA4 } from '@/components/ModalPdfDashboardA4'
+import { ModalPdfBenchmarksA4 } from '@/components/ModalPdfBenchmarksA4'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -144,6 +145,9 @@ export default function PainelIndicadores() {
 
   // Modal PDF A4 Executivo
   const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
+
+  // Modal PDF A4 Relatório de Benchmarks
+  const [modalPdfBenchmarksOpen, setModalPdfBenchmarksOpen] = useState<boolean>(false)
 
   // Modal de Edição de Benchmarks Setoriais
   const [modalBenchmarksOpen, setModalBenchmarksOpen] = useState<boolean>(false)
@@ -620,17 +624,40 @@ export default function PainelIndicadores() {
     return resolvedBenchmark.benchmark
   }, [resolvedBenchmark])
 
-  // Itens do Radar Chart Empresa Principal
+  // Benchmark setorial puro (sem sobrescrita de meta de empresa)
+  const benchmarkSetorialPuro = useMemo(() => {
+    const segmentoAlvo = selectedSetorBenchmark || selectedEmpresa?.segmento || 'Serviços'
+    const encontrado = benchmarksMap[segmentoAlvo] || BENCHMARKS_SETORIAIS[segmentoAlvo]
+    return encontrado || BENCHMARKS_SETORIAIS['Serviços'] || Object.values(BENCHMARKS_SETORIAIS)[0]
+  }, [selectedSetorBenchmark, selectedEmpresa?.segmento, benchmarksMap])
+
+  // Meta específica individual da empresa ativa (se existir)
+  const metaEmpresaAtiva = useMemo(() => {
+    if (!selectedEmpresaId || !empresaBenchmarksMap[selectedEmpresaId]) return null
+    return empresaBenchmarksMap[selectedEmpresaId]
+  }, [selectedEmpresaId, empresaBenchmarksMap])
+
+  // Tem meta específica individual cadastrada para a empresa atual?
+  const hasMetaIndividual = useMemo(() => {
+    return Boolean(metaEmpresaAtiva && Object.keys(metaEmpresaAtiva).length > 0)
+  }, [metaEmpresaAtiva])
+
+  // Itens do Radar Chart Empresa Principal (com suporte a Comparativo Triplo: Empresa x Setor x Meta)
   const radarItems = useMemo<GrupoRadarItem[]>(() => {
-    if (!benchmarkAtivo) return []
-    return calcularScoresRadar(indAtual, benchmarkAtivo)
-  }, [indAtual, benchmarkAtivo])
+    if (!benchmarkSetorialPuro) return []
+    return calcularScoresRadar(
+      indAtual,
+      benchmarkSetorialPuro,
+      hasMetaIndividual ? (metaEmpresaAtiva as any) : null,
+    )
+  }, [indAtual, benchmarkSetorialPuro, metaEmpresaAtiva, hasMetaIndividual])
 
   // Itens do Radar Chart Empresa B
   const radarItemsB = useMemo<GrupoRadarItem[]>(() => {
-    if (!benchmarkAtivo || !indBAtual) return []
-    return calcularScoresRadar(indBAtual, benchmarkAtivo)
-  }, [indBAtual, benchmarkAtivo])
+    if (!benchmarkSetorialPuro || !indBAtual) return []
+    const metaB = empresaBId ? empresaBenchmarksMap[empresaBId] : null
+    return calcularScoresRadar(indBAtual, benchmarkSetorialPuro, (metaB as any) || null)
+  }, [indBAtual, benchmarkSetorialPuro, empresaBId, empresaBenchmarksMap])
 
   // Score Geral Ponderado Empresa Principal (0-100)
   const scoreGeralPonderado = useMemo(() => {
@@ -1926,7 +1953,20 @@ export default function PainelIndicadores() {
             <span>Exportar CSV</span>
           </Button>
 
-          {/* Botão Relatório PDF A4 */}
+          {/* Botão Relatório de Benchmarks PDF A4 */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setModalPdfBenchmarksOpen(true)}
+            disabled={!balancoAtual && !dreAtual}
+            className="border-indigo-300 text-indigo-900 bg-indigo-50/70 hover:bg-indigo-100/90 font-bold text-xs h-9 shadow-2xs gap-1.5"
+            title="Gerar Relatório A4 em PDF consolidando Benchmarks do Setor, Metas e Resultados Reais"
+          >
+            <Printer className="w-3.5 h-3.5 text-indigo-700" />
+            <span>Relatório de Benchmarks (PDF)</span>
+          </Button>
+
+          {/* Botão Relatório PDF A4 Geral */}
           <Button
             type="button"
             variant="outline"
@@ -1934,8 +1974,8 @@ export default function PainelIndicadores() {
             disabled={!balancoAtual && !dreAtual}
             className="border-slate-300 text-slate-700 hover:bg-slate-100 font-semibold text-xs h-9 shadow-2xs gap-1.5"
           >
-            <FileText className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Relatório A4</span>
+            <FileText className="w-3.5 h-3.5 text-slate-600" />
+            <span>Dashboard A4</span>
           </Button>
 
           {/* Botão Personalizar Pesos */}
@@ -2192,18 +2232,24 @@ export default function PainelIndicadores() {
               </CardDescription>
             </div>
 
-            <div className="flex items-center gap-3 text-xs font-semibold">
+            <div className="flex items-center gap-3 text-xs font-semibold flex-wrap">
               <span className="flex items-center gap-1.5 text-blue-700">
                 <span
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: primaryBrandColor }}
                 />
-                Empresa
+                Resultado Real
               </span>
               <span className="flex items-center gap-1.5 text-slate-500">
                 <span className="w-3 h-3 rounded-full" style={{ backgroundColor: sectorColor }} />
-                Setor
+                Ref. Setorial ({selectedSetorBenchmark || selectedEmpresa?.segmento || 'Setor'})
               </span>
+              {hasMetaIndividual && (
+                <span className="flex items-center gap-1.5 text-indigo-700 font-bold">
+                  <span className="w-3 h-3 rounded-full bg-indigo-600" />
+                  Meta Individual
+                </span>
+              )}
             </div>
           </CardHeader>
 
@@ -2245,30 +2291,59 @@ export default function PainelIndicadores() {
                         if (!active || !payload || !payload.length) return null
                         const item = payload[0].payload as GrupoRadarItem
                         return (
-                          <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1.5 border border-slate-700">
+                          <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-xs space-y-1.5 border border-slate-700 min-w-[220px]">
                             <strong className="block font-bold text-sm text-blue-300 border-b border-slate-700 pb-1">
                               {item.grupoNome}
                             </strong>
+                            {/* Série 1: Resultado Real da Empresa */}
                             <div className="flex justify-between gap-4">
-                              <span className="text-slate-300">Empresa (Score):</span>
+                              <span className="text-blue-300 font-medium">1. Empresa (Real):</span>
                               <strong className="text-white font-mono">
                                 {item.empresaScore}/100
                               </strong>
                             </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-slate-400">Valor Real:</span>
+                            <div className="flex justify-between gap-4 text-[11px]">
+                              <span className="text-slate-400">Apuração:</span>
                               <span className="text-blue-200 font-mono font-semibold">
                                 {item.empresaValorRealStr}
                               </span>
                             </div>
+
+                            {/* Série 2: Meta Específica Individual (se existir) */}
+                            {item.metaScore !== null && item.metaScore !== undefined && (
+                              <>
+                                <div className="flex justify-between gap-4 pt-1 border-t border-slate-800">
+                                  <span className="text-indigo-300 font-medium">
+                                    2. Meta Individual:
+                                  </span>
+                                  <strong className="text-indigo-200 font-mono">
+                                    {item.metaScore}/100
+                                  </strong>
+                                </div>
+                                {item.metaValorRealStr && (
+                                  <div className="flex justify-between gap-4 text-[11px]">
+                                    <span className="text-slate-400">Objetivo Pactuado:</span>
+                                    <span className="text-indigo-200 font-mono font-semibold">
+                                      {item.metaValorRealStr}
+                                    </span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+
+                            {/* Série 3: Benchmark Setorial */}
                             <div className="flex justify-between gap-4 pt-1 border-t border-slate-800">
-                              <span className="text-slate-400">Setor (Score):</span>
+                              <span className="text-slate-300 font-medium">
+                                {item.metaScore !== null && item.metaScore !== undefined
+                                  ? '3. Setor (Ref):'
+                                  : '2. Setor (Ref):'}
+                              </span>
                               <strong className="text-slate-300 font-mono">
                                 {item.setorScore}/100
                               </strong>
                             </div>
-                            <div className="flex justify-between gap-4">
-                              <span className="text-slate-400">Benchmark Setor:</span>
+                            <div className="flex justify-between gap-4 text-[11px]">
+                              <span className="text-slate-400">Mediana Setorial:</span>
                               <span className="text-slate-300 font-mono">
                                 {item.setorValorRealStr}
                               </span>
@@ -2277,21 +2352,37 @@ export default function PainelIndicadores() {
                         )
                       }}
                     />
+                    {/* Linha / Área 1: Benchmark Setorial (Cinza pontilhado) */}
                     <Radar
-                      name="Setor"
+                      name="Benchmark do Setor"
                       dataKey="setorScore"
                       stroke={sectorColor}
                       fill={sectorColor}
-                      fillOpacity={0.25}
+                      fillOpacity={0.15}
                       strokeWidth={1.5}
                       strokeDasharray="4 4"
                     />
+
+                    {/* Linha / Área 2: Meta Específica Individual da Empresa (Índigo/Púrpura) - se existir */}
+                    {hasMetaIndividual && (
+                      <Radar
+                        name="Meta Individual da Empresa"
+                        dataKey="metaScore"
+                        stroke="#6366F1"
+                        fill="#6366F1"
+                        fillOpacity={0.25}
+                        strokeWidth={2}
+                        strokeDasharray="2 2"
+                      />
+                    )}
+
+                    {/* Linha / Área 3: Resultado Real da Empresa (Azul da marca) */}
                     <Radar
-                      name="Empresa"
+                      name="Resultado Real da Empresa"
                       dataKey="empresaScore"
                       stroke={primaryBrandColor}
                       fill={primaryBrandColor}
-                      fillOpacity={0.45}
+                      fillOpacity={hasMetaIndividual ? 0.35 : 0.45}
                       strokeWidth={2.5}
                     />
                   </RadarChart>
@@ -4500,6 +4591,21 @@ export default function PainelIndicadores() {
         empresaB={selectedEmpresaB}
         anoB={anoEmpresaB}
         scoreGeralB={scoreGeralPonderadoB}
+      />
+
+      {/* Modal de Impressão / PDF A4 do Relatório Consolidado de Benchmarks */}
+      <ModalPdfBenchmarksA4
+        open={modalPdfBenchmarksOpen}
+        onOpenChange={setModalPdfBenchmarksOpen}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+        indAtual={indAtual}
+        benchmarkSetor={benchmarkSetorialPuro}
+        metaEmpresa={metaEmpresaAtiva}
+        radarItems={radarItems}
+        scoreGeralPonderado={scoreGeralPonderado}
       />
     </div>
   )

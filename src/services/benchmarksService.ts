@@ -371,6 +371,75 @@ export const benchmarksService = {
     }
   },
 
+  /**
+   * Duplica as metas/benchmarks de uma empresa de origem para uma empresa de destino
+   */
+  async duplicateEmpresaMetas(
+    origemEmpresaId: string,
+    destinoEmpresaId: string,
+    metasValores?: Partial<BenchmarkSetorValores> | null,
+    empresaDestinoNome?: string,
+  ): Promise<BenchmarkEmpresaRecord> {
+    const userId = pb.authStore.record?.id
+    if (!userId) {
+      throw new Error('Usuário não autenticado.')
+    }
+    if (!origemEmpresaId || !destinoEmpresaId) {
+      throw new Error('IDs de empresa de origem e destino são obrigatórios.')
+    }
+
+    let valoresParaCopiar: Partial<BenchmarkSetorValores> | null = metasValores || null
+
+    if (!valoresParaCopiar) {
+      const recOrigem = await this.getByEmpresa(origemEmpresaId)
+      if (!recOrigem) {
+        throw new Error('Empresa de origem não possui metas individuais cadastradas.')
+      }
+      valoresParaCopiar = {
+        descricao:
+          recOrigem.descricao || `Metas duplicadas para ${empresaDestinoNome || 'a empresa'}`,
+        liquidezCorrente: recOrigem.liquidezCorrente,
+        liquidezSeca: recOrigem.liquidezSeca,
+        liquidezImediata: recOrigem.liquidezImediata,
+        liquidezGeral: recOrigem.liquidezGeral,
+        endividamentoGeral: recOrigem.endividamentoGeral,
+        composicaoEndividamento: recOrigem.composicaoEndividamento,
+        participacaoCapitalTerceiros: recOrigem.participacaoCapitalTerceiros,
+        imobilizacaoPL: recOrigem.imobilizacaoPL,
+        margemBruta: recOrigem.margemBruta,
+        margemOperacional: recOrigem.margemOperacional,
+        margemLiquida: recOrigem.margemLiquida,
+        roa: recOrigem.roa,
+        roe: recOrigem.roe,
+        giroAtivo: recOrigem.giroAtivo,
+        autonomiaFinanceira: recOrigem.autonomiaFinanceira,
+        dependenciaFinanceira: recOrigem.dependenciaFinanceira,
+        dividaEquity: recOrigem.dividaEquity,
+        margemEbitda: recOrigem.margemEbitda,
+        coberturaJuros: recOrigem.coberturaJuros,
+        pme: recOrigem.pme,
+        pmr: recOrigem.pmr,
+        pmp: recOrigem.pmp,
+        cicloOperacional: recOrigem.cicloOperacional,
+        cicloFinanceiro: recOrigem.cicloFinanceiro,
+        giroEstoque: recOrigem.giroEstoque,
+        giroReceber: recOrigem.giroReceber,
+        giroFornecedores: recOrigem.giroFornecedores,
+        roic: recOrigem.roic,
+        wacc: recOrigem.wacc,
+        spread: recOrigem.spread,
+      }
+    }
+
+    const payloadComDestino: Partial<BenchmarkSetorValores> = {
+      ...valoresParaCopiar,
+      descricao:
+        valoresParaCopiar.descricao || `Metas duplicadas para ${empresaDestinoNome || 'a empresa'}`,
+    }
+
+    return await this.saveEmpresa(destinoEmpresaId, payloadComDestino)
+  },
+
   // ==========================================
   // EXPORTAÇÃO E IMPORTAÇÃO CSV
   // ==========================================
