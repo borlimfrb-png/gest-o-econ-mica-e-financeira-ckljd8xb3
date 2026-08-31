@@ -559,9 +559,13 @@ export const BENCHMARKS_SETORIAIS: Record<string, BenchmarkSetorValores> = {
   },
 }
 
-export function getBenchmarkParaSegmento(segmento?: string | null): BenchmarkSetorValores {
-  if (!segmento) return BENCHMARKS_SETORIAIS['Serviços']
-  return BENCHMARKS_SETORIAIS[segmento] || BENCHMARKS_SETORIAIS['Outros']
+export function getBenchmarkParaSegmento(
+  segmento?: string | null,
+  customMap?: Record<string, BenchmarkSetorValores> | null,
+): BenchmarkSetorValores {
+  const map = customMap || BENCHMARKS_SETORIAIS
+  if (!segmento) return map['Serviços'] || BENCHMARKS_SETORIAIS['Serviços']
+  return map[segmento] || map['Outros'] || BENCHMARKS_SETORIAIS['Outros']
 }
 
 // Funções de normalização de 0 a 100

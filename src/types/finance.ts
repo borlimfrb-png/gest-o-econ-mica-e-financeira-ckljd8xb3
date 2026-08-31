@@ -586,6 +586,45 @@ export interface ConfiguracaoTributariaRecord extends RecordModel {
   }
 }
 
+export interface BenchmarkSetorialRecord extends RecordModel {
+  user: string
+  setor: SegmentoEmpresa
+  descricao?: string
+  liquidezCorrente: number
+  liquidezSeca: number
+  liquidezImediata: number
+  liquidezGeral: number
+  endividamentoGeral: number
+  composicaoEndividamento: number
+  participacaoCapitalTerceiros: number
+  imobilizacaoPL: number
+  margemBruta: number
+  margemOperacional: number
+  margemLiquida: number
+  roa: number
+  roe: number
+  giroAtivo: number
+  autonomiaFinanceira: number
+  dependenciaFinanceira: number
+  dividaEquity: number
+  margemEbitda: number
+  coberturaJuros: number
+  pme: number
+  pmr: number
+  pmp: number
+  cicloOperacional: number
+  cicloFinanceiro: number
+  giroEstoque: number
+  giroReceber: number
+  giroFornecedores: number
+  roic: number
+  wacc: number
+  spread: number
+  cgl_referencia?: number
+  ncg_referencia?: number
+  saldoTesouraria_referencia?: number
+}
+
 export interface IndicadoresCalculados {
   // 1. Liquidez
   liquidezCorrente: number | null

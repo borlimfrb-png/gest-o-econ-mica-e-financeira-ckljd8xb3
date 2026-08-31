@@ -38,7 +38,11 @@ import {
   type PesosGrupos,
   type GrupoRadarItem,
   type IndicadoresConsolidadosEmpresa,
+  type BenchmarkSetorValores,
 } from '@/lib/benchmarks'
+import { ModalEditarBenchmarks } from '@/components/ModalEditarBenchmarks'
+import { benchmarksService } from '@/services/benchmarksService'
+import type { BenchmarkSetorialRecord } from '@/types/finance'
 import { Coins } from 'lucide-react'
 import { ModalPesosRelatorio } from '@/components/ModalPesosRelatorio'
 import { ModalPdfDashboardA4 } from '@/components/ModalPdfDashboardA4'
@@ -140,6 +144,33 @@ export default function PainelIndicadores() {
   // Modal PDF A4 Executivo
   const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
 
+  // Modal de Edição de Benchmarks Setoriais
+  const [modalBenchmarksOpen, setModalBenchmarksOpen] = useState<boolean>(false)
+
+  // Dicionário de benchmarks customizados do usuário (mesclado com os padrões)
+  const [benchmarksMap, setBenchmarksMap] = useState<Record<string, BenchmarkSetorValores>>(() => ({
+    ...BENCHMARKS_SETORIAIS,
+  }))
+
+  // Carregar benchmarks do usuário do PocketBase
+  const loadBenchmarks = async () => {
+    try {
+      const records = await benchmarksService.getAll()
+      const merged = benchmarksService.mergeBenchmarksMap(records)
+      setBenchmarksMap(merged)
+    } catch (err) {
+      console.error('Erro ao buscar benchmarks:', err)
+    }
+  }
+
+  useEffect(() => {
+    loadBenchmarks()
+  }, [])
+
+  useRealtime<BenchmarkSetorialRecord>('benchmarks_setoriais', () => {
+    loadBenchmarks()
+  })
+
   // Setor selecionado para benchmark (padrão = segmento da empresa ou 'Serviços')
   const [selectedSetorBenchmark, setSelectedSetorBenchmark] = useState<string>('')
 
@@ -217,12 +248,15 @@ export default function PainelIndicadores() {
 
   // Sincroniza o setor de benchmark quando a empresa selecionada muda
   useEffect(() => {
-    if (selectedEmpresa?.segmento && BENCHMARKS_SETORIAIS[selectedEmpresa.segmento]) {
+    if (
+      selectedEmpresa?.segmento &&
+      (benchmarksMap[selectedEmpresa.segmento] || BENCHMARKS_SETORIAIS[selectedEmpresa.segmento])
+    ) {
       setSelectedSetorBenchmark(selectedEmpresa.segmento)
     } else if (!selectedSetorBenchmark) {
       setSelectedSetorBenchmark('Serviços')
     }
-  }, [selectedEmpresa?.segmento])
+  }, [selectedEmpresa?.segmento, benchmarksMap])
 
   // Carregar dados das coleções (Empresa Principal + Centros + Plano de Contas + Lançamentos)
   const loadData = async () => {
@@ -537,8 +571,10 @@ export default function PainelIndicadores() {
   // Benchmark ativo
   const benchmarkAtivo = useMemo(() => {
     if (!selectedSetorBenchmark) return null
-    return BENCHMARKS_SETORIAIS[selectedSetorBenchmark] || null
-  }, [selectedSetorBenchmark])
+    return (
+      benchmarksMap[selectedSetorBenchmark] || BENCHMARKS_SETORIAIS[selectedSetorBenchmark] || null
+    )
+  }, [selectedSetorBenchmark, benchmarksMap])
 
   // Itens do Radar Chart Empresa Principal
   const radarItems = useMemo<GrupoRadarItem[]>(() => {
@@ -1771,25 +1807,52 @@ export default function PainelIndicadores() {
             </Select>
           </div>
 
-          {/* Seletor Benchmark Setorial */}
-          <div className="flex items-center gap-1.5 bg-blue-50/70 border border-blue-200 rounded-lg px-2.5 py-1 text-xs">
-            <Scale className="w-3.5 h-3.5 text-blue-700 shrink-0" />
-            <Select
-              value={selectedSetorBenchmark}
-              onValueChange={(val) => setSelectedSetorBenchmark(val)}
+          {/* Seletor Benchmark Setorial com Ação de Edição */}
+          <div className="flex items-center gap-1 bg-blue-50/80 border border-blue-200 rounded-lg p-0.5 text-xs">
+            <div className="flex items-center gap-1.5 px-2 py-0.5">
+              <Scale className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+              <Select
+                value={selectedSetorBenchmark}
+                onValueChange={(val) => setSelectedSetorBenchmark(val)}
+              >
+                <SelectTrigger className="h-7 border-none shadow-none bg-transparent text-xs font-bold text-blue-900 p-0 focus:ring-0 w-[130px]">
+                  <SelectValue placeholder="Setor Benchmark" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.keys(benchmarksMap || BENCHMARKS_SETORIAIS).map((setor) => (
+                    <SelectItem key={setor} value={setor} className="text-xs font-medium">
+                      Setor: {setor}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setModalBenchmarksOpen(true)}
+              title="Ajustar e editar benchmarks manualmente"
+              className="h-7 px-2 text-[11px] font-bold text-blue-700 hover:text-blue-900 hover:bg-blue-100 rounded-md gap-1"
             >
-              <SelectTrigger className="h-7 border-none shadow-none bg-transparent text-xs font-bold text-blue-900 p-0 focus:ring-0 w-[130px]">
-                <SelectValue placeholder="Setor Benchmark" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.keys(BENCHMARKS_SETORIAIS).map((setor) => (
-                  <SelectItem key={setor} value={setor} className="text-xs font-medium">
-                    Setor: {setor}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <SlidersHorizontal className="w-3 h-3" />
+              <span className="hidden xl:inline">Ajustar</span>
+            </Button>
           </div>
+
+          {/* Botão Ajustar Benchmarks Setoriais */}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setModalBenchmarksOpen(true)}
+            className="border-blue-200 text-blue-800 bg-blue-50/50 hover:bg-blue-100/70 font-bold text-xs h-9 shadow-2xs gap-1.5"
+          >
+            <Scale className="w-3.5 h-3.5 text-blue-700" />
+            <span>Editar Benchmarks</span>
+            <Badge className="bg-blue-200 text-blue-900 border-none text-[9px] px-1 py-0 font-extrabold">
+              {selectedSetorBenchmark || 'Setorial'}
+            </Badge>
+          </Button>
 
           {/* Botão Exportar CSV */}
           <Button
@@ -4288,6 +4351,20 @@ export default function PainelIndicadores() {
         perfilAtual={perfilPesos}
         pesosAtuais={pesos}
         onSalvar={handleSalvarPesos}
+      />
+
+      {/* Modal de Edição de Benchmarks Setoriais */}
+      <ModalEditarBenchmarks
+        open={modalBenchmarksOpen}
+        onOpenChange={setModalBenchmarksOpen}
+        setorInicial={selectedSetorBenchmark || selectedEmpresa?.segmento || 'Serviços'}
+        benchmarksMap={benchmarksMap}
+        onSaved={(setor, novosValores) => {
+          setBenchmarksMap((prev) => ({
+            ...prev,
+            [setor]: novosValores,
+          }))
+        }}
       />
 
       {/* Modal de Impressão / PDF A4 do Dashboard Executivo */}

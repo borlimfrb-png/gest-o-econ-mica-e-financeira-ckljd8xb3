@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T12:20:18.737Z",
+  "generatedAt": "2026-08-31T12:43:52.108Z",
   "collections": [
     {
       "name": "users",
@@ -2632,6 +2632,265 @@
       "indexes": [
         "CREATE INDEX idx_config_tributarias_user ON configuracoes_tributarias (user)",
         "CREATE UNIQUE INDEX idx_config_tributarias_empresa ON configuracoes_tributarias (user, empresa)"
+      ]
+    },
+    {
+      "name": "benchmarks_setoriais",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != '' && @request.body.user = @request.auth.id",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "setor",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "Indústria",
+            "Comércio",
+            "Serviços",
+            "Tecnologia",
+            "Agronegócio",
+            "Construção",
+            "Saúde",
+            "Educação",
+            "Financeiro",
+            "Outros"
+          ]
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "liquidezCorrente",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "liquidezSeca",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "liquidezImediata",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "liquidezGeral",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "endividamentoGeral",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "composicaoEndividamento",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "participacaoCapitalTerceiros",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "imobilizacaoPL",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "margemBruta",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "margemOperacional",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "margemLiquida",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "roa",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "roe",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "giroAtivo",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "autonomiaFinanceira",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dependenciaFinanceira",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dividaEquity",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "margemEbitda",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "coberturaJuros",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pme",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pmr",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pmp",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cicloOperacional",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cicloFinanceiro",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "giroEstoque",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "giroReceber",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "giroFornecedores",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "roic",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "wacc",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "spread",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cgl_referencia",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ncg_referencia",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "saldoTesouraria_referencia",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_benchmarks_user_setor ON benchmarks_setoriais (user, setor)"
       ]
     }
   ]
