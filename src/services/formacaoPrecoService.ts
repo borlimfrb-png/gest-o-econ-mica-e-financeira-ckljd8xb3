@@ -7,6 +7,7 @@ import type {
   HistoricoPrecoProdutoRecord,
   OrigemAlteracaoPreco,
   ConfiguracaoTributariaRecord,
+  TipoTributacaoMateriaPrima,
 } from '@/types/finance'
 
 export interface ProdutoInput {
@@ -59,6 +60,11 @@ export interface MateriaPrimaInput {
   icms_percentual?: number
   pis_percentual?: number
   cofins_percentual?: number
+  ipi_percentual?: number
+  frete_percentual?: number
+  perdas_percentual?: number
+  isenta_st?: boolean
+  tipo_tributacao?: TipoTributacaoMateriaPrima
   estoque_atual?: number
   estoque_minimo?: number
   observacoes?: string

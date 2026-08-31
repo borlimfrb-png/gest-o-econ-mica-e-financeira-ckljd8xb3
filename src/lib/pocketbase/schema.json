@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T14:06:34.575Z",
+  "generatedAt": "2026-08-31T14:34:31.534Z",
   "collections": [
     {
       "name": "users",
@@ -2328,6 +2328,24 @@
           "required": false,
           "system": false,
           "selectValues": ["tributada", "isenta", "substituicao_tributaria"]
+        },
+        {
+          "name": "ipi_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "frete_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "perdas_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

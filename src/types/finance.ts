@@ -516,6 +516,9 @@ export interface MateriaPrimaRecord extends RecordModel {
   icms_percentual?: number
   pis_percentual?: number
   cofins_percentual?: number
+  ipi_percentual?: number
+  frete_percentual?: number
+  perdas_percentual?: number
   isenta_st?: boolean
   tipo_tributacao?: TipoTributacaoMateriaPrima
   estoque_atual?: number
@@ -530,16 +533,23 @@ export interface ItemFichaTecnica {
   custo_unitario: number
   quantidade: number
   subtotal: number
-  // Campos detalhados de impostos e custo líquido
+  // Campos detalhados de impostos, acréscimos e custo líquido
   custo_unitario_liquido?: number
   subtotal_liquido?: number
   icms_percentual?: number
   pis_percentual?: number
   cofins_percentual?: number
+  ipi_percentual?: number
+  frete_percentual?: number
+  perdas_percentual?: number
   credito_icms?: number
   credito_pis?: number
   credito_cofins?: number
   credito_total?: number
+  valor_ipi?: number
+  valor_frete?: number
+  valor_perdas?: number
+  acrescimos_total?: number
   isenta_st?: boolean
   tipo_tributacao?: TipoTributacaoMateriaPrima
 }

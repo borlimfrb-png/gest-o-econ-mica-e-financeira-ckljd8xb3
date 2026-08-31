@@ -606,8 +606,15 @@ export interface MatrizSensibilidadeItem {
  * Preço = Custo / (1 - (Margem% + DespVar% + CargaTrib%) / 100)
  */
 /**
- * Calcula créditos tributários de uma matéria-prima e custo líquido
- * Se marcada como isenta/ST, zera os percentuais e créditos, retornando custo líquido = custo bruto.
+ * Calcula créditos tributários (deduções), acréscimos operacionais (IPI, Frete, Perdas)
+ * e o custo unitário líquido de uma matéria-prima.
+ *
+ * Fórmula:
+ *   Custo Líquido = Custo Bruto − (ICMS + PIS + COFINS) + (IPI + Frete + Perdas)
+ *
+ * Onde todos os percentuais são calculados sobre o Custo Bruto.
+ * Se marcada como isenta/ST, zera os percentuais de ICMS/PIS/COFINS e créditos.
+ * IPI, Frete e Perdas continuam sendo somados ao custo bruto caso preenchidos.
  */
 export function calcularTributosMateriaPrima(
   custoUnitario: number,
@@ -616,23 +623,45 @@ export function calcularTributosMateriaPrima(
   cofinsPct: number = 0,
   isentaST: boolean = false,
   tipoTributacao: 'tributada' | 'isenta' | 'substituicao_tributaria' = 'tributada',
+  ipiPct: number = 0,
+  fretePct: number = 0,
+  perdasPct: number = 0,
 ) {
   const c = Math.max(0, Number(custoUnitario) || 0)
   const isIsentaOuST =
     isentaST || tipoTributacao === 'isenta' || tipoTributacao === 'substituicao_tributaria'
 
+  const ipi = Math.max(0, Number(ipiPct) || 0)
+  const frete = Math.max(0, Number(fretePct) || 0)
+  const perdas = Math.max(0, Number(perdasPct) || 0)
+
+  const valorIpi = (c * ipi) / 100
+  const valorFrete = (c * frete) / 100
+  const valorPerdas = (c * perdas) / 100
+  const totalAcrescimos = valorIpi + valorFrete + valorPerdas
+  const percentualAcrescimosTotal = c > 0 ? (totalAcrescimos / c) * 100 : 0
+
   if (isIsentaOuST) {
+    const custoLiquido = Math.max(0, c + totalAcrescimos)
     return {
       custoBruto: c,
       icmsPercentual: 0,
       pisPercentual: 0,
       cofinsPercentual: 0,
+      ipiPercentual: ipi,
+      fretePercentual: frete,
+      perdasPercentual: perdas,
       creditoIcms: 0,
       creditoPis: 0,
       creditoCofins: 0,
       totalCreditos: 0,
-      custoLiquido: c,
+      valorIpi: Math.round(valorIpi * 100) / 100,
+      valorFrete: Math.round(valorFrete * 100) / 100,
+      valorPerdas: Math.round(valorPerdas * 100) / 100,
+      totalAcrescimos: Math.round(totalAcrescimos * 100) / 100,
+      custoLiquido: Math.round(custoLiquido * 100) / 100,
       percentualCreditoTotal: 0,
+      percentualAcrescimosTotal: Math.round(percentualAcrescimosTotal * 100) / 100,
       isIsentaOuST: true,
       tipoTributacao: tipoTributacao === 'tributada' ? 'isenta' : tipoTributacao,
     }
@@ -646,7 +675,7 @@ export function calcularTributosMateriaPrima(
   const creditoPis = (c * pis) / 100
   const creditoCofins = (c * cofins) / 100
   const totalCreditos = creditoIcms + creditoPis + creditoCofins
-  const custoLiquido = Math.max(0, c - totalCreditos)
+  const custoLiquido = Math.max(0, c - totalCreditos + totalAcrescimos)
   const percentualCreditoTotal = c > 0 ? (totalCreditos / c) * 100 : 0
 
   return {
@@ -654,12 +683,20 @@ export function calcularTributosMateriaPrima(
     icmsPercentual: icms,
     pisPercentual: pis,
     cofinsPercentual: cofins,
+    ipiPercentual: ipi,
+    fretePercentual: frete,
+    perdasPercentual: perdas,
     creditoIcms: Math.round(creditoIcms * 100) / 100,
     creditoPis: Math.round(creditoPis * 100) / 100,
     creditoCofins: Math.round(creditoCofins * 100) / 100,
     totalCreditos: Math.round(totalCreditos * 100) / 100,
+    valorIpi: Math.round(valorIpi * 100) / 100,
+    valorFrete: Math.round(valorFrete * 100) / 100,
+    valorPerdas: Math.round(valorPerdas * 100) / 100,
+    totalAcrescimos: Math.round(totalAcrescimos * 100) / 100,
     custoLiquido: Math.round(custoLiquido * 100) / 100,
     percentualCreditoTotal: Math.round(percentualCreditoTotal * 100) / 100,
+    percentualAcrescimosTotal: Math.round(percentualAcrescimosTotal * 100) / 100,
     isIsentaOuST: false,
     tipoTributacao: 'tributada' as const,
   }

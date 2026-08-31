@@ -110,6 +110,9 @@ interface MateriaPrimaFormData {
   icms_percentual: string
   pis_percentual: string
   cofins_percentual: string
+  ipi_percentual: string
+  frete_percentual: string
+  perdas_percentual: string
   isenta_st: boolean
   tipo_tributacao: 'tributada' | 'isenta' | 'substituicao_tributaria'
   estoque_atual: string
@@ -126,6 +129,9 @@ const EMPTY_MP: MateriaPrimaFormData = {
   icms_percentual: '',
   pis_percentual: '',
   cofins_percentual: '',
+  ipi_percentual: '',
+  frete_percentual: '',
+  perdas_percentual: '',
   isenta_st: false,
   tipo_tributacao: 'tributada',
   estoque_atual: '',
@@ -196,7 +202,14 @@ export interface ItemCurvaABC {
   icms_percentual: number
   pis_percentual: number
   cofins_percentual: number
+  ipi_percentual: number
+  frete_percentual: number
+  perdas_percentual: number
   total_impostos_valor: number
+  total_acrescimos_valor: number
+  valor_ipi: number
+  valor_frete: number
+  valor_perdas: number
   custo_com_impostos: number
   quantidade: number
   valor_total: number
@@ -300,6 +313,9 @@ export default function CadastroMateriaPrima() {
     const icms = Number(formData.icms_percentual.replace(',', '.')) || 0
     const pis = Number(formData.pis_percentual.replace(',', '.')) || 0
     const cofins = Number(formData.cofins_percentual.replace(',', '.')) || 0
+    const ipi = Number(formData.ipi_percentual.replace(',', '.')) || 0
+    const frete = Number(formData.frete_percentual.replace(',', '.')) || 0
+    const perdas = Number(formData.perdas_percentual.replace(',', '.')) || 0
     return calcularTributosMateriaPrima(
       c,
       icms,
@@ -307,12 +323,18 @@ export default function CadastroMateriaPrima() {
       cofins,
       formData.isenta_st,
       formData.tipo_tributacao,
+      ipi,
+      frete,
+      perdas,
     )
   }, [
     formData.custo_unitario,
     formData.icms_percentual,
     formData.pis_percentual,
     formData.cofins_percentual,
+    formData.ipi_percentual,
+    formData.frete_percentual,
+    formData.perdas_percentual,
     formData.isenta_st,
     formData.tipo_tributacao,
   ])
@@ -349,6 +371,9 @@ export default function CadastroMateriaPrima() {
         m.cofins_percentual,
         m.isenta_st,
         m.tipo_tributacao,
+        m.ipi_percentual,
+        m.frete_percentual,
+        m.perdas_percentual,
       )
       const custoComImpostos = custoUnit > 0 ? Number((custoUnit * fatorGrossUp).toFixed(4)) : 0
       const consumoInfo = consumoFichasMap.get(m.id)
@@ -371,7 +396,14 @@ export default function CadastroMateriaPrima() {
         icms_percentual: calcTrib.icmsPercentual,
         pis_percentual: calcTrib.pisPercentual,
         cofins_percentual: calcTrib.cofinsPercentual,
+        ipi_percentual: calcTrib.ipiPercentual,
+        frete_percentual: calcTrib.fretePercentual,
+        perdas_percentual: calcTrib.perdasPercentual,
         total_impostos_valor: calcTrib.totalCreditos,
+        total_acrescimos_valor: calcTrib.totalAcrescimos,
+        valor_ipi: calcTrib.valorIpi,
+        valor_frete: calcTrib.valorFrete,
+        valor_perdas: calcTrib.valorPerdas,
         custo_com_impostos: custoComImpostos,
         quantidade: qtdBase,
         valor_total: valorTotal,
@@ -546,7 +578,7 @@ export default function CadastroMateriaPrima() {
     })
   }, [materiasPorPeriodo, search, categoriaFilter, statusFilter, tributacaoFilter])
 
-  // Estatísticas gerais e consolidado de créditos tributários
+  // Estatísticas gerais e consolidado de créditos tributários e acréscimos
   const stats = useMemo(() => {
     const total = materiasPorPeriodo.length
     let valorTotalEstoqueBruto = 0
@@ -556,12 +588,21 @@ export default function CadastroMateriaPrima() {
     let totalCreditoPisEstoque = 0
     let totalCreditoCofinsEstoque = 0
 
+    let totalIpiEstoque = 0
+    let totalFreteEstoque = 0
+    let totalPerdasEstoque = 0
+    let totalAcrescimosEstoque = 0
+
     let somaCustoBruto = 0
     let somaCustoLiquido = 0
     let somaCreditoIcmsUnit = 0
     let somaCreditoPisUnit = 0
     let somaCreditoCofinsUnit = 0
     let somaCreditosTotaisUnit = 0
+    let somaIpiUnit = 0
+    let somaFreteUnit = 0
+    let somaPerdasUnit = 0
+    let somaAcrescimosUnit = 0
 
     let countIsentasST = 0
     let countTributadas = 0
@@ -574,6 +615,9 @@ export default function CadastroMateriaPrima() {
         m.cofins_percentual || 0,
         m.isenta_st,
         m.tipo_tributacao,
+        m.ipi_percentual || 0,
+        m.frete_percentual || 0,
+        m.perdas_percentual || 0,
       )
       const qtd = Number(m.estoque_atual) || 0
 
@@ -595,12 +639,21 @@ export default function CadastroMateriaPrima() {
       totalCreditoCofinsEstoque += cCofEst
       totalCreditoImpostosEstoque += calc.totalCreditos * qtd
 
+      totalIpiEstoque += calc.valorIpi * qtd
+      totalFreteEstoque += calc.valorFrete * qtd
+      totalPerdasEstoque += calc.valorPerdas * qtd
+      totalAcrescimosEstoque += calc.totalAcrescimos * qtd
+
       somaCustoBruto += calc.custoBruto
       somaCustoLiquido += calc.custoLiquido
       somaCreditoIcmsUnit += calc.creditoIcms
       somaCreditoPisUnit += calc.creditoPis
       somaCreditoCofinsUnit += calc.creditoCofins
       somaCreditosTotaisUnit += calc.totalCreditos
+      somaIpiUnit += calc.valorIpi
+      somaFreteUnit += calc.valorFrete
+      somaPerdasUnit += calc.valorPerdas
+      somaAcrescimosUnit += calc.totalAcrescimos
     })
 
     const custoMedioBruto = total > 0 ? somaCustoBruto / total : 0
@@ -624,10 +677,18 @@ export default function CadastroMateriaPrima() {
       totalCreditoIcmsEstoque,
       totalCreditoPisEstoque,
       totalCreditoCofinsEstoque,
+      totalIpiEstoque,
+      totalFreteEstoque,
+      totalPerdasEstoque,
+      totalAcrescimosEstoque,
       somaCreditoIcmsUnit,
       somaCreditoPisUnit,
       somaCreditoCofinsUnit,
       somaCreditosTotaisUnit,
+      somaIpiUnit,
+      somaFreteUnit,
+      somaPerdasUnit,
+      somaAcrescimosUnit,
       custoMedioBruto,
       custoMedioLiquido,
       percentualEconomiaEstoque,
@@ -674,6 +735,21 @@ export default function CadastroMateriaPrima() {
       if (isNaN(cofins) || cofins < 0 || cofins > 100)
         errs.cofins_percentual = 'Percentual de COFINS inválido (0 a 100)'
     }
+    if (form.ipi_percentual.trim() !== '') {
+      const ipi = Number(form.ipi_percentual.replace(',', '.'))
+      if (isNaN(ipi) || ipi < 0 || ipi > 100)
+        errs.ipi_percentual = 'Percentual de IPI inválido (0 a 100)'
+    }
+    if (form.frete_percentual.trim() !== '') {
+      const frete = Number(form.frete_percentual.replace(',', '.'))
+      if (isNaN(frete) || frete < 0 || frete > 100)
+        errs.frete_percentual = 'Percentual de Frete inválido (0 a 100)'
+    }
+    if (form.perdas_percentual.trim() !== '') {
+      const perdas = Number(form.perdas_percentual.replace(',', '.'))
+      if (isNaN(perdas) || perdas < 0 || perdas > 100)
+        errs.perdas_percentual = 'Percentual de Perdas inválido (0 a 100)'
+    }
     if (form.estoque_atual.trim() !== '') {
       const e = Number(form.estoque_atual.replace(',', '.'))
       if (isNaN(e) || e < 0) errs.estoque_atual = 'Informe uma quantidade de estoque válida'
@@ -718,6 +794,16 @@ export default function CadastroMateriaPrima() {
         m.cofins_percentual !== undefined && m.cofins_percentual !== null
           ? String(m.cofins_percentual)
           : '',
+      ipi_percentual:
+        m.ipi_percentual !== undefined && m.ipi_percentual !== null ? String(m.ipi_percentual) : '',
+      frete_percentual:
+        m.frete_percentual !== undefined && m.frete_percentual !== null
+          ? String(m.frete_percentual)
+          : '',
+      perdas_percentual:
+        m.perdas_percentual !== undefined && m.perdas_percentual !== null
+          ? String(m.perdas_percentual)
+          : '',
       isenta_st: isIsenta,
       tipo_tributacao: m.tipo_tributacao || (isIsenta ? 'isenta' : 'tributada'),
       estoque_atual:
@@ -752,6 +838,18 @@ export default function CadastroMateriaPrima() {
         formData.cofins_percentual.trim() !== ''
           ? Number(formData.cofins_percentual.replace(',', '.'))
           : 0
+      const ipiNum =
+        formData.ipi_percentual.trim() !== ''
+          ? Number(formData.ipi_percentual.replace(',', '.'))
+          : 0
+      const freteNum =
+        formData.frete_percentual.trim() !== ''
+          ? Number(formData.frete_percentual.replace(',', '.'))
+          : 0
+      const perdasNum =
+        formData.perdas_percentual.trim() !== ''
+          ? Number(formData.perdas_percentual.replace(',', '.'))
+          : 0
       const estoqueNum =
         formData.estoque_atual.trim() !== ''
           ? Number(formData.estoque_atual.replace(',', '.'))
@@ -776,6 +874,9 @@ export default function CadastroMateriaPrima() {
         icms_percentual: isIsentaFinal ? 0 : icmsNum,
         pis_percentual: isIsentaFinal ? 0 : pisNum,
         cofins_percentual: isIsentaFinal ? 0 : cofinsNum,
+        ipi_percentual: ipiNum,
+        frete_percentual: freteNum,
+        perdas_percentual: perdasNum,
         isenta_st: isIsentaFinal,
         tipo_tributacao: formData.tipo_tributacao,
         estoque_atual: estoqueNum,
@@ -881,12 +982,19 @@ export default function CadastroMateriaPrima() {
       'Valor Crédito PIS (R$)',
       'COFINS (%)',
       'Valor Crédito COFINS (R$)',
-      'Total Créditos Tributários (%)',
-      'Total Créditos Tributários (R$)',
+      'Total Créditos Dedução (R$)',
+      'IPI (%)',
+      'Valor IPI (R$)',
+      'Frete (%)',
+      'Valor Frete (R$)',
+      'Perdas (%)',
+      'Valor Perdas (R$)',
+      'Total Acréscimos (R$)',
       'Custo Unitário Líquido (R$)',
       'Estoque Atual',
       'Estoque Mínimo',
       'Crédito Total no Estoque (R$)',
+      'Acréscimos Total no Estoque (R$)',
       'Valor Total em Estoque Líquido (R$)',
       'Valor Total em Estoque Bruto (R$)',
       'Observações',
@@ -902,11 +1010,15 @@ export default function CadastroMateriaPrima() {
         m.cofins_percentual || 0,
         m.isenta_st,
         m.tipo_tributacao,
+        m.ipi_percentual || 0,
+        m.frete_percentual || 0,
+        m.perdas_percentual || 0,
       )
       const est = m.estoque_atual || 0
       const totalEstoqueBruto = calc.custoBruto * est
       const totalEstoqueLiquido = calc.custoLiquido * est
       const creditoTotalEstoqueItem = calc.totalCreditos * est
+      const acrescimosTotalEstoqueItem = calc.totalAcrescimos * est
 
       const st = getStatusEstoque(m)
       const estMin =
@@ -935,12 +1047,19 @@ export default function CadastroMateriaPrima() {
           fmtNum(calc.creditoPis),
           fmtPctVal(calc.cofinsPercentual),
           fmtNum(calc.creditoCofins),
-          fmtPctVal(calc.percentualCreditoTotal),
           fmtNum(calc.totalCreditos),
+          fmtPctVal(calc.ipiPercentual),
+          fmtNum(calc.valorIpi),
+          fmtPctVal(calc.fretePercentual),
+          fmtNum(calc.valorFrete),
+          fmtPctVal(calc.perdasPercentual),
+          fmtNum(calc.valorPerdas),
+          fmtNum(calc.totalAcrescimos),
           fmtNum(calc.custoLiquido),
           est.toLocaleString('pt-BR'),
           estMin,
           fmtNum(creditoTotalEstoqueItem),
+          fmtNum(acrescimosTotalEstoqueItem),
           fmtNum(totalEstoqueLiquido),
           fmtNum(totalEstoqueBruto),
           m.observacoes || '',
@@ -1002,6 +1121,10 @@ export default function CadastroMateriaPrima() {
       'PIS (%)',
       'COFINS (%)',
       'Total Impostos/Créditos (R$)',
+      'IPI (%)',
+      'Frete (%)',
+      'Perdas (%)',
+      'Total Acréscimos (R$)',
       'Custo Unitário Líquido (R$)',
       `Custo c/ Gross-up Tributário (${cargaTrib.toFixed(2)}%) (R$)`,
       baseCalculoABC === 'consumo_fichas' ? 'Qtd Consumo em Fichas' : 'Estoque Atual (Qtd)',
@@ -1067,6 +1190,10 @@ export default function CadastroMateriaPrima() {
           it.pis_percentual.toFixed(2) + '%',
           it.cofins_percentual.toFixed(2) + '%',
           fmtNum(it.total_impostos_valor),
+          it.ipi_percentual.toFixed(2) + '%',
+          it.frete_percentual.toFixed(2) + '%',
+          it.perdas_percentual.toFixed(2) + '%',
+          fmtNum(it.total_acrescimos_valor),
           fmtNum(it.custo_liquido),
           fmtNum(it.custo_com_impostos),
           it.quantidade.toLocaleString('pt-BR', {
@@ -1111,8 +1238,8 @@ export default function CadastroMateriaPrima() {
             Matérias-Primas & Insumos
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Cadastre custos unitários, percentuais e deduções de ICMS, PIS e COFINS para apurar o
-            Custo Unitário Líquido.
+            Cadastre custos unitários, deduções (ICMS, PIS, COFINS) e acréscimos sobre o bruto (IPI,
+            Frete, Perdas) para apurar o Custo Unitário Líquido.
           </p>
         </div>
 
@@ -1231,82 +1358,76 @@ export default function CadastroMateriaPrima() {
               </div>
             </div>
 
-            {/* Cards do Resumo Tributário com ICMS, PIS, COFINS e Totais */}
+            {/* Cards do Resumo Tributário e Acréscimos (ICMS, PIS, COFINS, IPI, Frete, Perdas, Totais) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
               <div className="p-3 bg-white rounded-lg border border-blue-100 shadow-2xs space-y-0.5">
                 <span className="text-[10px] font-bold uppercase text-blue-700 block">
-                  Crédito ICMS (Estoque)
+                  Créditos Impostos (-)
                 </span>
                 <strong className="text-sm sm:text-base font-black font-mono text-blue-900 block">
-                  {formatBrl(stats.totalCreditoIcmsEstoque)}
-                </strong>
-                <span className="text-[10px] text-slate-500 block">
-                  Unit. soma: {formatBrl(stats.somaCreditoIcmsUnit)}
-                </span>
-              </div>
-
-              <div className="p-3 bg-white rounded-lg border border-indigo-100 shadow-2xs space-y-0.5">
-                <span className="text-[10px] font-bold uppercase text-indigo-700 block">
-                  Crédito PIS (Estoque)
-                </span>
-                <strong className="text-sm sm:text-base font-black font-mono text-indigo-900 block">
-                  {formatBrl(stats.totalCreditoPisEstoque)}
-                </strong>
-                <span className="text-[10px] text-slate-500 block">
-                  Unit. soma: {formatBrl(stats.somaCreditoPisUnit)}
-                </span>
-              </div>
-
-              <div className="p-3 bg-white rounded-lg border border-purple-100 shadow-2xs space-y-0.5">
-                <span className="text-[10px] font-bold uppercase text-purple-700 block">
-                  Crédito COFINS (Estoque)
-                </span>
-                <strong className="text-sm sm:text-base font-black font-mono text-purple-900 block">
-                  {formatBrl(stats.totalCreditoCofinsEstoque)}
-                </strong>
-                <span className="text-[10px] text-slate-500 block">
-                  Unit. soma: {formatBrl(stats.somaCreditoCofinsUnit)}
-                </span>
-              </div>
-
-              <div className="p-3 bg-blue-600 text-white rounded-lg shadow-2xs space-y-0.5 col-span-2 sm:col-span-1">
-                <span className="text-[10px] font-bold uppercase text-blue-100 block">
-                  Total Créditos Dedução
-                </span>
-                <strong className="text-sm sm:text-base font-black font-mono text-white block">
                   {formatBrl(stats.totalCreditoImpostosEstoque)}
                 </strong>
-                <span className="text-[10px] text-blue-100 block">
-                  {stats.percentualEconomiaEstoque.toFixed(1)}% de economia fiscal
+                <span className="text-[10px] text-slate-500 block">
+                  ICMS: {formatBrl(stats.totalCreditoIcmsEstoque)} | PIS/COF:{' '}
+                  {formatBrl(stats.totalCreditoPisEstoque + stats.totalCreditoCofinsEstoque)}
                 </span>
               </div>
 
-              <div className="p-3 bg-white rounded-lg border border-emerald-200 shadow-2xs space-y-0.5">
-                <span className="text-[10px] font-bold uppercase text-emerald-800 block">
-                  Estoque Valorizado Líquido
+              <div className="p-3 bg-white rounded-lg border border-orange-100 shadow-2xs space-y-0.5">
+                <span className="text-[10px] font-bold uppercase text-orange-700 block">
+                  IPI (+)
                 </span>
-                <strong className="text-sm sm:text-base font-black font-mono text-emerald-700 block">
-                  {formatBrl(stats.valorTotalEstoqueLiquido)}
+                <strong className="text-sm sm:text-base font-black font-mono text-orange-900 block">
+                  {formatBrl(stats.totalIpiEstoque)}
                 </strong>
                 <span className="text-[10px] text-slate-500 block">
-                  Bruto: {formatBrl(stats.valorTotalEstoqueBruto)}
+                  Unit. soma: {formatBrl(stats.somaIpiUnit)}
                 </span>
               </div>
 
-              <div className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs space-y-0.5">
-                <span className="text-[10px] font-bold uppercase text-slate-600 block">
-                  Situação Tributária
+              <div className="p-3 bg-white rounded-lg border border-cyan-100 shadow-2xs space-y-0.5">
+                <span className="text-[10px] font-bold uppercase text-cyan-700 block">
+                  Frete (+)
                 </span>
-                <div className="flex items-center gap-1.5 pt-0.5">
-                  <Badge className="text-[9px] bg-emerald-100 text-emerald-800 border-emerald-300">
-                    {stats.countTributadas} Trib.
-                  </Badge>
-                  <Badge className="text-[9px] bg-slate-100 text-slate-700 border-slate-300">
-                    {stats.countIsentasST} Isenta/ST
-                  </Badge>
-                </div>
-                <span className="text-[10px] text-slate-400 block">
-                  {stats.total} itens filtrados
+                <strong className="text-sm sm:text-base font-black font-mono text-cyan-900 block">
+                  {formatBrl(stats.totalFreteEstoque)}
+                </strong>
+                <span className="text-[10px] text-slate-500 block">
+                  Unit. soma: {formatBrl(stats.somaFreteUnit)}
+                </span>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-rose-100 shadow-2xs space-y-0.5">
+                <span className="text-[10px] font-bold uppercase text-rose-700 block">
+                  Perdas (+)
+                </span>
+                <strong className="text-sm sm:text-base font-black font-mono text-rose-900 block">
+                  {formatBrl(stats.totalPerdasEstoque)}
+                </strong>
+                <span className="text-[10px] text-slate-500 block">
+                  Unit. soma: {formatBrl(stats.somaPerdasUnit)}
+                </span>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-amber-200 shadow-2xs space-y-0.5">
+                <span className="text-[10px] font-bold uppercase text-amber-800 block">
+                  Total Acréscimos (+)
+                </span>
+                <strong className="text-sm sm:text-base font-black font-mono text-amber-900 block">
+                  {formatBrl(stats.totalAcrescimosEstoque)}
+                </strong>
+                <span className="text-[10px] text-slate-500 block">IPI + Frete + Perdas</span>
+              </div>
+
+              <div className="p-3 bg-emerald-600 text-white rounded-lg shadow-2xs space-y-0.5">
+                <span className="text-[10px] font-bold uppercase text-emerald-100 block">
+                  Estoque Líquido Total
+                </span>
+                <strong className="text-sm sm:text-base font-black font-mono text-white block">
+                  {formatBrl(stats.valorTotalEstoqueLiquido)}
+                </strong>
+                <span className="text-[10px] text-emerald-100 block">
+                  Bruto: {formatBrl(stats.valorTotalEstoqueBruto)}
                 </span>
               </div>
             </div>
@@ -1321,8 +1442,8 @@ export default function CadastroMateriaPrima() {
                     Catálogo de Matérias-Primas, Alíquotas e Custos Líquidos
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Demonstração detalhada do Custo Unitário Bruto, deduções de ICMS, PIS e COFINS e
-                    Custo Unitário Líquido.
+                    Demonstração detalhada do Custo Bruto, deduções (ICMS, PIS, COFINS), acréscimos
+                    (IPI, Frete, Perdas) e Custo Líquido.
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1440,24 +1561,33 @@ export default function CadastroMateriaPrima() {
                         <th className="py-3 px-3.5 min-w-[180px]">Matéria-Prima</th>
                         <th className="py-3 px-2.5 text-center">Unid.</th>
                         <th className="py-3 px-3 text-right">Custo Bruto</th>
-                        <th className="py-3 px-3 text-right bg-blue-50/40 text-blue-900">
-                          ICMS (%) / R$
+                        <th className="py-3 px-2.5 text-right bg-blue-50/40 text-blue-900">
+                          ICMS (-)
                         </th>
-                        <th className="py-3 px-3 text-right bg-indigo-50/40 text-indigo-900">
-                          PIS (%) / R$
+                        <th className="py-3 px-2.5 text-right bg-indigo-50/40 text-indigo-900">
+                          PIS (-)
                         </th>
-                        <th className="py-3 px-3 text-right bg-purple-50/40 text-purple-900">
-                          COFINS (%) / R$
+                        <th className="py-3 px-2.5 text-right bg-purple-50/40 text-purple-900">
+                          COFINS (-)
+                        </th>
+                        <th className="py-3 px-2.5 text-right bg-orange-50/50 text-orange-900">
+                          IPI (+)
+                        </th>
+                        <th className="py-3 px-2.5 text-right bg-cyan-50/50 text-cyan-900">
+                          Frete (+)
+                        </th>
+                        <th className="py-3 px-2.5 text-right bg-rose-50/50 text-rose-900">
+                          Perdas (+)
                         </th>
                         <th className="py-3 px-3 text-right bg-amber-50/50 text-amber-900">
-                          Total Impostos (-)
+                          Deduções / Acréscimos
                         </th>
                         <th className="py-3 px-3.5 text-right bg-emerald-50/70 text-emerald-950 font-bold">
                           Custo Líquido
                         </th>
-                        <th className="py-3 px-3 text-right">Estoque</th>
+                        <th className="py-3 px-2.5 text-right">Estoque</th>
                         <th className="py-3 px-3 text-right">Saldo Líquido</th>
-                        <th className="py-3 px-3 text-right">Ações</th>
+                        <th className="py-3 px-2.5 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1469,6 +1599,9 @@ export default function CadastroMateriaPrima() {
                           m.cofins_percentual || 0,
                           m.isenta_st,
                           m.tipo_tributacao,
+                          m.ipi_percentual || 0,
+                          m.frete_percentual || 0,
+                          m.perdas_percentual || 0,
                         )
                         const estoque = m.estoque_atual || 0
                         const saldoEstoqueLiquido = calc.custoLiquido * estoque
@@ -1539,9 +1672,9 @@ export default function CadastroMateriaPrima() {
                               {formatBrl(calc.custoBruto)}
                             </td>
                             {/* ICMS */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap bg-blue-50/20">
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap bg-blue-50/20">
                               <div className="text-blue-900 font-semibold font-mono">
-                                {formatBrl(calc.creditoIcms)}
+                                -{formatBrl(calc.creditoIcms)}
                               </div>
                               <div className="text-[10px] text-blue-600 font-mono">
                                 {calc.icmsPercentual > 0
@@ -1550,9 +1683,9 @@ export default function CadastroMateriaPrima() {
                               </div>
                             </td>
                             {/* PIS */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap bg-indigo-50/20">
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap bg-indigo-50/20">
                               <div className="text-indigo-900 font-semibold font-mono">
-                                {formatBrl(calc.creditoPis)}
+                                -{formatBrl(calc.creditoPis)}
                               </div>
                               <div className="text-[10px] text-indigo-600 font-mono">
                                 {calc.pisPercentual > 0
@@ -1561,9 +1694,9 @@ export default function CadastroMateriaPrima() {
                               </div>
                             </td>
                             {/* COFINS */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap bg-purple-50/20">
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap bg-purple-50/20">
                               <div className="text-purple-900 font-semibold font-mono">
-                                {formatBrl(calc.creditoCofins)}
+                                -{formatBrl(calc.creditoCofins)}
                               </div>
                               <div className="text-[10px] text-purple-600 font-mono">
                                 {calc.cofinsPercentual > 0
@@ -1571,13 +1704,53 @@ export default function CadastroMateriaPrima() {
                                   : '0%'}
                               </div>
                             </td>
-                            {/* Total Impostos a Subtrair */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap bg-amber-50/30">
-                              <div className="text-amber-900 font-bold font-mono">
-                                - {formatBrl(calc.totalCreditos)}
+                            {/* IPI */}
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap bg-orange-50/20">
+                              <div className="text-orange-900 font-semibold font-mono">
+                                +{formatBrl(calc.valorIpi)}
                               </div>
-                              <div className="text-[10px] text-amber-700 font-mono font-semibold">
-                                ({calc.percentualCreditoTotal.toFixed(2)}%)
+                              <div className="text-[10px] text-orange-600 font-mono">
+                                {calc.ipiPercentual > 0
+                                  ? `${calc.ipiPercentual.toFixed(2)}%`
+                                  : '0%'}
+                              </div>
+                            </td>
+                            {/* Frete */}
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap bg-cyan-50/20">
+                              <div className="text-cyan-900 font-semibold font-mono">
+                                +{formatBrl(calc.valorFrete)}
+                              </div>
+                              <div className="text-[10px] text-cyan-600 font-mono">
+                                {calc.fretePercentual > 0
+                                  ? `${calc.fretePercentual.toFixed(2)}%`
+                                  : '0%'}
+                              </div>
+                            </td>
+                            {/* Perdas */}
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap bg-rose-50/20">
+                              <div className="text-rose-900 font-semibold font-mono">
+                                +{formatBrl(calc.valorPerdas)}
+                              </div>
+                              <div className="text-[10px] text-rose-600 font-mono">
+                                {calc.perdasPercentual > 0
+                                  ? `${calc.perdasPercentual.toFixed(2)}%`
+                                  : '0%'}
+                              </div>
+                            </td>
+                            {/* Total Deduções e Acréscimos */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap bg-amber-50/30">
+                              <div className="text-[11px] font-mono">
+                                <span className="text-blue-900 font-semibold">
+                                  -{formatBrl(calc.totalCreditos)}
+                                </span>
+                                <span className="text-slate-400 mx-1">/</span>
+                                <span className="text-amber-900 font-semibold">
+                                  +{formatBrl(calc.totalAcrescimos)}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 font-mono">
+                                Líq: {calc.totalAcrescimos >= calc.totalCreditos ? '+' : ''}
+                                {formatBrl(calc.totalAcrescimos - calc.totalCreditos)}
                               </div>
                             </td>
                             {/* Custo Unitário Líquido */}
@@ -1590,7 +1763,7 @@ export default function CadastroMateriaPrima() {
                               </div>
                             </td>
                             {/* Estoque */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap font-mono">
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap font-mono">
                               {m.estoque_atual !== undefined && m.estoque_atual !== null ? (
                                 <span
                                   className={`font-semibold ${
@@ -1612,7 +1785,7 @@ export default function CadastroMateriaPrima() {
                               {formatBrl(saldoEstoqueLiquido)}
                             </td>
                             {/* Ações */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
+                            <td className="py-3 px-2.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
                                 <Button
                                   onClick={() => handleOpenEdit(m)}
@@ -1651,7 +1824,8 @@ export default function CadastroMateriaPrima() {
                             ),
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-blue-900 bg-blue-50/40">
+                        <td className="py-3 px-2.5 text-right font-mono text-blue-900 bg-blue-50/40">
+                          -
                           {formatBrl(
                             materiasFiltradas.reduce((acc, m) => {
                               const c = calcularTributosMateriaPrima(
@@ -1661,12 +1835,16 @@ export default function CadastroMateriaPrima() {
                                 m.cofins_percentual || 0,
                                 m.isenta_st,
                                 m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
                               )
                               return acc + c.creditoIcms
                             }, 0),
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-indigo-900 bg-indigo-50/40">
+                        <td className="py-3 px-2.5 text-right font-mono text-indigo-900 bg-indigo-50/40">
+                          -
                           {formatBrl(
                             materiasFiltradas.reduce((acc, m) => {
                               const c = calcularTributosMateriaPrima(
@@ -1676,12 +1854,16 @@ export default function CadastroMateriaPrima() {
                                 m.cofins_percentual || 0,
                                 m.isenta_st,
                                 m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
                               )
                               return acc + c.creditoPis
                             }, 0),
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-purple-900 bg-purple-50/40">
+                        <td className="py-3 px-2.5 text-right font-mono text-purple-900 bg-purple-50/40">
+                          -
                           {formatBrl(
                             materiasFiltradas.reduce((acc, m) => {
                               const c = calcularTributosMateriaPrima(
@@ -1691,13 +1873,16 @@ export default function CadastroMateriaPrima() {
                                 m.cofins_percentual || 0,
                                 m.isenta_st,
                                 m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
                               )
                               return acc + c.creditoCofins
                             }, 0),
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-amber-900 bg-amber-50/50">
-                          -{' '}
+                        <td className="py-3 px-2.5 text-right font-mono text-orange-900 bg-orange-50/40">
+                          +
                           {formatBrl(
                             materiasFiltradas.reduce((acc, m) => {
                               const c = calcularTributosMateriaPrima(
@@ -1707,8 +1892,68 @@ export default function CadastroMateriaPrima() {
                                 m.cofins_percentual || 0,
                                 m.isenta_st,
                                 m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
                               )
-                              return acc + c.totalCreditos
+                              return acc + c.valorIpi
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-2.5 text-right font-mono text-cyan-900 bg-cyan-50/40">
+                          +
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario || 0,
+                                m.icms_percentual || 0,
+                                m.pis_percentual || 0,
+                                m.cofins_percentual || 0,
+                                m.isenta_st,
+                                m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
+                              )
+                              return acc + c.valorFrete
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-2.5 text-right font-mono text-rose-900 bg-rose-50/40">
+                          +
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario || 0,
+                                m.icms_percentual || 0,
+                                m.pis_percentual || 0,
+                                m.cofins_percentual || 0,
+                                m.isenta_st,
+                                m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
+                              )
+                              return acc + c.valorPerdas
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-amber-900 bg-amber-50/50">
+                          +
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario || 0,
+                                m.icms_percentual || 0,
+                                m.pis_percentual || 0,
+                                m.cofins_percentual || 0,
+                                m.isenta_st,
+                                m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
+                              )
+                              return acc + c.totalAcrescimos
                             }, 0),
                           )}
                         </td>
@@ -1722,12 +1967,15 @@ export default function CadastroMateriaPrima() {
                                 m.cofins_percentual || 0,
                                 m.isenta_st,
                                 m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
                               )
                               return acc + c.custoLiquido
                             }, 0),
                           )}
                         </td>
-                        <td className="py-3 px-3 text-right font-mono text-slate-600">—</td>
+                        <td className="py-3 px-2.5 text-right font-mono text-slate-600">—</td>
                         <td className="py-3 px-3 text-right font-mono text-slate-900">
                           {formatBrl(
                             materiasFiltradas.reduce((acc, m) => {
@@ -1738,12 +1986,15 @@ export default function CadastroMateriaPrima() {
                                 m.cofins_percentual || 0,
                                 m.isenta_st,
                                 m.tipo_tributacao,
+                                m.ipi_percentual || 0,
+                                m.frete_percentual || 0,
+                                m.perdas_percentual || 0,
                               )
                               return acc + c.custoLiquido * (Number(m.estoque_atual) || 0)
                             }, 0),
                           )}
                         </td>
-                        <td className="py-3 px-3 text-slate-400 text-right">—</td>
+                        <td className="py-3 px-2.5 text-slate-400 text-right">—</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -1846,267 +2097,391 @@ export default function CadastroMateriaPrima() {
                     </div>
                   </div>
 
-                  {/* Seção 2: Custo Bruto, Toggle Isenta/ST e Percentuais de Impostos (Melhoria 3) */}
+                  {/* Seção 2: Custo Bruto, Toggle Isenta/ST, Deduções e Acréscimos (IPI, Frete, Perdas) */}
                   <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/40 space-y-3">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-200/70 pb-2">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900">
                         <Receipt className="w-4 h-4 text-blue-700" />
-                        Custos & Tributação (ICMS, PIS, COFINS)
+                        Custos, Deduções Fiscais & Acréscimos Operacionais
                       </div>
                       <span className="text-[10px] text-blue-700 font-semibold bg-white px-2 py-0.5 rounded border border-blue-200">
-                        Dedução sobre Custo Bruto
+                        Todos calculados sobre Custo Bruto
                       </span>
                     </div>
 
-                    {/* Toggle / Regime Especial: Isenta ou Substituição Tributária (ST) */}
-                    <div className="p-2.5 bg-white rounded-lg border border-slate-200 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <Label
-                            htmlFor="toggle-isenta-st"
-                            className="text-xs font-bold text-slate-800 cursor-pointer block"
-                          >
-                            Matéria-Prima Isenta ou Substituição Tributária (ST)
-                          </Label>
-                          <p className="text-[11px] text-slate-500">
-                            Se marcada, não gera crédito tributário (alíquotas zeradas e Custo
-                            Líquido = Custo Bruto).
-                          </p>
-                        </div>
-                        <input
-                          id="toggle-isenta-st"
-                          type="checkbox"
-                          checked={formData.isenta_st}
-                          onChange={(e) => {
-                            const checked = e.target.checked
-                            setFormData((prev) => ({
-                              ...prev,
-                              isenta_st: checked,
-                              tipo_tributacao: checked
-                                ? prev.tipo_tributacao === 'tributada'
-                                  ? 'isenta'
-                                  : prev.tipo_tributacao
-                                : 'tributada',
-                              icms_percentual: checked ? '0' : prev.icms_percentual,
-                              pis_percentual: checked ? '0' : prev.pis_percentual,
-                              cofins_percentual: checked ? '0' : prev.cofins_percentual,
-                            }))
-                          }}
-                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
-                        />
-                      </div>
-
-                      {formData.isenta_st && (
-                        <div className="pt-2 border-t border-slate-100 flex items-center gap-3">
-                          <Label className="text-xs font-semibold text-slate-700">
-                            Enquadramento:
-                          </Label>
-                          <div className="flex items-center gap-4 text-xs">
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="tipo_tributacao_radio"
-                                value="isenta"
-                                checked={formData.tipo_tributacao === 'isenta'}
-                                onChange={() =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    tipo_tributacao: 'isenta',
-                                  }))
-                                }
-                                className="text-blue-600"
-                              />
-                              <span>Isenta / Não Tributada</span>
-                            </label>
-                            <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                              <input
-                                type="radio"
-                                name="tipo_tributacao_radio"
-                                value="substituicao_tributaria"
-                                checked={formData.tipo_tributacao === 'substituicao_tributaria'}
-                                onChange={() =>
-                                  setFormData((prev) => ({
-                                    ...prev,
-                                    tipo_tributacao: 'substituicao_tributaria',
-                                  }))
-                                }
-                                className="text-blue-600"
-                              />
-                              <span>Substituição Tributária (ST)</span>
-                            </label>
-                          </div>
-                        </div>
+                    {/* Custo Unitário Bruto */}
+                    <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                      <Label
+                        htmlFor="mp-custo"
+                        className="text-xs font-bold text-slate-900 flex items-center gap-1"
+                      >
+                        Custo Unitário Bruto (R$) *
+                      </Label>
+                      <Input
+                        id="mp-custo"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        placeholder="0,00"
+                        value={formData.custo_unitario}
+                        onChange={(e) => setField('custo_unitario', e.target.value)}
+                        className={`h-9 text-xs font-mono bg-white font-semibold mt-1 ${errors.custo_unitario ? 'border-red-500' : ''}`}
+                      />
+                      {errors.custo_unitario && (
+                        <p className="text-[10px] text-red-600 font-medium mt-0.5">
+                          {errors.custo_unitario}
+                        </p>
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="mp-custo"
-                          className="text-xs font-bold text-slate-900 flex items-center gap-1"
-                        >
-                          Custo Unit. Bruto (R$) *
-                        </Label>
-                        <Input
-                          id="mp-custo"
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.01"
-                          placeholder="0,00"
-                          value={formData.custo_unitario}
-                          onChange={(e) => setField('custo_unitario', e.target.value)}
-                          className={`h-9 text-xs font-mono bg-white font-semibold ${errors.custo_unitario ? 'border-red-500' : ''}`}
-                        />
-                        {errors.custo_unitario && (
-                          <p className="text-[10px] text-red-600 font-medium">
-                            {errors.custo_unitario}
-                          </p>
+                    {/* Bloco de Deduções: ICMS, PIS, COFINS */}
+                    <div className="p-2.5 bg-white rounded-lg border border-blue-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-blue-900 flex items-center gap-1">
+                          1. Créditos Tributários (Deduções −)
+                        </span>
+                        <span className="text-[10px] text-slate-500">Subtraem do custo</span>
+                      </div>
+
+                      {/* Toggle / Regime Especial: Isenta ou Substituição Tributária (ST) */}
+                      <div className="p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label
+                              htmlFor="toggle-isenta-st"
+                              className="text-[11px] font-bold text-slate-800 cursor-pointer block"
+                            >
+                              Matéria-Prima Isenta ou Substituição Tributária (ST)
+                            </Label>
+                            <p className="text-[10px] text-slate-500">
+                              Se marcada, zera os créditos de ICMS/PIS/COFINS.
+                            </p>
+                          </div>
+                          <input
+                            id="toggle-isenta-st"
+                            type="checkbox"
+                            checked={formData.isenta_st}
+                            onChange={(e) => {
+                              const checked = e.target.checked
+                              setFormData((prev) => ({
+                                ...prev,
+                                isenta_st: checked,
+                                tipo_tributacao: checked
+                                  ? prev.tipo_tributacao === 'tributada'
+                                    ? 'isenta'
+                                    : prev.tipo_tributacao
+                                  : 'tributada',
+                                icms_percentual: checked ? '0' : prev.icms_percentual,
+                                pis_percentual: checked ? '0' : prev.pis_percentual,
+                                cofins_percentual: checked ? '0' : prev.cofins_percentual,
+                              }))
+                            }}
+                            className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer"
+                          />
+                        </div>
+
+                        {formData.isenta_st && (
+                          <div className="pt-1.5 border-t border-slate-200 flex items-center gap-3">
+                            <Label className="text-[10px] font-semibold text-slate-700">
+                              Enquadramento:
+                            </Label>
+                            <div className="flex items-center gap-3 text-[11px]">
+                              <label className="inline-flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="tipo_tributacao_radio"
+                                  value="isenta"
+                                  checked={formData.tipo_tributacao === 'isenta'}
+                                  onChange={() =>
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      tipo_tributacao: 'isenta',
+                                    }))
+                                  }
+                                  className="text-blue-600"
+                                />
+                                <span>Isenta / Não Trib.</span>
+                              </label>
+                              <label className="inline-flex items-center gap-1 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name="tipo_tributacao_radio"
+                                  value="substituicao_tributaria"
+                                  checked={formData.tipo_tributacao === 'substituicao_tributaria'}
+                                  onChange={() =>
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      tipo_tributacao: 'substituicao_tributaria',
+                                    }))
+                                  }
+                                  className="text-blue-600"
+                                />
+                                <span>Subst. Tributária (ST)</span>
+                              </label>
+                            </div>
+                          </div>
                         )}
                       </div>
 
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="mp-icms"
-                          className="text-xs font-semibold text-blue-900 flex items-center gap-1"
-                        >
-                          ICMS (%) {formData.isenta_st && '(Zerado)'}
-                        </Label>
-                        <Input
-                          id="mp-icms"
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="Ex: 18.00"
-                          disabled={formData.isenta_st}
-                          value={formData.isenta_st ? '0' : formData.icms_percentual}
-                          onChange={(e) => setField('icms_percentual', e.target.value)}
-                          className={`h-9 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.icms_percentual ? 'border-red-500' : ''}`}
-                        />
-                        {errors.icms_percentual && (
-                          <p className="text-[10px] text-red-600 font-medium">
-                            {errors.icms_percentual}
-                          </p>
-                        )}
-                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="mp-icms"
+                            className="text-[11px] font-semibold text-blue-900"
+                          >
+                            ICMS (%) {formData.isenta_st && '(Zerado)'}
+                          </Label>
+                          <Input
+                            id="mp-icms"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="Ex: 18.00"
+                            disabled={formData.isenta_st}
+                            value={formData.isenta_st ? '0' : formData.icms_percentual}
+                            onChange={(e) => setField('icms_percentual', e.target.value)}
+                            className={`h-8 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.icms_percentual ? 'border-red-500' : ''}`}
+                          />
+                          {errors.icms_percentual && (
+                            <p className="text-[10px] text-red-600 font-medium">
+                              {errors.icms_percentual}
+                            </p>
+                          )}
+                        </div>
 
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="mp-pis"
-                          className="text-xs font-semibold text-indigo-900 flex items-center gap-1"
-                        >
-                          PIS (%) {formData.isenta_st && '(Zerado)'}
-                        </Label>
-                        <Input
-                          id="mp-pis"
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="Ex: 1.65"
-                          disabled={formData.isenta_st}
-                          value={formData.isenta_st ? '0' : formData.pis_percentual}
-                          onChange={(e) => setField('pis_percentual', e.target.value)}
-                          className={`h-9 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.pis_percentual ? 'border-red-500' : ''}`}
-                        />
-                        {errors.pis_percentual && (
-                          <p className="text-[10px] text-red-600 font-medium">
-                            {errors.pis_percentual}
-                          </p>
-                        )}
-                      </div>
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="mp-pis"
+                            className="text-[11px] font-semibold text-indigo-900"
+                          >
+                            PIS (%) {formData.isenta_st && '(Zerado)'}
+                          </Label>
+                          <Input
+                            id="mp-pis"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="Ex: 1.65"
+                            disabled={formData.isenta_st}
+                            value={formData.isenta_st ? '0' : formData.pis_percentual}
+                            onChange={(e) => setField('pis_percentual', e.target.value)}
+                            className={`h-8 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.pis_percentual ? 'border-red-500' : ''}`}
+                          />
+                          {errors.pis_percentual && (
+                            <p className="text-[10px] text-red-600 font-medium">
+                              {errors.pis_percentual}
+                            </p>
+                          )}
+                        </div>
 
-                      <div className="space-y-1.5">
-                        <Label
-                          htmlFor="mp-cofins"
-                          className="text-xs font-semibold text-purple-900 flex items-center gap-1"
-                        >
-                          COFINS (%) {formData.isenta_st && '(Zerado)'}
-                        </Label>
-                        <Input
-                          id="mp-cofins"
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          placeholder="Ex: 7.60"
-                          disabled={formData.isenta_st}
-                          value={formData.isenta_st ? '0' : formData.cofins_percentual}
-                          onChange={(e) => setField('cofins_percentual', e.target.value)}
-                          className={`h-9 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.cofins_percentual ? 'border-red-500' : ''}`}
-                        />
-                        {errors.cofins_percentual && (
-                          <p className="text-[10px] text-red-600 font-medium">
-                            {errors.cofins_percentual}
-                          </p>
-                        )}
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="mp-cofins"
+                            className="text-[11px] font-semibold text-purple-900"
+                          >
+                            COFINS (%) {formData.isenta_st && '(Zerado)'}
+                          </Label>
+                          <Input
+                            id="mp-cofins"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="Ex: 7.60"
+                            disabled={formData.isenta_st}
+                            value={formData.isenta_st ? '0' : formData.cofins_percentual}
+                            onChange={(e) => setField('cofins_percentual', e.target.value)}
+                            className={`h-8 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.cofins_percentual ? 'border-red-500' : ''}`}
+                          />
+                          {errors.cofins_percentual && (
+                            <p className="text-[10px] text-red-600 font-medium">
+                              {errors.cofins_percentual}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Demonstrativo em tempo real do cálculo dos tributos e do custo líquido */}
+                    {/* Bloco de Acréscimos: IPI, Frete, Perdas */}
+                    <div className="p-2.5 bg-white rounded-lg border border-amber-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-amber-900 flex items-center gap-1">
+                          2. Acréscimos Operacionais (IPI, Frete, Perdas +)
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          Somam ao custo líquido (base: Custo Bruto)
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="mp-ipi"
+                            className="text-[11px] font-semibold text-orange-900"
+                          >
+                            IPI (%)
+                          </Label>
+                          <Input
+                            id="mp-ipi"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="Ex: 5.00"
+                            value={formData.ipi_percentual}
+                            onChange={(e) => setField('ipi_percentual', e.target.value)}
+                            className={`h-8 text-xs font-mono bg-white ${errors.ipi_percentual ? 'border-red-500' : ''}`}
+                          />
+                          {errors.ipi_percentual && (
+                            <p className="text-[10px] text-red-600 font-medium">
+                              {errors.ipi_percentual}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="mp-frete"
+                            className="text-[11px] font-semibold text-cyan-900"
+                          >
+                            Frete (%)
+                          </Label>
+                          <Input
+                            id="mp-frete"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="Ex: 3.50"
+                            value={formData.frete_percentual}
+                            onChange={(e) => setField('frete_percentual', e.target.value)}
+                            className={`h-8 text-xs font-mono bg-white ${errors.frete_percentual ? 'border-red-500' : ''}`}
+                          />
+                          {errors.frete_percentual && (
+                            <p className="text-[10px] text-red-600 font-medium">
+                              {errors.frete_percentual}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="mp-perdas"
+                            className="text-[11px] font-semibold text-rose-900"
+                          >
+                            Perdas (%)
+                          </Label>
+                          <Input
+                            id="mp-perdas"
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            placeholder="Ex: 2.00"
+                            value={formData.perdas_percentual}
+                            onChange={(e) => setField('perdas_percentual', e.target.value)}
+                            className={`h-8 text-xs font-mono bg-white ${errors.perdas_percentual ? 'border-red-500' : ''}`}
+                          />
+                          {errors.perdas_percentual && (
+                            <p className="text-[10px] text-red-600 font-medium">
+                              {errors.perdas_percentual}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Demonstrativo em tempo real do cálculo dos tributos, acréscimos e custo líquido */}
                     <div className="p-3 bg-white rounded-lg border border-blue-200/80 space-y-2">
                       <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
                         <span className="flex items-center gap-1">
                           <Calculator className="w-3.5 h-3.5 text-blue-600" />
-                          Memória de Cálculo dos Tributos & Custo Líquido
+                          Memória de Cálculo Completa
                         </span>
                         <span className="text-[10px] font-semibold text-slate-500">
                           Base = {formatBrl(formCalculos.custoBruto)}
                         </span>
                       </div>
 
-                      {formData.isenta_st ? (
-                        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded text-xs text-slate-600 flex items-center gap-2">
-                          <Badge className="bg-slate-200 text-slate-800 text-[10px]">
-                            Isenta / ST
-                          </Badge>
-                          <span>
-                            Insumo não gera créditos de ICMS/PIS/COFINS. Custo líquido integral.
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1 border-t border-slate-100">
-                          <div className="p-2 bg-blue-50/50 rounded border border-blue-100">
-                            <div className="text-[10px] text-blue-700 font-semibold">
-                              ICMS ({formCalculos.icmsPercentual.toFixed(2)}%)
-                            </div>
-                            <div className="font-mono font-bold text-blue-900">
-                              {formatBrl(formCalculos.creditoIcms)}
-                            </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs pt-1 border-t border-slate-100">
+                        <div className="p-2 bg-blue-50/50 rounded border border-blue-100">
+                          <div className="text-[10px] text-blue-700 font-semibold">
+                            ICMS ({formCalculos.icmsPercentual.toFixed(2)}%)
                           </div>
-
-                          <div className="p-2 bg-indigo-50/50 rounded border border-indigo-100">
-                            <div className="text-[10px] text-indigo-700 font-semibold">
-                              PIS ({formCalculos.pisPercentual.toFixed(2)}%)
-                            </div>
-                            <div className="font-mono font-bold text-indigo-900">
-                              {formatBrl(formCalculos.creditoPis)}
-                            </div>
-                          </div>
-
-                          <div className="p-2 bg-purple-50/50 rounded border border-purple-100">
-                            <div className="text-[10px] text-purple-700 font-semibold">
-                              COFINS ({formCalculos.cofinsPercentual.toFixed(2)}%)
-                            </div>
-                            <div className="font-mono font-bold text-purple-900">
-                              {formatBrl(formCalculos.creditoCofins)}
-                            </div>
-                          </div>
-
-                          <div className="p-2 bg-amber-50/60 rounded border border-amber-200">
-                            <div className="text-[10px] text-amber-800 font-semibold">
-                              Total Créditos (-)
-                            </div>
-                            <div className="font-mono font-bold text-amber-900">
-                              - {formatBrl(formCalculos.totalCreditos)}
-                            </div>
+                          <div className="font-mono font-bold text-blue-900">
+                            -{formatBrl(formCalculos.creditoIcms)}
                           </div>
                         </div>
-                      )}
+
+                        <div className="p-2 bg-indigo-50/50 rounded border border-indigo-100">
+                          <div className="text-[10px] text-indigo-700 font-semibold">
+                            PIS ({formCalculos.pisPercentual.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-indigo-900">
+                            -{formatBrl(formCalculos.creditoPis)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-purple-50/50 rounded border border-purple-100">
+                          <div className="text-[10px] text-purple-700 font-semibold">
+                            COFINS ({formCalculos.cofinsPercentual.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-purple-900">
+                            -{formatBrl(formCalculos.creditoCofins)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-orange-50/50 rounded border border-orange-100">
+                          <div className="text-[10px] text-orange-700 font-semibold">
+                            IPI ({formCalculos.ipiPercentual.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-orange-900">
+                            +{formatBrl(formCalculos.valorIpi)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-cyan-50/50 rounded border border-cyan-100">
+                          <div className="text-[10px] text-cyan-700 font-semibold">
+                            Frete ({formCalculos.fretePercentual.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-cyan-900">
+                            +{formatBrl(formCalculos.valorFrete)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-rose-50/50 rounded border border-rose-100">
+                          <div className="text-[10px] text-rose-700 font-semibold">
+                            Perdas ({formCalculos.perdasPercentual.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-rose-900">
+                            +{formatBrl(formCalculos.valorPerdas)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                        <div className="p-1.5 bg-blue-50/80 rounded border border-blue-200 text-blue-900 flex justify-between">
+                          <span>Total Deduções (Créditos):</span>
+                          <strong className="font-mono">
+                            -{formatBrl(formCalculos.totalCreditos)}
+                          </strong>
+                        </div>
+                        <div className="p-1.5 bg-amber-50/80 rounded border border-amber-200 text-amber-900 flex justify-between">
+                          <span>Total Acréscimos:</span>
+                          <strong className="font-mono">
+                            +{formatBrl(formCalculos.totalAcrescimos)}
+                          </strong>
+                        </div>
+                      </div>
 
                       <div className="p-2.5 bg-gradient-to-r from-emerald-500/10 via-emerald-50 to-teal-50 rounded-lg border border-emerald-300 flex items-center justify-between mt-2">
                         <div>
@@ -2115,15 +2490,11 @@ export default function CadastroMateriaPrima() {
                             Custo Unitário Líquido (Base para Ficha Técnica)
                           </div>
                           <div className="text-[10px] text-emerald-800">
-                            {formData.isenta_st ? (
-                              <span>Sem créditos tributários a deduzir</span>
-                            ) : (
-                              <span>
-                                {formatBrl(formCalculos.custoBruto)} −{' '}
-                                {formatBrl(formCalculos.totalCreditos)} (
-                                {formCalculos.percentualCreditoTotal.toFixed(2)}%)
-                              </span>
-                            )}
+                            <span>
+                              {formatBrl(formCalculos.custoBruto)} −{' '}
+                              {formatBrl(formCalculos.totalCreditos)} +{' '}
+                              {formatBrl(formCalculos.totalAcrescimos)}
+                            </span>
                           </div>
                         </div>
                         <div className="text-right">

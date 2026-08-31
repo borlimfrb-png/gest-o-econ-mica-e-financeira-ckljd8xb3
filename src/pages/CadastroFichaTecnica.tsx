@@ -519,6 +519,9 @@ export default function CadastroFichaTecnica() {
       const icms = isIsenta ? 0 : Number(mp?.icms_percentual || 0)
       const pis = isIsenta ? 0 : Number(mp?.pis_percentual || 0)
       const cofins = isIsenta ? 0 : Number(mp?.cofins_percentual || 0)
+      const ipi = Number(mp?.ipi_percentual || 0)
+      const frete = Number(mp?.frete_percentual || 0)
+      const perdas = Number(mp?.perdas_percentual || 0)
 
       const trib = calcularTributosMateriaPrima(
         unitBruto,
@@ -527,10 +530,14 @@ export default function CadastroFichaTecnica() {
         cofins,
         isIsenta,
         mp?.tipo_tributacao,
+        ipi,
+        frete,
+        perdas,
       )
 
       const subtotalLiquido = qtd * trib.custoLiquido
       const creditoItemTotal = qtd * trib.totalCreditos
+      const acrescimosItemTotal = qtd * trib.totalAcrescimos
 
       custoMPBruto += subtotalBruto
       custoMPLiquido += subtotalLiquido
@@ -548,10 +555,17 @@ export default function CadastroFichaTecnica() {
         icms_percentual: trib.icmsPercentual,
         pis_percentual: trib.pisPercentual,
         cofins_percentual: trib.cofinsPercentual,
+        ipi_percentual: trib.ipiPercentual,
+        frete_percentual: trib.fretePercentual,
+        perdas_percentual: trib.perdasPercentual,
         credito_icms: qtd * trib.creditoIcms,
         credito_pis: qtd * trib.creditoPis,
         credito_cofins: qtd * trib.creditoCofins,
         credito_total: creditoItemTotal,
+        valor_ipi: qtd * trib.valorIpi,
+        valor_frete: qtd * trib.valorFrete,
+        valor_perdas: qtd * trib.valorPerdas,
+        acrescimos_total: acrescimosItemTotal,
         isenta_st: trib.isIsentaOuST,
         tipo_tributacao: mp?.tipo_tributacao,
       })
@@ -1920,7 +1934,7 @@ export default function CadastroFichaTecnica() {
                         ? (margem / (100 - margem)) * 100
                         : 50
 
-                  // Cálculo dinâmico de créditos tributários se não estiverem gravados
+                  // Cálculo dinâmico de créditos tributários e acréscimos se não estiverem gravados
                   let totalCreditosInsumos = 0
                   let custoMPLiquidoCalc = 0
                   for (const it of itens) {
@@ -1938,6 +1952,9 @@ export default function CadastroFichaTecnica() {
                     const cofins = isIsenta
                       ? 0
                       : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+                    const ipi = Number(it.ipi_percentual ?? mp?.ipi_percentual ?? 0)
+                    const frete = Number(it.frete_percentual ?? mp?.frete_percentual ?? 0)
+                    const perdas = Number(it.perdas_percentual ?? mp?.perdas_percentual ?? 0)
                     const cBruto = Number(it.custo_unitario) || 0
                     const qtd = Number(it.quantidade) || 0
                     const trib = calcularTributosMateriaPrima(
@@ -1947,6 +1964,9 @@ export default function CadastroFichaTecnica() {
                       cofins,
                       isIsenta,
                       mp?.tipo_tributacao,
+                      ipi,
+                      frete,
+                      perdas,
                     )
                     totalCreditosInsumos += qtd * trib.totalCreditos
                     custoMPLiquidoCalc += qtd * trib.custoLiquido
@@ -2281,6 +2301,11 @@ export default function CadastroFichaTecnica() {
                               const cofins = isIsenta
                                 ? 0
                                 : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+                              const ipi = Number(it.ipi_percentual ?? mp?.ipi_percentual ?? 0)
+                              const frete = Number(it.frete_percentual ?? mp?.frete_percentual ?? 0)
+                              const perdas = Number(
+                                it.perdas_percentual ?? mp?.perdas_percentual ?? 0,
+                              )
                               const trib = calcularTributosMateriaPrima(
                                 Number(it.custo_unitario) || 0,
                                 icms,
@@ -2288,11 +2313,16 @@ export default function CadastroFichaTecnica() {
                                 cofins,
                                 isIsenta,
                                 mp?.tipo_tributacao,
+                                ipi,
+                                frete,
+                                perdas,
                               )
                               const subtotalLiquido =
                                 (Number(it.quantidade) || 0) * trib.custoLiquido
                               const creditoItemTotal =
                                 (Number(it.quantidade) || 0) * trib.totalCreditos
+                              const acrescimosItemTotal =
+                                (Number(it.quantidade) || 0) * trib.totalAcrescimos
 
                               return (
                                 <div
@@ -2309,8 +2339,15 @@ export default function CadastroFichaTecnica() {
                                           Isenta / ST
                                         </Badge>
                                       ) : (
-                                        <Badge className="text-[9px] px-1 py-0 bg-emerald-50 text-emerald-800 border-emerald-200">
-                                          Crédito -{formatBrl(creditoItemTotal)}
+                                        creditoItemTotal > 0 && (
+                                          <Badge className="text-[9px] px-1 py-0 bg-blue-50 text-blue-800 border-blue-200">
+                                            Crédito -{formatBrl(creditoItemTotal)}
+                                          </Badge>
+                                        )
+                                      )}
+                                      {acrescimosItemTotal > 0 && (
+                                        <Badge className="text-[9px] px-1 py-0 bg-amber-50 text-amber-800 border-amber-200">
+                                          Acréscimos +{formatBrl(acrescimosItemTotal)}
                                         </Badge>
                                       )}
                                     </div>
