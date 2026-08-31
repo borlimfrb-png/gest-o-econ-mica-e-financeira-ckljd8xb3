@@ -136,11 +136,11 @@ export const aiAgentService = {
         ano ? `- Ano Principal de Referência: ${ano}` : '',
         anoComparacao ? `- Ano de Comparação Selecionado: ${anoComparacao}` : '',
         mes ? `- Mês de Referência: ${mes}` : '',
-        `- Setor para Benchmark: Utilize os benchmarks do setor "${empresa.segmento || 'Geral'}" da sua memória de mercado brasileiro.`,
+        `- Precedência de Benchmarks: Consulte "benchmarks_empresas" (meta específica da empresa), depois "benchmarks_setoriais" (personalizado do setor "${empresa.segmento || 'Geral'}") e por fim a mediana padrão de mercado na sua memória.`,
         dadosContextoExtra
           ? `\n[DEMONSTRAÇÕES E INDICADORES CONSOLIDADOS]:\n${dadosContextoExtra}`
           : '',
-        `Consulte diretamente os registros de balancos, dre e demais coleções da empresa "${empresa.nome}" para fundamentar as respostas com números reais comparativos.]`,
+        `Consulte diretamente os registros de balancos, dre, benchmarks_empresas, benchmarks_setoriais e demais coleções da empresa "${empresa.nome}" para fundamentar as respostas com números reais comparativos.]`,
       ]
         .filter(Boolean)
         .join('\n')
@@ -203,7 +203,7 @@ export const aiAgentService = {
 
     let contextualizedMessage = message.trim()
     if (empresa) {
-      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}, Setor/Segmento: ${empresa.segmento || 'Geral'}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}]`
+      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}, Setor/Segmento: ${empresa.segmento || 'Geral'}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}. Precedência de benchmarks: benchmarks_empresas > benchmarks_setoriais > padrão mercado.]`
     }
 
     const res = await fetch(`${backendUrl}/backend/v1/agent-diagnostico/ask`, {

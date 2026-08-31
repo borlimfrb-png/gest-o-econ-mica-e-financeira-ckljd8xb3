@@ -153,6 +153,11 @@ export interface BenchmarkSetorValores {
   roic: number // %
   wacc: number // %
   spread: number // %
+
+  // Campos opcionais de apoio / Fleuriet
+  origemTipo?: 'empresa' | 'setor' | 'padrao'
+  empresaId?: string
+  empresaNome?: string
 }
 
 // Benchmarks Médios de Mercado por Setor
@@ -566,6 +571,63 @@ export function getBenchmarkParaSegmento(
   const map = customMap || BENCHMARKS_SETORIAIS
   if (!segmento) return map['Serviços'] || BENCHMARKS_SETORIAIS['Serviços']
   return map[segmento] || map['Outros'] || BENCHMARKS_SETORIAIS['Outros']
+}
+
+/**
+ * Resolve o benchmark com precedência:
+ * 1. Benchmark por Empresa (se existir)
+ * 2. Benchmark por Setor personalizado do usuário (se existir)
+ * 3. Padrão de Mercado para o setor (ou 'Outros')
+ */
+export function resolverBenchmarkComPrecedencia(
+  empresaId?: string | null,
+  segmento?: string | null,
+  empresaBenchmark?: Partial<BenchmarkSetorValores> | null,
+  setoresMap?: Record<string, BenchmarkSetorValores> | null,
+  empresaNome?: string,
+): {
+  benchmark: BenchmarkSetorValores
+  origem: 'empresa' | 'setor' | 'padrao'
+  origemLabel: string
+} {
+  const setorPadraoOuCustom = getBenchmarkParaSegmento(segmento, setoresMap)
+
+  // Se houver benchmark personalizado para esta empresa específica
+  if (empresaBenchmark && Object.keys(empresaBenchmark).length > 0) {
+    const combined: BenchmarkSetorValores = {
+      ...setorPadraoOuCustom,
+      ...empresaBenchmark,
+      setor: segmento || 'Geral',
+      descricao:
+        empresaBenchmark.descricao || `Meta personalizada para ${empresaNome || 'a empresa'}`,
+      origemTipo: 'empresa',
+      empresaId: empresaId || undefined,
+      empresaNome: empresaNome || undefined,
+    }
+    return {
+      benchmark: combined,
+      origem: 'empresa',
+      origemLabel: `Meta Específica da Empresa (${empresaNome || 'Individual'})`,
+    }
+  }
+
+  // Verifica se o setor foi customizado pelo usuário
+  const isSetorCustom =
+    setoresMap &&
+    segmento &&
+    setoresMap[segmento] &&
+    JSON.stringify(setoresMap[segmento]) !== JSON.stringify(BENCHMARKS_SETORIAIS[segmento])
+
+  return {
+    benchmark: {
+      ...setorPadraoOuCustom,
+      origemTipo: isSetorCustom ? 'setor' : 'padrao',
+    },
+    origem: isSetorCustom ? 'setor' : 'padrao',
+    origemLabel: isSetorCustom
+      ? `Benchmark Setorial Personalizado (${segmento || 'Geral'})`
+      : `Mediana Padrão de Mercado (${segmento || 'Geral'})`,
+  }
 }
 
 // Funções de normalização de 0 a 100

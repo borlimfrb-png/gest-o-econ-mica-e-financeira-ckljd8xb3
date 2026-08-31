@@ -39,10 +39,11 @@ import {
   type GrupoRadarItem,
   type IndicadoresConsolidadosEmpresa,
   type BenchmarkSetorValores,
+  resolverBenchmarkComPrecedencia,
 } from '@/lib/benchmarks'
 import { ModalEditarBenchmarks } from '@/components/ModalEditarBenchmarks'
 import { benchmarksService } from '@/services/benchmarksService'
-import type { BenchmarkSetorialRecord } from '@/types/finance'
+import type { BenchmarkSetorialRecord, BenchmarkEmpresaRecord } from '@/types/finance'
 import { Coins } from 'lucide-react'
 import { ModalPesosRelatorio } from '@/components/ModalPesosRelatorio'
 import { ModalPdfDashboardA4 } from '@/components/ModalPdfDashboardA4'
@@ -152,12 +153,28 @@ export default function PainelIndicadores() {
     ...BENCHMARKS_SETORIAIS,
   }))
 
-  // Carregar benchmarks do usuário do PocketBase
+  // Dicionário de benchmarks específicos por empresa cadastrados pelo usuário
+  const [empresaBenchmarksMap, setEmpresaBenchmarksMap] = useState<
+    Record<string, BenchmarkEmpresaRecord>
+  >({})
+
+  // Carregar benchmarks do usuário do PocketBase (setoriais e por empresa)
   const loadBenchmarks = async () => {
     try {
-      const records = await benchmarksService.getAll()
+      const [records, empRecords] = await Promise.all([
+        benchmarksService.getAll(),
+        benchmarksService.getAllEmpresas(),
+      ])
       const merged = benchmarksService.mergeBenchmarksMap(records)
       setBenchmarksMap(merged)
+
+      const empMap: Record<string, BenchmarkEmpresaRecord> = {}
+      for (const rec of empRecords) {
+        if (rec.empresa) {
+          empMap[rec.empresa] = rec
+        }
+      }
+      setEmpresaBenchmarksMap(empMap)
     } catch (err) {
       console.error('Erro ao buscar benchmarks:', err)
     }
@@ -168,6 +185,10 @@ export default function PainelIndicadores() {
   }, [])
 
   useRealtime<BenchmarkSetorialRecord>('benchmarks_setoriais', () => {
+    loadBenchmarks()
+  })
+
+  useRealtime<BenchmarkEmpresaRecord>('benchmarks_empresas', () => {
     loadBenchmarks()
   })
 
@@ -568,13 +589,36 @@ export default function PainelIndicadores() {
     [balancoBAtual, dreBAtual],
   )
 
-  // Benchmark ativo
-  const benchmarkAtivo = useMemo(() => {
-    if (!selectedSetorBenchmark) return null
-    return (
-      benchmarksMap[selectedSetorBenchmark] || BENCHMARKS_SETORIAIS[selectedSetorBenchmark] || null
+  // Benchmark ativo resolvido com a regra de precedência:
+  // Empresa individual > Setor personalizado > Padrão de mercado
+  const resolvedBenchmark = useMemo(() => {
+    const empresaBench = selectedEmpresaId ? empresaBenchmarksMap[selectedEmpresaId] : null
+    const segmentoAlvo = selectedSetorBenchmark || selectedEmpresa?.segmento || 'Serviços'
+
+    // Se o usuário selecionou manualmente um setor diferente do da empresa, respeitar o setor selecionado
+    const isExplicitSetorChange =
+      selectedSetorBenchmark &&
+      selectedEmpresa?.segmento &&
+      selectedSetorBenchmark !== selectedEmpresa.segmento
+
+    return resolverBenchmarkComPrecedencia(
+      selectedEmpresaId,
+      segmentoAlvo,
+      isExplicitSetorChange ? null : (empresaBench as any),
+      benchmarksMap,
+      selectedEmpresa?.nome,
     )
-  }, [selectedSetorBenchmark, benchmarksMap])
+  }, [
+    selectedEmpresaId,
+    selectedEmpresa,
+    selectedSetorBenchmark,
+    empresaBenchmarksMap,
+    benchmarksMap,
+  ])
+
+  const benchmarkAtivo = useMemo(() => {
+    return resolvedBenchmark.benchmark
+  }, [resolvedBenchmark])
 
   // Itens do Radar Chart Empresa Principal
   const radarItems = useMemo<GrupoRadarItem[]>(() => {
@@ -1840,17 +1884,33 @@ export default function PainelIndicadores() {
             </Button>
           </div>
 
-          {/* Botão Ajustar Benchmarks Setoriais */}
+          {/* Botão Ajustar Benchmarks Setoriais & Empresa */}
           <Button
             type="button"
             variant="outline"
             onClick={() => setModalBenchmarksOpen(true)}
-            className="border-blue-200 text-blue-800 bg-blue-50/50 hover:bg-blue-100/70 font-bold text-xs h-9 shadow-2xs gap-1.5"
+            className={`font-bold text-xs h-9 shadow-2xs gap-1.5 ${
+              resolvedBenchmark.origem === 'empresa'
+                ? 'border-indigo-300 text-indigo-900 bg-indigo-50/80 hover:bg-indigo-100/90'
+                : 'border-blue-200 text-blue-800 bg-blue-50/50 hover:bg-blue-100/70'
+            }`}
           >
-            <Scale className="w-3.5 h-3.5 text-blue-700" />
+            <Scale
+              className={`w-3.5 h-3.5 ${resolvedBenchmark.origem === 'empresa' ? 'text-indigo-700' : 'text-blue-700'}`}
+            />
             <span>Editar Benchmarks</span>
-            <Badge className="bg-blue-200 text-blue-900 border-none text-[9px] px-1 py-0 font-extrabold">
-              {selectedSetorBenchmark || 'Setorial'}
+            <Badge
+              className={`border-none text-[9px] px-1.5 py-0 font-extrabold ${
+                resolvedBenchmark.origem === 'empresa'
+                  ? 'bg-indigo-600 text-white'
+                  : resolvedBenchmark.origem === 'setor'
+                    ? 'bg-amber-100 text-amber-900'
+                    : 'bg-blue-200 text-blue-900'
+              }`}
+            >
+              {resolvedBenchmark.origem === 'empresa'
+                ? 'Meta Empresa'
+                : selectedSetorBenchmark || 'Setorial'}
             </Badge>
           </Button>
 
@@ -2124,7 +2184,7 @@ export default function PainelIndicadores() {
                   <Activity className="w-4 h-4" />
                 </div>
                 <CardTitle className="text-base font-bold text-[#0B1F3A]">
-                  Radar 360º: Empresa vs Benchmark ({selectedSetorBenchmark})
+                  Radar 360º: Empresa vs {resolvedBenchmark.origemLabel}
                 </CardTitle>
               </div>
               <CardDescription className="text-xs text-slate-500 mt-0.5">
@@ -2489,7 +2549,7 @@ export default function PainelIndicadores() {
                   <div className="lg:col-span-7 h-72 sm:h-80 w-full bg-slate-50/50 p-3 sm:p-4 rounded-xl border border-slate-200">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-bold text-slate-800">
-                        Comparativo: Empresa vs Benchmark Setorial ({selectedSetorBenchmark})
+                        Comparativo: Empresa vs {resolvedBenchmark.origemLabel}
                       </span>
                       <span className="text-[10px] text-slate-500">Escala em Múltiplos (x)</span>
                     </div>
@@ -4353,16 +4413,47 @@ export default function PainelIndicadores() {
         onSalvar={handleSalvarPesos}
       />
 
-      {/* Modal de Edição de Benchmarks Setoriais */}
+      {/* Modal de Edição de Benchmarks Setoriais e por Empresa com CSV */}
       <ModalEditarBenchmarks
         open={modalBenchmarksOpen}
         onOpenChange={setModalBenchmarksOpen}
         setorInicial={selectedSetorBenchmark || selectedEmpresa?.segmento || 'Serviços'}
         benchmarksMap={benchmarksMap}
-        onSaved={(setor, novosValores) => {
+        empresas={empresas}
+        empresaSelecionadaInicial={selectedEmpresa}
+        empresaBenchmarksMap={empresaBenchmarksMap}
+        onSavedSetor={(setor, novosValores) => {
           setBenchmarksMap((prev) => ({
             ...prev,
             [setor]: novosValores,
+          }))
+        }}
+        onSavedEmpresa={(empresaId, novosValores) => {
+          setEmpresaBenchmarksMap((prev) => ({
+            ...prev,
+            [empresaId]: {
+              id: prev[empresaId]?.id || `bench-emp-${empresaId}`,
+              collectionId: '',
+              collectionName: 'benchmarks_empresas',
+              created: '',
+              updated: '',
+              user: '',
+              empresa: empresaId,
+              ...novosValores,
+            } as any,
+          }))
+        }}
+        onDeletedEmpresaBenchmark={(empresaId) => {
+          setEmpresaBenchmarksMap((prev) => {
+            const copy = { ...prev }
+            delete copy[empresaId]
+            return copy
+          })
+        }}
+        onImportCsvSuccess={(dadosAtualizados) => {
+          setBenchmarksMap((prev) => ({
+            ...prev,
+            ...dadosAtualizados,
           }))
         }}
       />

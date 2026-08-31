@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -23,19 +23,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BENCHMARKS_SETORIAIS, type BenchmarkSetorValores } from '@/lib/benchmarks'
 import { benchmarksService } from '@/services/benchmarksService'
 import { useToast } from '@/hooks/use-toast'
+import type { EmpresaRecord, BenchmarkEmpresaRecord } from '@/types/finance'
 import {
   Scale,
   RotateCcw,
   Save,
   CheckCircle2,
-  Activity,
-  TrendingDown,
-  TrendingUp,
   Building2,
-  Sparkles,
-  Clock,
+  FileSpreadsheet,
+  Upload,
+  Download,
+  Trash2,
   HelpCircle,
   AlertCircle,
+  Layers,
 } from 'lucide-react'
 
 interface ModalEditarBenchmarksProps {
@@ -43,7 +44,13 @@ interface ModalEditarBenchmarksProps {
   onOpenChange: (open: boolean) => void
   setorInicial?: string
   benchmarksMap: Record<string, BenchmarkSetorValores>
-  onSaved?: (setor: string, novosValores: BenchmarkSetorValores) => void
+  empresas?: EmpresaRecord[]
+  empresaSelecionadaInicial?: EmpresaRecord | null
+  empresaBenchmarksMap?: Record<string, BenchmarkEmpresaRecord>
+  onSavedSetor?: (setor: string, novosValores: BenchmarkSetorValores) => void
+  onSavedEmpresa?: (empresaId: string, novosValores: BenchmarkSetorValores) => void
+  onDeletedEmpresaBenchmark?: (empresaId: string) => void
+  onImportCsvSuccess?: (dadosAtualizados: Record<string, BenchmarkSetorValores>) => void
 }
 
 export function ModalEditarBenchmarks({
@@ -51,34 +58,136 @@ export function ModalEditarBenchmarks({
   onOpenChange,
   setorInicial = 'Serviços',
   benchmarksMap,
-  onSaved,
+  empresas = [],
+  empresaSelecionadaInicial = null,
+  empresaBenchmarksMap = {},
+  onSavedSetor,
+  onSavedEmpresa,
+  onDeletedEmpresaBenchmark,
+  onImportCsvSuccess,
 }: ModalEditarBenchmarksProps) {
   const { toast } = useToast()
+
+  // Modo: 'setor' (por setor) ou 'empresa' (por empresa individual)
+  const [modo, setModo] = useState<'setor' | 'empresa'>('setor')
+
+  // Estado do Setor
   const [selectedSetor, setSelectedSetor] = useState<string>(setorInicial)
+
+  // Estado da Empresa
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>(
+    empresaSelecionadaInicial?.id || (empresas.length > 0 ? empresas[0].id : ''),
+  )
+
+  // Dados do Formulário
   const [formData, setFormData] = useState<BenchmarkSetorValores>(
     () => benchmarksMap[setorInicial] || BENCHMARKS_SETORIAIS['Serviços'],
   )
+
   const [saving, setSaving] = useState<boolean>(false)
   const [activeTab, setActiveTab] = useState<string>('liquidez')
 
-  // Atualizar o formulário quando o setor selecionado mudar
+  // CSV Import State
+  const [importandoCsv, setImportandoCsv] = useState<boolean>(false)
+  const [csvErros, setCsvErros] = useState<string[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Encontrar empresa ativa selecionada
+  const empresaAtiva = empresas.find((e) => e.id === selectedEmpresaId) || null
+
+  // Sincronizar dados do formulário quando mudar modo, setor ou empresa
   useEffect(() => {
-    if (open) {
+    if (!open) return
+
+    if (modo === 'setor') {
       const targetSetor = selectedSetor || setorInicial || 'Serviços'
       const base =
         benchmarksMap[targetSetor] ||
         BENCHMARKS_SETORIAIS[targetSetor] ||
         BENCHMARKS_SETORIAIS['Outros']
       setFormData({ ...base })
-    }
-  }, [selectedSetor, open, benchmarksMap])
+    } else {
+      // Modo Empresa
+      if (selectedEmpresaId && empresaBenchmarksMap[selectedEmpresaId]) {
+        const empBench = empresaBenchmarksMap[selectedEmpresaId]
+        const setorBase =
+          (empresaAtiva?.segmento && benchmarksMap[empresaAtiva.segmento]) ||
+          BENCHMARKS_SETORIAIS['Outros']
 
-  // Quando abre com um setorInicial específico
-  useEffect(() => {
-    if (open && setorInicial) {
-      setSelectedSetor(setorInicial)
+        setFormData({
+          ...setorBase,
+          setor: empresaAtiva?.segmento || 'Geral',
+          descricao:
+            empBench.descricao || `Metas personalizadas para ${empresaAtiva?.nome || 'empresa'}`,
+          liquidezCorrente: empBench.liquidezCorrente ?? setorBase.liquidezCorrente,
+          liquidezSeca: empBench.liquidezSeca ?? setorBase.liquidezSeca,
+          liquidezImediata: empBench.liquidezImediata ?? setorBase.liquidezImediata,
+          liquidezGeral: empBench.liquidezGeral ?? setorBase.liquidezGeral,
+          endividamentoGeral: empBench.endividamentoGeral ?? setorBase.endividamentoGeral,
+          composicaoEndividamento:
+            empBench.composicaoEndividamento ?? setorBase.composicaoEndividamento,
+          participacaoCapitalTerceiros:
+            empBench.participacaoCapitalTerceiros ?? setorBase.participacaoCapitalTerceiros,
+          imobilizacaoPL: empBench.imobilizacaoPL ?? setorBase.imobilizacaoPL,
+          margemBruta: empBench.margemBruta ?? setorBase.margemBruta,
+          margemOperacional: empBench.margemOperacional ?? setorBase.margemOperacional,
+          margemLiquida: empBench.margemLiquida ?? setorBase.margemLiquida,
+          roa: empBench.roa ?? setorBase.roa,
+          roe: empBench.roe ?? setorBase.roe,
+          giroAtivo: empBench.giroAtivo ?? setorBase.giroAtivo,
+          autonomiaFinanceira: empBench.autonomiaFinanceira ?? setorBase.autonomiaFinanceira,
+          dependenciaFinanceira: empBench.dependenciaFinanceira ?? setorBase.dependenciaFinanceira,
+          dividaEquity: empBench.dividaEquity ?? setorBase.dividaEquity,
+          margemEbitda: empBench.margemEbitda ?? setorBase.margemEbitda,
+          coberturaJuros: empBench.coberturaJuros ?? setorBase.coberturaJuros,
+          pme: empBench.pme ?? setorBase.pme,
+          pmr: empBench.pmr ?? setorBase.pmr,
+          pmp: empBench.pmp ?? setorBase.pmp,
+          cicloOperacional: empBench.cicloOperacional ?? setorBase.cicloOperacional,
+          cicloFinanceiro: empBench.cicloFinanceiro ?? setorBase.cicloFinanceiro,
+          giroEstoque: empBench.giroEstoque ?? setorBase.giroEstoque,
+          giroReceber: empBench.giroReceber ?? setorBase.giroReceber,
+          giroFornecedores: empBench.giroFornecedores ?? setorBase.giroFornecedores,
+          roic: empBench.roic ?? setorBase.roic,
+          wacc: empBench.wacc ?? setorBase.wacc,
+          spread: empBench.spread ?? setorBase.spread,
+        })
+      } else {
+        // Sem benchmark por empresa cadastrado ainda: carregar padrão do setor da empresa
+        const setorDaEmpresa = empresaAtiva?.segmento || 'Serviços'
+        const base =
+          benchmarksMap[setorDaEmpresa] ||
+          BENCHMARKS_SETORIAIS[setorDaEmpresa] ||
+          BENCHMARKS_SETORIAIS['Outros']
+        setFormData({
+          ...base,
+          descricao: `Metas específicas para ${empresaAtiva?.nome || 'a empresa'}`,
+        })
+      }
     }
-  }, [open, setorInicial])
+  }, [
+    modo,
+    selectedSetor,
+    selectedEmpresaId,
+    open,
+    benchmarksMap,
+    empresaBenchmarksMap,
+    empresaAtiva,
+    setorInicial,
+  ])
+
+  // Inicializar quando o modal abre
+  useEffect(() => {
+    if (open) {
+      if (empresaSelecionadaInicial?.id) {
+        setSelectedEmpresaId(empresaSelecionadaInicial.id)
+      }
+      if (setorInicial) {
+        setSelectedSetor(setorInicial)
+      }
+      setCsvErros([])
+    }
+  }, [open, empresaSelecionadaInicial, setorInicial])
 
   const handleChange = (field: keyof BenchmarkSetorValores, value: string | number) => {
     setFormData((prev) => ({
@@ -95,14 +204,18 @@ export function ModalEditarBenchmarks({
   }
 
   // Verificar se o setor atual diverge do padrão original de fábrica
-  const isCustomizado = () => {
+  const isCustomizadoSetor = () => {
     const padrao = BENCHMARKS_SETORIAIS[selectedSetor]
     if (!padrao) return false
     return JSON.stringify(formData) !== JSON.stringify(padrao)
   }
 
+  const hasEmpresaCustomizada = Boolean(
+    selectedEmpresaId && empresaBenchmarksMap[selectedEmpresaId],
+  )
+
   // Restaurar padrão de fábrica do setor selecionado
-  const handleRestaurarPadrao = async () => {
+  const handleRestaurarPadraoSetor = async () => {
     const padrao = BENCHMARKS_SETORIAIS[selectedSetor] || BENCHMARKS_SETORIAIS['Outros']
     if (!padrao) return
 
@@ -110,7 +223,7 @@ export function ModalEditarBenchmarks({
     try {
       setSaving(true)
       await benchmarksService.restorePadrao(selectedSetor)
-      if (onSaved) onSaved(selectedSetor, padrao)
+      if (onSavedSetor) onSavedSetor(selectedSetor, padrao)
       toast({
         title: 'Valores Padrão Restaurados',
         description: `O setor ${selectedSetor} foi restaurado para os parâmetros de referência originais.`,
@@ -127,29 +240,91 @@ export function ModalEditarBenchmarks({
     }
   }
 
-  // Salvar alterações do setor
+  // Excluir meta personalizada da empresa e voltar a herdar do setor
+  const handleRemoverMetaEmpresa = async () => {
+    if (!selectedEmpresaId) return
+    try {
+      setSaving(true)
+      await benchmarksService.deleteEmpresa(selectedEmpresaId)
+      if (onDeletedEmpresaBenchmark) {
+        onDeletedEmpresaBenchmark(selectedEmpresaId)
+      }
+      // Carregar os valores do setor correspondente
+      const setorEmpresa = empresaAtiva?.segmento || 'Serviços'
+      const baseSetor =
+        benchmarksMap[setorEmpresa] ||
+        BENCHMARKS_SETORIAIS[setorEmpresa] ||
+        BENCHMARKS_SETORIAIS['Outros']
+      setFormData({ ...baseSetor })
+
+      toast({
+        title: 'Meta da Empresa Removida',
+        description: `A empresa "${empresaAtiva?.nome}" voltou a herdar os benchmarks do setor ${setorEmpresa}.`,
+      })
+    } catch (err) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao remover meta',
+        description: 'Não foi possível remover o benchmark específico da empresa.',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Salvar alterações
   const handleSalvar = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     try {
       setSaving(true)
-      // Calcular spread automático se usuário preencheu ROIC e WACC
       const roicVal = formData.roic ?? 0
       const waccVal = formData.wacc ?? 12
       const spreadCalc = Number((roicVal - waccVal).toFixed(2))
 
-      const dadosParaSalvar: BenchmarkSetorValores = {
-        ...formData,
-        setor: selectedSetor,
-        spread: spreadCalc,
+      if (modo === 'setor') {
+        const dadosParaSalvar: BenchmarkSetorValores = {
+          ...formData,
+          setor: selectedSetor,
+          spread: spreadCalc,
+        }
+
+        await benchmarksService.saveSetor(selectedSetor, dadosParaSalvar)
+        if (onSavedSetor) onSavedSetor(selectedSetor, dadosParaSalvar)
+
+        toast({
+          title: 'Benchmark Setorial Atualizado!',
+          description: `Os parâmetros para o setor "${selectedSetor}" foram salvos com sucesso.`,
+        })
+      } else {
+        // Modo Empresa
+        if (!selectedEmpresaId) {
+          toast({
+            variant: 'destructive',
+            title: 'Selecione uma empresa',
+            description: 'Escolha a empresa para vincular as metas.',
+          })
+          return
+        }
+
+        const dadosParaSalvar: BenchmarkSetorValores = {
+          ...formData,
+          setor: empresaAtiva?.segmento || 'Geral',
+          spread: spreadCalc,
+          empresaId: selectedEmpresaId,
+          empresaNome: empresaAtiva?.nome,
+          origemTipo: 'empresa',
+        }
+
+        await benchmarksService.saveEmpresa(selectedEmpresaId, dadosParaSalvar)
+        if (onSavedEmpresa) onSavedEmpresa(selectedEmpresaId, dadosParaSalvar)
+
+        toast({
+          title: 'Metas da Empresa Salvas!',
+          description: `As metas e benchmarks específicos para "${empresaAtiva?.nome}" foram salvas e têm prioridade máxima nos cálculos.`,
+        })
       }
 
-      await benchmarksService.saveSetor(selectedSetor, dadosParaSalvar)
-      if (onSaved) onSaved(selectedSetor, dadosParaSalvar)
-
-      toast({
-        title: 'Benchmark Atualizado!',
-        description: `Os parâmetros de referência para o setor ${selectedSetor} foram salvos com sucesso.`,
-      })
       onOpenChange(false)
     } catch (err) {
       console.error('Erro ao salvar benchmark:', err)
@@ -163,10 +338,106 @@ export function ModalEditarBenchmarks({
     }
   }
 
+  // ==========================================
+  // EXPORTAÇÃO CSV
+  // ==========================================
+  const handleExportarCsv = () => {
+    try {
+      const csvData = benchmarksService.exportToCsv(benchmarksMap)
+      const dataHora = new Date().toISOString().slice(0, 10)
+      benchmarksService.downloadCsv(csvData, `benchmarks_setoriais_${dataHora}.csv`)
+      toast({
+        title: 'CSV Exportado com Sucesso!',
+        description:
+          'A tabela completa com todos os 10 setores e indicadores foi baixada em formato CSV.',
+      })
+    } catch (err) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Falha na Exportação',
+        description: 'Não foi possível gerar o arquivo CSV.',
+      })
+    }
+  }
+
+  // ==========================================
+  // IMPORTAÇÃO CSV
+  // ==========================================
+  const handleTriggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+      fileInputRef.current.click()
+    }
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.name.endsWith('.csv') && !file.type.includes('csv') && !file.type.includes('text')) {
+      toast({
+        variant: 'destructive',
+        title: 'Formato inválido',
+        description: 'Por favor, selecione um arquivo válido com extensão .csv.',
+      })
+      return
+    }
+
+    try {
+      setImportandoCsv(true)
+      setCsvErros([])
+      const text = await file.text()
+      const parseResult = benchmarksService.parseAndValidateCsv(text)
+
+      if (!parseResult.success || parseResult.totalSetores === 0) {
+        setCsvErros(parseResult.errors)
+        toast({
+          variant: 'destructive',
+          title: 'Erro na Validação do CSV',
+          description:
+            parseResult.errors[0] ||
+            'O arquivo CSV não pôde ser lido corretamente. Verifique o layout.',
+        })
+        return
+      }
+
+      // Persistir dados importados no PocketBase
+      const totalSalvos = await benchmarksService.saveImportedCsvData(parseResult.data)
+
+      if (onImportCsvSuccess) {
+        onImportCsvSuccess(parseResult.data)
+      }
+
+      // Se o setor ativo estava nos importados, atualizar form
+      if (parseResult.data[selectedSetor]) {
+        setFormData({ ...parseResult.data[selectedSetor] })
+      }
+
+      toast({
+        title: 'CSV Importado com Sucesso! 🎉',
+        description: `${totalSalvos} setores foram atualizados no banco de dados e sincronizados.`,
+      })
+
+      if (parseResult.errors.length > 0) {
+        setCsvErros(parseResult.errors)
+      }
+    } catch (err: any) {
+      console.error('Erro na importação do CSV:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Falha na Importação',
+        description: err?.message || 'Ocorreu um erro ao processar o arquivo CSV.',
+      })
+    } finally {
+      setImportandoCsv(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-0 gap-0 rounded-2xl border-slate-200">
-        <DialogHeader className="p-5 pb-4 border-b border-slate-100 bg-slate-50/70">
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0 gap-0 rounded-2xl border-slate-200">
+        <DialogHeader className="p-5 pb-4 border-b border-slate-100 bg-slate-50/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shadow-xs">
@@ -174,77 +445,238 @@ export function ModalEditarBenchmarks({
               </div>
               <div>
                 <DialogTitle className="text-base font-extrabold text-[#0B1F3A] flex items-center gap-2">
-                  Ajustar Benchmarks Setoriais de Mercado
-                  <Badge className="bg-blue-100 text-blue-800 border-none text-[10px]">
-                    Por Usuário
+                  Metas & Benchmarks Personalizados
+                  <Badge className="bg-blue-100 text-blue-800 border-none text-[10px] font-bold">
+                    Empresa & Setor
                   </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                  Edite manualmente as metas e referências de cada setor para calibrar os gráficos,
-                  radar e diagnósticos.
+                  Precedência: <strong>Empresa Individual</strong> &gt;{' '}
+                  <strong>Setor Personalizado</strong> &gt; <strong>Padrão de Mercado</strong>.
                 </DialogDescription>
               </div>
             </div>
 
-            {/* Seletor de Setor no Header do Modal */}
-            <div className="flex items-center gap-2">
-              <Label className="text-xs font-bold text-slate-700 whitespace-nowrap">
-                Setor Alvo:
-              </Label>
-              <Select value={selectedSetor} onValueChange={(val) => setSelectedSetor(val)}>
-                <SelectTrigger className="h-8 text-xs font-bold bg-white border-slate-300 w-[160px] text-blue-950">
-                  <SelectValue placeholder="Selecione o setor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.keys(BENCHMARKS_SETORIAIS).map((s) => (
-                    <SelectItem key={s} value={s} className="text-xs font-medium">
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {/* Ações Rápidas: Exportar / Importar CSV */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv,text/plain"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleExportarCsv}
+                className="h-8 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 gap-1.5 shadow-2xs"
+                title="Baixar tabela de benchmarks setoriais em CSV"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
+                <span className="hidden sm:inline">Exportar</span> CSV
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTriggerFileInput}
+                disabled={importandoCsv}
+                className="h-8 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-100 gap-1.5 shadow-2xs"
+                title="Carregar arquivo CSV com benchmarks"
+              >
+                {importandoCsv ? (
+                  <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Upload className="w-3.5 h-3.5 text-emerald-600" />
+                )}
+                <span className="hidden sm:inline">Importar</span> CSV
+              </Button>
             </div>
           </div>
         </DialogHeader>
 
         <div className="p-5 space-y-4">
-          {/* Informações do Setor Ativo */}
-          <div className="bg-blue-50/50 border border-blue-200/80 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-blue-950">
-                  Parâmetros de Referência para:{' '}
-                  <span className="text-blue-700 underline">{selectedSetor}</span>
-                </span>
-                {isCustomizado() ? (
-                  <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
-                    Personalizado
-                  </Badge>
-                ) : (
-                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold">
-                    Padrão de Mercado
-                  </Badge>
+          {/* Seletor de Modo: Por Setor ou Por Empresa */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-100/90 p-2 rounded-xl border border-slate-200">
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={modo === 'setor' ? 'default' : 'ghost'}
+                onClick={() => setModo('setor')}
+                className={`h-8 text-xs font-bold gap-1.5 transition-all ${
+                  modo === 'setor'
+                    ? 'bg-blue-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                1. Benchmark por Setor
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={modo === 'empresa' ? 'default' : 'ghost'}
+                onClick={() => setModo('empresa')}
+                className={`h-8 text-xs font-bold gap-1.5 transition-all ${
+                  modo === 'empresa'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                2. Meta Específica por Empresa
+                {empresas.length > 0 && (
+                  <span className="bg-indigo-100 text-indigo-900 text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                    {Object.keys(empresaBenchmarksMap).length}
+                  </span>
                 )}
-              </div>
-              <p className="text-[11px] text-slate-600 mt-1 max-w-xl">
-                {formData.descricao || 'Defina as métricas ideais e medianas para o segmento.'}
-              </p>
+              </Button>
             </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRestaurarPadrao}
-              disabled={saving}
-              className="h-8 text-xs border-slate-300 text-slate-700 hover:bg-slate-100 shrink-0 gap-1.5 shadow-2xs font-semibold"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-              Restaurar Padrão
-            </Button>
+            {/* Seletores Dinâmicos conforme o Modo */}
+            {modo === 'setor' ? (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-bold text-slate-700 whitespace-nowrap">Setor:</Label>
+                <Select value={selectedSetor} onValueChange={(val) => setSelectedSetor(val)}>
+                  <SelectTrigger className="h-8 text-xs font-bold bg-white border-slate-300 w-[170px] text-blue-950">
+                    <SelectValue placeholder="Selecione o setor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(BENCHMARKS_SETORIAIS).map((s) => (
+                      <SelectItem key={s} value={s} className="text-xs font-medium">
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs font-bold text-slate-700 whitespace-nowrap">
+                  Empresa:
+                </Label>
+                <Select
+                  value={selectedEmpresaId}
+                  onValueChange={(val) => setSelectedEmpresaId(val)}
+                  disabled={empresas.length === 0}
+                >
+                  <SelectTrigger className="h-8 text-xs font-bold bg-white border-slate-300 w-[200px] text-indigo-950">
+                    <SelectValue placeholder="Escolha a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id} className="text-xs font-medium">
+                        {emp.nome} ({emp.segmento || 'Geral'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
-          {/* Abas por Grupo de Indicadores */}
+          {/* Banner Informativo do Alvo Ativo */}
+          {modo === 'setor' ? (
+            <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-blue-950">
+                    Setor em Edição:{' '}
+                    <span className="text-blue-700 underline">{selectedSetor}</span>
+                  </span>
+                  {isCustomizadoSetor() ? (
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-300 text-[10px] font-bold">
+                      Personalizado pelo Usuário
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold">
+                      Padrão de Mercado
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1 max-w-xl">
+                  {formData.descricao ||
+                    'Define a mediana de mercado aplicada às empresas deste segmento.'}
+                </p>
+              </div>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRestaurarPadraoSetor}
+                disabled={saving}
+                className="h-8 text-xs border-slate-300 text-slate-700 hover:bg-slate-100 shrink-0 gap-1.5 shadow-2xs font-semibold"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                Restaurar Padrão
+              </Button>
+            </div>
+          ) : (
+            <div className="bg-indigo-50/70 border border-indigo-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-indigo-950">
+                    Metas para:{' '}
+                    <span className="text-indigo-700 underline">
+                      {empresaAtiva?.nome || 'Selecione uma empresa'}
+                    </span>
+                  </span>
+                  {hasEmpresaCustomizada ? (
+                    <Badge className="bg-indigo-100 text-indigo-900 border-indigo-300 text-[10px] font-bold">
+                      Meta Individual Ativa (Prioridade Máxima)
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-slate-100 text-slate-700 border-slate-300 text-[10px] font-medium">
+                      Herdando do Setor ({empresaAtiva?.segmento || 'Geral'})
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1 max-w-xl">
+                  Ao salvar metas nesta tela, elas prevalecerão sobre qualquer benchmark setorial
+                  nos diagnósticos e no radar desta empresa específica.
+                </p>
+              </div>
+
+              {hasEmpresaCustomizada && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRemoverMetaEmpresa}
+                  disabled={saving}
+                  className="h-8 text-xs border-rose-300 text-rose-700 hover:bg-rose-50 shrink-0 gap-1.5 shadow-2xs font-semibold"
+                  title="Remover meta individual e voltar a herdar do setor"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                  Voltar ao Setor
+                </Button>
+              )}
+            </div>
+          )}
+
+          {/* Alertas / Erros do CSV se houver */}
+          {csvErros.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                Avisos da Importação CSV:
+              </div>
+              <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-amber-800">
+                {csvErros.slice(0, 4).map((err, i) => (
+                  <li key={i}>{err}</li>
+                ))}
+                {csvErros.length > 4 && (
+                  <li>... e mais {csvErros.length - 4} observações no arquivo.</li>
+                )}
+              </ul>
+            </div>
+          )}
+
+          {/* Abas por Grupo de Indicadores (7 abas) */}
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 h-auto p-1 bg-slate-100/80 rounded-xl gap-1">
               <TabsTrigger
@@ -330,7 +762,7 @@ export function ModalEditarBenchmarks({
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Liquidez sem depender da venda imediata de estoques (ex: 1,00x).
+                    Liquidez sem depender da venda de estoques (ex: 1,00x).
                   </p>
                 </div>
 
@@ -350,7 +782,7 @@ export function ModalEditarBenchmarks({
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Disponibilidades imediatas frente às dívidas imediatas (ex: 0,25x).
+                    Disponibilidades imediatas frente às dívidas de curto prazo (ex: 0,25x).
                   </p>
                 </div>
 
@@ -655,7 +1087,7 @@ export function ModalEditarBenchmarks({
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Geração operacional bruta de caixa em % da receita líquida (ex: 17%).
+                    Geração operacional de caixa sobre vendas (ex: 17%).
                   </p>
                 </div>
 
@@ -839,21 +1271,27 @@ export function ModalEditarBenchmarks({
                     className="h-9 text-xs font-mono font-bold bg-white text-rose-800"
                   />
                   <p className="text-[10px] text-rose-700">
-                    Calculado automaticamente (positivo indica criação de riqueza).
+                    Calculado automaticamente (positivo indica criação de valor).
                   </p>
                 </div>
               </div>
 
-              {/* Campo de Descrição do Setor */}
+              {/* Descrição do Setor ou da Empresa */}
               <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-1.5">
                 <Label className="text-xs font-bold text-slate-800">
-                  Descrição e Características do Setor {selectedSetor}
+                  {modo === 'setor'
+                    ? `Descrição e Particularidades do Setor ${selectedSetor}`
+                    : `Observações e Metas para ${empresaAtiva?.nome || 'a Empresa'}`}
                 </Label>
                 <Textarea
                   rows={2}
                   value={formData.descricao ?? ''}
                   onChange={(e) => handleTextChange('descricao', e.target.value)}
-                  placeholder="Descreva as particularidades e modelo de negócio deste setor..."
+                  placeholder={
+                    modo === 'setor'
+                      ? 'Descreva as premissas e medianas deste setor...'
+                      : 'Descreva as metas estratégicas e objetivos pactuados com esta empresa...'
+                  }
                   className="text-xs resize-none"
                 />
               </div>
@@ -861,10 +1299,10 @@ export function ModalEditarBenchmarks({
           </Tabs>
         </div>
 
-        <DialogFooter className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+        <DialogFooter className="p-4 border-t border-slate-100 bg-slate-50 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-slate-500 text-xs">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Valores persistem na sua conta e atualizam o painel em tempo real.</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Sincronizado em tempo real com o Agente de IA e os Painéis.</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -883,7 +1321,11 @@ export function ModalEditarBenchmarks({
               size="sm"
               onClick={handleSalvar}
               disabled={saving}
-              className="text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white font-bold gap-1.5 shadow-xs"
+              className={`text-xs h-9 font-bold gap-1.5 shadow-xs text-white ${
+                modo === 'empresa'
+                  ? 'bg-indigo-600 hover:bg-indigo-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
             >
               {saving ? (
                 <>
@@ -893,7 +1335,7 @@ export function ModalEditarBenchmarks({
               ) : (
                 <>
                   <Save className="w-3.5 h-3.5" />
-                  Salvar Alterações
+                  Salvar {modo === 'empresa' ? 'Metas da Empresa' : 'Benchmark do Setor'}
                 </>
               )}
             </Button>
