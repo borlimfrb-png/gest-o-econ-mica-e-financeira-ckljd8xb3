@@ -7,7 +7,7 @@ import {
   fichasTecnicasService,
   configuracoesTributariasService,
 } from '@/services/formacaoPrecoService'
-import { calcularPrecoPorDentro } from '@/lib/taxCalculations'
+import { calcularPrecoPorDentro, calcularTributosMateriaPrima } from '@/lib/taxCalculations'
 import {
   ProdutoRecord,
   MateriaPrimaRecord,
@@ -2006,10 +2006,10 @@ export default function CadastroFichaTecnica() {
                         pIdx++
                       }
                     })
-                  } else if (custoMP > 0) {
+                  } else if (custoMPLiquido > 0) {
                     chartDataList.push({
                       name: 'Matéria-Prima',
-                      value: Math.round(custoMP * 100) / 100,
+                      value: Math.round(custoMPLiquido * 100) / 100,
                       color: '#2563EB',
                     })
                   }

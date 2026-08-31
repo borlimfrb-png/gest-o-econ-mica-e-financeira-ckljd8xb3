@@ -58,6 +58,7 @@ import {
   Receipt,
   ArrowDownRight,
   DollarSign,
+  Calendar,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -72,6 +73,7 @@ import {
   Cell,
 } from 'recharts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { calcularTributosMateriaPrima } from '@/lib/taxCalculations'
 
 export function formatBrl(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
@@ -97,55 +99,6 @@ function formatQty(val: number | null | undefined, unidade: string = ''): string
   if (val === null || val === undefined || isNaN(val)) return '—'
   const fmt = val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })
   return unidade ? `${fmt} ${unidade}` : fmt
-}
-
-export interface TributosMateriaPrimaCalculados {
-  custoBruto: number
-  icmsPct: number
-  pisPct: number
-  cofinsPct: number
-  totalImpostosPct: number
-  valorIcms: number
-  valorPis: number
-  valorCofins: number
-  totalImpostosValor: number
-  custoLiquido: number
-}
-
-export function calcularTributosMateriaPrima(
-  custoUnitario: number | undefined | null,
-  icmsPct: number | undefined | null,
-  pisPct: number | undefined | null,
-  cofinsPct: number | undefined | null,
-): TributosMateriaPrimaCalculados {
-  const custoBruto = Number(custoUnitario) || 0
-  const icms = Number(icmsPct) || 0
-  const pis = Number(pisPct) || 0
-  const cofins = Number(cofinsPct) || 0
-
-  const totalImpostosPct = icms + pis + cofins
-
-  // Cálculo individual dos tributos sobre o custo unitário bruto
-  const valorIcms = (custoBruto * icms) / 100
-  const valorPis = (custoBruto * pis) / 100
-  const valorCofins = (custoBruto * cofins) / 100
-  const totalImpostosValor = valorIcms + valorPis + valorCofins
-
-  // Custo Unitário Líquido = Custo Unitário - (ICMS + PIS + COFINS)
-  const custoLiquido = Math.max(0, custoBruto - totalImpostosValor)
-
-  return {
-    custoBruto,
-    icmsPct: icms,
-    pisPct: pis,
-    cofinsPct: cofins,
-    totalImpostosPct,
-    valorIcms,
-    valorPis,
-    valorCofins,
-    totalImpostosValor,
-    custoLiquido,
-  }
 }
 
 interface MateriaPrimaFormData {
