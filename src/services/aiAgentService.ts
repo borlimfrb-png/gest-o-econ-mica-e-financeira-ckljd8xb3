@@ -33,7 +33,14 @@ export interface SendMessageOptions {
 export interface PromptSugestao {
   id: string
   titulo: string
-  categoria: 'geral' | 'liquidez' | 'fleuriet' | 'rentabilidade' | 'kanitz' | 'plano_acao'
+  categoria:
+    | 'geral'
+    | 'benchmark'
+    | 'liquidez'
+    | 'fleuriet'
+    | 'rentabilidade'
+    | 'kanitz'
+    | 'plano_acao'
   prompt: string
   icone: string
 }
@@ -46,6 +53,14 @@ export const PROMPTS_SUGERIDOS: PromptSugestao[] = [
     prompt:
       'Faça uma análise diagnóstica completa 360° da empresa no período selecionado: avalie Balanço Patrimonial, DRE, todos os índices de Liquidez, Endividamento, Rentabilidade, Modelo Fleuriet e Kanitz. Dê a classificação geral da situação (Saudável, Atenção ou Crítica), aponte os pontos fortes, pontos fracos e qual é o melhor caminho prático para melhorar os resultados operacionais e de caixa.',
     icone: 'Gauge',
+  },
+  {
+    id: 'benchmark-setorial',
+    titulo: 'Benchmark Setorial',
+    categoria: 'benchmark',
+    prompt:
+      'Compare detalhadamente todos os indicadores econômico-financeiros da empresa com as medianas de referência do seu setor/concorrentes no Brasil (Liquidez Corrente, Seca, Endividamento Geral, Composição da Dívida, Margens Bruta/EBITDA/Líquida, ROE, ROA, Giro do Ativo, Ciclo Financeiro, PMR, PMP, CGL, NCG e Saldo de Tesouraria). Mostre onde a empresa está acima, abaixo ou alinhada ao setor, destacando vantagens competitivas e pontos de melhoria prioritários.',
+    icone: 'BarChart3',
   },
   {
     id: 'comparar-periodos',
@@ -117,10 +132,11 @@ export const aiAgentService = {
     if (empresa) {
       const contextoExtraLinhas = [
         `\n\n[CONTEXTO ATUAL DA SESSÃO:`,
-        `- Empresa: "${empresa.nome}" (ID: ${empresa.id}, CNPJ: ${empresa.cnpj || 'N/D'}, Segmento: ${empresa.segmento || 'Geral'})`,
+        `- Empresa: "${empresa.nome}" (ID: ${empresa.id}, CNPJ: ${empresa.cnpj || 'N/D'}, Setor/Segmento: ${empresa.segmento || 'Não informado / Geral'})`,
         ano ? `- Ano Principal de Referência: ${ano}` : '',
         anoComparacao ? `- Ano de Comparação Selecionado: ${anoComparacao}` : '',
         mes ? `- Mês de Referência: ${mes}` : '',
+        `- Setor para Benchmark: Utilize os benchmarks do setor "${empresa.segmento || 'Geral'}" da sua memória de mercado brasileiro.`,
         dadosContextoExtra
           ? `\n[DEMONSTRAÇÕES E INDICADORES CONSOLIDADOS]:\n${dadosContextoExtra}`
           : '',
@@ -187,7 +203,7 @@ export const aiAgentService = {
 
     let contextualizedMessage = message.trim()
     if (empresa) {
-      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}]`
+      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}, Setor/Segmento: ${empresa.segmento || 'Geral'}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}]`
     }
 
     const res = await fetch(`${backendUrl}/backend/v1/agent-diagnostico/ask`, {

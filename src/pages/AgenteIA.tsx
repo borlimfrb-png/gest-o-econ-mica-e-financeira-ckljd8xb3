@@ -64,6 +64,7 @@ import {
   FileText,
   Printer,
   ArrowLeftRight,
+  BarChart3,
   X,
 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
@@ -446,6 +447,13 @@ export default function AgenteIA() {
     handleSendMessage(promptTexto)
   }
 
+  // Prompt rápido de Benchmark Setorial
+  const handlePromptBenchmark = () => {
+    const segmento = selectedEmpresa?.segmento || 'o setor correspondente'
+    const promptTexto = `Faça uma análise comparativa completa dos indicadores econômico-financeiros de ${selectedEmpresa?.nome || 'nossa empresa'} em ${selectedAno} com os benchmarks setoriais do mercado brasileiro para ${segmento}. Apresente um confronto detalhado (Liquidez Corrente, Seca, Endividamento Geral, Margens Bruta/EBITDA/Líquida, ROE, ROA, Giro do Ativo, Ciclo Financeiro, CGL, NCG e Saldo de Tesouraria) indicando onde estamos acima, abaixo ou alinhados à mediana do setor, e quais vantagens competitivas ou correções devemos priorizar.`
+    handleSendMessage(promptTexto)
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-100px)] min-h-[640px] max-w-7xl mx-auto gap-3">
       {/* 1. Header Superior com Contexto da Empresa e Indicadores Chave */}
@@ -818,38 +826,51 @@ export default function AgenteIA() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {PROMPTS_SUGERIDOS.map((sugestao) => {
                     const isComparar = sugestao.id === 'comparar-periodos'
+                    const isBenchmark = sugestao.id === 'benchmark-setorial'
                     return (
                       <button
                         key={sugestao.id}
                         onClick={() => {
                           if (isComparar) {
                             handlePromptComparacao()
+                          } else if (isBenchmark) {
+                            handlePromptBenchmark()
                           } else {
                             handleSendMessage(sugestao.prompt)
                           }
                         }}
                         className={`text-left p-3 rounded-xl border transition-all group flex items-start gap-3 bg-white shadow-2xs ${
-                          isComparar
-                            ? 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/40 bg-indigo-50/10'
-                            : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/40'
+                          isBenchmark
+                            ? 'border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50/40 bg-emerald-50/10'
+                            : isComparar
+                              ? 'border-indigo-200 hover:border-indigo-400 hover:bg-indigo-50/40 bg-indigo-50/10'
+                              : 'border-slate-200 hover:border-blue-300 hover:bg-blue-50/40'
                         }`}
                       >
                         <div
                           className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors ${
-                            isComparar
-                              ? 'bg-indigo-100 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
-                              : 'bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'
+                            isBenchmark
+                              ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white'
+                              : isComparar
+                                ? 'bg-indigo-100 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white'
+                                : 'bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white'
                           }`}
                         >
-                          <Zap className="w-4 h-4" />
+                          {isBenchmark ? (
+                            <BarChart3 className="w-4 h-4" />
+                          ) : (
+                            <Zap className="w-4 h-4" />
+                          )}
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
                             <span
                               className={`font-semibold text-xs ${
-                                isComparar
-                                  ? 'text-indigo-950 group-hover:text-indigo-900'
-                                  : 'text-slate-800 group-hover:text-blue-900'
+                                isBenchmark
+                                  ? 'text-emerald-950 group-hover:text-emerald-900'
+                                  : isComparar
+                                    ? 'text-indigo-950 group-hover:text-indigo-900'
+                                    : 'text-slate-800 group-hover:text-blue-900'
                               }`}
                             >
                               {sugestao.titulo}
@@ -1032,6 +1053,14 @@ export default function AgenteIA() {
               <span className="text-[10px] font-semibold text-slate-400 uppercase shrink-0">
                 Atalhos:
               </span>
+              <button
+                type="button"
+                onClick={handlePromptBenchmark}
+                className="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-[11px] font-semibold transition-colors shrink-0 flex items-center gap-1 shadow-2xs"
+              >
+                <BarChart3 className="w-3 h-3 text-emerald-600" />📊 Benchmark Setorial (
+                {selectedEmpresa?.segmento || 'Setor'})
+              </button>
               <button
                 type="button"
                 onClick={handlePromptComparacao}
