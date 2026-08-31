@@ -56,6 +56,9 @@ export interface MateriaPrimaInput {
   unidade: string
   categoria?: string
   custo_unitario?: number
+  icms_percentual?: number
+  pis_percentual?: number
+  cofins_percentual?: number
   estoque_atual?: number
   estoque_minimo?: number
   observacoes?: string

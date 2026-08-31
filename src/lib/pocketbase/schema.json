@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T13:16:14.294Z",
+  "generatedAt": "2026-08-31T13:52:09.273Z",
   "collections": [
     {
       "name": "users",
@@ -2294,6 +2294,24 @@
         },
         {
           "name": "estoque_minimo",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "icms_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pis_percentual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cofins_percentual",
           "type": "number",
           "required": false,
           "system": false

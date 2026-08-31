@@ -47,18 +47,17 @@ import {
   AlertCircle,
   Coins,
   Boxes,
-  Tag,
   AlertTriangle,
   CheckCircle2,
   ShieldAlert,
   BarChart3,
   TrendingUp,
   Percent,
-  Filter,
-  ArrowUpDown,
-  Sparkles,
-  Info,
   Scale,
+  Calculator,
+  Receipt,
+  ArrowDownRight,
+  DollarSign,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -71,12 +70,10 @@ import {
   Tooltip as RechartsTooltip,
   Legend,
   Cell,
-  PieChart,
-  Pie,
 } from 'recharts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
-function formatBrl(val: number | null | undefined): string {
+export function formatBrl(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -86,10 +83,69 @@ function formatBrl(val: number | null | undefined): string {
   }).format(val)
 }
 
+export function formatPct(val: number | null | undefined): string {
+  if (val === null || val === undefined || isNaN(val)) return '0,00%'
+  return (
+    val.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + '%'
+  )
+}
+
 function formatQty(val: number | null | undefined, unidade: string = ''): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
   const fmt = val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })
   return unidade ? `${fmt} ${unidade}` : fmt
+}
+
+export interface TributosMateriaPrimaCalculados {
+  custoBruto: number
+  icmsPct: number
+  pisPct: number
+  cofinsPct: number
+  totalImpostosPct: number
+  valorIcms: number
+  valorPis: number
+  valorCofins: number
+  totalImpostosValor: number
+  custoLiquido: number
+}
+
+export function calcularTributosMateriaPrima(
+  custoUnitario: number | undefined | null,
+  icmsPct: number | undefined | null,
+  pisPct: number | undefined | null,
+  cofinsPct: number | undefined | null,
+): TributosMateriaPrimaCalculados {
+  const custoBruto = Number(custoUnitario) || 0
+  const icms = Number(icmsPct) || 0
+  const pis = Number(pisPct) || 0
+  const cofins = Number(cofinsPct) || 0
+
+  const totalImpostosPct = icms + pis + cofins
+
+  // Cálculo individual dos tributos sobre o custo unitário bruto
+  const valorIcms = (custoBruto * icms) / 100
+  const valorPis = (custoBruto * pis) / 100
+  const valorCofins = (custoBruto * cofins) / 100
+  const totalImpostosValor = valorIcms + valorPis + valorCofins
+
+  // Custo Unitário Líquido = Custo Unitário - (ICMS + PIS + COFINS)
+  const custoLiquido = Math.max(0, custoBruto - totalImpostosValor)
+
+  return {
+    custoBruto,
+    icmsPct: icms,
+    pisPct: pis,
+    cofinsPct: cofins,
+    totalImpostosPct,
+    valorIcms,
+    valorPis,
+    valorCofins,
+    totalImpostosValor,
+    custoLiquido,
+  }
 }
 
 interface MateriaPrimaFormData {
@@ -98,6 +154,9 @@ interface MateriaPrimaFormData {
   unidade: string
   categoria: string
   custo_unitario: string
+  icms_percentual: string
+  pis_percentual: string
+  cofins_percentual: string
   estoque_atual: string
   estoque_minimo: string
   observacoes: string
@@ -109,6 +168,9 @@ const EMPTY_MP: MateriaPrimaFormData = {
   unidade: 'UN',
   categoria: '',
   custo_unitario: '',
+  icms_percentual: '',
+  pis_percentual: '',
+  cofins_percentual: '',
   estoque_atual: '',
   estoque_minimo: '',
   observacoes: '',
@@ -173,9 +235,15 @@ export interface ItemCurvaABC {
   unidade: string
   categoria: string
   custo_unitario: number
+  custo_liquido: number
+  icms_percentual: number
+  pis_percentual: number
+  cofins_percentual: number
+  total_impostos_valor: number
   custo_com_impostos: number
   quantidade: number
   valor_total: number
+  valor_total_liquido: number
   percentual_individual: number
   percentual_acumulado: number
   classe: 'A' | 'B' | 'C'
@@ -263,6 +331,20 @@ export default function CadastroMateriaPrima() {
     return Array.from(set).sort()
   }, [materias])
 
+  // Cálculo de tributos do formulário em tempo real
+  const formCalculos = useMemo(() => {
+    const c = Number(formData.custo_unitario.replace(',', '.')) || 0
+    const icms = Number(formData.icms_percentual.replace(',', '.')) || 0
+    const pis = Number(formData.pis_percentual.replace(',', '.')) || 0
+    const cofins = Number(formData.cofins_percentual.replace(',', '.')) || 0
+    return calcularTributosMateriaPrima(c, icms, pis, cofins)
+  }, [
+    formData.custo_unitario,
+    formData.icms_percentual,
+    formData.pis_percentual,
+    formData.cofins_percentual,
+  ])
+
   // Cálculo da Curva ABC
   const curvaABCData = useMemo(() => {
     // 1. Mapeamento de consumo de matérias-primas nas fichas técnicas
@@ -288,16 +370,21 @@ export default function CadastroMateriaPrima() {
 
     const itensCalculados = materias.map((m) => {
       const custoUnit = Number(m.custo_unitario) || 0
+      const calcTrib = calcularTributosMateriaPrima(
+        custoUnit,
+        m.icms_percentual,
+        m.pis_percentual,
+        m.cofins_percentual,
+      )
       const custoComImpostos = custoUnit > 0 ? Number((custoUnit * fatorGrossUp).toFixed(4)) : 0
       const consumoInfo = consumoFichasMap.get(m.id)
       const qtdConsumoFichas = consumoInfo ? consumoInfo.qtd : 0
       const qtdEstoque = Number(m.estoque_atual) || 0
       const fichasCount = consumoInfo ? consumoInfo.fichasSet.size : 0
 
-      // Se a base for consumo_fichas, mas a soma for zero, caso o estoque seja maior que 0 e não houver fichas,
-      // usamos a quantidade escolhida pelo usuário
       const qtdBase = baseCalculoABC === 'consumo_fichas' ? qtdConsumoFichas : qtdEstoque
       const valorTotal = qtdBase * custoUnit
+      const valorTotalLiquido = qtdBase * calcTrib.custoLiquido
 
       return {
         id: m.id,
@@ -306,9 +393,15 @@ export default function CadastroMateriaPrima() {
         unidade: m.unidade || 'UN',
         categoria: m.categoria || 'Geral',
         custo_unitario: custoUnit,
+        custo_liquido: calcTrib.custoLiquido,
+        icms_percentual: calcTrib.icmsPct,
+        pis_percentual: calcTrib.pisPct,
+        cofins_percentual: calcTrib.cofinsPct,
+        total_impostos_valor: calcTrib.totalImpostosValor,
         custo_com_impostos: custoComImpostos,
         quantidade: qtdBase,
         valor_total: valorTotal,
+        valor_total_liquido: valorTotalLiquido,
         percentual_individual: 0,
         percentual_acumulado: 0,
         classe: 'C' as 'A' | 'B' | 'C',
@@ -322,6 +415,10 @@ export default function CadastroMateriaPrima() {
 
     // 4. Valor total geral
     const valorGeralConsumido = itensCalculados.reduce((acc, it) => acc + it.valor_total, 0)
+    const valorGeralConsumidoLiquido = itensCalculados.reduce(
+      (acc, it) => acc + it.valor_total_liquido,
+      0,
+    )
 
     // 5. Calcula percentuais individuais, acumulados e classifica em A (~80%), B (~15% => 80 a 95%) e C (~5% => > 95%)
     let acumulado = 0
@@ -331,14 +428,11 @@ export default function CadastroMateriaPrima() {
       const pctAcum = Math.min(100, acumulado)
 
       let classe: 'A' | 'B' | 'C' = 'C'
-      // Classe A: itens que compõem até ~80% do valor acumulado (ou o primeiro item mais relevante)
       if (pctAcum <= 80.05 || (acumulado - pctInd === 0 && pctInd > 0)) {
         classe = 'A'
       } else if (pctAcum <= 95.05) {
-        // Classe B: itens que compõem os próximos ~15% (de 80% a 95%)
         classe = 'B'
       } else {
-        // Classe C: itens finais (~5% restante)
         classe = 'C'
       }
 
@@ -371,6 +465,7 @@ export default function CadastroMateriaPrima() {
     return {
       itens: itensClassificados,
       valorGeralConsumido,
+      valorGeralConsumidoLiquido,
       totalItens,
       classeA: {
         count: itensA.length,
@@ -414,13 +509,6 @@ export default function CadastroMateriaPrima() {
     })
   }, [materias])
 
-  const materiasAtencao = useMemo(() => {
-    return materias.filter((m) => {
-      const st = getStatusEstoque(m).status
-      return st === 'atencao'
-    })
-  }, [materias])
-
   // Filtradas
   const materiasFiltradas = useMemo(() => {
     return materias.filter((m) => {
@@ -444,26 +532,43 @@ export default function CadastroMateriaPrima() {
     })
   }, [materias, search, categoriaFilter, statusFilter])
 
-  // Estatísticas
+  // Estatísticas gerais
   const stats = useMemo(() => {
     const total = materias.length
-    const valorTotalEstoque = materias.reduce((acc, m) => {
-      const custo = Number(m.custo_unitario) || 0
+    let valorTotalEstoqueBruto = 0
+    let valorTotalEstoqueLiquido = 0
+    let totalCreditoImpostosEstoque = 0
+    let somaCustoBruto = 0
+    let somaCustoLiquido = 0
+
+    materias.forEach((m) => {
+      const calc = calcularTributosMateriaPrima(
+        m.custo_unitario,
+        m.icms_percentual,
+        m.pis_percentual,
+        m.cofins_percentual,
+      )
       const qtd = Number(m.estoque_atual) || 0
-      return acc + custo * qtd
-    }, 0)
-    const custoMedio =
-      materias.length > 0
-        ? materias.reduce((acc, m) => acc + (Number(m.custo_unitario) || 0), 0) / materias.length
-        : 0
+      valorTotalEstoqueBruto += calc.custoBruto * qtd
+      valorTotalEstoqueLiquido += calc.custoLiquido * qtd
+      totalCreditoImpostosEstoque += calc.totalImpostosValor * qtd
+      somaCustoBruto += calc.custoBruto
+      somaCustoLiquido += calc.custoLiquido
+    })
+
+    const custoMedioBruto = total > 0 ? somaCustoBruto / total : 0
+    const custoMedioLiquido = total > 0 ? somaCustoLiquido / total : 0
 
     const totalCriticos = materias.filter((m) => getStatusEstoque(m).status === 'critico').length
     const totalAtencao = materias.filter((m) => getStatusEstoque(m).status === 'atencao').length
 
     return {
       total,
-      valorTotalEstoque,
-      custoMedio,
+      valorTotalEstoqueBruto,
+      valorTotalEstoqueLiquido,
+      totalCreditoImpostosEstoque,
+      custoMedioBruto,
+      custoMedioLiquido,
       categoriasCount: categorias.length,
       totalCriticos,
       totalAtencao,
@@ -489,6 +594,21 @@ export default function CadastroMateriaPrima() {
     if (form.custo_unitario.trim() !== '') {
       const c = Number(form.custo_unitario.replace(',', '.'))
       if (isNaN(c) || c < 0) errs.custo_unitario = 'Informe um custo unitário válido'
+    }
+    if (form.icms_percentual.trim() !== '') {
+      const icms = Number(form.icms_percentual.replace(',', '.'))
+      if (isNaN(icms) || icms < 0 || icms > 100)
+        errs.icms_percentual = 'Percentual de ICMS inválido (0 a 100)'
+    }
+    if (form.pis_percentual.trim() !== '') {
+      const pis = Number(form.pis_percentual.replace(',', '.'))
+      if (isNaN(pis) || pis < 0 || pis > 100)
+        errs.pis_percentual = 'Percentual de PIS inválido (0 a 100)'
+    }
+    if (form.cofins_percentual.trim() !== '') {
+      const cofins = Number(form.cofins_percentual.replace(',', '.'))
+      if (isNaN(cofins) || cofins < 0 || cofins > 100)
+        errs.cofins_percentual = 'Percentual de COFINS inválido (0 a 100)'
     }
     if (form.estoque_atual.trim() !== '') {
       const e = Number(form.estoque_atual.replace(',', '.'))
@@ -519,6 +639,16 @@ export default function CadastroMateriaPrima() {
       categoria: m.categoria || '',
       custo_unitario:
         m.custo_unitario !== undefined && m.custo_unitario !== null ? String(m.custo_unitario) : '',
+      icms_percentual:
+        m.icms_percentual !== undefined && m.icms_percentual !== null
+          ? String(m.icms_percentual)
+          : '',
+      pis_percentual:
+        m.pis_percentual !== undefined && m.pis_percentual !== null ? String(m.pis_percentual) : '',
+      cofins_percentual:
+        m.cofins_percentual !== undefined && m.cofins_percentual !== null
+          ? String(m.cofins_percentual)
+          : '',
       estoque_atual:
         m.estoque_atual !== undefined && m.estoque_atual !== null ? String(m.estoque_atual) : '',
       estoque_minimo:
@@ -539,6 +669,18 @@ export default function CadastroMateriaPrima() {
         formData.custo_unitario.trim() !== ''
           ? Number(formData.custo_unitario.replace(',', '.'))
           : undefined
+      const icmsNum =
+        formData.icms_percentual.trim() !== ''
+          ? Number(formData.icms_percentual.replace(',', '.'))
+          : 0
+      const pisNum =
+        formData.pis_percentual.trim() !== ''
+          ? Number(formData.pis_percentual.replace(',', '.'))
+          : 0
+      const cofinsNum =
+        formData.cofins_percentual.trim() !== ''
+          ? Number(formData.cofins_percentual.replace(',', '.'))
+          : 0
       const estoqueNum =
         formData.estoque_atual.trim() !== ''
           ? Number(formData.estoque_atual.replace(',', '.'))
@@ -554,6 +696,9 @@ export default function CadastroMateriaPrima() {
         unidade: formData.unidade.trim().toUpperCase(),
         categoria: formData.categoria.trim() || undefined,
         custo_unitario: custoNum,
+        icms_percentual: icmsNum,
+        pis_percentual: pisNum,
+        cofins_percentual: cofinsNum,
         estoque_atual: estoqueNum,
         estoque_minimo: estoqueMinNum,
         observacoes: formData.observacoes.trim() || undefined,
@@ -638,25 +783,46 @@ export default function CadastroMateriaPrima() {
         ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : ''
 
+    const fmtPctVal = (n?: number) =>
+      n !== undefined && n !== null
+        ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%'
+        : '0,00%'
+
     const headers = [
       'Código',
       'Matéria-Prima',
       'Status Estoque',
       'Unidade',
       'Categoria',
-      'Custo Unitário (R$)',
+      'Custo Unitário Bruto (R$)',
+      'ICMS (%)',
+      'Valor ICMS (R$)',
+      'PIS (%)',
+      'Valor PIS (R$)',
+      'COFINS (%)',
+      'Valor COFINS (R$)',
+      'Total Créditos/Impostos (%)',
+      'Total Créditos/Impostos (R$)',
+      'Custo Unitário Líquido (R$)',
       'Estoque Atual',
       'Estoque Mínimo',
-      'Valor Total em Estoque (R$)',
+      'Valor Total em Estoque Líquido (R$)',
+      'Valor Total em Estoque Bruto (R$)',
       'Observações',
     ]
 
     const linhas = [headers.map(escapeCsv).join(';')]
 
     for (const m of materiasFiltradas) {
-      const custo = m.custo_unitario || 0
+      const calc = calcularTributosMateriaPrima(
+        m.custo_unitario,
+        m.icms_percentual,
+        m.pis_percentual,
+        m.cofins_percentual,
+      )
       const est = m.estoque_atual || 0
-      const totalEstoque = custo * est
+      const totalEstoqueBruto = calc.custoBruto * est
+      const totalEstoqueLiquido = calc.custoLiquido * est
 
       const st = getStatusEstoque(m)
       const estMin =
@@ -671,10 +837,20 @@ export default function CadastroMateriaPrima() {
           st.label,
           m.unidade,
           m.categoria || '',
-          fmtNum(m.custo_unitario),
+          fmtNum(calc.custoBruto),
+          fmtPctVal(calc.icmsPct),
+          fmtNum(calc.valorIcms),
+          fmtPctVal(calc.pisPct),
+          fmtNum(calc.valorPis),
+          fmtPctVal(calc.cofinsPct),
+          fmtNum(calc.valorCofins),
+          fmtPctVal(calc.totalImpostosPct),
+          fmtNum(calc.totalImpostosValor),
+          fmtNum(calc.custoLiquido),
           est.toLocaleString('pt-BR'),
           estMin,
-          fmtNum(totalEstoque),
+          fmtNum(totalEstoqueLiquido),
+          fmtNum(totalEstoqueBruto),
           m.observacoes || '',
         ]
           .map(escapeCsv)
@@ -687,14 +863,14 @@ export default function CadastroMateriaPrima() {
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     const dataStr = new Date().toISOString().slice(0, 10)
-    link.setAttribute('download', `cadastro-materias-primas-${dataStr}.csv`)
+    link.setAttribute('download', `cadastro-materias-primas-impostos-${dataStr}.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
 
     toast({
       title: 'Exportação concluída',
-      description: 'O arquivo CSV com as matérias-primas foi baixado.',
+      description: 'O arquivo CSV com as matérias-primas e tributos foi baixado.',
     })
   }
 
@@ -729,11 +905,17 @@ export default function CadastroMateriaPrima() {
       'Matéria-Prima',
       'Unidade',
       'Categoria',
-      'Custo Unitário s/ Impostos (R$)',
-      `Custo Unitário c/ Impostos (${cargaTrib.toFixed(2)}%) (R$)`,
+      'Custo Unitário Bruto (R$)',
+      'ICMS (%)',
+      'PIS (%)',
+      'COFINS (%)',
+      'Total Impostos/Créditos (R$)',
+      'Custo Unitário Líquido (R$)',
+      `Custo c/ Gross-up Tributário (${cargaTrib.toFixed(2)}%) (R$)`,
       baseCalculoABC === 'consumo_fichas' ? 'Qtd Consumo em Fichas' : 'Estoque Atual (Qtd)',
       'Fichas Técnicas Atendidas',
-      'Valor Total Consumido / Valorizado (R$)',
+      'Valor Total Consumido Bruto (R$)',
+      'Valor Total Consumido Líquido (R$)',
       '% Individual sobre Total',
       '% Acumulado',
       'Prioridade de Negociação / Estratégia',
@@ -775,7 +957,7 @@ export default function CadastroMateriaPrima() {
     curvaABCFiltrada.forEach((it, index) => {
       const estrategia =
         it.classe === 'A'
-          ? 'ALTA PRIORIDADE: Negociar contratos anuais, desconto por escala e monitorar preços semanalmente.'
+          ? 'ALTA PRIORIDADE: Negociar contratos anuais, desconto por escala e monitorar créditos de ICMS/PIS/COFINS.'
           : it.classe === 'B'
             ? 'MÉDIA PRIORIDADE: Revisão periódica de fornecedores e cotação trimestral.'
             : 'BAIXA PRIORIDADE / OPERACIONAL: Manter estoque de segurança básico e compras simplificadas.'
@@ -789,6 +971,11 @@ export default function CadastroMateriaPrima() {
           it.unidade,
           it.categoria,
           fmtNum(it.custo_unitario),
+          it.icms_percentual.toFixed(2) + '%',
+          it.pis_percentual.toFixed(2) + '%',
+          it.cofins_percentual.toFixed(2) + '%',
+          fmtNum(it.total_impostos_valor),
+          fmtNum(it.custo_liquido),
           fmtNum(it.custo_com_impostos),
           it.quantidade.toLocaleString('pt-BR', {
             minimumFractionDigits: 0,
@@ -796,6 +983,7 @@ export default function CadastroMateriaPrima() {
           }),
           it.fichas_count,
           fmtNum(it.valor_total),
+          fmtNum(it.valor_total_liquido),
           it.percentual_individual.toFixed(2) + '%',
           it.percentual_acumulado.toFixed(2) + '%',
           estrategia,
@@ -828,11 +1016,11 @@ export default function CadastroMateriaPrima() {
         <div>
           <h2 className="text-lg font-bold text-[#0B1F3A] flex items-center gap-2">
             <Layers className="w-5 h-5 text-amber-600" />
-            Matérias-Primas & Análise de Insumos
+            Matérias-Primas & Insumos
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Gerencie o catálogo de insumos e analise a Curva ABC de valor consumido para negociação
-            com fornecedores.
+            Cadastre custos unitários, percentuais e deduções de ICMS, PIS e COFINS para apurar o
+            Custo Unitário Líquido.
           </p>
         </div>
 
@@ -902,7 +1090,9 @@ export default function CadastroMateriaPrima() {
                 <div>
                   <p className="text-xs text-slate-500 font-medium">Total de Matérias-Primas</p>
                   <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{stats.total}</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Insumos cadastrados</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {stats.categoriasCount} categorias ativas
+                  </p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
                   <Layers className="w-5 h-5" />
@@ -913,11 +1103,13 @@ export default function CadastroMateriaPrima() {
             <Card className="bg-white border-slate-200 shadow-xs">
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Valor Total em Estoque</p>
+                  <p className="text-xs text-slate-500 font-medium">Estoque Valorizado Líquido</p>
                   <h3 className="text-xl font-bold text-emerald-700 mt-1">
-                    {formatBrl(stats.valorTotalEstoque)}
+                    {formatBrl(stats.valorTotalEstoqueLiquido)}
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Saldo valorizado</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Bruto: {formatBrl(stats.valorTotalEstoqueBruto)}
+                  </p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
                   <Boxes className="w-5 h-5" />
@@ -928,14 +1120,14 @@ export default function CadastroMateriaPrima() {
             <Card className="bg-white border-slate-200 shadow-xs">
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Custo Médio Unitário</p>
-                  <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">
-                    {formatBrl(stats.custoMedio)}
+                  <p className="text-xs text-slate-500 font-medium">Créditos de Impostos (Total)</p>
+                  <h3 className="text-xl font-bold text-blue-700 mt-1">
+                    {formatBrl(stats.totalCreditoImpostosEstoque)}
                   </h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Por item cadastrado</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">ICMS + PIS + COFINS a deduzir</p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Coins className="w-5 h-5" />
+                  <Receipt className="w-5 h-5" />
                 </div>
               </CardContent>
             </Card>
@@ -943,36 +1135,19 @@ export default function CadastroMateriaPrima() {
             <Card className="bg-white border-slate-200 shadow-xs">
               <CardContent className="p-4 flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Status do Estoque</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span
-                      className={`text-xl font-bold ${stats.totalCriticos > 0 ? 'text-rose-600' : 'text-emerald-700'}`}
-                    >
-                      {stats.totalCriticos > 0
-                        ? `${stats.totalCriticos} Crítico${stats.totalCriticos > 1 ? 's' : ''}`
-                        : 'Estoque Regular'}
+                  <p className="text-xs text-slate-500 font-medium">Custo Médio Unitário</p>
+                  <div className="flex items-baseline gap-1.5 mt-1">
+                    <span className="text-xl font-bold text-[#0B1F3A]">
+                      {formatBrl(stats.custoMedioLiquido)}
                     </span>
+                    <span className="text-[11px] font-semibold text-emerald-700">líquido</span>
                   </div>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    {stats.totalAtencao > 0
-                      ? `${stats.totalAtencao} em atenção`
-                      : `${stats.categoriasCount} categorias cadastradas`}
+                    Bruto médio: {formatBrl(stats.custoMedioBruto)}
                   </p>
                 </div>
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                    stats.totalCriticos > 0
-                      ? 'bg-rose-50 text-rose-600'
-                      : stats.totalAtencao > 0
-                        ? 'bg-amber-50 text-amber-600'
-                        : 'bg-emerald-50 text-emerald-600'
-                  }`}
-                >
-                  {stats.totalCriticos > 0 ? (
-                    <AlertTriangle className="w-5 h-5" />
-                  ) : (
-                    <CheckCircle2 className="w-5 h-5" />
-                  )}
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Coins className="w-5 h-5" />
                 </div>
               </CardContent>
             </Card>
@@ -985,10 +1160,11 @@ export default function CadastroMateriaPrima() {
                 <div>
                   <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
                     <Layers className="w-4 h-4 text-amber-600" />
-                    Catálogo de Matérias-Primas e Insumos
+                    Catálogo de Matérias-Primas, Alíquotas e Custos Líquidos
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Insumos utilizados na produção e composição das fichas técnicas.
+                    Demonstração detalhada do Custo Unitário Bruto, deduções de ICMS, PIS e COFINS e
+                    Custo Unitário Líquido.
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1000,7 +1176,7 @@ export default function CadastroMateriaPrima() {
                     className="h-9 text-xs font-semibold border-slate-200 text-slate-700 hover:bg-slate-50"
                   >
                     <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Exportar CSV
+                    Exportar CSV Completo
                   </Button>
                   <Button
                     type="button"
@@ -1072,7 +1248,7 @@ export default function CadastroMateriaPrima() {
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
                     {materias.length === 0
-                      ? 'Cadastre os insumos e matérias-primas que entram na composição dos seus produtos.'
+                      ? 'Cadastre os insumos e matérias-primas com os percentuais de ICMS, PIS e COFINS.'
                       : 'Nenhum resultado para os filtros de busca aplicados.'}
                   </p>
                   {materias.length === 0 && (
@@ -1090,24 +1266,41 @@ export default function CadastroMateriaPrima() {
                 <div className="overflow-x-auto rounded-lg border border-slate-200">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-700 font-semibold">
-                        <th className="py-3 px-3.5">Código</th>
-                        <th className="py-3 px-3.5">Matéria-Prima</th>
-                        <th className="py-3 px-3.5 text-center">Status Estoque</th>
-                        <th className="py-3 px-3.5">Unidade</th>
-                        <th className="py-3 px-3.5">Categoria</th>
-                        <th className="py-3 px-3.5 text-right">Custo Unitário (R$)</th>
-                        <th className="py-3 px-3.5 text-right">Estoque Atual</th>
-                        <th className="py-3 px-3.5 text-right">Estoque Mínimo</th>
-                        <th className="py-3 px-3.5 text-right">Valor em Estoque (R$)</th>
-                        <th className="py-3 px-3.5 text-right">Ações</th>
+                      <tr className="border-b border-slate-200 bg-slate-50/90 text-slate-700 font-semibold">
+                        <th className="py-3 px-3">Código</th>
+                        <th className="py-3 px-3.5 min-w-[180px]">Matéria-Prima</th>
+                        <th className="py-3 px-2.5 text-center">Unid.</th>
+                        <th className="py-3 px-3 text-right">Custo Bruto</th>
+                        <th className="py-3 px-3 text-right bg-blue-50/40 text-blue-900">
+                          ICMS (%) / R$
+                        </th>
+                        <th className="py-3 px-3 text-right bg-indigo-50/40 text-indigo-900">
+                          PIS (%) / R$
+                        </th>
+                        <th className="py-3 px-3 text-right bg-purple-50/40 text-purple-900">
+                          COFINS (%) / R$
+                        </th>
+                        <th className="py-3 px-3 text-right bg-amber-50/50 text-amber-900">
+                          Total Impostos (-)
+                        </th>
+                        <th className="py-3 px-3.5 text-right bg-emerald-50/70 text-emerald-950 font-bold">
+                          Custo Líquido
+                        </th>
+                        <th className="py-3 px-3 text-right">Estoque</th>
+                        <th className="py-3 px-3 text-right">Saldo Líquido</th>
+                        <th className="py-3 px-3 text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {materiasFiltradas.map((m) => {
-                        const custo = m.custo_unitario || 0
+                        const calc = calcularTributosMateriaPrima(
+                          m.custo_unitario,
+                          m.icms_percentual,
+                          m.pis_percentual,
+                          m.cofins_percentual,
+                        )
                         const estoque = m.estoque_atual || 0
-                        const valorEstoque = custo * estoque
+                        const saldoEstoqueLiquido = calc.custoLiquido * estoque
                         const st = getStatusEstoque(m)
 
                         return (
@@ -1121,7 +1314,7 @@ export default function CadastroMateriaPrima() {
                                   : 'hover:bg-slate-50/70'
                             }`}
                           >
-                            <td className="py-3 px-3.5 font-mono font-semibold text-slate-600">
+                            <td className="py-3 px-3 font-mono font-semibold text-slate-600 whitespace-nowrap">
                               {m.codigo ? (
                                 <Badge
                                   variant="outline"
@@ -1135,41 +1328,81 @@ export default function CadastroMateriaPrima() {
                             </td>
                             <td className="py-3 px-3.5">
                               <div className="font-semibold text-slate-900">{m.nome}</div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {m.categoria && (
+                                  <Badge className="text-[9px] px-1.5 py-0 font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                    {m.categoria}
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant={st.badgeVariant}
+                                  className={`text-[9px] px-1.5 py-0 ${st.badgeClass}`}
+                                >
+                                  {st.label}
+                                </Badge>
+                              </div>
                               {m.observacoes && (
-                                <div className="text-[11px] text-slate-400 truncate max-w-xs">
+                                <div className="text-[11px] text-slate-400 truncate max-w-xs mt-0.5">
                                   {m.observacoes}
                                 </div>
                               )}
                             </td>
-                            <td className="py-3 px-3.5 text-center whitespace-nowrap">
-                              <Badge
-                                variant={st.badgeVariant}
-                                className={`text-[10px] px-2 py-0.5 ${st.badgeClass}`}
-                              >
-                                {st.status === 'critico' && '● '}
-                                {st.status === 'atencao' && '▲ '}
-                                {st.status === 'ok' && '✓ '}
-                                {st.label}
-                              </Badge>
-                            </td>
-                            <td className="py-3 px-3.5">
-                              <span className="inline-block px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px] font-semibold">
+                            <td className="py-3 px-2.5 text-center whitespace-nowrap">
+                              <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-semibold">
                                 {m.unidade}
                               </span>
                             </td>
-                            <td className="py-3 px-3.5 text-slate-600">
-                              {m.categoria ? (
-                                <Badge className="text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                                  {m.categoria}
-                                </Badge>
-                              ) : (
-                                <span className="text-slate-400 italic">—</span>
-                              )}
+                            {/* Custo Unitário Bruto */}
+                            <td className="py-3 px-3 text-right font-medium text-slate-700 whitespace-nowrap font-mono">
+                              {formatBrl(calc.custoBruto)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-slate-800 whitespace-nowrap">
-                              {formatBrl(m.custo_unitario)}
+                            {/* ICMS */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap bg-blue-50/20">
+                              <div className="text-blue-900 font-semibold font-mono">
+                                {formatBrl(calc.valorIcms)}
+                              </div>
+                              <div className="text-[10px] text-blue-600 font-mono">
+                                {calc.icmsPct > 0 ? `${calc.icmsPct.toFixed(2)}%` : '0%'}
+                              </div>
                             </td>
-                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                            {/* PIS */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap bg-indigo-50/20">
+                              <div className="text-indigo-900 font-semibold font-mono">
+                                {formatBrl(calc.valorPis)}
+                              </div>
+                              <div className="text-[10px] text-indigo-600 font-mono">
+                                {calc.pisPct > 0 ? `${calc.pisPct.toFixed(2)}%` : '0%'}
+                              </div>
+                            </td>
+                            {/* COFINS */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap bg-purple-50/20">
+                              <div className="text-purple-900 font-semibold font-mono">
+                                {formatBrl(calc.valorCofins)}
+                              </div>
+                              <div className="text-[10px] text-purple-600 font-mono">
+                                {calc.cofinsPct > 0 ? `${calc.cofinsPct.toFixed(2)}%` : '0%'}
+                              </div>
+                            </td>
+                            {/* Total Impostos a Subtrair */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap bg-amber-50/30">
+                              <div className="text-amber-900 font-bold font-mono">
+                                - {formatBrl(calc.totalImpostosValor)}
+                              </div>
+                              <div className="text-[10px] text-amber-700 font-mono font-semibold">
+                                ({calc.totalImpostosPct.toFixed(2)}%)
+                              </div>
+                            </td>
+                            {/* Custo Unitário Líquido */}
+                            <td className="py-3 px-3.5 text-right whitespace-nowrap bg-emerald-50/50">
+                              <div className="text-emerald-900 font-extrabold font-mono text-[13px]">
+                                {formatBrl(calc.custoLiquido)}
+                              </div>
+                              <div className="text-[10px] text-emerald-700 font-semibold">
+                                Líquido
+                              </div>
+                            </td>
+                            {/* Estoque */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap font-mono">
                               {m.estoque_atual !== undefined && m.estoque_atual !== null ? (
                                 <span
                                   className={`font-semibold ${
@@ -1186,19 +1419,12 @@ export default function CadastroMateriaPrima() {
                                 <span className="text-slate-400 italic">—</span>
                               )}
                             </td>
-                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
-                              {m.estoque_minimo !== undefined && m.estoque_minimo !== null ? (
-                                <span className="font-medium text-slate-500">
-                                  {formatQty(m.estoque_minimo, m.unidade)}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400 italic">—</span>
-                              )}
+                            {/* Saldo Líquido do Estoque */}
+                            <td className="py-3 px-3 text-right font-bold text-slate-800 whitespace-nowrap font-mono">
+                              {formatBrl(saldoEstoqueLiquido)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-semibold text-emerald-700 whitespace-nowrap">
-                              {formatBrl(valorEstoque)}
-                            </td>
-                            <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                            {/* Ações */}
+                            <td className="py-3 px-3 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
                                 <Button
                                   onClick={() => handleOpenEdit(m)}
@@ -1224,15 +1450,111 @@ export default function CadastroMateriaPrima() {
                         )
                       })}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-900">
+                        <td colSpan={3} className="py-3 px-3 uppercase text-xs">
+                          Totais ({materiasFiltradas.length} itens)
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-700">
+                          {formatBrl(
+                            materiasFiltradas.reduce(
+                              (acc, m) => acc + (Number(m.custo_unitario) || 0),
+                              0,
+                            ),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-blue-900 bg-blue-50/40">
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario,
+                                m.icms_percentual,
+                                m.pis_percentual,
+                                m.cofins_percentual,
+                              )
+                              return acc + c.valorIcms
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-indigo-900 bg-indigo-50/40">
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario,
+                                m.icms_percentual,
+                                m.pis_percentual,
+                                m.cofins_percentual,
+                              )
+                              return acc + c.valorPis
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-purple-900 bg-purple-50/40">
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario,
+                                m.icms_percentual,
+                                m.pis_percentual,
+                                m.cofins_percentual,
+                              )
+                              return acc + c.valorCofins
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-amber-900 bg-amber-50/50">
+                          -{' '}
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario,
+                                m.icms_percentual,
+                                m.pis_percentual,
+                                m.cofins_percentual,
+                              )
+                              return acc + c.totalImpostosValor
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3.5 text-right font-mono text-emerald-950 font-black bg-emerald-50/70">
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario,
+                                m.icms_percentual,
+                                m.pis_percentual,
+                                m.cofins_percentual,
+                              )
+                              return acc + c.custoLiquido
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-600">—</td>
+                        <td className="py-3 px-3 text-right font-mono text-slate-900">
+                          {formatBrl(
+                            materiasFiltradas.reduce((acc, m) => {
+                              const c = calcularTributosMateriaPrima(
+                                m.custo_unitario,
+                                m.icms_percentual,
+                                m.pis_percentual,
+                                m.cofins_percentual,
+                              )
+                              return acc + c.custoLiquido * (Number(m.estoque_atual) || 0)
+                            }, 0),
+                          )}
+                        </td>
+                        <td className="py-3 px-3 text-slate-400 text-right">—</td>
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Modal Cadastro/Edição de Matéria-Prima */}
+          {/* Modal Cadastro/Edição de Matéria-Prima com Cálculo de Tributos e Dedução */}
           <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-            <DialogContent className="sm:max-w-[500px] bg-white">
+            <DialogContent className="sm:max-w-[620px] bg-white max-h-[92vh] overflow-y-auto">
               <form onSubmit={handleSave}>
                 <DialogHeader>
                   <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
@@ -1240,7 +1562,8 @@ export default function CadastroMateriaPrima() {
                     {editingMP ? 'Editar Matéria-Prima' : 'Nova Matéria-Prima'}
                   </DialogTitle>
                   <DialogDescription className="text-xs text-slate-500">
-                    Cadastre as informações da matéria-prima e seus custos de aquisição.
+                    Cadastre o custo unitário bruto e os percentuais de ICMS, PIS e COFINS para
+                    obter o Custo Unitário Líquido.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -1256,7 +1579,8 @@ export default function CadastroMateriaPrima() {
                   </Alert>
                 )}
 
-                <div className="space-y-3 py-4">
+                <div className="space-y-4 py-4">
+                  {/* Seção 1: Identificação */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="mp-codigo" className="text-xs font-semibold text-slate-700">
@@ -1267,7 +1591,7 @@ export default function CadastroMateriaPrima() {
                         placeholder="Ex: MP-001"
                         value={formData.codigo}
                         onChange={(e) => setField('codigo', e.target.value)}
-                        className="h-9 text-xs uppercase"
+                        className="h-9 text-xs uppercase font-mono"
                       />
                     </div>
 
@@ -1322,29 +1646,196 @@ export default function CadastroMateriaPrima() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="mp-custo" className="text-xs font-semibold text-slate-700">
-                        Custo Unitário (R$)
-                      </Label>
-                      <Input
-                        id="mp-custo"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.custo_unitario}
-                        onChange={(e) => setField('custo_unitario', e.target.value)}
-                        className={`h-9 text-xs ${errors.custo_unitario ? 'border-red-500' : ''}`}
-                      />
-                      {errors.custo_unitario && (
-                        <p className="text-[11px] text-red-600 font-medium">
-                          {errors.custo_unitario}
-                        </p>
-                      )}
+                  {/* Seção 2: Custo Bruto e Percentuais de Impostos (ICMS, PIS, COFINS) */}
+                  <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/40 space-y-3">
+                    <div className="flex items-center justify-between border-b border-blue-200/70 pb-2">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900">
+                        <Receipt className="w-4 h-4 text-blue-700" />
+                        Custos & Percentuais de Impostos (ICMS, PIS, COFINS)
+                      </div>
+                      <span className="text-[10px] text-blue-700 font-semibold bg-white px-2 py-0.5 rounded border border-blue-200">
+                        Dedução sobre Custo Bruto
+                      </span>
                     </div>
 
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="mp-custo"
+                          className="text-xs font-bold text-slate-900 flex items-center gap-1"
+                        >
+                          Custo Unit. Bruto (R$)
+                        </Label>
+                        <Input
+                          id="mp-custo"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          step="0.01"
+                          placeholder="0,00"
+                          value={formData.custo_unitario}
+                          onChange={(e) => setField('custo_unitario', e.target.value)}
+                          className={`h-9 text-xs font-mono bg-white font-semibold ${errors.custo_unitario ? 'border-red-500' : ''}`}
+                        />
+                        {errors.custo_unitario && (
+                          <p className="text-[10px] text-red-600 font-medium">
+                            {errors.custo_unitario}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="mp-icms"
+                          className="text-xs font-semibold text-blue-900 flex items-center gap-1"
+                        >
+                          ICMS (%)
+                        </Label>
+                        <Input
+                          id="mp-icms"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="Ex: 18.00"
+                          value={formData.icms_percentual}
+                          onChange={(e) => setField('icms_percentual', e.target.value)}
+                          className={`h-9 text-xs font-mono bg-white ${errors.icms_percentual ? 'border-red-500' : ''}`}
+                        />
+                        {errors.icms_percentual && (
+                          <p className="text-[10px] text-red-600 font-medium">
+                            {errors.icms_percentual}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="mp-pis"
+                          className="text-xs font-semibold text-indigo-900 flex items-center gap-1"
+                        >
+                          PIS (%)
+                        </Label>
+                        <Input
+                          id="mp-pis"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="Ex: 1.65"
+                          value={formData.pis_percentual}
+                          onChange={(e) => setField('pis_percentual', e.target.value)}
+                          className={`h-9 text-xs font-mono bg-white ${errors.pis_percentual ? 'border-red-500' : ''}`}
+                        />
+                        {errors.pis_percentual && (
+                          <p className="text-[10px] text-red-600 font-medium">
+                            {errors.pis_percentual}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="mp-cofins"
+                          className="text-xs font-semibold text-purple-900 flex items-center gap-1"
+                        >
+                          COFINS (%)
+                        </Label>
+                        <Input
+                          id="mp-cofins"
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          placeholder="Ex: 7.60"
+                          value={formData.cofins_percentual}
+                          onChange={(e) => setField('cofins_percentual', e.target.value)}
+                          className={`h-9 text-xs font-mono bg-white ${errors.cofins_percentual ? 'border-red-500' : ''}`}
+                        />
+                        {errors.cofins_percentual && (
+                          <p className="text-[10px] text-red-600 font-medium">
+                            {errors.cofins_percentual}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Demonstrativo em tempo real do cálculo dos tributos e do custo líquido */}
+                    <div className="p-3 bg-white rounded-lg border border-blue-200/80 space-y-2">
+                      <div className="text-[11px] font-bold text-slate-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1">
+                          <Calculator className="w-3.5 h-3.5 text-blue-600" />
+                          Memória de Cálculo dos Tributos & Custo Líquido
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500">
+                          Base = {formatBrl(formCalculos.custoBruto)}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-1 border-t border-slate-100">
+                        <div className="p-2 bg-blue-50/50 rounded border border-blue-100">
+                          <div className="text-[10px] text-blue-700 font-semibold">
+                            ICMS ({formCalculos.icmsPct.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-blue-900">
+                            {formatBrl(formCalculos.valorIcms)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-indigo-50/50 rounded border border-indigo-100">
+                          <div className="text-[10px] text-indigo-700 font-semibold">
+                            PIS ({formCalculos.pisPct.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-indigo-900">
+                            {formatBrl(formCalculos.valorPis)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-purple-50/50 rounded border border-purple-100">
+                          <div className="text-[10px] text-purple-700 font-semibold">
+                            COFINS ({formCalculos.cofinsPct.toFixed(2)}%)
+                          </div>
+                          <div className="font-mono font-bold text-purple-900">
+                            {formatBrl(formCalculos.valorCofins)}
+                          </div>
+                        </div>
+
+                        <div className="p-2 bg-amber-50/60 rounded border border-amber-200">
+                          <div className="text-[10px] text-amber-800 font-semibold">
+                            Total Impostos (-)
+                          </div>
+                          <div className="font-mono font-bold text-amber-900">
+                            - {formatBrl(formCalculos.totalImpostosValor)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-2.5 bg-gradient-to-r from-emerald-500/10 via-emerald-50 to-teal-50 rounded-lg border border-emerald-300 flex items-center justify-between mt-2">
+                        <div>
+                          <div className="text-[11px] font-bold text-emerald-950 flex items-center gap-1">
+                            <ArrowDownRight className="w-3.5 h-3.5 text-emerald-700" />
+                            Custo Unitário Líquido (Subtração dos Impostos)
+                          </div>
+                          <div className="text-[10px] text-emerald-800">
+                            {formatBrl(formCalculos.custoBruto)} −{' '}
+                            {formatBrl(formCalculos.totalImpostosValor)} (
+                            {formCalculos.totalImpostosPct.toFixed(2)}%)
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-lg font-black text-emerald-900 font-mono">
+                            {formatBrl(formCalculos.custoLiquido)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Seção 3: Estoques */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="mp-estoque" className="text-xs font-semibold text-slate-700">
                         Estoque Atual (Qtd)
@@ -1358,7 +1849,7 @@ export default function CadastroMateriaPrima() {
                         placeholder="0"
                         value={formData.estoque_atual}
                         onChange={(e) => setField('estoque_atual', e.target.value)}
-                        className={`h-9 text-xs ${errors.estoque_atual ? 'border-red-500' : ''}`}
+                        className={`h-9 text-xs font-mono ${errors.estoque_atual ? 'border-red-500' : ''}`}
                       />
                       {errors.estoque_atual && (
                         <p className="text-[11px] text-red-600 font-medium">
@@ -1383,7 +1874,7 @@ export default function CadastroMateriaPrima() {
                         placeholder="0"
                         value={formData.estoque_minimo}
                         onChange={(e) => setField('estoque_minimo', e.target.value)}
-                        className={`h-9 text-xs ${errors.estoque_minimo ? 'border-red-500' : ''}`}
+                        className={`h-9 text-xs font-mono ${errors.estoque_minimo ? 'border-red-500' : ''}`}
                       />
                       {errors.estoque_minimo && (
                         <p className="text-[11px] text-red-600 font-medium">
@@ -1393,21 +1884,22 @@ export default function CadastroMateriaPrima() {
                     </div>
                   </div>
 
+                  {/* Seção 4: Observações */}
                   <div className="space-y-1.5">
                     <Label htmlFor="mp-obs" className="text-xs font-semibold text-slate-700">
-                      Observações / Fornecedor
+                      Observações / Dados do Fornecedor
                     </Label>
                     <Textarea
                       id="mp-obs"
                       placeholder="Informações do fornecedor, espessura, código de barras etc."
                       value={formData.observacoes}
                       onChange={(e) => setField('observacoes', e.target.value)}
-                      className="min-h-[70px] text-xs resize-y"
+                      className="min-h-[60px] text-xs resize-y"
                     />
                   </div>
                 </div>
 
-                <DialogFooter className="gap-2 sm:gap-0">
+                <DialogFooter className="gap-2 sm:gap-0 border-t border-slate-100 pt-3">
                   <Button
                     type="button"
                     variant="outline"
@@ -1483,7 +1975,7 @@ export default function CadastroMateriaPrima() {
                 <p className="text-xs text-blue-100 max-w-3xl">
                   Identifique os insumos de maior impacto financeiro na formação de preço. Concentre
                   até 80% do seu esforço de negociação nos itens da <strong>Classe A</strong> para
-                  obter os maiores ganhos de margem.
+                  obter os maiores ganhos de margem e créditos tributários (ICMS/PIS/COFINS).
                 </p>
               </div>
 
@@ -1522,7 +2014,7 @@ export default function CadastroMateriaPrima() {
                     {formatBrl(curvaABCData.valorGeralConsumido)}
                   </h3>
                   <p className="text-[11px] text-slate-400 mt-0.5">
-                    {curvaABCData.totalItens} insumos analisados
+                    Líquido: {formatBrl(curvaABCData.valorGeralConsumidoLiquido)}
                   </p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -1739,8 +2231,8 @@ export default function CadastroMateriaPrima() {
                     Ranking ABC de Matérias-Primas & Plano de Ação
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Lista classificada com percentuais acumulados e diretrizes para negociação com
-                    fornecedores.
+                    Lista classificada com custos brutos, deduções fiscais, custo líquido e
+                    diretrizes para negociação com fornecedores.
                   </CardDescription>
                 </div>
 
@@ -1783,12 +2275,12 @@ export default function CadastroMateriaPrima() {
                         <th className="py-3 px-3 text-center">Classe</th>
                         <th className="py-3 px-3.5">Matéria-Prima</th>
                         <th className="py-3 px-3">Unid.</th>
-                        <th className="py-3 px-3 text-right">Custo s/ Imp.</th>
-                        <th className="py-3 px-3 text-right text-amber-700">
-                          Custo c/ Imp.{' '}
-                          {configTributaria?.carga_tributaria_total
-                            ? `(${Number(configTributaria.carga_tributaria_total).toFixed(1)}%)`
-                            : ''}
+                        <th className="py-3 px-3 text-right">Custo Bruto</th>
+                        <th className="py-3 px-3 text-right bg-blue-50/40 text-blue-900">
+                          Impostos (-)
+                        </th>
+                        <th className="py-3 px-3 text-right bg-emerald-50/60 text-emerald-950 font-bold">
+                          Custo Líquido
                         </th>
                         <th className="py-3 px-3.5 text-right">
                           {baseCalculoABC === 'consumo_fichas' ? 'Qtd em Fichas' : 'Estoque Atual'}
@@ -1800,7 +2292,7 @@ export default function CadastroMateriaPrima() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {curvaABCFiltrada.map((item, index) => {
+                      {curvaABCFiltrada.map((item) => {
                         const rankOriginal =
                           curvaABCData.itens.findIndex((i) => i.id === item.id) + 1
                         return (
@@ -1845,8 +2337,17 @@ export default function CadastroMateriaPrima() {
                             <td className="py-3 px-3 text-right font-medium text-slate-700 font-mono whitespace-nowrap">
                               {formatBrl(item.custo_unitario)}
                             </td>
-                            <td className="py-3 px-3 text-right font-bold text-amber-700 font-mono whitespace-nowrap bg-amber-50/30">
-                              {formatBrl(item.custo_com_impostos)}
+                            <td className="py-3 px-3 text-right whitespace-nowrap font-mono bg-blue-50/30">
+                              <div className="text-blue-900 font-semibold">
+                                - {formatBrl(item.total_impostos_valor)}
+                              </div>
+                              <div className="text-[10px] text-blue-700 font-medium">
+                                ICMS:{item.icms_percentual}% PIS:{item.pis_percentual}% COF:
+                                {item.cofins_percentual}%
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-right font-black text-emerald-900 font-mono whitespace-nowrap bg-emerald-50/50">
+                              {formatBrl(item.custo_liquido)}
                             </td>
                             <td className="py-3 px-3.5 text-right font-semibold text-slate-800 font-mono whitespace-nowrap">
                               {item.quantidade.toLocaleString('pt-BR', {
