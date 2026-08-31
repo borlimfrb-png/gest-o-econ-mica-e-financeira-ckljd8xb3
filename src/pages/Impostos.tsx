@@ -3,6 +3,7 @@ import { useFilter } from '@/contexts/FilterContext'
 import {
   configuracoesTributariasService,
   produtosService,
+  materiasPrimasService,
   fichasTecnicasService,
 } from '@/services/formacaoPrecoService'
 import { dreService } from '@/services/financeService'
@@ -12,6 +13,7 @@ import {
   RegimeTributarioFormacaoPreco,
   ProdutoRecord,
   FichaTecnicaRecord,
+  MateriaPrimaRecord,
   DreRecord,
 } from '@/types/finance'
 import {
@@ -19,6 +21,7 @@ import {
   gerarMatrizSensibilidade,
   simularEnquadramentoPorRbt12,
   calcularPrecoPorDentro,
+  calcularTributosMateriaPrima,
   type ComparativoRegimesPrecoItem,
   type MatrizSensibilidadeItem,
   type SimulacaoEnquadramentoRbt12,
@@ -114,6 +117,7 @@ export default function Impostos() {
   // Simulador de Preço e Dados Base
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
+  const [materiasPrimas, setMateriasPrimas] = useState<MateriaPrimaRecord[]>([])
   const [selectedProdutoId, setSelectedProdutoId] = useState<string>('custom')
   const [custoBaseSimulacao, setCustoBaseSimulacao] = useState<number>(50.0)
   const [margemDesejadaSimulacao, setMargemDesejadaSimulacao] = useState<number>(30.0)
@@ -203,17 +207,19 @@ export default function Impostos() {
     [toast],
   )
 
-  // Carregar produtos e fichas para o simulador
+  // Carregar produtos, matérias-primas e fichas para o simulador
   const carregarProdutosEFichas = useCallback(async () => {
     try {
-      const [listaProd, listaFichas] = await Promise.all([
+      const [listaProd, listaFichas, listaMaterias] = await Promise.all([
         produtosService.getAll(),
         fichasTecnicasService.getAll(),
+        materiasPrimasService.getAll(),
       ])
       setProdutos(listaProd)
       setFichas(listaFichas)
+      setMateriasPrimas(listaMaterias)
     } catch (err) {
-      console.error('Erro ao carregar produtos/fichas:', err)
+      console.error('Erro ao carregar produtos/fichas/matérias:', err)
     }
   }, [])
 
@@ -431,6 +437,111 @@ export default function Impostos() {
     return Number(((fatorPorDentro - 1) * 100).toFixed(2))
   }, [fatorPorDentro])
 
+  // Mapa de Matérias Primas para consulta rápida
+  const materiasMap = useMemo(() => {
+    const map = new Map<string, MateriaPrimaRecord>()
+    for (const m of materiasPrimas) {
+      map.set(m.id, m)
+    }
+    return map
+  }, [materiasPrimas])
+
+  // Detalhamento de Custo dos Insumos da Ficha do Produto Selecionado
+  const detalhesProdutoSimulado = useMemo(() => {
+    if (selectedProdutoId === 'custom') return null
+    const prod = produtos.find((p) => p.id === selectedProdutoId)
+    const ficha = fichas.find((f) => f.produto === selectedProdutoId)
+    if (!ficha) return null
+
+    let custoMPBruto = 0
+    let creditosTotais = 0
+    let acrescimosTotais = 0
+    let custoMPLiquido = 0
+    let valorIpi = 0
+    let valorFrete = 0
+    let valorPerdas = 0
+    let creditoIcms = 0
+    let creditoPis = 0
+    let creditoCofins = 0
+
+    if (ficha.itens && Array.isArray(ficha.itens)) {
+      for (const it of ficha.itens) {
+        const mp = materiasMap.get(it.materia_prima_id)
+        const qtd = Number(it.quantidade) || 0
+        const unitBruto = Number(it.custo_unitario) || mp?.custo_unitario || 0
+        const subtotalBruto = qtd * unitBruto
+
+        const isIsenta = Boolean(
+          it.isenta_st ??
+          (mp?.isenta_st ||
+            mp?.tipo_tributacao === 'isenta' ||
+            mp?.tipo_tributacao === 'substituicao_tributaria'),
+        )
+        const icms = isIsenta ? 0 : Number(it.icms_percentual ?? mp?.icms_percentual ?? 0)
+        const pis = isIsenta ? 0 : Number(it.pis_percentual ?? mp?.pis_percentual ?? 0)
+        const cofins = isIsenta ? 0 : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+        const ipi = Number(it.ipi_percentual ?? mp?.ipi_percentual ?? 0)
+        const frete = Number(it.frete_percentual ?? mp?.frete_percentual ?? 0)
+        const perdas = Number(it.perdas_percentual ?? mp?.perdas_percentual ?? 0)
+
+        const trib = calcularTributosMateriaPrima(
+          unitBruto,
+          icms,
+          pis,
+          cofins,
+          isIsenta,
+          mp?.tipo_tributacao,
+          ipi,
+          frete,
+          perdas,
+        )
+
+        custoMPBruto += subtotalBruto
+        creditosTotais += qtd * trib.totalCreditos
+        acrescimosTotais += qtd * trib.totalAcrescimos
+        custoMPLiquido += qtd * trib.custoLiquido
+
+        creditoIcms += qtd * trib.creditoIcms
+        creditoPis += qtd * trib.creditoPis
+        creditoCofins += qtd * trib.creditoCofins
+        valorIpi += qtd * trib.valorIpi
+        valorFrete += qtd * trib.valorFrete
+        valorPerdas += qtd * trib.valorPerdas
+      }
+    }
+
+    const outrosCustos = Number(ficha.outros_custos) || 0
+    const custoTotalBruto =
+      (custoMPBruto > 0 ? custoMPBruto : Number(ficha.custo_materia_prima) || 0) + outrosCustos
+    const custoTotalLiquido =
+      custoMPLiquido > 0
+        ? custoMPLiquido + outrosCustos
+        : Number(ficha.custo_total_liquido) || Number(ficha.custo_total) || 0
+
+    return {
+      prod,
+      ficha,
+      custoMPBruto: custoMPBruto > 0 ? custoMPBruto : Number(ficha.custo_materia_prima) || 0,
+      creditosTotais:
+        creditosTotais > 0 ? creditosTotais : Number(ficha.creditos_tributarios_totais) || 0,
+      acrescimosTotais,
+      custoMPLiquido:
+        custoMPLiquido > 0
+          ? custoMPLiquido
+          : Math.max(0, custoMPBruto - creditosTotais + acrescimosTotais),
+      outrosCustos,
+      custoTotalBruto,
+      custoTotalLiquido,
+      creditoIcms,
+      creditoPis,
+      creditoCofins,
+      valorIpi,
+      valorFrete,
+      valorPerdas,
+      itensCount: ficha.itens?.length || 0,
+    }
+  }, [selectedProdutoId, produtos, fichas, materiasMap])
+
   // Atualização do produto selecionado no simulador
   const handleSelectProduto = (prodId: string) => {
     setSelectedProdutoId(prodId)
@@ -441,9 +552,51 @@ export default function Impostos() {
     if (!prod) return
 
     const ficha = fichas.find((f) => f.produto === prodId)
-    if (ficha && ficha.custo_total > 0) {
-      setCustoBaseSimulacao(ficha.custo_total)
-      setMargemDesejadaSimulacao(ficha.margem_lucro_desejada || prod.margem_desejada || 30)
+    if (ficha) {
+      // Calcular custo líquido apurado considerando IPI, Frete, Perdas e Créditos
+      let custoLiquidoCalculado = 0
+      if (ficha.itens && Array.isArray(ficha.itens) && ficha.itens.length > 0) {
+        for (const it of ficha.itens) {
+          const mp = materiasMap.get(it.materia_prima_id)
+          const qtd = Number(it.quantidade) || 0
+          const unitBruto = Number(it.custo_unitario) || mp?.custo_unitario || 0
+
+          const isIsenta = Boolean(
+            it.isenta_st ??
+            (mp?.isenta_st ||
+              mp?.tipo_tributacao === 'isenta' ||
+              mp?.tipo_tributacao === 'substituicao_tributaria'),
+          )
+          const icms = isIsenta ? 0 : Number(it.icms_percentual ?? mp?.icms_percentual ?? 0)
+          const pis = isIsenta ? 0 : Number(it.pis_percentual ?? mp?.pis_percentual ?? 0)
+          const cofins = isIsenta ? 0 : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+          const ipi = Number(it.ipi_percentual ?? mp?.ipi_percentual ?? 0)
+          const frete = Number(it.frete_percentual ?? mp?.frete_percentual ?? 0)
+          const perdas = Number(it.perdas_percentual ?? mp?.perdas_percentual ?? 0)
+
+          const trib = calcularTributosMateriaPrima(
+            unitBruto,
+            icms,
+            pis,
+            cofins,
+            isIsenta,
+            mp?.tipo_tributacao,
+            ipi,
+            frete,
+            perdas,
+          )
+          custoLiquidoCalculado += qtd * trib.custoLiquido
+        }
+        custoLiquidoCalculado += Number(ficha.outros_custos) || 0
+      }
+
+      const custoFinal =
+        custoLiquidoCalculado > 0
+          ? custoLiquidoCalculado
+          : Number(ficha.custo_total_liquido) || Number(ficha.custo_total) || 0
+
+      setCustoBaseSimulacao(Number(custoFinal.toFixed(2)))
+      setMargemDesejadaSimulacao(ficha.margem_desejada || prod.margem_desejada || 30)
     } else if (prod.custo && prod.custo > 0) {
       setCustoBaseSimulacao(prod.custo)
       setMargemDesejadaSimulacao(prod.margem_desejada || 30)
@@ -1391,6 +1544,79 @@ export default function Impostos() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Quadro Demonstrativo da Apuração do Insumo: Créditos vs Acréscimos (quando produto selecionado) */}
+                  {detalhesProdutoSimulado && (
+                    <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                          <Layers className="w-4 h-4 text-amber-600" />
+                          Apuração Tributária dos Insumos (Ficha Técnica)
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] bg-white text-blue-700 border-blue-200"
+                        >
+                          {detalhesProdutoSimulado.itensCount} insumo(s)
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                        <div className="bg-white p-2 rounded-lg border border-slate-100">
+                          <span className="text-slate-500 block">Custo Bruto MP</span>
+                          <strong className="text-slate-900 font-mono block">
+                            R$ {detalhesProdutoSimulado.custoMPBruto.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div className="bg-emerald-50/70 p-2 rounded-lg border border-emerald-100">
+                          <span className="text-emerald-700 block font-medium">Créditos (-)</span>
+                          <strong className="text-emerald-800 font-mono block">
+                            -R$ {detalhesProdutoSimulado.creditosTotais.toFixed(2)}
+                          </strong>
+                          <span className="text-[9px] text-emerald-600">ICMS, PIS, COFINS</span>
+                        </div>
+                        <div className="bg-amber-50/70 p-2 rounded-lg border border-amber-100">
+                          <span className="text-amber-800 block font-medium">Acréscimos (+)</span>
+                          <strong className="text-amber-900 font-mono block">
+                            +R$ {detalhesProdutoSimulado.acrescimosTotais.toFixed(2)}
+                          </strong>
+                          <span className="text-[9px] text-amber-700">IPI, Frete, Perdas</span>
+                        </div>
+                        <div className="bg-blue-50/70 p-2 rounded-lg border border-blue-100">
+                          <span className="text-blue-900 block font-semibold">Custo Líq. MP</span>
+                          <strong className="text-blue-950 font-mono block">
+                            R$ {detalhesProdutoSimulado.custoMPLiquido.toFixed(2)}
+                          </strong>
+                          {detalhesProdutoSimulado.outrosCustos > 0 && (
+                            <span className="text-[9px] text-slate-500">
+                              + R$ {detalhesProdutoSimulado.outrosCustos.toFixed(2)} outros
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-[10px] text-slate-500 bg-white/80 p-2 rounded border border-slate-100 flex flex-wrap gap-x-3 gap-y-1">
+                        <span>
+                          Fórmula: <strong>Custo Líquido = Bruto − Créditos + Acréscimos</strong>
+                        </span>
+                        {detalhesProdutoSimulado.valorIpi > 0 && (
+                          <span className="text-slate-600">
+                            IPI: R$ {detalhesProdutoSimulado.valorIpi.toFixed(2)}
+                          </span>
+                        )}
+                        {detalhesProdutoSimulado.valorFrete > 0 && (
+                          <span className="text-slate-600">
+                            Frete: R$ {detalhesProdutoSimulado.valorFrete.toFixed(2)}
+                          </span>
+                        )}
+                        {detalhesProdutoSimulado.valorPerdas > 0 && (
+                          <span className="text-slate-600">
+                            Perdas: R$ {detalhesProdutoSimulado.valorPerdas.toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Parâmetros do Simulador */}
                   <div className="grid grid-cols-2 gap-3">

@@ -5,11 +5,13 @@ import {
   configuracoesTributariasService,
 } from '@/services/formacaoPrecoService'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import type {
   MateriaPrimaRecord,
   FichaTecnicaRecord,
   ConfiguracaoTributariaRecord,
 } from '@/types/finance'
+import { ModalPdfMateriaPrima } from '@/components/ModalPdfMateriaPrima'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -59,6 +61,8 @@ import {
   ArrowDownRight,
   DollarSign,
   Calendar,
+  Printer,
+  FileText,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -223,7 +227,8 @@ export interface ItemCurvaABC {
 
 export default function CadastroMateriaPrima() {
   const { toast } = useToast()
-  const { selectedEmpresaId } = useFilter()
+  const { selectedEmpresaId, selectedEmpresa } = useFilter()
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
 
   const [materias, setMaterias] = useState<MateriaPrimaRecord[]>([])
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
@@ -231,6 +236,9 @@ export default function CadastroMateriaPrima() {
     null,
   )
   const [loading, setLoading] = useState(true)
+
+  // Modal PDF de Custos por Matéria-Prima (A4)
+  const [pdfModalOpen, setPdfModalOpen] = useState(false)
 
   // Aba ativa: 'catalogo' | 'curva-abc'
   const [activeTab, setActiveTab] = useState<'catalogo' | 'curva-abc'>('catalogo')
@@ -1267,6 +1275,19 @@ export default function CadastroMateriaPrima() {
         </Tabs>
       </div>
 
+      {/* Modal PDF de Custos por Matéria-Prima (A4) */}
+      <ModalPdfMateriaPrima
+        open={pdfModalOpen}
+        onOpenChange={setPdfModalOpen}
+        materias={materiasFiltradas.length > 0 ? materiasFiltradas : materias}
+        selectedEmpresa={selectedEmpresa}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+        configTributaria={configTributaria}
+        filtroCategoria={categoriaFilter}
+        filtroTributacao={tributacaoFilter}
+      />
+
       {activeTab === 'catalogo' ? (
         <>
           {/* Alerta de Estoque Mínimo no Topo */}
@@ -1449,13 +1470,24 @@ export default function CadastroMateriaPrima() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <Button
                     type="button"
+                    onClick={() => setPdfModalOpen(true)}
+                    variant="outline"
+                    size="sm"
+                    className="h-9 text-xs font-semibold border-blue-300 text-blue-900 bg-blue-50/50 hover:bg-blue-100/70"
+                    title="Gerar Relatório A4 / PDF de Custos por Matéria-Prima com cabeçalho e assinaturas"
+                  >
+                    <Printer className="w-3.5 h-3.5 mr-1.5 text-blue-700" />
+                    Relatório Custos (PDF/A4)
+                  </Button>
+                  <Button
+                    type="button"
                     onClick={handleExportCsv}
                     variant="outline"
                     size="sm"
                     className="h-9 text-xs font-semibold border-slate-200 text-slate-700 hover:bg-slate-50"
                   >
                     <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Exportar CSV Completo
+                    Exportar CSV
                   </Button>
                   <Button
                     type="button"

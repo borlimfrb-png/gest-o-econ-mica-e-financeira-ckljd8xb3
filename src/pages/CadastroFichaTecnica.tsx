@@ -299,9 +299,74 @@ export default function CadastroFichaTecnica() {
   const relatorioData = useMemo(() => {
     return fichas.map((f) => {
       const prod = produtosMap.get(f.produto)
-      const custoTotal = Number(f.custo_total) || 0
-      const custoMP = Number(f.custo_materia_prima) || 0
+
+      // Cálculo detalhado dos insumos (Bruto, Créditos, Acréscimos e Líquido)
+      let custoMPBrutoCalc = 0
+      let creditosTotaisCalc = 0
+      let acrescimosTotaisCalc = 0
+      let custoMPLiquidoCalc = 0
+
+      if (f.itens && Array.isArray(f.itens)) {
+        for (const it of f.itens) {
+          const mp = materiasMap.get(it.materia_prima_id)
+          const qtd = Number(it.quantidade) || 0
+          const unitBruto = Number(it.custo_unitario) || mp?.custo_unitario || 0
+          const subtotalBruto = qtd * unitBruto
+
+          const isIsenta = Boolean(
+            it.isenta_st ??
+            (mp?.isenta_st ||
+              mp?.tipo_tributacao === 'isenta' ||
+              mp?.tipo_tributacao === 'substituicao_tributaria'),
+          )
+          const icms = isIsenta ? 0 : Number(it.icms_percentual ?? mp?.icms_percentual ?? 0)
+          const pis = isIsenta ? 0 : Number(it.pis_percentual ?? mp?.pis_percentual ?? 0)
+          const cofins = isIsenta ? 0 : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+          const ipi = Number(it.ipi_percentual ?? mp?.ipi_percentual ?? 0)
+          const frete = Number(it.frete_percentual ?? mp?.frete_percentual ?? 0)
+          const perdas = Number(it.perdas_percentual ?? mp?.perdas_percentual ?? 0)
+
+          const trib = calcularTributosMateriaPrima(
+            unitBruto,
+            icms,
+            pis,
+            cofins,
+            isIsenta,
+            mp?.tipo_tributacao,
+            ipi,
+            frete,
+            perdas,
+          )
+
+          custoMPBrutoCalc += subtotalBruto
+          creditosTotaisCalc += qtd * trib.totalCreditos
+          acrescimosTotaisCalc += qtd * trib.totalAcrescimos
+          custoMPLiquidoCalc += qtd * trib.custoLiquido
+        }
+      }
+
+      // Custo MP Bruto e Líquido
+      const custoMPBruto =
+        custoMPBrutoCalc > 0 ? custoMPBrutoCalc : Number(f.custo_materia_prima) || 0
+      const creditosTotais =
+        f.creditos_tributarios_totais !== undefined && f.creditos_tributarios_totais !== null
+          ? Number(f.creditos_tributarios_totais)
+          : creditosTotaisCalc
+      const acrescimosTotais = acrescimosTotaisCalc
+      const custoMPLiquido =
+        f.custo_materia_prima_liquido !== undefined && f.custo_materia_prima_liquido !== null
+          ? Number(f.custo_materia_prima_liquido)
+          : custoMPLiquidoCalc > 0
+            ? custoMPLiquidoCalc
+            : Math.max(0, custoMPBruto - creditosTotais + acrescimosTotais)
+
       const outrosCustos = Number(f.outros_custos) || 0
+      const custoTotalLiquido =
+        f.custo_total_liquido !== undefined && f.custo_total_liquido !== null
+          ? Number(f.custo_total_liquido)
+          : custoMPLiquido + outrosCustos
+      const custoTotalBruto = custoMPBruto + outrosCustos
+      const custoTotal = custoTotalLiquido // Usar sempre o Custo Líquido como base real
 
       // Preço de venda praticado no cadastro do produto (ou sugerido se produto não tem preço)
       const precoVenda = Number(prod?.preco_venda) || Number(f.preco_venda_sugerido) || 0
@@ -338,9 +403,15 @@ export default function CadastroFichaTecnica() {
         unidade: prod?.unidade || 'UN',
         categoria: prod?.categoria || '',
         itensCount: f.itens?.length || 0,
-        custoMP,
+        custoMP: custoMPLiquido,
+        custoMPBruto,
+        custoMPLiquido,
+        creditosTotais,
+        acrescimosTotais,
         outrosCustos,
         custoTotal,
+        custoTotalBruto,
+        custoTotalLiquido,
         precoVenda,
         precoSugerido: Number(f.preco_venda_sugerido) || 0,
         margemDesejada,
@@ -350,7 +421,7 @@ export default function CadastroFichaTecnica() {
         statusMargem,
       }
     })
-  }, [fichas, produtosMap])
+  }, [fichas, produtosMap, materiasMap])
 
   // Relatório filtrado
   const relatorioFiltrado = useMemo(() => {
@@ -1368,9 +1439,11 @@ export default function CadastroFichaTecnica() {
       'Unidade',
       'Qtd Insumos',
       'Custo MP Bruto (R$)',
-      'Créditos Tributários (R$)',
+      'Créditos Tributários (ICMS/PIS/COFINS) (R$)',
+      'Acréscimos (IPI/Frete/Perdas) (R$)',
       'Custo MP Líquido (R$)',
       'Outros Custos (R$)',
+      'Custo Total Bruto (R$)',
       'Custo Total Líquido (R$)',
       'Preço de Venda Praticado (R$)',
       'Preço Sugerido por Margem (R$)',
@@ -1414,9 +1487,6 @@ export default function CadastroFichaTecnica() {
         item.ficha.preco_venda_markup ||
         (item.custoTotal > 0 ? item.custoTotal * (1 + mkDesejado / 100) : 0)
 
-      const creditosDeduzidos = item.ficha.creditos_tributarios_totais || 0
-      const custoMPBrutoVal = item.ficha.custo_materia_prima || item.custoMP
-
       linhas.push(
         [
           item.produtoCodigo,
@@ -1424,11 +1494,13 @@ export default function CadastroFichaTecnica() {
           item.categoria,
           item.unidade,
           item.itensCount,
-          fmtNum(custoMPBrutoVal),
-          fmtNum(creditosDeduzidos),
-          fmtNum(item.custoMP),
+          fmtNum(item.custoMPBruto),
+          fmtNum(item.creditosTotais),
+          fmtNum(item.acrescimosTotais),
+          fmtNum(item.custoMPLiquido),
           fmtNum(item.outrosCustos),
-          fmtNum(item.custoTotal),
+          fmtNum(item.custoTotalBruto),
+          fmtNum(item.custoTotalLiquido),
           fmtNum(item.precoVenda),
           fmtNum(item.precoSugerido),
           fmtNum(precoMk),
@@ -3542,12 +3614,31 @@ export default function CadastroFichaTecnica() {
                         <th className="py-3 px-3.5">Código</th>
                         <th className="py-3 px-3.5">Produto</th>
                         <th className="py-3 px-3.5">Categoria</th>
-                        <th className="py-3 px-3.5 text-right">Custo MP</th>
+                        <th className="py-3 px-3.5 text-right" title="Custo Bruto dos Insumos">
+                          Custo Bruto MP
+                        </th>
+                        <th
+                          className="py-3 px-3.5 text-right text-emerald-700"
+                          title="Créditos Tributários: ICMS, PIS e COFINS deduzidos"
+                        >
+                          Créditos (-)
+                        </th>
+                        <th
+                          className="py-3 px-3.5 text-right text-amber-700"
+                          title="Acréscimos: IPI, Frete e Perdas somados"
+                        >
+                          Acréscimos (+)
+                        </th>
+                        <th
+                          className="py-3 px-3.5 text-right font-bold text-blue-900"
+                          title="Custo Líquido = Bruto - Créditos + Acréscimos"
+                        >
+                          Custo Líq. MP
+                        </th>
                         <th className="py-3 px-3.5 text-right">Outros Custos</th>
-                        <th className="py-3 px-3.5 text-right">Custo Total</th>
+                        <th className="py-3 px-3.5 text-right">Custo Total Líq.</th>
                         <th className="py-3 px-3.5 text-right">Preço Venda</th>
-                        <th className="py-3 px-3.5 text-right">Preço Sug. (Margem)</th>
-                        <th className="py-3 px-3.5 text-right">Preço Sug. (Markup)</th>
+                        <th className="py-3 px-3.5 text-right">Preço Sug.</th>
                         <th className="py-3 px-3.5 text-right">Margem Desejada</th>
                         <th className="py-3 px-3.5 text-right">Margem Real</th>
                         <th className="py-3 px-3.5 text-center">Desempenho</th>
@@ -3599,23 +3690,41 @@ export default function CadastroFichaTecnica() {
                                 <span className="text-slate-400 italic">—</span>
                               )}
                             </td>
-                            <td className="py-3 px-3.5 text-right text-slate-600 whitespace-nowrap">
-                              {formatBrl(item.custoMP)}
+                            <td className="py-3 px-3.5 text-right text-slate-600 font-mono whitespace-nowrap">
+                              {formatBrl(item.custoMPBruto)}
                             </td>
-                            <td className="py-3 px-3.5 text-right text-slate-500 whitespace-nowrap">
+                            <td className="py-3 px-3.5 text-right font-mono whitespace-nowrap">
+                              {item.creditosTotais > 0 ? (
+                                <span className="text-emerald-700 font-medium">
+                                  -{formatBrl(item.creditosTotais)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">R$ 0,00</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-mono whitespace-nowrap">
+                              {item.acrescimosTotais > 0 ? (
+                                <span className="text-amber-700 font-medium">
+                                  +{formatBrl(item.acrescimosTotais)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">R$ 0,00</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-3.5 text-right font-bold text-blue-900 font-mono whitespace-nowrap">
+                              {formatBrl(item.custoMPLiquido)}
+                            </td>
+                            <td className="py-3 px-3.5 text-right text-slate-500 font-mono whitespace-nowrap">
                               {formatBrl(item.outrosCustos)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
-                              {formatBrl(item.custoTotal)}
+                            <td className="py-3 px-3.5 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
+                              {formatBrl(item.custoTotalLiquido)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-bold text-slate-900 whitespace-nowrap">
+                            <td className="py-3 px-3.5 text-right font-bold text-slate-900 font-mono whitespace-nowrap">
                               {formatBrl(item.precoVenda)}
                             </td>
-                            <td className="py-3 px-3.5 text-right font-semibold text-emerald-700 whitespace-nowrap">
+                            <td className="py-3 px-3.5 text-right font-semibold text-emerald-700 font-mono whitespace-nowrap">
                               {formatBrl(item.precoSugerido)}
-                            </td>
-                            <td className="py-3 px-3.5 text-right font-semibold text-blue-700 whitespace-nowrap">
-                              {formatBrl(precoMk)}
                             </td>
                             <td className="py-3 px-3.5 text-right font-medium text-slate-600 whitespace-nowrap">
                               <div>{formatPct(item.margemDesejada)}</div>
