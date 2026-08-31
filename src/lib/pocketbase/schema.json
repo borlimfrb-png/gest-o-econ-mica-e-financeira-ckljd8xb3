@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T13:52:09.273Z",
+  "generatedAt": "2026-08-31T14:06:34.575Z",
   "collections": [
     {
       "name": "users",
@@ -2315,6 +2315,19 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "isenta_st",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_tributacao",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["tributada", "isenta", "substituicao_tributaria"]
         }
       ],
       "indexes": [

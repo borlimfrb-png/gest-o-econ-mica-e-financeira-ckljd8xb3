@@ -494,68 +494,114 @@ export default function CadastroFichaTecnica() {
     return { total, custoMedioMP, custoTotalMedio, precoMedioSugerido }
   }, [fichas])
 
-  // Cálculos em tempo real para o formulário aberto
+  // Cálculos em tempo real para o formulário aberto (considerando créditos de impostos na matéria-prima)
   const formCalculations = useMemo(() => {
-    let custoMP = 0
+    let custoMPBruto = 0
+    let custoMPLiquido = 0
+    let creditosTotais = 0
     const itensValidos: ItemFichaTecnica[] = []
 
     for (const item of formData.itens) {
       if (!item.materia_prima_id) continue
       const mp = materiasMap.get(item.materia_prima_id)
       const qtd = Number(item.quantidade.replace(',', '.')) || 0
-      const unit =
+      const unitBruto =
         item.custo_unitario.trim() !== ''
           ? Number(item.custo_unitario.replace(',', '.'))
           : mp?.custo_unitario || 0
-      const subtotal = qtd * unit
-      custoMP += subtotal
+      const subtotalBruto = qtd * unitBruto
+
+      const isIsenta = Boolean(
+        mp?.isenta_st ||
+        mp?.tipo_tributacao === 'isenta' ||
+        mp?.tipo_tributacao === 'substituicao_tributaria',
+      )
+      const icms = isIsenta ? 0 : Number(mp?.icms_percentual || 0)
+      const pis = isIsenta ? 0 : Number(mp?.pis_percentual || 0)
+      const cofins = isIsenta ? 0 : Number(mp?.cofins_percentual || 0)
+
+      const trib = calcularTributosMateriaPrima(
+        unitBruto,
+        icms,
+        pis,
+        cofins,
+        isIsenta,
+        mp?.tipo_tributacao,
+      )
+
+      const subtotalLiquido = qtd * trib.custoLiquido
+      const creditoItemTotal = qtd * trib.totalCreditos
+
+      custoMPBruto += subtotalBruto
+      custoMPLiquido += subtotalLiquido
+      creditosTotais += creditoItemTotal
 
       itensValidos.push({
         materia_prima_id: item.materia_prima_id,
         materia_prima_nome: mp?.nome || 'Insumo',
         unidade: mp?.unidade || 'UN',
-        custo_unitario: unit,
+        custo_unitario: unitBruto,
         quantidade: qtd,
-        subtotal,
+        subtotal: subtotalBruto,
+        custo_unitario_liquido: trib.custoLiquido,
+        subtotal_liquido: subtotalLiquido,
+        icms_percentual: trib.icmsPercentual,
+        pis_percentual: trib.pisPercentual,
+        cofins_percentual: trib.cofinsPercentual,
+        credito_icms: qtd * trib.creditoIcms,
+        credito_pis: qtd * trib.creditoPis,
+        credito_cofins: qtd * trib.creditoCofins,
+        credito_total: creditoItemTotal,
+        isenta_st: trib.isIsentaOuST,
+        tipo_tributacao: mp?.tipo_tributacao,
       })
     }
 
     const outros = Number(formData.outros_custos.replace(',', '.')) || 0
-    const custoTotal = custoMP + outros
+    // Custo Total Base Líquida (Custo MP Líquido + Outros Custos)
+    const custoTotalLiquido = custoMPLiquido + outros
+    // Custo Total Bruto (para referência e comparação)
+    const custoTotalBruto = custoMPBruto + outros
+
     const margem = Number(formData.margem_desejada.replace(',', '.')) || 0
     const markup = Number(formData.markup_desejado.replace(',', '.')) || 0
 
+    // Preço Sugerido por Margem baseado no CUSTO LÍQUIDO (divisor): Custo Líquido / (1 - Margem/100)
     let precoSugeridoMargem = 0
-    if (margem < 100 && margem >= 0 && custoTotal > 0) {
-      // Fórmula por Margem (divisor): Custo / (1 - Margem/100)
-      precoSugeridoMargem = custoTotal / (1 - margem / 100)
-    } else if (custoTotal > 0) {
-      precoSugeridoMargem = custoTotal
+    if (margem < 100 && margem >= 0 && custoTotalLiquido > 0) {
+      precoSugeridoMargem = custoTotalLiquido / (1 - margem / 100)
+    } else if (custoTotalLiquido > 0) {
+      precoSugeridoMargem = custoTotalLiquido
     }
 
-    // Fórmula por Markup sobre custo total (multiplicador): Custo Total * (1 + markup/100)
+    // Preço Sugerido por Markup baseado no CUSTO LÍQUIDO (multiplicador): Custo Líquido * (1 + markup/100)
     let precoSugeridoMarkup = 0
-    if (custoTotal > 0) {
-      precoSugeridoMarkup = custoTotal * (1 + (markup >= 0 ? markup : 0) / 100)
+    if (custoTotalLiquido > 0) {
+      precoSugeridoMarkup = custoTotalLiquido * (1 + (markup >= 0 ? markup : 0) / 100)
     }
 
-    const lucroBrutoMargem = precoSugeridoMargem - custoTotal
-    const lucroBrutoMarkup = precoSugeridoMarkup - custoTotal
+    const lucroBrutoMargem = precoSugeridoMargem - custoTotalLiquido
+    const lucroBrutoMarkup = precoSugeridoMarkup - custoTotalLiquido
 
-    // Cálculo com impostos por dentro
+    // Cálculo com impostos por dentro sobre Custo Líquido
     const cargaTrib = Number(configTributaria?.carga_tributaria_total) || 0
     let precoSugeridoComImpostos = precoSugeridoMargem
     const divisorComImpostos = 1 - (margem + cargaTrib) / 100
-    if (cargaTrib > 0 && divisorComImpostos > 0.01 && custoTotal > 0) {
-      precoSugeridoComImpostos = custoTotal / divisorComImpostos
-    } else if (cargaTrib > 0 && custoTotal > 0) {
+    if (cargaTrib > 0 && divisorComImpostos > 0.01 && custoTotalLiquido > 0) {
+      precoSugeridoComImpostos = custoTotalLiquido / divisorComImpostos
+    } else if (cargaTrib > 0 && custoTotalLiquido > 0) {
       precoSugeridoComImpostos = precoSugeridoMargem * (1 + cargaTrib / 100)
     }
 
     return {
-      custoMP,
+      custoMP: custoMPLiquido, // Custo MP Líquido como padrão operacional
+      custoMPBruto,
+      custoMPLiquido,
+      creditosTotais,
       outros,
-      custoTotal,
+      custoTotal: custoTotalLiquido, // Custo Total Líquido
+      custoTotalLiquido,
+      custoTotalBruto,
       margem,
       markup,
       cargaTrib,
@@ -707,9 +753,11 @@ export default function CadastroFichaTecnica() {
     setSaving(true)
     try {
       const {
-        custoMP,
+        custoMPBruto,
+        custoMPLiquido,
+        creditosTotais,
         outros,
-        custoTotal,
+        custoTotalLiquido,
         margem,
         markup,
         precoSugeridoMargem,
@@ -720,13 +768,18 @@ export default function CadastroFichaTecnica() {
       const payload = {
         produto: formData.produto_id,
         itens: itensValidos,
-        custo_materia_prima: custoMP,
+        custo_materia_prima: custoMPBruto,
+        custo_materia_prima_liquido: custoMPLiquido,
+        creditos_tributarios_totais: creditosTotais,
         outros_custos: outros,
-        custo_total: custoTotal,
+        custo_total: custoTotalLiquido,
+        custo_total_liquido: custoTotalLiquido,
         margem_desejada: margem,
         preco_venda_sugerido: Math.round(precoSugeridoMargem * 100) / 100,
+        preco_venda_sugerido_liquido: Math.round(precoSugeridoMargem * 100) / 100,
         markup_desejado: markup,
         preco_venda_markup: Math.round(precoSugeridoMarkup * 100) / 100,
+        preco_venda_markup_liquido: Math.round(precoSugeridoMarkup * 100) / 100,
         observacoes: formData.observacoes.trim() || undefined,
       }
 
@@ -1300,14 +1353,16 @@ export default function CadastroFichaTecnica() {
       'Categoria',
       'Unidade',
       'Qtd Insumos',
-      'Custo Matéria-Prima (R$)',
+      'Custo MP Bruto (R$)',
+      'Créditos Tributários (R$)',
+      'Custo MP Líquido (R$)',
       'Outros Custos (R$)',
-      'Custo Total Unitário (R$)',
+      'Custo Total Líquido (R$)',
       'Preço de Venda Praticado (R$)',
       'Preço Sugerido por Margem (R$)',
       'Preço Sugerido por Markup (R$)',
       'Markup Desejado (%)',
-      'Lucro Unitário (R$)',
+      'Lucro Unitário Real (R$)',
       'Margem Desejada (%)',
       'Margem Real (%)',
       'Diferença Margem (p.p.)',
@@ -1315,7 +1370,9 @@ export default function CadastroFichaTecnica() {
     ]
 
     const linhas: string[] = [
-      ['RELATÓRIO COMPARATIVO DE CUSTOS E MARGEM REAL'].map(escapeCsv).join(';'),
+      ['RELATÓRIO COMPARATIVO DE CUSTOS E MARGEM REAL (BASE CUSTO LÍQUIDO)']
+        .map(escapeCsv)
+        .join(';'),
       ['Data de Exportação:', new Date().toLocaleDateString('pt-BR')].map(escapeCsv).join(';'),
       '',
       ['1. PRODUTOS E COMPARAÇÃO DE MARGEM'].map(escapeCsv).join(';'),
@@ -1343,6 +1400,9 @@ export default function CadastroFichaTecnica() {
         item.ficha.preco_venda_markup ||
         (item.custoTotal > 0 ? item.custoTotal * (1 + mkDesejado / 100) : 0)
 
+      const creditosDeduzidos = item.ficha.creditos_tributarios_totais || 0
+      const custoMPBrutoVal = item.ficha.custo_materia_prima || item.custoMP
+
       linhas.push(
         [
           item.produtoCodigo,
@@ -1350,6 +1410,8 @@ export default function CadastroFichaTecnica() {
           item.categoria,
           item.unidade,
           item.itensCount,
+          fmtNum(custoMPBrutoVal),
+          fmtNum(creditosDeduzidos),
           fmtNum(item.custoMP),
           fmtNum(item.outrosCustos),
           fmtNum(item.custoTotal),
@@ -1847,8 +1909,7 @@ export default function CadastroFichaTecnica() {
                 (() => {
                   const prod = produtosMap.get(selectedFicha.produto)
                   const itens = selectedFicha.itens || []
-                  const custoTotal = Number(selectedFicha.custo_total) || 0
-                  const custoMP = Number(selectedFicha.custo_materia_prima) || 0
+                  const custoMPBruto = Number(selectedFicha.custo_materia_prima) || 0
                   const outrosCustos = Number(selectedFicha.outros_custos) || 0
                   const margem = Number(selectedFicha.margem_desejada) || 0
                   const markup =
@@ -1859,13 +1920,66 @@ export default function CadastroFichaTecnica() {
                         ? (margem / (100 - margem)) * 100
                         : 50
 
+                  // Cálculo dinâmico de créditos tributários se não estiverem gravados
+                  let totalCreditosInsumos = 0
+                  let custoMPLiquidoCalc = 0
+                  for (const it of itens) {
+                    const mp = materiasMap.get(it.materia_prima_id)
+                    const isIsenta = Boolean(
+                      it.isenta_st ??
+                      (mp?.isenta_st ||
+                        mp?.tipo_tributacao === 'isenta' ||
+                        mp?.tipo_tributacao === 'substituicao_tributaria'),
+                    )
+                    const icms = isIsenta
+                      ? 0
+                      : Number(it.icms_percentual ?? mp?.icms_percentual ?? 0)
+                    const pis = isIsenta ? 0 : Number(it.pis_percentual ?? mp?.pis_percentual ?? 0)
+                    const cofins = isIsenta
+                      ? 0
+                      : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+                    const cBruto = Number(it.custo_unitario) || 0
+                    const qtd = Number(it.quantidade) || 0
+                    const trib = calcularTributosMateriaPrima(
+                      cBruto,
+                      icms,
+                      pis,
+                      cofins,
+                      isIsenta,
+                      mp?.tipo_tributacao,
+                    )
+                    totalCreditosInsumos += qtd * trib.totalCreditos
+                    custoMPLiquidoCalc += qtd * trib.custoLiquido
+                  }
+
+                  const creditosTotais =
+                    selectedFicha.creditos_tributarios_totais !== undefined
+                      ? Number(selectedFicha.creditos_tributarios_totais)
+                      : totalCreditosInsumos
+
+                  const custoMPLiquido =
+                    selectedFicha.custo_materia_prima_liquido !== undefined
+                      ? Number(selectedFicha.custo_materia_prima_liquido)
+                      : custoMPLiquidoCalc
+
+                  const custoTotalLiquido =
+                    selectedFicha.custo_total_liquido !== undefined
+                      ? Number(selectedFicha.custo_total_liquido)
+                      : Number(selectedFicha.custo_total) || custoMPLiquido + outrosCustos
+
+                  const custoTotal = custoTotalLiquido
+
                   const precoMargem =
-                    Number(selectedFicha.preco_venda_sugerido) ||
+                    Number(
+                      selectedFicha.preco_venda_sugerido_liquido ||
+                        selectedFicha.preco_venda_sugerido,
+                    ) ||
                     (margem < 100 && custoTotal > 0 ? custoTotal / (1 - margem / 100) : custoTotal)
 
                   const precoMarkup =
-                    Number(selectedFicha.preco_venda_markup) ||
-                    (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
+                    Number(
+                      selectedFicha.preco_venda_markup_liquido || selectedFicha.preco_venda_markup,
+                    ) || (custoTotal > 0 ? custoTotal * (1 + markup / 100) : custoTotal)
 
                   // Preparação de dados categorizados para o gráfico de composição
                   // Agrupa insumos por categoria (ex: Insumos principais, Embalagem, etc.) ou lista itens + outros custos
@@ -2152,36 +2266,94 @@ export default function CadastroFichaTecnica() {
                           <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                             {itens.map((it, idx) => {
                               const mp = materiasMap.get(it.materia_prima_id)
+                              const isIsenta = Boolean(
+                                it.isenta_st ??
+                                (mp?.isenta_st ||
+                                  mp?.tipo_tributacao === 'isenta' ||
+                                  mp?.tipo_tributacao === 'substituicao_tributaria'),
+                              )
+                              const icms = isIsenta
+                                ? 0
+                                : Number(it.icms_percentual ?? mp?.icms_percentual ?? 0)
+                              const pis = isIsenta
+                                ? 0
+                                : Number(it.pis_percentual ?? mp?.pis_percentual ?? 0)
+                              const cofins = isIsenta
+                                ? 0
+                                : Number(it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+                              const trib = calcularTributosMateriaPrima(
+                                Number(it.custo_unitario) || 0,
+                                icms,
+                                pis,
+                                cofins,
+                                isIsenta,
+                                mp?.tipo_tributacao,
+                              )
+                              const subtotalLiquido =
+                                (Number(it.quantidade) || 0) * trib.custoLiquido
+                              const creditoItemTotal =
+                                (Number(it.quantidade) || 0) * trib.totalCreditos
+
                               return (
                                 <div
                                   key={idx}
-                                  className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-xs"
+                                  className="p-2.5 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-between text-xs gap-2"
                                 >
                                   <div>
-                                    <p className="font-semibold text-slate-800">
-                                      {it.materia_prima_nome || mp?.nome || 'Insumo'}
-                                    </p>
-                                    <p className="text-[11px] text-slate-500">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-semibold text-slate-800">
+                                        {it.materia_prima_nome || mp?.nome || 'Insumo'}
+                                      </p>
+                                      {isIsenta ? (
+                                        <Badge className="text-[9px] px-1 py-0 bg-slate-100 text-slate-600">
+                                          Isenta / ST
+                                        </Badge>
+                                      ) : (
+                                        <Badge className="text-[9px] px-1 py-0 bg-emerald-50 text-emerald-800 border-emerald-200">
+                                          Crédito -{formatBrl(creditoItemTotal)}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 mt-0.5">
                                       {it.quantidade} {it.unidade || mp?.unidade || 'UN'} ×{' '}
-                                      {formatBrl(it.custo_unitario)}
+                                      {formatBrl(it.custo_unitario)} (Bruto) → Líq:{' '}
+                                      <strong className="text-blue-900">
+                                        {formatBrl(trib.custoLiquido)}
+                                      </strong>
+                                      /un
                                     </p>
                                   </div>
-                                  <span className="font-bold text-slate-900">
-                                    {formatBrl(it.subtotal)}
-                                  </span>
+                                  <div className="text-right shrink-0">
+                                    <span className="font-bold text-blue-950 font-mono block">
+                                      {formatBrl(subtotalLiquido)}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 block">
+                                      Bruto: {formatBrl(it.subtotal)}
+                                    </span>
+                                  </div>
                                 </div>
                               )
                             })}
                           </div>
                         </div>
 
-                        {/* 4. COMPARATIVO DE PREÇOS SUGERIDOS: MARGEM VS MARKUP */}
+                        {/* 4. COMPARATIVO DE PREÇOS SUGERIDOS: MARGEM VS MARKUP SOBRE CUSTO LÍQUIDO */}
                         <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-2.5">
                           <div className="flex justify-between text-xs text-slate-600">
-                            <span>Subtotal Matéria-Prima:</span>
+                            <span>Subtotal Matéria-Prima (Bruto):</span>
                             <span className="font-semibold text-slate-800">
-                              {formatBrl(custoMP)}
+                              {formatBrl(custoMPBruto)}
                             </span>
+                          </div>
+                          <div className="flex justify-between text-xs text-emerald-800">
+                            <span>Créditos Tributários Dedução:</span>
+                            <span className="font-semibold text-emerald-700 font-mono">
+                              -{formatBrl(creditosTotais)}
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-xs text-blue-900 font-semibold">
+                            <span>Subtotal Matéria-Prima (Líquido):</span>
+                            <span className="font-mono">{formatBrl(custoMPLiquido)}</span>
                           </div>
                           <div className="flex justify-between text-xs text-slate-600">
                             <span>Outros Custos (MOD/Despesas):</span>
@@ -2189,9 +2361,9 @@ export default function CadastroFichaTecnica() {
                               {formatBrl(outrosCustos)}
                             </span>
                           </div>
-                          <div className="flex justify-between text-xs font-bold text-slate-900 border-t border-slate-200 pt-1.5">
-                            <span>Custo Total Unitário:</span>
-                            <span>{formatBrl(custoTotal)}</span>
+                          <div className="flex justify-between text-xs font-bold text-indigo-950 border-t border-slate-200 pt-1.5">
+                            <span>Custo Total Unitário Líquido (Base Real):</span>
+                            <span className="font-mono text-sm">{formatBrl(custoTotal)}</span>
                           </div>
 
                           {/* Comparativo dos Preços Sugeridos com Impostos */}
@@ -3657,9 +3829,23 @@ export default function CadastroFichaTecnica() {
 
                         {/* Subtotal e Remover */}
                         <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-28">
-                          <span className="text-xs font-bold text-slate-800">
-                            {formatBrl(subtotal)}
-                          </span>
+                          <div className="text-right">
+                            <span className="text-xs font-bold text-slate-800 block">
+                              {formatBrl(subtotal)}
+                            </span>
+                            {mp &&
+                              (mp.isenta_st ||
+                              mp.tipo_tributacao === 'isenta' ||
+                              mp.tipo_tributacao === 'substituicao_tributaria' ? (
+                                <span className="text-[10px] text-slate-500 block">
+                                  Isenta / ST
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-emerald-700 block font-semibold">
+                                  c/ crédito trib.
+                                </span>
+                              ))}
+                          </div>
                           <Button
                             type="button"
                             onClick={() => handleRemoveItem(idx)}
@@ -3773,10 +3959,26 @@ export default function CadastroFichaTecnica() {
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center">
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
                     <span className="text-[10px] text-slate-500 font-medium block">
-                      Custo Matéria-Prima
+                      Custo MP (Bruto)
                     </span>
                     <span className="text-xs font-bold text-slate-800 mt-0.5 block">
-                      {formatBrl(formCalculations.custoMP)}
+                      {formatBrl(formCalculations.custoMPBruto)}
+                    </span>
+                  </div>
+                  <div className="bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                    <span className="text-[10px] text-emerald-800 font-medium block">
+                      Créditos Deduzidos
+                    </span>
+                    <span className="text-xs font-bold text-emerald-700 mt-0.5 block">
+                      -{formatBrl(formCalculations.creditosTotais)}
+                    </span>
+                  </div>
+                  <div className="bg-blue-50/70 p-2 rounded-lg border border-blue-200">
+                    <span className="text-[10px] text-blue-900 font-medium block">
+                      Custo MP (Líquido)
+                    </span>
+                    <span className="text-xs font-bold text-blue-900 mt-0.5 block">
+                      {formatBrl(formCalculations.custoMPLiquido)}
                     </span>
                   </div>
                   <div className="bg-white p-2 rounded-lg border border-slate-200">
@@ -3787,12 +3989,12 @@ export default function CadastroFichaTecnica() {
                       {formatBrl(formCalculations.outros)}
                     </span>
                   </div>
-                  <div className="bg-white p-2 rounded-lg border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-medium block">
-                      Custo Total
+                  <div className="bg-indigo-50 p-2 rounded-lg border border-indigo-200">
+                    <span className="text-[10px] text-indigo-900 font-bold block">
+                      Custo Total Líquido
                     </span>
-                    <span className="text-xs font-bold text-slate-900 mt-0.5 block">
-                      {formatBrl(formCalculations.custoTotal)}
+                    <span className="text-xs font-black text-indigo-950 mt-0.5 block">
+                      {formatBrl(formCalculations.custoTotalLiquido)}
                     </span>
                   </div>
                   <div className="bg-emerald-700 text-white p-2 rounded-lg shadow-xs">

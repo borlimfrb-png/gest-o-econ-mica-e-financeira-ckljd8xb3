@@ -108,25 +108,29 @@ export function ModalPdfFichaTecnica({
   const stats = React.useMemo(() => {
     if (!ficha) {
       return {
-        custoMP: 0,
+        custoMPBruto: 0,
+        custoMPLiquido: 0,
+        creditosTotais: 0,
         outrosCustos: 0,
-        custoTotal: 0,
+        custoTotalBruto: 0,
+        custoTotalLiquido: 0,
         margemDesejada: 0,
         markupDesejado: 0,
-        precoMargem: 0,
-        precoMarkup: 0,
+        precoMargemLiquido: 0,
+        precoMarkupLiquido: 0,
+        precoMargemBruto: 0,
         precoComImpostos: 0,
         cargaTrib: 0,
-        lucroMargem: 0,
-        lucroMarkup: 0,
+        lucroMargemLiquido: 0,
+        lucroMarkupLiquido: 0,
         itensDetalhados: [],
         porCategoria: [],
       }
     }
 
-    const custoMP = Number(ficha.custo_materia_prima) || 0
+    const custoMPBruto = Number(ficha.custo_materia_prima) || 0
     const outrosCustos = Number(ficha.outros_custos) || 0
-    const custoTotal = Number(ficha.custo_total) || custoMP + outrosCustos
+    const custoTotalBruto = Number(ficha.custo_total) || custoMPBruto + outrosCustos
     const margemDesejada = Number(ficha.margem_desejada) || 0
     const markupDesejado =
       ficha.markup_desejado !== undefined && ficha.markup_desejado !== null
@@ -135,42 +139,96 @@ export function ModalPdfFichaTecnica({
           ? (margemDesejada / (100 - margemDesejada)) * 100
           : 50
 
-    const precoMargem =
-      Number(ficha.preco_venda_sugerido) ||
-      (margemDesejada < 100 && custoTotal > 0
-        ? custoTotal / (1 - margemDesejada / 100)
-        : custoTotal)
-    const precoMarkup =
-      Number(ficha.preco_venda_markup) ||
-      (custoTotal > 0 ? custoTotal * (1 + markupDesejado / 100) : custoTotal)
+    // Detalhar itens com a categoria e tributos da matéria-prima
+    let totalCreditosCalc = 0
+    let totalMPLiquidoCalc = 0
 
-    const cargaTrib = Number(configTributariaModal?.carga_tributaria_total) || 0
-    let precoComImpostos = precoMargem
-    const divImp = 1 - (margemDesejada + cargaTrib) / 100
-    if (cargaTrib > 0 && divImp > 0.01 && custoTotal > 0) {
-      precoComImpostos = custoTotal / divImp
-    } else if (cargaTrib > 0 && custoTotal > 0) {
-      precoComImpostos = precoMargem * (1 + cargaTrib / 100)
-    }
-
-    const lucroMargem = precoMargem - custoTotal
-    const lucroMarkup = precoMarkup - custoTotal
-
-    // Detalhar itens com a categoria da matéria-prima
     const itens = (ficha.itens || []).map((it) => {
       const mp = materiasMap.get(it.materia_prima_id)
-      const subtotal = Number(it.subtotal) || Number(it.quantidade) * Number(it.custo_unitario)
-      const partTotal = custoTotal > 0 ? (subtotal / custoTotal) * 100 : 0
-      const partMP = custoMP > 0 ? (subtotal / custoMP) * 100 : 0
+      const custoBrutoUn = Number(it.custo_unitario) || 0
+      const qtd = Number(it.quantidade) || 0
+      const subtotalBruto = Number(it.subtotal) || qtd * custoBrutoUn
+
+      const isIsentaOuST =
+        it.isenta_st ??
+        (mp?.isenta_st ||
+          mp?.tipo_tributacao === 'isenta' ||
+          mp?.tipo_tributacao === 'substituicao_tributaria')
+
+      const icmsPct = isIsentaOuST ? 0 : (it.icms_percentual ?? mp?.icms_percentual ?? 0)
+      const pisPct = isIsentaOuST ? 0 : (it.pis_percentual ?? mp?.pis_percentual ?? 0)
+      const cofinsPct = isIsentaOuST ? 0 : (it.cofins_percentual ?? mp?.cofins_percentual ?? 0)
+
+      const totalPctCredito = icmsPct + pisPct + cofinsPct
+      const creditoUn = isIsentaOuST ? 0 : (custoBrutoUn * totalPctCredito) / 100
+      const custoLiquidoUn = isIsentaOuST ? custoBrutoUn : Math.max(0, custoBrutoUn - creditoUn)
+      const subtotalLiquido = qtd * custoLiquidoUn
+      const creditoTotalItem = qtd * creditoUn
+
+      totalCreditosCalc += creditoTotalItem
+      totalMPLiquidoCalc += subtotalLiquido
+
       return {
         ...it,
         categoria: mp?.categoria || 'Geral / Não categorizado',
         codigo: mp?.codigo || '',
-        subtotal,
-        partTotal,
-        partMP,
+        subtotal: subtotalBruto,
+        custo_unitario_liquido: custoLiquidoUn,
+        subtotal_liquido: subtotalLiquido,
+        credito_total: creditoTotalItem,
+        icms_percentual: icmsPct,
+        pis_percentual: pisPct,
+        cofins_percentual: cofinsPct,
+        isenta_st: isIsentaOuST,
+        partTotal: custoTotalBruto > 0 ? (subtotalBruto / custoTotalBruto) * 100 : 0,
+        partMP: custoMPBruto > 0 ? (subtotalBruto / custoMPBruto) * 100 : 0,
       }
     })
+
+    const custoMPLiquido =
+      ficha.custo_materia_prima_liquido !== undefined
+        ? Number(ficha.custo_materia_prima_liquido)
+        : totalMPLiquidoCalc
+    const creditosTotais =
+      ficha.creditos_tributarios_totais !== undefined
+        ? Number(ficha.creditos_tributarios_totais)
+        : totalCreditosCalc
+    const custoTotalLiquido =
+      ficha.custo_total_liquido !== undefined
+        ? Number(ficha.custo_total_liquido)
+        : custoMPLiquido + outrosCustos
+
+    const precoMargemLiquido =
+      ficha.preco_venda_sugerido_liquido !== undefined
+        ? Number(ficha.preco_venda_sugerido_liquido)
+        : margemDesejada < 100 && custoTotalLiquido > 0
+          ? custoTotalLiquido / (1 - margemDesejada / 100)
+          : custoTotalLiquido
+
+    const precoMarkupLiquido =
+      ficha.preco_venda_markup_liquido !== undefined
+        ? Number(ficha.preco_venda_markup_liquido)
+        : custoTotalLiquido > 0
+          ? custoTotalLiquido * (1 + markupDesejado / 100)
+          : custoTotalLiquido
+
+    const precoMargemBruto =
+      Number(ficha.preco_venda_sugerido) ||
+      (margemDesejada < 100 && custoTotalBruto > 0
+        ? custoTotalBruto / (1 - margemDesejada / 100)
+        : custoTotalBruto)
+
+    const cargaTrib = Number(configTributariaModal?.carga_tributaria_total) || 0
+    let precoComImpostos = precoMargemLiquido
+    const divImp = 1 - (margemDesejada + cargaTrib) / 100
+    if (cargaTrib > 0 && divImp > 0.01 && custoTotalLiquido > 0) {
+      precoComImpostos = custoTotalLiquido / divImp
+    } else if (cargaTrib > 0 && custoTotalLiquido > 0) {
+      precoComImpostos = precoMargemLiquido * (1 + cargaTrib / 100)
+    }
+
+    const lucroMargemLiquido = precoMargemLiquido - custoTotalLiquido
+    const lucroMarkupLiquido = precoMarkupLiquido - custoTotalLiquido
 
     // Agrupamento por Categoria de Matéria-Prima
     const catMap = new Map<string, { total: number; count: number }>()
@@ -187,23 +245,27 @@ export function ModalPdfFichaTecnica({
         categoria,
         total: d.total,
         count: d.count,
-        pctSobreMP: custoMP > 0 ? (d.total / custoMP) * 100 : 0,
-        pctSobreTotal: custoTotal > 0 ? (d.total / custoTotal) * 100 : 0,
+        pctSobreMP: custoMPBruto > 0 ? (d.total / custoMPBruto) * 100 : 0,
+        pctSobreTotal: custoTotalBruto > 0 ? (d.total / custoTotalBruto) * 100 : 0,
       }))
       .sort((a, b) => b.total - a.total)
 
     return {
-      custoMP,
+      custoMPBruto,
+      custoMPLiquido,
+      creditosTotais,
       outrosCustos,
-      custoTotal,
+      custoTotalBruto,
+      custoTotalLiquido,
       margemDesejada,
       markupDesejado,
-      precoMargem,
-      precoMarkup,
+      precoMargemLiquido,
+      precoMarkupLiquido,
+      precoMargemBruto,
       precoComImpostos,
       cargaTrib,
-      lucroMargem,
-      lucroMarkup,
+      lucroMargemLiquido,
+      lucroMarkupLiquido,
       itensDetalhados: itens,
       porCategoria,
     }
@@ -245,34 +307,55 @@ export function ModalPdfFichaTecnica({
       ['1. RESUMO GERAL DE CUSTOS E FORMAÇÃO DE PREÇO'].map(escapeCsv).join(';'),
       ['Indicador', 'Valor (R$)', 'Percentual / Base'].map(escapeCsv).join(';'),
       [
-        'Custo Matéria-Prima',
-        fmtNum(stats.custoMP),
-        stats.custoTotal > 0
-          ? ((stats.custoMP / stats.custoTotal) * 100).toFixed(1) + '% do custo total'
+        'Custo Matéria-Prima Bruto',
+        fmtNum(stats.custoMPBruto),
+        stats.custoTotalBruto > 0
+          ? ((stats.custoMPBruto / stats.custoTotalBruto) * 100).toFixed(1) + '% do custo bruto'
           : '100%',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+      [
+        'Créditos Tributários (ICMS/PIS/COFINS)',
+        fmtNum(stats.creditosTotais),
+        'Dedução recuperável na compra',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+      [
+        'Custo Matéria-Prima Líquido',
+        fmtNum(stats.custoMPLiquido),
+        'Custo bruto - Créditos deduzidos',
       ]
         .map(escapeCsv)
         .join(';'),
       [
         'Outros Custos / MOD',
         fmtNum(stats.outrosCustos),
-        stats.custoTotal > 0
-          ? ((stats.outrosCustos / stats.custoTotal) * 100).toFixed(1) + '% do custo total'
+        stats.custoTotalLiquido > 0
+          ? ((stats.outrosCustos / stats.custoTotalLiquido) * 100).toFixed(1) +
+            '% do custo líq. total'
           : '0%',
       ]
         .map(escapeCsv)
         .join(';'),
-      ['CUSTO TOTAL UNITÁRIO', fmtNum(stats.custoTotal), '100%'].map(escapeCsv).join(';'),
       [
-        'Preço Sugerido por Margem (Sem Impostos)',
-        fmtNum(stats.precoMargem),
+        'CUSTO TOTAL LÍQUIDO UNITÁRIO',
+        fmtNum(stats.custoTotalLiquido),
+        'Base real para precificação',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+      [
+        'Preço Sugerido por Margem (Base Custo Líquido)',
+        fmtNum(stats.precoMargemLiquido),
         `Margem: ${stats.margemDesejada.toFixed(1)}%`,
       ]
         .map(escapeCsv)
         .join(';'),
       [
-        'Preço Sugerido por Markup',
-        fmtNum(stats.precoMarkup),
+        'Preço Sugerido por Markup (Base Custo Líquido)',
+        fmtNum(stats.precoMarkupLiquido),
         `Markup: ${stats.markupDesejado.toFixed(1)}%`,
       ]
         .map(escapeCsv)
@@ -282,7 +365,7 @@ export function ModalPdfFichaTecnica({
             [
               `Preço com Impostos (${configTributariaModal?.regime_tributario || 'Tributos'} - ${stats.cargaTrib}%)`,
               fmtNum(stats.precoComImpostos),
-              'Cálculo por dentro',
+              'Cálculo por dentro sobre custo líquido',
             ]
               .map(escapeCsv)
               .join(';'),
@@ -303,10 +386,12 @@ export function ModalPdfFichaTecnica({
         'Categoria',
         'Qtd',
         'Unidade',
-        'Custo Unitário (R$)',
-        'Subtotal (R$)',
-        '% Custo MP',
-        '% Custo Total',
+        'Custo Bruto Un. (R$)',
+        'Subtotal Bruto (R$)',
+        'Créditos Trib. (R$)',
+        'Custo Líquido Un. (R$)',
+        'Subtotal Líquido (R$)',
+        'Situação Trib.',
       ]
         .map(escapeCsv)
         .join(';'),
@@ -322,8 +407,12 @@ export function ModalPdfFichaTecnica({
           it.unidade,
           fmtNum(it.custo_unitario),
           fmtNum(it.subtotal),
-          it.partMP.toFixed(1) + '%',
-          it.partTotal.toFixed(1) + '%',
+          fmtNum(it.credito_total),
+          fmtNum(it.custo_unitario_liquido),
+          fmtNum(it.subtotal_liquido),
+          it.isenta_st
+            ? 'Isenta / ST'
+            : `ICMS ${it.icms_percentual}% / PIS ${it.pis_percentual}% / COF ${it.cofins_percentual}%`,
         ]
           .map(escapeCsv)
           .join(';'),
@@ -586,55 +675,55 @@ export function ModalPdfFichaTecnica({
                 Resumo Executivo de Custos e Formação de Preço
               </h2>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
                   <span className="text-[10px] font-bold uppercase text-slate-500 block">
-                    Custo Matéria-Prima
+                    Custo MP (Bruto)
                   </span>
-                  <strong className="text-sm sm:text-base font-black font-mono text-slate-800 block">
-                    {formatBrl(stats.custoMP)}
+                  <strong className="text-sm font-black font-mono text-slate-800 block">
+                    {formatBrl(stats.custoMPBruto)}
                   </strong>
-                  <span className="text-[10px] text-slate-500 block">
-                    {stats.custoTotal > 0
-                      ? `${((stats.custoMP / stats.custoTotal) * 100).toFixed(1)}% do total`
-                      : '100%'}
-                  </span>
+                  <span className="text-[10px] text-slate-500 block">Valor da compra</span>
                 </div>
 
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase text-emerald-800 block">
+                    Créditos Deduzidos
+                  </span>
+                  <strong className="text-sm font-black font-mono text-emerald-700 block">
+                    -{formatBrl(stats.creditosTotais)}
+                  </strong>
+                  <span className="text-[10px] text-emerald-700 block">ICMS / PIS / COFINS</span>
+                </div>
+
+                <div className="p-2.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-0.5">
+                  <span className="text-[10px] font-bold uppercase text-blue-900 block">
+                    Custo MP (Líquido)
+                  </span>
+                  <strong className="text-sm font-black font-mono text-blue-900 block">
+                    {formatBrl(stats.custoMPLiquido)}
+                  </strong>
+                  <span className="text-[10px] text-blue-700 block">Bruto - Créditos</span>
+                </div>
+
+                <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-0.5">
                   <span className="text-[10px] font-bold uppercase text-slate-500 block">
                     Outros Custos / MOD
                   </span>
-                  <strong className="text-sm sm:text-base font-black font-mono text-slate-800 block">
+                  <strong className="text-sm font-black font-mono text-slate-800 block">
                     {formatBrl(stats.outrosCustos)}
                   </strong>
-                  <span className="text-[10px] text-slate-500 block">
-                    {stats.custoTotal > 0
-                      ? `${((stats.outrosCustos / stats.custoTotal) * 100).toFixed(1)}% do total`
-                      : '0%'}
-                  </span>
+                  <span className="text-[10px] text-slate-500 block">Diretos e rateio</span>
                 </div>
 
-                <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl space-y-0.5">
-                  <span className="text-[10px] font-bold uppercase text-blue-900 block">
-                    Custo Total Unitário
+                <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-0.5 col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-bold uppercase text-indigo-900 block">
+                    Custo Total Líquido
                   </span>
-                  <strong className="text-sm sm:text-base font-black font-mono text-blue-900 block">
-                    {formatBrl(stats.custoTotal)}
+                  <strong className="text-sm sm:text-base font-black font-mono text-indigo-950 block">
+                    {formatBrl(stats.custoTotalLiquido)}
                   </strong>
-                  <span className="text-[10px] text-blue-700 block">Base de formação</span>
-                </div>
-
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl space-y-0.5">
-                  <span className="text-[10px] font-bold uppercase text-emerald-900 block">
-                    Preço Praticado Atual
-                  </span>
-                  <strong className="text-sm sm:text-base font-black font-mono text-emerald-800 block">
-                    {formatBrl(produto.preco_venda || 0)}
-                  </strong>
-                  <span className="text-[10px] text-emerald-700 block">
-                    Margem: {formatPct(produto.margem_desejada)}
-                  </span>
+                  <span className="text-[10px] text-indigo-700 block">Base de formação real</span>
                 </div>
               </div>
 
@@ -645,7 +734,7 @@ export function ModalPdfFichaTecnica({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
                       <Percent className="w-3.5 h-3.5 text-emerald-700" />
-                      Preço Sugerido por Margem (Divisor)
+                      Preço Sugerido por Margem (Base Custo Líquido)
                     </span>
                     <Badge className="text-[10px] bg-emerald-100 text-emerald-800 font-bold border-emerald-300">
                       Margem: {formatPct(stats.margemDesejada)}
@@ -654,17 +743,17 @@ export function ModalPdfFichaTecnica({
                   <div className="flex items-baseline justify-between border-t border-emerald-200/60 pt-1.5">
                     <span className="text-[11px] text-slate-600">Preço Calculado:</span>
                     <strong className="text-base font-black font-mono text-emerald-800">
-                      {formatBrl(stats.precoMargem)}
+                      {formatBrl(stats.precoMargemLiquido)}
                     </strong>
                   </div>
                   <div className="flex items-baseline justify-between text-[11px] text-slate-600">
-                    <span>Lucro Bruto Unitário:</span>
+                    <span>Lucro Bruto Real:</span>
                     <span className="font-semibold text-slate-800 font-mono">
-                      {formatBrl(stats.lucroMargem)}
+                      {formatBrl(stats.lucroMargemLiquido)}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-500 italic">
-                    Fórmula: Custo Total ÷ (1 - Margem/100)
+                    Fórmula: Custo Total Líquido ÷ (1 - Margem/100)
                   </p>
                 </div>
 
@@ -673,7 +762,7 @@ export function ModalPdfFichaTecnica({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-blue-900 flex items-center gap-1.5">
                       <TrendingUp className="w-3.5 h-3.5 text-blue-700" />
-                      Preço Sugerido por Markup (Multiplicador)
+                      Preço Sugerido por Markup (Base Custo Líquido)
                     </span>
                     <Badge className="text-[10px] bg-blue-100 text-blue-800 font-bold border-blue-300">
                       Markup: {formatPct(stats.markupDesejado)}
@@ -682,17 +771,17 @@ export function ModalPdfFichaTecnica({
                   <div className="flex items-baseline justify-between border-t border-blue-200/60 pt-1.5">
                     <span className="text-[11px] text-slate-600">Preço Calculado:</span>
                     <strong className="text-base font-black font-mono text-blue-900">
-                      {formatBrl(stats.precoMarkup)}
+                      {formatBrl(stats.precoMarkupLiquido)}
                     </strong>
                   </div>
                   <div className="flex items-baseline justify-between text-[11px] text-slate-600">
-                    <span>Lucro Bruto Unitário:</span>
+                    <span>Lucro Bruto Real:</span>
                     <span className="font-semibold text-slate-800 font-mono">
-                      {formatBrl(stats.lucroMarkup)}
+                      {formatBrl(stats.lucroMarkupLiquido)}
                     </span>
                   </div>
                   <p className="text-[10px] text-slate-500 italic">
-                    Fórmula: Custo Total × (1 + Markup/100)
+                    Fórmula: Custo Total Líquido × (1 + Markup/100)
                   </p>
                 </div>
 
@@ -702,7 +791,7 @@ export function ModalPdfFichaTecnica({
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
                         <Percent className="w-3.5 h-3.5 text-amber-700" />
-                        Preço Sugerido com Impostos (
+                        Preço Sugerido com Impostos sobre Custo Líquido (
                         {configTributariaModal?.regime_tributario || 'Regime Fiscal'})
                       </span>
                       <Badge className="text-[10px] bg-amber-100 text-amber-900 font-bold border-amber-300">
@@ -718,7 +807,7 @@ export function ModalPdfFichaTecnica({
                       </strong>
                     </div>
                     <p className="text-[10px] text-amber-800 italic">
-                      Fórmula por Dentro: Custo ÷ [1 - (Margem% + Carga Tributária%)/100]
+                      Fórmula por Dentro: Custo Líquido ÷ [1 - (Margem% + Carga Tributária%)/100]
                     </p>
                   </div>
                 )}
@@ -741,14 +830,14 @@ export function ModalPdfFichaTecnica({
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50 text-slate-700 font-semibold">
                       <th className="py-2 px-2.5">Código</th>
-                      <th className="py-2 px-2.5">Insumo / Matéria-Prima</th>
-                      <th className="py-2 px-2.5">Categoria</th>
+                      <th className="py-2 px-2.5">Insumo</th>
+                      <th className="py-2 px-2.5">Trib.</th>
                       <th className="py-2 px-2.5 text-right">Qtd</th>
                       <th className="py-2 px-2.5 text-center">Un</th>
-                      <th className="py-2 px-2.5 text-right">Custo Un. (R$)</th>
-                      <th className="py-2 px-2.5 text-right">Subtotal (R$)</th>
-                      <th className="py-2 px-2.5 text-right">% Custo MP</th>
-                      <th className="py-2 px-2.5 text-right">% Custo Total</th>
+                      <th className="py-2 px-2.5 text-right">Custo Bruto (R$)</th>
+                      <th className="py-2 px-2.5 text-right">Subtotal Bruto (R$)</th>
+                      <th className="py-2 px-2.5 text-right">Crédito (R$)</th>
+                      <th className="py-2 px-2.5 text-right">Subtotal Líq. (R$)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -758,12 +847,24 @@ export function ModalPdfFichaTecnica({
                           {it.codigo || '—'}
                         </td>
                         <td className="py-2 px-2.5 font-semibold text-slate-900">
-                          {it.materia_prima_nome}
-                        </td>
-                        <td className="py-2 px-2.5 text-slate-600 text-[11px]">
-                          <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                          <div>{it.materia_prima_nome}</div>
+                          <span className="text-[10px] text-slate-400 font-normal">
                             {it.categoria}
                           </span>
+                        </td>
+                        <td className="py-2 px-2.5 text-[11px]">
+                          {it.isenta_st ? (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold text-[10px]">
+                              Isenta / ST
+                            </span>
+                          ) : (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 font-mono text-[10px]">
+                              {(it.icms_percentual || 0) +
+                                (it.pis_percentual || 0) +
+                                (it.cofins_percentual || 0)}
+                              %
+                            </span>
+                          )}
                         </td>
                         <td className="py-2 px-2.5 text-right font-mono text-slate-800">
                           {formatNumber(it.quantidade, 3)}
@@ -774,59 +875,49 @@ export function ModalPdfFichaTecnica({
                         <td className="py-2 px-2.5 text-right font-mono text-slate-700">
                           {formatBrl(it.custo_unitario)}
                         </td>
-                        <td className="py-2 px-2.5 text-right font-bold font-mono text-slate-900">
+                        <td className="py-2 px-2.5 text-right font-mono text-slate-700">
                           {formatBrl(it.subtotal)}
                         </td>
-                        <td className="py-2 px-2.5 text-right font-mono text-slate-600 text-[11px]">
-                          {it.partMP.toFixed(1)}%
+                        <td className="py-2 px-2.5 text-right font-mono text-emerald-700 font-semibold">
+                          {it.credito_total > 0 ? `-${formatBrl(it.credito_total)}` : 'R$ 0,00'}
                         </td>
-                        <td className="py-2 px-2.5 text-right font-mono font-semibold text-blue-700 text-[11px]">
-                          {it.partTotal.toFixed(1)}%
+                        <td className="py-2 px-2.5 text-right font-bold font-mono text-blue-900">
+                          {formatBrl(it.subtotal_liquido)}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-slate-300 bg-slate-50/80 font-bold text-slate-900">
-                      <td colSpan={6} className="py-2.5 px-2.5 text-right uppercase text-[11px]">
-                        Subtotal Matérias-Primas:
+                      <td colSpan={6} className="py-2 px-2.5 text-right uppercase text-[11px]">
+                        Subtotal MP Bruto:
                       </td>
-                      <td className="py-2.5 px-2.5 text-right font-mono text-sm text-slate-900">
-                        {formatBrl(stats.custoMP)}
+                      <td className="py-2 px-2.5 text-right font-mono text-xs text-slate-800">
+                        {formatBrl(stats.custoMPBruto)}
                       </td>
-                      <td className="py-2.5 px-2.5 text-right font-mono text-[11px]">100,0%</td>
-                      <td className="py-2.5 px-2.5 text-right font-mono text-[11px] text-blue-700">
-                        {stats.custoTotal > 0
-                          ? `${((stats.custoMP / stats.custoTotal) * 100).toFixed(1)}%`
-                          : '100%'}
+                      <td className="py-2 px-2.5 text-right font-mono text-xs text-emerald-700">
+                        -{formatBrl(stats.creditosTotais)}
+                      </td>
+                      <td className="py-2 px-2.5 text-right font-mono text-xs text-blue-900">
+                        {formatBrl(stats.custoMPLiquido)}
                       </td>
                     </tr>
                     {stats.outrosCustos > 0 && (
                       <tr className="border-t border-slate-200 bg-slate-50/40 text-slate-700">
-                        <td colSpan={6} className="py-2 px-2.5 text-right text-[11px]">
+                        <td colSpan={8} className="py-2 px-2.5 text-right text-[11px]">
                           Outros Custos / Mão de Obra Direta:
                         </td>
                         <td className="py-2 px-2.5 text-right font-mono font-semibold text-slate-800">
                           {formatBrl(stats.outrosCustos)}
                         </td>
-                        <td className="py-2 px-2.5 text-right text-slate-400 text-[11px]">—</td>
-                        <td className="py-2 px-2.5 text-right font-mono text-[11px] text-slate-700">
-                          {stats.custoTotal > 0
-                            ? `${((stats.outrosCustos / stats.custoTotal) * 100).toFixed(1)}%`
-                            : '0%'}
-                        </td>
                       </tr>
                     )}
                     <tr className="border-t border-slate-300 bg-blue-50/50 font-black text-blue-950">
-                      <td colSpan={6} className="py-2.5 px-2.5 text-right uppercase text-xs">
-                        Custo Total Unitário de Fabricação:
+                      <td colSpan={8} className="py-2.5 px-2.5 text-right uppercase text-xs">
+                        Custo Total Líquido Unitário:
                       </td>
-                      <td className="py-2.5 px-2.5 text-right font-mono text-sm text-blue-900">
-                        {formatBrl(stats.custoTotal)}
-                      </td>
-                      <td className="py-2.5 px-2.5 text-right text-slate-400 text-[11px]">—</td>
-                      <td className="py-2.5 px-2.5 text-right font-mono text-[11px] text-blue-900">
-                        100,0%
+                      <td className="py-2.5 px-2.5 text-right font-mono text-sm text-blue-950">
+                        {formatBrl(stats.custoTotalLiquido)}
                       </td>
                     </tr>
                   </tfoot>

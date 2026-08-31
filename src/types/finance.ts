@@ -504,6 +504,8 @@ export interface HistoricoPrecoProdutoRecord extends RecordModel {
   }
 }
 
+export type TipoTributacaoMateriaPrima = 'tributada' | 'isenta' | 'substituicao_tributaria'
+
 export interface MateriaPrimaRecord extends RecordModel {
   user: string
   codigo?: string
@@ -514,6 +516,8 @@ export interface MateriaPrimaRecord extends RecordModel {
   icms_percentual?: number
   pis_percentual?: number
   cofins_percentual?: number
+  isenta_st?: boolean
+  tipo_tributacao?: TipoTributacaoMateriaPrima
   estoque_atual?: number
   estoque_minimo?: number
   observacoes?: string
@@ -526,6 +530,18 @@ export interface ItemFichaTecnica {
   custo_unitario: number
   quantidade: number
   subtotal: number
+  // Campos detalhados de impostos e custo líquido
+  custo_unitario_liquido?: number
+  subtotal_liquido?: number
+  icms_percentual?: number
+  pis_percentual?: number
+  cofins_percentual?: number
+  credito_icms?: number
+  credito_pis?: number
+  credito_cofins?: number
+  credito_total?: number
+  isenta_st?: boolean
+  tipo_tributacao?: TipoTributacaoMateriaPrima
 }
 
 export interface FichaTecnicaRecord extends RecordModel {
@@ -539,6 +555,12 @@ export interface FichaTecnicaRecord extends RecordModel {
   preco_venda_sugerido?: number
   markup_desejado?: number
   preco_venda_markup?: number
+  // Totais líquidos com dedução de créditos tributários
+  custo_materia_prima_liquido?: number
+  creditos_tributarios_totais?: number
+  custo_total_liquido?: number
+  preco_venda_sugerido_liquido?: number
+  preco_venda_markup_liquido?: number
   observacoes?: string
   expand?: {
     produto?: ProdutoRecord

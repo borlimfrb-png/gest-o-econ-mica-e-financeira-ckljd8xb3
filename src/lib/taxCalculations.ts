@@ -605,6 +605,70 @@ export interface MatrizSensibilidadeItem {
  * Calcula o preço de venda por dentro (Gross-Up)
  * Preço = Custo / (1 - (Margem% + DespVar% + CargaTrib%) / 100)
  */
+/**
+ * Calcula créditos tributários de uma matéria-prima e custo líquido
+ * Se marcada como isenta/ST, zera os percentuais e créditos, retornando custo líquido = custo bruto.
+ */
+export function calcularTributosMateriaPrima(
+  custoUnitario: number,
+  icmsPct: number = 0,
+  pisPct: number = 0,
+  cofinsPct: number = 0,
+  isentaST: boolean = false,
+  tipoTributacao: 'tributada' | 'isenta' | 'substituicao_tributaria' = 'tributada',
+) {
+  const c = Math.max(0, Number(custoUnitario) || 0)
+  const isIsentaOuST =
+    isentaST || tipoTributacao === 'isenta' || tipoTributacao === 'substituicao_tributaria'
+
+  if (isIsentaOuST) {
+    return {
+      custoBruto: c,
+      icmsPercentual: 0,
+      pisPercentual: 0,
+      cofinsPercentual: 0,
+      creditoIcms: 0,
+      creditoPis: 0,
+      creditoCofins: 0,
+      totalCreditos: 0,
+      custoLiquido: c,
+      percentualCreditoTotal: 0,
+      isIsentaOuST: true,
+      tipoTributacao: tipoTributacao === 'tributada' ? 'isenta' : tipoTributacao,
+    }
+  }
+
+  const icms = Math.max(0, Number(icmsPct) || 0)
+  const pis = Math.max(0, Number(pisPct) || 0)
+  const cofins = Math.max(0, Number(cofinsPct) || 0)
+
+  const creditoIcms = (c * icms) / 100
+  const creditoPis = (c * pis) / 100
+  const creditoCofins = (c * cofins) / 100
+  const totalCreditos = creditoIcms + creditoPis + creditoCofins
+  const custoLiquido = Math.max(0, c - totalCreditos)
+  const percentualCreditoTotal = c > 0 ? (totalCreditos / c) * 100 : 0
+
+  return {
+    custoBruto: c,
+    icmsPercentual: icms,
+    pisPercentual: pis,
+    cofinsPercentual: cofins,
+    creditoIcms: Math.round(creditoIcms * 100) / 100,
+    creditoPis: Math.round(creditoPis * 100) / 100,
+    creditoCofins: Math.round(creditoCofins * 100) / 100,
+    totalCreditos: Math.round(totalCreditos * 100) / 100,
+    custoLiquido: Math.round(custoLiquido * 100) / 100,
+    percentualCreditoTotal: Math.round(percentualCreditoTotal * 100) / 100,
+    isIsentaOuST: false,
+    tipoTributacao: 'tributada' as const,
+  }
+}
+
+/**
+ * Calcula o preço de venda por dentro (Gross-Up)
+ * Preço = Custo / (1 - (Margem% + DespVar% + CargaTrib%) / 100)
+ */
 export function calcularPrecoPorDentro(
   custo: number,
   margemPct: number,
