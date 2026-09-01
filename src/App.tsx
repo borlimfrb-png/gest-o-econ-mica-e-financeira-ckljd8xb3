@@ -1,4 +1,4 @@
-/* Main App Component - Handles routing (using react-router-dom), query client and other providers */
+/* Main App Component - Sistema de Gestão Econômica e Financeira */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
