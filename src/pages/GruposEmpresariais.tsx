@@ -41,9 +41,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { gruposEmpresariaisService, empresasService } from '@/services/financeService'
 import type { GrupoEmpresarialRecord, EmpresaRecord } from '@/types/finance'
+import { ModalRelatorioConsolidadoGrupoA4 } from '@/components/ModalRelatorioConsolidadoGrupoA4'
+import { FileText, Printer } from 'lucide-react'
 function formatCnpj(v: string) {
   if (!v) return ''
   const d = v.replace(/\D/g, '')
@@ -54,7 +57,8 @@ function formatCnpj(v: string) {
 export default function GruposEmpresariais() {
   const { toast } = useToast()
   const navigate = useNavigate()
-  const { setSelectedEmpresaId, reloadEmpresas } = useFilter()
+  const { setSelectedEmpresaId, reloadEmpresas, selectedAno } = useFilter()
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
 
   const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
@@ -70,6 +74,10 @@ export default function GruposEmpresariais() {
   const [buscaEmpresaModal, setBuscaEmpresaModal] = useState('')
   const [saving, setSaving] = useState(false)
   const [formErrors, setFormErrors] = useState<{ nome?: string; empresas?: string }>({})
+
+  // Modal Relatório Consolidado A4 em PDF
+  const [modalPdfConsolidadoOpen, setModalPdfConsolidadoOpen] = useState(false)
+  const [grupoParaRelatorio, setGrupoParaRelatorio] = useState<GrupoEmpresarialRecord | null>(null)
 
   // Modal confirmação de exclusão
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
@@ -239,6 +247,11 @@ export default function GruposEmpresariais() {
       description: `Agora visualizando o grupo consolidado "${grupo.nome}".`,
     })
     navigate('/dashboard')
+  }
+
+  const handleOpenRelatorioConsolidado = (grupo: GrupoEmpresarialRecord) => {
+    setGrupoParaRelatorio(grupo)
+    setModalPdfConsolidadoOpen(true)
   }
 
   // Filtragem dos grupos na lista
@@ -447,16 +460,29 @@ export default function GruposEmpresariais() {
                 </div>
 
                 <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleVerConsolidado(grupo)}
-                    className="flex-1 text-xs font-semibold text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200 h-8 gap-1 shadow-2xs"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Ver Análises</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </Button>
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleVerConsolidado(grupo)}
+                      className="flex-1 text-xs font-semibold text-indigo-700 hover:text-indigo-800 hover:bg-indigo-50 border-indigo-200 h-8 gap-1 shadow-2xs"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Ver Análises</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenRelatorioConsolidado(grupo)}
+                      className="text-xs font-semibold text-slate-700 hover:text-indigo-700 hover:bg-indigo-50 border-slate-200 h-8 gap-1 shadow-2xs"
+                      title="Relatório Consolidado em PDF (A4)"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      <span className="hidden sm:inline">Relatório PDF</span>
+                    </Button>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <Button
@@ -464,7 +490,7 @@ export default function GruposEmpresariais() {
                       size="icon"
                       onClick={() => openEditModal(grupo)}
                       className="h-8 w-8 text-slate-600 hover:text-slate-900 hover:bg-slate-200"
-                      title="Editar Grupo"
+                      title="Editar / Renomear Grupo"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </Button>
@@ -719,6 +745,17 @@ export default function GruposEmpresariais() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal Relatório Consolidado A4 do Grupo em PDF */}
+      <ModalRelatorioConsolidadoGrupoA4
+        open={modalPdfConsolidadoOpen}
+        onOpenChange={setModalPdfConsolidadoOpen}
+        grupo={grupoParaRelatorio}
+        empresas={empresas}
+        selectedAnoInicial={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+      />
     </div>
   )
 }

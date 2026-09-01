@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import {
   balancosService,
   centrosService,
@@ -28,8 +29,11 @@ import type {
   ContratoRecord,
   RecebivelRecord,
   NotaFiscalRecord,
+  GrupoEmpresarialRecord,
+  EmpresaRecord,
 } from '@/types/finance'
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
+import { ModalRelatorioConsolidadoGrupoA4 } from '@/components/ModalRelatorioConsolidadoGrupoA4'
 import {
   calcularBalanco,
   calcularDre,
@@ -90,6 +94,10 @@ import {
   Plus,
   Bot,
   Sparkles,
+  Network,
+  Printer,
+  Crown,
+  Layers,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -97,12 +105,22 @@ const CHART_COLORS = ['#2563EB', '#0EA5E9', '#10B981', '#F59E0B', '#8B5CF6', '#E
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { empresas, selectedEmpresaId, selectedAno, selectedEmpresa, isLoadingEmpresas } =
-    useFilter()
+  const {
+    empresas,
+    grupos,
+    selectedEmpresaId,
+    selectedAno,
+    selectedEmpresa,
+    isGrupoAtivo,
+    grupoAtivo,
+    isLoadingEmpresas,
+  } = useFilter()
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
 
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [allBalancos, setAllBalancos] = useState<BalancoRecord[]>([])
+  const [allDres, setAllDres] = useState<DreRecord[]>([])
   const [lancamentosCentro, setLancamentosCentro] = useState<LancamentoCentroRecord[]>([])
   const [lancamentosFinanceiros, setLancamentosFinanceiros] = useState<LancamentoRecord[]>([])
   const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
@@ -114,6 +132,7 @@ export default function Dashboard() {
   const [recebiveis, setRecebiveis] = useState<RecebivelRecord[]>([])
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscalRecord[]>([])
   const [modalMetasOpen, setModalMetasOpen] = useState(false)
+  const [modalRelatorioGrupoOpen, setModalRelatorioGrupoOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
 
   const loadData = async () => {
@@ -147,7 +166,7 @@ export default function Dashboard() {
         notasFiscaisService.listar().catch(() => [] as NotaFiscalRecord[]),
       ])
       setAllBalancos(allB)
-      setDres(allD)
+      setAllDres(allD)
       setLancamentosCentro(allL)
       setTiposDespesa(allTd)
       setCentros(allC)
@@ -160,9 +179,20 @@ export default function Dashboard() {
       setNotasFiscais(allNotas)
 
       if (selectedEmpresaId) {
-        setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
+        if (selectedEmpresaId.startsWith('grupo-')) {
+          const [bGrupo, dGrupo] = await Promise.all([
+            balancosService.getByEmpresa(selectedEmpresaId),
+            dreService.getByEmpresa(selectedEmpresaId),
+          ])
+          setBalancos(bGrupo)
+          setDres(dGrupo)
+        } else {
+          setBalancos(allB.filter((b) => b.empresa === selectedEmpresaId))
+          setDres(allD.filter((d) => d.empresa === selectedEmpresaId))
+        }
       } else {
         setBalancos(allB)
+        setDres(allD)
       }
     } catch (err) {
       console.error('Erro ao carregar dados do dashboard:', err)
@@ -171,16 +201,39 @@ export default function Dashboard() {
     }
   }
 
-  // Atualiza balancos filtrados quando selectedEmpresaId muda sem precisar recarregar tudo
+  // Atualiza balanços e DREs quando selectedEmpresaId muda
   useEffect(() => {
-    if (allBalancos.length > 0) {
-      if (selectedEmpresaId) {
-        setBalancos(allBalancos.filter((b) => b.empresa === selectedEmpresaId))
-      } else {
-        setBalancos(allBalancos)
+    let isMounted = true
+    const updateDadosEmpresa = async () => {
+      if (selectedEmpresaId && selectedEmpresaId.startsWith('grupo-')) {
+        try {
+          const [bGrupo, dGrupo] = await Promise.all([
+            balancosService.getByEmpresa(selectedEmpresaId),
+            dreService.getByEmpresa(selectedEmpresaId),
+          ])
+          if (isMounted) {
+            setBalancos(bGrupo)
+            setDres(dGrupo)
+          }
+        } catch (err) {
+          console.error('Erro ao consolidar balanços e DRE do grupo:', err)
+        }
+      } else if (allBalancos.length > 0 || allDres.length > 0) {
+        if (selectedEmpresaId) {
+          setBalancos(allBalancos.filter((b) => b.empresa === selectedEmpresaId))
+          setDres(allDres.filter((d) => d.empresa === selectedEmpresaId))
+        } else {
+          setBalancos(allBalancos)
+          setDres(allDres)
+        }
       }
     }
-  }, [selectedEmpresaId, allBalancos])
+
+    updateDadosEmpresa()
+    return () => {
+      isMounted = false
+    }
+  }, [selectedEmpresaId, allBalancos, allDres])
 
   useEffect(() => {
     loadData()
@@ -458,6 +511,72 @@ export default function Dashboard() {
   const calcB = calcularBalanco(balancoAtual)
   const calcD = calcularDre(dreAtual)
   const calcInd = calcularIndicadores(balancoAtual, dreAtual)
+
+  // APURAÇÃO DE COMPOSIÇÃO DO GRUPO (quando isGrupoAtivo === true)
+  const composicaoGrupo = useMemo(() => {
+    if (!isGrupoAtivo || !grupoAtivo || !grupoAtivo.empresas || grupoAtivo.empresas.length === 0) {
+      return null
+    }
+
+    const empresasIds = grupoAtivo.empresas || []
+    const empresasMembros = empresas.filter((e) => empresasIds.includes(e.id))
+
+    // Calcula balanço e DRE do exercício para cada empresa do grupo
+    const itens = empresasMembros.map((emp) => {
+      const bList = allBalancos.filter((b) => b.empresa === emp.id)
+      const dList = allDres.filter((d) => d.empresa === emp.id)
+
+      const bEmp = consolidarBalancoAnual(bList, selectedAno)
+      const dEmp = consolidarDreAnual(dList, selectedAno)
+
+      const calcBEmp = calcularBalanco(bEmp)
+      const calcDEmp = calcularDre(dEmp)
+
+      return {
+        empresa: emp,
+        ativoTotal: calcBEmp.ativoTotal,
+        receitaLiquida: calcDEmp.receitaLiquida,
+        lucroLiquido: calcDEmp.lucroLiquido,
+        patrimonioLiquido: calcBEmp.patrimonioLiquido,
+        pctAtivo: 0,
+        pctReceita: 0,
+        pctPL: 0,
+      }
+    })
+
+    const totalAtivoGrupo = itens.reduce((acc, it) => acc + it.ativoTotal, 0)
+    const totalReceitaGrupo = itens.reduce((acc, it) => acc + it.receitaLiquida, 0)
+    const totalPLGrupo = itens.reduce((acc, it) => acc + it.patrimonioLiquido, 0)
+    const totalLucroGrupo = itens.reduce((acc, it) => acc + it.lucroLiquido, 0)
+
+    const itensComPct = itens.map((it) => ({
+      ...it,
+      pctAtivo: totalAtivoGrupo > 0 ? (it.ativoTotal / totalAtivoGrupo) * 100 : 0,
+      pctReceita: totalReceitaGrupo > 0 ? (it.receitaLiquida / totalReceitaGrupo) * 100 : 0,
+      pctPL: totalPLGrupo > 0 ? (it.patrimonioLiquido / totalPLGrupo) * 100 : 0,
+    }))
+
+    // Empresa que mais contribui para Ativo Total
+    const maiorContribuinteAtivo =
+      [...itensComPct].sort((a, b) => b.ativoTotal - a.ativoTotal)[0] || null
+
+    // Empresa que mais contribui para Receita
+    const maiorContribuinteReceita =
+      [...itensComPct].sort((a, b) => b.receitaLiquida - a.receitaLiquida)[0] || null
+
+    return {
+      grupo: grupoAtivo,
+      qtdEmpresas: empresasMembros.length,
+      empresasMembros,
+      itens: itensComPct,
+      totalAtivoGrupo,
+      totalReceitaGrupo,
+      totalPLGrupo,
+      totalLucroGrupo,
+      maiorContribuinteAtivo,
+      maiorContribuinteReceita,
+    }
+  }, [isGrupoAtivo, grupoAtivo, empresas, allBalancos, allDres, selectedAno])
 
   // SEÇÃO METAS DE LANÇAMENTOS DO MÊS / EXERCÍCIO / TRIMESTRE
   const cardsMetasCalculados = useMemo(() => {
@@ -1597,41 +1716,279 @@ export default function Dashboard() {
         onMetaChanged={loadData}
       />
 
-      {/* Banner Empresa Selecionada */}
+      {/* Modal Relatório Consolidado A4 do Grupo em PDF */}
+      <ModalRelatorioConsolidadoGrupoA4
+        open={modalRelatorioGrupoOpen}
+        onOpenChange={setModalRelatorioGrupoOpen}
+        grupo={grupoAtivo}
+        empresas={empresas}
+        selectedAnoInicial={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+      />
+
+      {/* Banner Empresa / Grupo Selecionado */}
       {selectedEmpresa && (
         <div className="bg-white border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
-              <Building2 className="w-5 h-5" />
+            <div
+              className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                isGrupoAtivo
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
+                  : 'bg-blue-50 text-blue-700'
+              }`}
+            >
+              {isGrupoAtivo ? <Network className="w-5 h-5" /> : <Building2 className="w-5 h-5" />}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold text-[#0B1F3A]">{selectedEmpresa.nome}</h2>
-                <Badge
-                  variant="secondary"
-                  className="text-[11px] font-semibold bg-blue-50 text-blue-700 border-blue-200"
-                >
-                  {selectedEmpresa.segmento}
-                </Badge>
+                {isGrupoAtivo ? (
+                  <Badge className="text-[11px] font-bold bg-indigo-50 text-indigo-700 border-indigo-200">
+                    Grupo Consolidado ({grupoAtivo?.empresas?.length || 0} emp.)
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    className="text-[11px] font-semibold bg-blue-50 text-blue-700 border-blue-200"
+                  >
+                    {selectedEmpresa.segmento}
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-[#5B6B7F]">
-                CNPJ: {formatCnpj(selectedEmpresa.cnpj)} · Exercício de Referência:{' '}
+                {isGrupoAtivo
+                  ? `Visão Econômica Consolidada · Exercício de Referência: `
+                  : `CNPJ: ${formatCnpj(selectedEmpresa.cnpj)} · Exercício de Referência: `}
                 <span className="font-semibold text-slate-700">{selectedAno}</span>
               </p>
             </div>
           </div>
 
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium"
-          >
-            <Link to={`/empresas/${selectedEmpresa.id}`}>
-              Ver Análise Completa <ArrowRight className="w-3.5 h-3.5 ml-1" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            {isGrupoAtivo && grupoAtivo && (
+              <Button
+                size="sm"
+                onClick={() => setModalRelatorioGrupoOpen(true)}
+                className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold gap-1.5 shadow-xs h-8"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Relatório Consolidado (PDF)
+              </Button>
+            )}
+
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 font-medium h-8"
+            >
+              <Link to={`/empresas/${selectedEmpresa.id}`}>
+                Ver Análise Completa <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Link>
+            </Button>
+          </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* CARD DE COMPOSIÇÃO DO GRUPO (APENAS QUANDO UM GRUPO ESTÁ SELECIONADO) */}
+      {/* ========================================================================= */}
+      {isGrupoAtivo && composicaoGrupo && (
+        <Card className="bg-gradient-to-br from-white via-indigo-50/20 to-slate-50 border-indigo-200 shadow-xs overflow-hidden">
+          <CardHeader className="p-4 pb-3 border-b border-indigo-100 bg-indigo-50/40">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-indigo-600 text-white shadow-xs">
+                  <Network className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm font-bold text-indigo-950">
+                      Composição do Grupo Econômico
+                    </CardTitle>
+                    <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[10px] font-bold">
+                      {composicaoGrupo.qtdEmpresas}{' '}
+                      {composicaoGrupo.qtdEmpresas === 1 ? 'empresa membro' : 'empresas membros'}
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs text-slate-600 mt-0.5">
+                    Visão de concentração patrimonial e contribuição de faturamento de cada empresa
+                    no exercício de {selectedAno}
+                  </CardDescription>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setModalRelatorioGrupoOpen(true)}
+                  className="h-8 text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-white hover:bg-indigo-50 border-indigo-200 gap-1.5 shadow-2xs"
+                >
+                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Relatório Consolidado (PDF)</span>
+                </Button>
+                <Button
+                  asChild
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 text-xs font-semibold text-slate-600 hover:text-indigo-700"
+                >
+                  <Link to="/cadastro/grupos-empresariais">Gerenciar Grupos</Link>
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-4 pt-4 space-y-4">
+            {/* Linha de Destaques: Maior Ativo e Maior Receita */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Maior Contribuição em Ativo */}
+              <div className="p-3 bg-white rounded-xl border border-indigo-100/90 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5 text-amber-500" />
+                    Maior Participação em Ativo Total
+                  </span>
+                  {composicaoGrupo.maiorContribuinteAtivo && (
+                    <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-bold text-xs">
+                      {formatPercent(composicaoGrupo.maiorContribuinteAtivo.pctAtivo, 1)} do grupo
+                    </Badge>
+                  )}
+                </div>
+
+                {composicaoGrupo.maiorContribuinteAtivo ? (
+                  <div className="flex items-center justify-between pt-1">
+                    <div>
+                      <h4 className="text-sm font-bold text-[#0B1F3A] flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-indigo-600" />
+                        {composicaoGrupo.maiorContribuinteAtivo.empresa.nome}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        CNPJ: {formatCnpj(composicaoGrupo.maiorContribuinteAtivo.empresa.cnpj)} ·{' '}
+                        {composicaoGrupo.maiorContribuinteAtivo.empresa.segmento}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-black text-indigo-950 font-mono block">
+                        {formatBrlMil(composicaoGrupo.maiorContribuinteAtivo.ativoTotal)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Ativo sob gestão
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">Sem dados de balanço para o ano.</p>
+                )}
+              </div>
+
+              {/* Maior Contribuição em Receita */}
+              <div className="p-3 bg-white rounded-xl border border-indigo-100/90 shadow-2xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                    <Crown className="w-3.5 h-3.5 text-emerald-500" />
+                    Maior Participação em Receita
+                  </span>
+                  {composicaoGrupo.maiorContribuinteReceita && (
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold text-xs">
+                      {formatPercent(composicaoGrupo.maiorContribuinteReceita.pctReceita, 1)} do
+                      faturamento
+                    </Badge>
+                  )}
+                </div>
+
+                {composicaoGrupo.maiorContribuinteReceita ? (
+                  <div className="flex items-center justify-between pt-1">
+                    <div>
+                      <h4 className="text-sm font-bold text-[#0B1F3A] flex items-center gap-1.5">
+                        <Building2 className="w-4 h-4 text-emerald-600" />
+                        {composicaoGrupo.maiorContribuinteReceita.empresa.nome}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        CNPJ: {formatCnpj(composicaoGrupo.maiorContribuinteReceita.empresa.cnpj)} ·{' '}
+                        {composicaoGrupo.maiorContribuinteReceita.empresa.segmento}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-black text-emerald-900 font-mono block">
+                        {formatBrlMil(composicaoGrupo.maiorContribuinteReceita.receitaLiquida)}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium">
+                        Receita Líquida
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">Sem dados de DRE para o ano.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Mini Lista / Barras de Contribuição de cada Empresa */}
+            <div className="space-y-2 pt-1 border-t border-indigo-100/60">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                Distribuição de Ativo e Receita por Empresa Membro
+              </span>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {composicaoGrupo.itens.map((it) => (
+                  <div
+                    key={it.empresa.id}
+                    className="p-2.5 rounded-lg bg-white border border-slate-200/80 shadow-2xs space-y-2 hover:border-indigo-300 transition-colors"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <h5 className="text-xs font-bold text-[#0B1F3A] truncate">
+                          {it.empresa.nome}
+                        </h5>
+                        <span className="text-[10px] text-slate-500">
+                          {it.empresa.segmento || 'Geral'}
+                        </span>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] text-slate-600 shrink-0">
+                        {formatPercent(it.pctAtivo, 0)} Ativo
+                      </Badge>
+                    </div>
+
+                    {/* Barra de Ativo */}
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-500">Ativo:</span>
+                        <span className="font-mono font-bold text-indigo-900">
+                          {formatBrlMil(it.ativoTotal)} ({formatPercent(it.pctAtivo, 1)})
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, Math.max(0, it.pctAtivo))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Barra de Receita */}
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-500">Receita:</span>
+                        <span className="font-mono font-bold text-emerald-800">
+                          {formatBrlMil(it.receitaLiquida)} ({formatPercent(it.pctReceita, 1)})
+                        </span>
+                      </div>
+                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, Math.max(0, it.pctReceita))}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Grid de KPIs - 2 colunas mobile, 6 colunas desktop */}
