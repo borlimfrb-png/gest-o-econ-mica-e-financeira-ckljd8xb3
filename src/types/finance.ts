@@ -470,6 +470,7 @@ export interface CapitalGiroCalculado {
 
 export interface ProdutoRecord extends RecordModel {
   user: string
+  empresa?: string
   codigo?: string
   nome: string
   unidade: string
@@ -478,6 +479,9 @@ export interface ProdutoRecord extends RecordModel {
   preco_venda?: number
   margem_desejada?: number
   observacoes?: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
 }
 
 export type OrigemAlteracaoPreco =
@@ -508,6 +512,7 @@ export type TipoTributacaoMateriaPrima = 'tributada' | 'isenta' | 'substituicao_
 
 export interface MateriaPrimaRecord extends RecordModel {
   user: string
+  empresa?: string
   codigo?: string
   nome: string
   unidade: string
@@ -524,6 +529,9 @@ export interface MateriaPrimaRecord extends RecordModel {
   estoque_atual?: number
   estoque_minimo?: number
   observacoes?: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
 }
 
 export interface ItemFichaTecnica {

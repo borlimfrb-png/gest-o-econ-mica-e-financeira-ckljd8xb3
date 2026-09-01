@@ -208,12 +208,12 @@ export default function Impostos() {
   )
 
   // Carregar produtos, matérias-primas e fichas para o simulador
-  const carregarProdutosEFichas = useCallback(async () => {
+  const carregarProdutosEFichas = useCallback(async (empresaId?: string) => {
     try {
       const [listaProd, listaFichas, listaMaterias] = await Promise.all([
-        produtosService.getAll(),
-        fichasTecnicasService.getAll(),
-        materiasPrimasService.getAll(),
+        produtosService.getAll(empresaId),
+        fichasTecnicasService.getAll(empresaId),
+        materiasPrimasService.getAll(empresaId),
       ])
       setProdutos(listaProd)
       setFichas(listaFichas)
@@ -226,7 +226,7 @@ export default function Impostos() {
   useEffect(() => {
     if (selectedEmpresaId) {
       carregarConfiguracaoEDre(selectedEmpresaId)
-      carregarProdutosEFichas()
+      carregarProdutosEFichas(selectedEmpresaId)
     }
   }, [selectedEmpresaId, carregarConfiguracaoEDre, carregarProdutosEFichas])
 

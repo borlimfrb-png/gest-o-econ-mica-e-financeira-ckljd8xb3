@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { produtosService, fichasTecnicasService } from '@/services/formacaoPrecoService'
-import type { ProdutoRecord, FichaTecnicaRecord } from '@/types/finance'
+import type { ProdutoRecord, FichaTecnicaRecord, EmpresaRecord } from '@/types/finance'
+import { useFilter } from '@/contexts/FilterContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -48,6 +49,7 @@ import {
   Check,
   AlertTriangle,
   History,
+  Building2,
 } from 'lucide-react'
 import { ModalHistoricoPrecos } from '@/components/ModalHistoricoPrecos'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -68,6 +70,7 @@ function formatPct(val: number | null | undefined): string {
 }
 
 interface ProdutoFormData {
+  empresa: string
   codigo: string
   nome: string
   unidade: string
@@ -79,6 +82,7 @@ interface ProdutoFormData {
 }
 
 const EMPTY_PRODUTO: ProdutoFormData = {
+  empresa: '',
   codigo: '',
   nome: '',
   unidade: 'UN',
@@ -93,6 +97,7 @@ type ProdutoErrors = Partial<Record<keyof ProdutoFormData | 'general', string>>
 
 export default function CadastroProdutos() {
   const { toast } = useToast()
+  const { selectedEmpresaId, setSelectedEmpresaId, empresas, selectedEmpresa } = useFilter()
 
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
@@ -128,9 +133,10 @@ export default function CadastroProdutos() {
   const loadData = async () => {
     try {
       setLoading(true)
+      // Carrega produtos e fichas filtrando pela empresa selecionada (ou todos se nenhuma empresa)
       const [prodList, fichasList] = await Promise.all([
-        produtosService.getAll(),
-        fichasTecnicasService.getAll(),
+        produtosService.getAll(selectedEmpresaId || undefined),
+        fichasTecnicasService.getAll(selectedEmpresaId || undefined),
       ])
       setProdutos(prodList)
       setFichas(fichasList)
@@ -148,7 +154,7 @@ export default function CadastroProdutos() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [selectedEmpresaId])
 
   useRealtime<ProdutoRecord>('produtos', () => loadData())
   useRealtime<FichaTecnicaRecord>('fichas_tecnicas', () => loadData())
@@ -264,6 +270,9 @@ export default function CadastroProdutos() {
     if (!form.nome.trim() || form.nome.trim().length < 2) {
       errs.nome = 'Informe o nome do produto (mínimo 2 caracteres)'
     }
+    if (!form.empresa) {
+      errs.general = 'Selecione uma empresa para vincular o produto'
+    }
     if (!form.unidade.trim()) {
       errs.unidade = 'Informe a unidade de medida (ex: UN, KG, CX)'
     }
@@ -286,7 +295,10 @@ export default function CadastroProdutos() {
 
   const handleOpenNew = () => {
     setEditingProduto(null)
-    setFormData(EMPTY_PRODUTO)
+    setFormData({
+      ...EMPTY_PRODUTO,
+      empresa: selectedEmpresaId || (empresas.length > 0 ? empresas[0].id : ''),
+    })
     setErrors({})
     setModalOpen(true)
   }
@@ -294,6 +306,7 @@ export default function CadastroProdutos() {
   const handleOpenEdit = (p: ProdutoRecord) => {
     setEditingProduto(p)
     setFormData({
+      empresa: p.empresa || selectedEmpresaId || (empresas.length > 0 ? empresas[0].id : ''),
       codigo: p.codigo || '',
       nome: p.nome,
       unidade: p.unidade || 'UN',
@@ -329,6 +342,7 @@ export default function CadastroProdutos() {
           : undefined
 
       const payload = {
+        empresa: formData.empresa || selectedEmpresaId || undefined,
         codigo: formData.codigo.trim() || undefined,
         nome: formData.nome.trim(),
         unidade: formData.unidade.trim().toUpperCase(),
@@ -548,6 +562,51 @@ export default function CadastroProdutos() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Seletor de Empresa e Banner de Contexto */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Empresa Selecionada:
+              </span>
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                {selectedEmpresa?.nome || 'Nenhuma selecionada'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Os produtos e precificações exibidos pertencem exclusivamente a esta empresa.
+            </p>
+          </div>
+        </div>
+
+        {empresas.length > 1 && (
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <label
+              htmlFor="empresa-filtro-prod"
+              className="text-xs font-medium text-slate-600 shrink-0"
+            >
+              Trocar Empresa:
+            </label>
+            <select
+              id="empresa-filtro-prod"
+              value={selectedEmpresaId}
+              onChange={(e) => setSelectedEmpresaId(e.target.value)}
+              className="h-9 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none w-full md:w-64"
+            >
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nome} ({emp.segmento || 'Empresa'})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       {/* Cards de Métricas Rápidas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-white border-slate-200 shadow-xs">
@@ -895,6 +954,33 @@ export default function CadastroProdutos() {
             )}
 
             <div className="space-y-3 py-4">
+              {/* Seletor de Empresa no Modal */}
+              <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                <Label
+                  htmlFor="prod-empresa"
+                  className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                >
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  Empresa Cliente *
+                </Label>
+                <select
+                  id="prod-empresa"
+                  value={formData.empresa}
+                  onChange={(e) => setField('empresa', e.target.value)}
+                  className="w-full h-9 text-xs bg-white border border-slate-300 rounded-md px-2.5 text-slate-800 font-medium focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                  required
+                >
+                  <option value="" disabled>
+                    Selecione a empresa...
+                  </option>
+                  {empresas.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.nome} {emp.cnpj ? `(${emp.cnpj})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="prod-codigo" className="text-xs font-semibold text-slate-700">

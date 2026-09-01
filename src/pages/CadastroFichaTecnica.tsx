@@ -219,9 +219,9 @@ export default function CadastroFichaTecnica() {
     try {
       setLoading(true)
       const [fList, pList, mList, cfg] = await Promise.all([
-        fichasTecnicasService.getAll(),
-        produtosService.getAll(),
-        materiasPrimasService.getAll(),
+        fichasTecnicasService.getAll(selectedEmpresaId || undefined),
+        produtosService.getAll(selectedEmpresaId || undefined),
+        materiasPrimasService.getAll(selectedEmpresaId || undefined),
         selectedEmpresaId
           ? configuracoesTributariasService.getByEmpresa(selectedEmpresaId).catch(() => null)
           : Promise.resolve(null),

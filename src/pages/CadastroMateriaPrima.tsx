@@ -63,6 +63,7 @@ import {
   Calendar,
   Printer,
   FileText,
+  Building2,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -106,6 +107,7 @@ function formatQty(val: number | null | undefined, unidade: string = ''): string
 }
 
 interface MateriaPrimaFormData {
+  empresa: string
   codigo: string
   nome: string
   unidade: string
@@ -125,6 +127,7 @@ interface MateriaPrimaFormData {
 }
 
 const EMPTY_MP: MateriaPrimaFormData = {
+  empresa: '',
   codigo: '',
   nome: '',
   unidade: 'UN',
@@ -227,7 +230,7 @@ export interface ItemCurvaABC {
 
 export default function CadastroMateriaPrima() {
   const { toast } = useToast()
-  const { selectedEmpresaId, selectedEmpresa } = useFilter()
+  const { selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, empresas } = useFilter()
   const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
 
   const [materias, setMaterias] = useState<MateriaPrimaRecord[]>([])
@@ -278,8 +281,8 @@ export default function CadastroMateriaPrima() {
     try {
       setLoading(true)
       const [mList, fList, cfg] = await Promise.all([
-        materiasPrimasService.getAll(),
-        fichasTecnicasService.getAll(),
+        materiasPrimasService.getAll(selectedEmpresaId || undefined),
+        fichasTecnicasService.getAll(selectedEmpresaId || undefined),
         selectedEmpresaId
           ? configuracoesTributariasService.getByEmpresa(selectedEmpresaId)
           : Promise.resolve(null),
@@ -721,8 +724,11 @@ export default function CadastroMateriaPrima() {
     if (!form.nome.trim() || form.nome.trim().length < 2) {
       errs.nome = 'Informe o nome da matéria-prima (mínimo 2 caracteres)'
     }
+    if (!form.empresa) {
+      errs.general = 'Selecione uma empresa para vincular a matéria-prima'
+    }
     if (!form.unidade.trim()) {
-      errs.unidade = 'Informe a unidade de medida (ex: KG, UN, M, L)'
+      errs.unidade = 'Informe a unidade de medida (ex: KG, UN, L)'
     }
     if (form.custo_unitario.trim() !== '') {
       const c = Number(form.custo_unitario.replace(',', '.'))
@@ -773,7 +779,10 @@ export default function CadastroMateriaPrima() {
 
   const handleOpenNew = () => {
     setEditingMP(null)
-    setFormData(EMPTY_MP)
+    setFormData({
+      ...EMPTY_MP,
+      empresa: selectedEmpresaId || (empresas.length > 0 ? empresas[0].id : ''),
+    })
     setErrors({})
     setModalOpen(true)
   }
@@ -786,6 +795,7 @@ export default function CadastroMateriaPrima() {
       m.tipo_tributacao === 'substituicao_tributaria',
     )
     setFormData({
+      empresa: m.empresa || selectedEmpresaId || (empresas.length > 0 ? empresas[0].id : ''),
       codigo: m.codigo || '',
       nome: m.nome,
       unidade: m.unidade || 'UN',
@@ -874,6 +884,7 @@ export default function CadastroMateriaPrima() {
       )
 
       const payload = {
+        empresa: formData.empresa || selectedEmpresaId || undefined,
         codigo: formData.codigo.trim() || undefined,
         nome: formData.nome.trim(),
         unidade: formData.unidade.trim().toUpperCase(),
@@ -1238,6 +1249,51 @@ export default function CadastroMateriaPrima() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Seletor de Empresa e Banner de Contexto */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Empresa Selecionada:
+              </span>
+              <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                {selectedEmpresa?.nome || 'Nenhuma selecionada'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Os insumos, tributos e curva ABC exibidos pertencem exclusivamente a esta empresa.
+            </p>
+          </div>
+        </div>
+
+        {empresas.length > 1 && (
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <label
+              htmlFor="empresa-filtro-mp"
+              className="text-xs font-medium text-slate-600 shrink-0"
+            >
+              Trocar Empresa:
+            </label>
+            <select
+              id="empresa-filtro-mp"
+              value={selectedEmpresaId}
+              onChange={(e) => setSelectedEmpresaId(e.target.value)}
+              className="h-9 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1 text-slate-800 font-medium focus:ring-2 focus:ring-amber-600 focus:outline-none w-full md:w-64"
+            >
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nome} ({emp.segmento || 'Empresa'})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       {/* Abas Superiores: Catálogo de Insumos vs Curva ABC */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
@@ -2063,6 +2119,33 @@ export default function CadastroMateriaPrima() {
                 )}
 
                 <div className="space-y-4 py-4">
+                  {/* Seletor de Empresa no Modal */}
+                  <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <Label
+                      htmlFor="mp-empresa"
+                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      Empresa Cliente *
+                    </Label>
+                    <select
+                      id="mp-empresa"
+                      value={formData.empresa}
+                      onChange={(e) => setField('empresa', e.target.value)}
+                      className="w-full h-9 text-xs bg-white border border-slate-300 rounded-md px-2.5 text-slate-800 font-medium focus:ring-1 focus:ring-blue-600 focus:outline-none"
+                      required
+                    >
+                      <option value="" disabled>
+                        Selecione a empresa...
+                      </option>
+                      {empresas.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.nome} {emp.cnpj ? `(${emp.cnpj})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Seção 1: Identificação */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">

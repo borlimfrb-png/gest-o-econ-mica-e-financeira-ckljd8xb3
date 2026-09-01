@@ -11,6 +11,7 @@ import type {
 } from '@/types/finance'
 
 export interface ProdutoInput {
+  empresa?: string
   codigo?: string
   nome: string
   unidade: string
@@ -52,6 +53,7 @@ export interface ConfiguracaoTributariaInput {
 }
 
 export interface MateriaPrimaInput {
+  empresa?: string
   codigo?: string
   nome: string
   unidade: string
@@ -124,16 +126,27 @@ export const historicoPrecosService = {
 // SERVIÇO: PRODUTOS
 // -------------------------------------------------------------
 export const produtosService = {
-  async getAll(): Promise<ProdutoRecord[]> {
+  async getAll(empresaId?: string): Promise<ProdutoRecord[]> {
     const userId = getUserId()
+    let filter = `user = "${userId}"`
+    if (empresaId) {
+      filter += ` && empresa = "${empresaId}"`
+    }
     return pb.collection('produtos').getFullList<ProdutoRecord>({
-      filter: `user = "${userId}"`,
+      filter,
       sort: 'nome',
+      expand: 'empresa',
     })
   },
 
+  async getByEmpresa(empresaId: string): Promise<ProdutoRecord[]> {
+    return this.getAll(empresaId)
+  },
+
   async getById(id: string): Promise<ProdutoRecord> {
-    return pb.collection('produtos').getOne<ProdutoRecord>(id)
+    return pb.collection('produtos').getOne<ProdutoRecord>(id, {
+      expand: 'empresa',
+    })
   },
 
   async create(data: ProdutoInput): Promise<ProdutoRecord> {
@@ -220,16 +233,27 @@ export const produtosService = {
 // SERVIÇO: MATÉRIAS-PRIMAS
 // -------------------------------------------------------------
 export const materiasPrimasService = {
-  async getAll(): Promise<MateriaPrimaRecord[]> {
+  async getAll(empresaId?: string): Promise<MateriaPrimaRecord[]> {
     const userId = getUserId()
+    let filter = `user = "${userId}"`
+    if (empresaId) {
+      filter += ` && empresa = "${empresaId}"`
+    }
     return pb.collection('materias_primas').getFullList<MateriaPrimaRecord>({
-      filter: `user = "${userId}"`,
+      filter,
       sort: 'nome',
+      expand: 'empresa',
     })
   },
 
+  async getByEmpresa(empresaId: string): Promise<MateriaPrimaRecord[]> {
+    return this.getAll(empresaId)
+  },
+
   async getById(id: string): Promise<MateriaPrimaRecord> {
-    return pb.collection('materias_primas').getOne<MateriaPrimaRecord>(id)
+    return pb.collection('materias_primas').getOne<MateriaPrimaRecord>(id, {
+      expand: 'empresa',
+    })
   },
 
   async create(data: MateriaPrimaInput): Promise<MateriaPrimaRecord> {
@@ -316,10 +340,14 @@ export const configuracoesTributariasService = {
 // SERVIÇO: FICHAS TÉCNICAS
 // -------------------------------------------------------------
 export const fichasTecnicasService = {
-  async getAll(): Promise<FichaTecnicaRecord[]> {
+  async getAll(empresaId?: string): Promise<FichaTecnicaRecord[]> {
     const userId = getUserId()
+    let filter = `user = "${userId}"`
+    if (empresaId) {
+      filter += ` && produto.empresa = "${empresaId}"`
+    }
     return pb.collection('fichas_tecnicas').getFullList<FichaTecnicaRecord>({
-      filter: `user = "${userId}"`,
+      filter,
       sort: '-created',
       expand: 'produto',
     })
@@ -483,6 +511,7 @@ export const fichasTecnicasService = {
 
       const novoProduto = await pb.collection('produtos').create<ProdutoRecord>({
         user: userId,
+        empresa: originalProd?.empresa,
         codigo: novoCodigo,
         nome: novoNome,
         unidade: novaUnidade,

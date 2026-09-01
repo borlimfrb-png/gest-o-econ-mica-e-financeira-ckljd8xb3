@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-31T14:49:10.876Z",
+  "generatedAt": "2026-09-01T18:16:46.531Z",
   "collections": [
     {
       "name": "users",
@@ -2211,11 +2211,20 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_produtos_user ON produtos (user)",
-        "CREATE INDEX idx_produtos_codigo ON produtos (user, codigo)"
+        "CREATE INDEX idx_produtos_codigo ON produtos (user, codigo)",
+        "CREATE INDEX `idx_produtos_empresa` ON `produtos` (empresa)",
+        "CREATE INDEX `idx_produtos_user_empresa` ON `produtos` (user, empresa)"
       ]
     },
     {
@@ -2346,11 +2355,20 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_materias_primas_user ON materias_primas (user)",
-        "CREATE INDEX idx_materias_primas_codigo ON materias_primas (user, codigo)"
+        "CREATE INDEX idx_materias_primas_codigo ON materias_primas (user, codigo)",
+        "CREATE INDEX `idx_materias_primas_empresa` ON `materias_primas` (empresa)",
+        "CREATE INDEX `idx_materias_primas_user_empresa` ON `materias_primas` (user, empresa)"
       ]
     },
     {
