@@ -564,6 +564,7 @@ export interface ItemFichaTecnica {
 
 export interface FichaTecnicaRecord extends RecordModel {
   user: string
+  empresa?: string
   produto: string
   itens: ItemFichaTecnica[]
   custo_materia_prima: number
@@ -581,6 +582,7 @@ export interface FichaTecnicaRecord extends RecordModel {
   preco_venda_markup_liquido?: number
   observacoes?: string
   expand?: {
+    empresa?: EmpresaRecord
     produto?: ProdutoRecord
   }
 }

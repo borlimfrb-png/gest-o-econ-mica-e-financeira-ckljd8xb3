@@ -73,15 +73,21 @@ export interface MateriaPrimaInput {
 }
 
 export interface FichaTecnicaInput {
+  empresa?: string
   produto: string
   itens: ItemFichaTecnica[]
   custo_materia_prima: number
+  custo_materia_prima_liquido?: number
+  creditos_tributarios_totais?: number
   outros_custos?: number
   custo_total: number
+  custo_total_liquido?: number
   margem_desejada?: number
   preco_venda_sugerido?: number
+  preco_venda_sugerido_liquido?: number
   markup_desejado?: number
   preco_venda_markup?: number
+  preco_venda_markup_liquido?: number
   observacoes?: string
 }
 
@@ -224,6 +230,28 @@ export const produtosService = {
     return record
   },
 
+  async transferirEmpresa(produtoId: string, novaEmpresaId: string): Promise<ProdutoRecord> {
+    const updated = await pb.collection('produtos').update<ProdutoRecord>(produtoId, {
+      empresa: novaEmpresaId,
+    })
+
+    // Sincroniza também as fichas técnicas associadas a este produto para a nova empresa
+    try {
+      const fichas = await pb.collection('fichas_tecnicas').getFullList<FichaTecnicaRecord>({
+        filter: `produto = "${produtoId}"`,
+      })
+      for (const f of fichas) {
+        await pb.collection('fichas_tecnicas').update(f.id, {
+          empresa: novaEmpresaId,
+        })
+      }
+    } catch (err) {
+      console.warn('Aviso ao sincronizar empresa das fichas do produto transferido:', err)
+    }
+
+    return updated
+  },
+
   async delete(id: string): Promise<boolean> {
     return pb.collection('produtos').delete(id)
   },
@@ -266,6 +294,28 @@ export const materiasPrimasService = {
 
   async update(id: string, data: Partial<MateriaPrimaInput>): Promise<MateriaPrimaRecord> {
     return pb.collection('materias_primas').update<MateriaPrimaRecord>(id, data)
+  },
+
+  async verificarUsoEmFichas(materiaPrimaId: string): Promise<FichaTecnicaRecord[]> {
+    const userId = getUserId()
+    const fichas = await pb.collection('fichas_tecnicas').getFullList<FichaTecnicaRecord>({
+      filter: `user = "${userId}"`,
+      expand: 'produto,empresa',
+    })
+
+    return fichas.filter((f) => {
+      if (!f.itens || !Array.isArray(f.itens)) return false
+      return f.itens.some((it) => it.materia_prima_id === materiaPrimaId)
+    })
+  },
+
+  async transferirEmpresa(
+    materiaPrimaId: string,
+    novaEmpresaId: string,
+  ): Promise<MateriaPrimaRecord> {
+    return pb.collection('materias_primas').update<MateriaPrimaRecord>(materiaPrimaId, {
+      empresa: novaEmpresaId,
+    })
   },
 
   async delete(id: string): Promise<boolean> {
@@ -344,18 +394,18 @@ export const fichasTecnicasService = {
     const userId = getUserId()
     let filter = `user = "${userId}"`
     if (empresaId) {
-      filter += ` && produto.empresa = "${empresaId}"`
+      filter += ` && (empresa = "${empresaId}" || produto.empresa = "${empresaId}")`
     }
     return pb.collection('fichas_tecnicas').getFullList<FichaTecnicaRecord>({
       filter,
       sort: '-created',
-      expand: 'produto',
+      expand: 'produto,empresa',
     })
   },
 
   async getById(id: string): Promise<FichaTecnicaRecord> {
     return pb.collection('fichas_tecnicas').getOne<FichaTecnicaRecord>(id, {
-      expand: 'produto',
+      expand: 'produto,empresa',
     })
   },
 
@@ -365,7 +415,7 @@ export const fichasTecnicasService = {
       const records = await pb.collection('fichas_tecnicas').getFullList<FichaTecnicaRecord>({
         filter: `user = "${userId}" && produto = "${produtoId}"`,
         sort: '-created',
-        expand: 'produto',
+        expand: 'produto,empresa',
       })
       return records.length > 0 ? records[0] : null
     } catch {
@@ -375,13 +425,26 @@ export const fichasTecnicasService = {
 
   async create(data: FichaTecnicaInput): Promise<FichaTecnicaRecord> {
     const userId = getUserId()
+
+    // Se empresa não foi passada explicitamente, busca a empresa do produto
+    let empresaId = data.empresa
+    if (!empresaId && data.produto) {
+      try {
+        const prod = await pb.collection('produtos').getOne<ProdutoRecord>(data.produto)
+        empresaId = prod.empresa
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+
     const record = await pb.collection('fichas_tecnicas').create<FichaTecnicaRecord>(
       {
         ...data,
+        empresa: empresaId,
         user: userId,
       },
       {
-        expand: 'produto',
+        expand: 'produto,empresa',
       },
     )
 
@@ -400,7 +463,7 @@ export const fichasTecnicasService = {
 
   async update(id: string, data: Partial<FichaTecnicaInput>): Promise<FichaTecnicaRecord> {
     const record = await pb.collection('fichas_tecnicas').update<FichaTecnicaRecord>(id, data, {
-      expand: 'produto',
+      expand: 'produto,empresa',
     })
 
     if (data.produto && data.custo_total !== undefined) {
@@ -473,6 +536,7 @@ export const fichasTecnicasService = {
   async clone(
     id: string,
     options?: {
+      empresaId?: string
       criarNovoProduto?: boolean
       novoProdutoNome?: string
       novoProdutoCodigo?: string
@@ -486,6 +550,7 @@ export const fichasTecnicasService = {
     const userId = getUserId()
     const originalFicha = await this.getById(id)
     let targetProdutoId = options?.targetProdutoId
+    let empresaDestino = options?.empresaId || originalFicha.empresa
 
     // Se solicitado criar novo produto como cópia do produto original (ou sem targetProdutoId)
     if (options?.criarNovoProduto || !targetProdutoId) {
@@ -500,6 +565,10 @@ export const fichasTecnicasService = {
         }
       }
 
+      if (!empresaDestino && originalProd?.empresa) {
+        empresaDestino = originalProd.empresa
+      }
+
       const originalNome = originalProd?.nome || 'Produto'
       const novoNome = options?.novoProdutoNome?.trim() || `${originalNome} (Variação)`
       const novoCodigo =
@@ -511,7 +580,7 @@ export const fichasTecnicasService = {
 
       const novoProduto = await pb.collection('produtos').create<ProdutoRecord>({
         user: userId,
-        empresa: originalProd?.empresa,
+        empresa: empresaDestino,
         codigo: novoCodigo,
         nome: novoNome,
         unidade: novaUnidade,
@@ -555,10 +624,11 @@ export const fichasTecnicasService = {
     const precoSugeridoMarkup =
       novoCustoTotal > 0 ? novoCustoTotal * (1 + markup / 100) : novoCustoTotal
 
-    // Cria a nova ficha técnica clonada vinculada ao produto destino
+    // Cria a nova ficha técnica clonada vinculada ao produto destino e à empresa
     const novaFicha = await pb.collection('fichas_tecnicas').create<FichaTecnicaRecord>(
       {
         user: userId,
+        empresa: empresaDestino,
         produto: targetProdutoId,
         itens: itensClonados,
         custo_materia_prima: novoCustoMP,
@@ -575,7 +645,7 @@ export const fichasTecnicasService = {
             : 'Ficha técnica duplicada com insumos em lote.'),
       },
       {
-        expand: 'produto',
+        expand: 'produto,empresa',
       },
     )
 

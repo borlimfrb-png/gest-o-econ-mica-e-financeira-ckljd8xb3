@@ -7,8 +7,10 @@ import {
   fichasTecnicasService,
   configuracoesTributariasService,
 } from '@/services/formacaoPrecoService'
+import { empresasService } from '@/services/financeService'
 import { calcularPrecoPorDentro, calcularTributosMateriaPrima } from '@/lib/taxCalculations'
 import {
+  EmpresaRecord,
   ProdutoRecord,
   MateriaPrimaRecord,
   FichaTecnicaRecord,
@@ -80,6 +82,7 @@ import {
   SlidersHorizontal,
   ArrowUpDown,
   Receipt,
+  Building2,
 } from 'lucide-react'
 import { ModalPdfFichaTecnica } from '@/components/ModalPdfFichaTecnica'
 import {
@@ -149,9 +152,12 @@ type FichaFormErrors = Partial<
 
 export default function CadastroFichaTecnica() {
   const { toast } = useToast()
-  const { selectedEmpresaId } = useFilter()
+  const { selectedEmpresaId: filterEmpresaId, setSelectedEmpresaId: setFilterEmpresaId } =
+    useFilter()
   const [searchParams] = useSearchParams()
 
+  const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>(filterEmpresaId || '')
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
   const [produtos, setProdutos] = useState<ProdutoRecord[]>([])
   const [materias, setMaterias] = useState<MateriaPrimaRecord[]>([])
@@ -159,6 +165,39 @@ export default function CadastroFichaTecnica() {
     null,
   )
   const [loading, setLoading] = useState(true)
+
+  // Carregar lista de empresas
+  const loadEmpresas = async () => {
+    try {
+      const empList = await empresasService.getAll()
+      setEmpresas(empList)
+      if (empList.length > 0 && !selectedEmpresaId) {
+        const initialId = filterEmpresaId || empList[0].id
+        setSelectedEmpresaId(initialId)
+      }
+    } catch (err) {
+      console.error('Erro ao carregar empresas:', err)
+    }
+  }
+
+  useEffect(() => {
+    loadEmpresas()
+  }, [])
+
+  useEffect(() => {
+    if (filterEmpresaId && filterEmpresaId !== selectedEmpresaId) {
+      setSelectedEmpresaId(filterEmpresaId)
+    }
+  }, [filterEmpresaId])
+
+  const handleSelectEmpresa = (empId: string) => {
+    setSelectedEmpresaId(empId)
+    setFilterEmpresaId(empId)
+  }
+
+  const selectedEmpresa = useMemo(() => {
+    return empresas.find((e) => e.id === selectedEmpresaId) || null
+  }, [empresas, selectedEmpresaId])
 
   // Filtros
   const [search, setSearch] = useState('')
@@ -260,6 +299,7 @@ export default function CadastroFichaTecnica() {
   useRealtime<FichaTecnicaRecord>('fichas_tecnicas', () => loadData())
   useRealtime<ProdutoRecord>('produtos', () => loadData())
   useRealtime<MateriaPrimaRecord>('materias_primas', () => loadData())
+  useRealtime<EmpresaRecord>('empresas', () => loadEmpresas())
 
   const produtosMap = useMemo(() => {
     const map = new Map<string, ProdutoRecord>()
@@ -850,7 +890,11 @@ export default function CadastroFichaTecnica() {
         itensValidos,
       } = formCalculations
 
+      const prodSelected = produtosMap.get(formData.produto_id)
+      const empresaParaSalvar = selectedEmpresaId || prodSelected?.empresa || editingFicha?.empresa
+
       const payload = {
+        empresa: empresaParaSalvar,
         produto: formData.produto_id,
         itens: itensValidos,
         custo_materia_prima: custoMPBruto,
@@ -985,6 +1029,7 @@ export default function CadastroFichaTecnica() {
       const ajusteNum = Number(cloneAjustePercentual.replace(',', '.')) || 0
 
       const novaFicha = await fichasTecnicasService.clone(fichaToClone.id, {
+        empresaId: fichaToClone.empresa || selectedEmpresaId,
         criarNovoProduto: true,
         novoProdutoNome: cloneNovoNome.trim(),
         novoProdutoCodigo: cloneNovoCodigo.trim() || undefined,
@@ -1663,6 +1708,69 @@ export default function CadastroFichaTecnica() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
+      </div>
+
+      {/* Seletor de Empresa, Banner de Contexto e Indicador de Quantidade Resumido */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Empresa Selecionada:
+              </span>
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                {selectedEmpresa?.nome || 'Nenhuma selecionada'}
+              </span>
+              {/* Indicador Resumido da Empresa Ativa */}
+              <Badge
+                variant="outline"
+                className="text-xs font-semibold bg-blue-50 text-blue-800 border-blue-300"
+              >
+                {stats.total} {stats.total === 1 ? 'ficha técnica' : 'fichas técnicas'} ·{' '}
+                {selectedEmpresa?.nome || 'Geral'}
+              </Badge>
+              {produtos.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium bg-emerald-50/70 text-emerald-700 border-emerald-200"
+                >
+                  {produtos.length}{' '}
+                  {produtos.length === 1 ? 'produto cadastrado' : 'produtos cadastrados'}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              As fichas técnicas, insumos e formação de preços exibidos pertencem exclusivamente a
+              esta empresa.
+            </p>
+          </div>
+        </div>
+
+        {empresas.length > 1 && (
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <label
+              htmlFor="empresa-filtro-ficha"
+              className="text-xs font-medium text-slate-600 shrink-0"
+            >
+              Trocar Empresa:
+            </label>
+            <select
+              id="empresa-filtro-ficha"
+              value={selectedEmpresaId}
+              onChange={(e) => handleSelectEmpresa(e.target.value)}
+              className="h-9 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none w-full md:w-64"
+            >
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nome} ({emp.segmento || 'Empresa'})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* RENDERIZAÇÃO DAS ABAS */}

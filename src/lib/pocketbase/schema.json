@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T18:16:46.531Z",
+  "generatedAt": "2026-09-01T18:38:33.907Z",
   "collections": [
     {
       "name": "users",
@@ -2463,11 +2463,20 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_fichas_tecnicas_user ON fichas_tecnicas (user)",
-        "CREATE INDEX idx_fichas_tecnicas_produto ON fichas_tecnicas (user, produto)"
+        "CREATE INDEX idx_fichas_tecnicas_produto ON fichas_tecnicas (user, produto)",
+        "CREATE INDEX `idx_fichas_tecnicas_empresa` ON `fichas_tecnicas` (empresa)",
+        "CREATE INDEX `idx_fichas_tecnicas_user_empresa` ON `fichas_tecnicas` (user, empresa)"
       ]
     },
     {

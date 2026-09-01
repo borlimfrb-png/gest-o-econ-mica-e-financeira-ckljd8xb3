@@ -50,6 +50,7 @@ import {
   AlertTriangle,
   History,
   Building2,
+  ArrowRightLeft,
 } from 'lucide-react'
 import { ModalHistoricoPrecos } from '@/components/ModalHistoricoPrecos'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -129,6 +130,12 @@ export default function CadastroProdutos() {
   // Modal Histórico de Preços
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false)
   const [produtoParaHistorico, setProdutoParaHistorico] = useState<ProdutoRecord | null>(null)
+
+  // Modal Mover / Transferir Empresa
+  const [transferirModalOpen, setTransferirModalOpen] = useState(false)
+  const [produtoParaTransferir, setProdutoParaTransferir] = useState<ProdutoRecord | null>(null)
+  const [empresaDestinoId, setEmpresaDestinoId] = useState('')
+  const [transferindo, setTransferindo] = useState(false)
 
   const loadData = async () => {
     try {
@@ -395,6 +402,58 @@ export default function CadastroProdutos() {
     setHistoricoModalOpen(true)
   }
 
+  const handleOpenTransferir = (p: ProdutoRecord) => {
+    setProdutoParaTransferir(p)
+    // Inicializa com a primeira empresa diferente da atual
+    const outraEmpresa = empresas.find((e) => e.id !== p.empresa)
+    setEmpresaDestinoId(outraEmpresa ? outraEmpresa.id : '')
+    setTransferirModalOpen(true)
+  }
+
+  const handleConfirmarTransferencia = async () => {
+    if (!produtoParaTransferir || !empresaDestinoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Selecione o destino',
+        description: 'Por favor, escolha a empresa de destino.',
+      })
+      return
+    }
+
+    if (produtoParaTransferir.empresa === empresaDestinoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Empresa idêntica',
+        description: 'A empresa de destino deve ser diferente da empresa atual.',
+      })
+      return
+    }
+
+    const empresaDestinoObj = empresas.find((e) => e.id === empresaDestinoId)
+    const nomeDestino = empresaDestinoObj?.nome || 'nova empresa'
+
+    setTransferindo(true)
+    try {
+      await produtosService.transferirEmpresa(produtoParaTransferir.id, empresaDestinoId)
+      toast({
+        title: 'Produto transferido!',
+        description: `"${produtoParaTransferir.nome}" foi movido com sucesso para ${nomeDestino}. As fichas técnicas associadas também foram sincronizadas.`,
+      })
+      setTransferirModalOpen(false)
+      setProdutoParaTransferir(null)
+      loadData()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao transferir produto',
+        description: err?.message || 'Não foi possível concluir a transferência.',
+      })
+    } finally {
+      setTransferindo(false)
+    }
+  }
+
   const handleConfirmarVinculoPreco = async () => {
     if (!produtoParaVincular || !fichaParaVincular) return
 
@@ -562,20 +621,36 @@ export default function CadastroProdutos() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Seletor de Empresa e Banner de Contexto */}
+      {/* Seletor de Empresa, Banner de Contexto e Indicador de Quantidade Resumido */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Empresa Selecionada:
               </span>
               <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
                 {selectedEmpresa?.nome || 'Nenhuma selecionada'}
               </span>
+              {/* Indicador Resumido da Empresa Ativa */}
+              <Badge
+                variant="outline"
+                className="text-xs font-semibold bg-emerald-50 text-emerald-800 border-emerald-200"
+              >
+                {stats.total} {stats.total === 1 ? 'produto' : 'produtos'} ·{' '}
+                {selectedEmpresa?.nome || 'Geral'}
+              </Badge>
+              {fichas.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium bg-blue-50/70 text-blue-700 border-blue-200"
+                >
+                  {fichas.length} {fichas.length === 1 ? 'ficha técnica' : 'fichas técnicas'}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-slate-600 mt-0.5">
               Os produtos e precificações exibidos pertencem exclusivamente a esta empresa.
@@ -888,6 +963,17 @@ export default function CadastroProdutos() {
                         </td>
                         <td className="py-3 px-3.5 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1">
+                            {empresas.length > 1 && (
+                              <Button
+                                onClick={() => handleOpenTransferir(p)}
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-amber-600 hover:bg-amber-50"
+                                title="Mover/Transferir para outra empresa"
+                              >
+                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
                             <Button
                               onClick={() => handleOpenHistorico(p)}
                               size="sm"
@@ -1312,6 +1398,107 @@ export default function CadastroProdutos() {
         produto={produtoParaHistorico}
         onPrecoUpdated={loadData}
       />
+
+      {/* Modal Mover / Transferir Produto de Empresa */}
+      <Dialog open={transferirModalOpen} onOpenChange={setTransferirModalOpen}>
+        <DialogContent className="sm:max-w-[460px] bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+              <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+              Transferir Produto de Empresa
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Mova o produto e suas fichas técnicas vinculadas para outra empresa cadastrada.
+            </DialogDescription>
+          </DialogHeader>
+
+          {produtoParaTransferir && (
+            <div className="space-y-4 py-3">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Produto:</span>
+                  <span className="font-bold text-slate-900">{produtoParaTransferir.nome}</span>
+                </div>
+                {produtoParaTransferir.codigo && (
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Código / SKU:</span>
+                    <span className="font-mono text-slate-700">{produtoParaTransferir.codigo}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Empresa de Origem:</span>
+                  <span className="font-semibold text-slate-700">
+                    {empresas.find((e) => e.id === produtoParaTransferir.empresa)?.nome ||
+                      selectedEmpresa?.nome ||
+                      'Empresa Atual'}
+                  </span>
+                </div>
+                {fichasMap.has(produtoParaTransferir.id) && (
+                  <div className="flex justify-between text-emerald-700 font-medium">
+                    <span>Ficha Técnica Vinculada:</span>
+                    <span>Sim (será transferida junto)</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="empresa-destino-prod"
+                  className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                >
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  Selecione a Empresa de Destino *
+                </Label>
+                <select
+                  id="empresa-destino-prod"
+                  value={empresaDestinoId}
+                  onChange={(e) => setEmpresaDestinoId(e.target.value)}
+                  className="w-full h-9 text-xs bg-white border border-slate-300 rounded-md px-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                >
+                  <option value="" disabled>
+                    Selecione o destino...
+                  </option>
+                  {empresas
+                    .filter((emp) => emp.id !== produtoParaTransferir.empresa)
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.nome} {emp.cnpj ? `(${emp.cnpj})` : ''} - {emp.segmento || 'Geral'}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="text-[11px] text-amber-800 bg-amber-50 p-2.5 rounded border border-amber-200 flex items-start gap-1.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                <span>
+                  Ao transferir, este produto deixará de constar na empresa de origem e passará a
+                  ser gerenciado sob o CNPJ e regras da nova empresa selecionada.
+                </span>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTransferirModalOpen(false)}
+              disabled={transferindo}
+              className="text-xs h-9"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmarTransferencia}
+              disabled={transferindo || !empresaDestinoId}
+              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-9 shadow-xs"
+            >
+              {transferindo ? 'Transferindo...' : 'Confirmar Transferência'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmação de Exclusão */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

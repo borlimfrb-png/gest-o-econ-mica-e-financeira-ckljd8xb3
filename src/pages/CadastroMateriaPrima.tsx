@@ -64,6 +64,7 @@ import {
   Printer,
   FileText,
   Building2,
+  ArrowRightLeft,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -276,6 +277,14 @@ export default function CadastroMateriaPrima() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [mpToDelete, setMpToDelete] = useState<MateriaPrimaRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Modal Mover / Transferir Matéria-Prima de Empresa
+  const [transferirModalOpen, setTransferirModalOpen] = useState(false)
+  const [mpParaTransferir, setMpParaTransferir] = useState<MateriaPrimaRecord | null>(null)
+  const [empresaDestinoId, setEmpresaDestinoId] = useState('')
+  const [fichasAfetadas, setFichasAfetadas] = useState<FichaTecnicaRecord[]>([])
+  const [verificandoFichas, setVerificandoFichas] = useState(false)
+  const [transferindo, setTransferindo] = useState(false)
 
   const loadData = async () => {
     try {
@@ -935,6 +944,67 @@ export default function CadastroMateriaPrima() {
     setDeleteOpen(true)
   }
 
+  const handleOpenTransferir = async (m: MateriaPrimaRecord) => {
+    setMpParaTransferir(m)
+    const outraEmpresa = empresas.find((e) => e.id !== m.empresa)
+    setEmpresaDestinoId(outraEmpresa ? outraEmpresa.id : '')
+    setTransferirModalOpen(true)
+    setVerificandoFichas(true)
+    try {
+      const usadas = await materiasPrimasService.verificarUsoEmFichas(m.id)
+      setFichasAfetadas(usadas)
+    } catch (err) {
+      console.warn('Erro ao verificar uso em fichas:', err)
+      setFichasAfetadas([])
+    } finally {
+      setVerificandoFichas(false)
+    }
+  }
+
+  const handleConfirmarTransferencia = async () => {
+    if (!mpParaTransferir || !empresaDestinoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Selecione o destino',
+        description: 'Por favor, escolha a empresa de destino.',
+      })
+      return
+    }
+
+    if (mpParaTransferir.empresa === empresaDestinoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Empresa idêntica',
+        description: 'A empresa de destino deve ser diferente da empresa atual.',
+      })
+      return
+    }
+
+    const empresaDestinoObj = empresas.find((e) => e.id === empresaDestinoId)
+    const nomeDestino = empresaDestinoObj?.nome || 'nova empresa'
+
+    setTransferindo(true)
+    try {
+      await materiasPrimasService.transferirEmpresa(mpParaTransferir.id, empresaDestinoId)
+      toast({
+        title: 'Matéria-prima transferida!',
+        description: `"${mpParaTransferir.nome}" foi movida com sucesso para ${nomeDestino}.`,
+      })
+      setTransferirModalOpen(false)
+      setMpParaTransferir(null)
+      loadData()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao transferir',
+        description: err?.message || 'Não foi possível concluir a transferência da matéria-prima.',
+      })
+    } finally {
+      setTransferindo(false)
+    }
+  }
+
   const handleDelete = async () => {
     if (!mpToDelete) return
     setDeleting(true)
@@ -1249,20 +1319,36 @@ export default function CadastroMateriaPrima() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Seletor de Empresa e Banner de Contexto */}
+      {/* Seletor de Empresa, Banner de Contexto e Indicador de Quantidade Resumido */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
             <Building2 className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Empresa Selecionada:
               </span>
               <span className="text-xs font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
                 {selectedEmpresa?.nome || 'Nenhuma selecionada'}
               </span>
+              {/* Indicador Resumido da Empresa Ativa */}
+              <Badge
+                variant="outline"
+                className="text-xs font-semibold bg-amber-50 text-amber-900 border-amber-300"
+              >
+                {stats.total} {stats.total === 1 ? 'item' : 'itens'} ·{' '}
+                {selectedEmpresa?.nome || 'Geral'}
+              </Badge>
+              {fichas.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-medium bg-blue-50/70 text-blue-700 border-blue-200"
+                >
+                  {fichas.length} {fichas.length === 1 ? 'ficha vinculada' : 'fichas vinculadas'}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-slate-600 mt-0.5">
               Os insumos, tributos e curva ABC exibidos pertencem exclusivamente a esta empresa.
@@ -1875,6 +1961,17 @@ export default function CadastroMateriaPrima() {
                             {/* Ações */}
                             <td className="py-3 px-2.5 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
+                                {empresas.length > 1 && (
+                                  <Button
+                                    onClick={() => handleOpenTransferir(m)}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-amber-600 hover:bg-amber-50"
+                                    title="Mover/Transferir para outra empresa"
+                                  >
+                                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
                                 <Button
                                   onClick={() => handleOpenEdit(m)}
                                   size="sm"
@@ -2739,6 +2836,137 @@ export default function CadastroMateriaPrima() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Modal Mover / Transferir Matéria-Prima de Empresa */}
+          <Dialog open={transferirModalOpen} onOpenChange={setTransferirModalOpen}>
+            <DialogContent className="sm:max-w-[480px] bg-white">
+              <DialogHeader>
+                <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+                  Transferir Matéria-Prima de Empresa
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Mova o insumo para o catálogo de outra empresa cadastrada.
+                </DialogDescription>
+              </DialogHeader>
+
+              {mpParaTransferir && (
+                <div className="space-y-4 py-3">
+                  <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Insumo:</span>
+                      <span className="font-bold text-slate-900">{mpParaTransferir.nome}</span>
+                    </div>
+                    {mpParaTransferir.codigo && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Código:</span>
+                        <span className="font-mono text-slate-700">{mpParaTransferir.codigo}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Empresa de Origem:</span>
+                      <span className="font-semibold text-slate-700">
+                        {empresas.find((e) => e.id === mpParaTransferir.empresa)?.nome ||
+                          selectedEmpresa?.nome ||
+                          'Empresa Atual'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Verificação de Integridade com Fichas Técnicas */}
+                  {verificandoFichas ? (
+                    <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-500 flex items-center gap-2">
+                      <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      Verificando fichas técnicas vinculadas...
+                    </div>
+                  ) : fichasAfetadas.length > 0 ? (
+                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-300 text-xs text-amber-900 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">
+                            Atenção à Integridade: Este insumo é usado em {fichasAfetadas.length}{' '}
+                            {fichasAfetadas.length === 1 ? 'ficha técnica' : 'fichas técnicas'}:
+                          </p>
+                          <ul className="list-disc list-inside mt-1 text-[11px] text-amber-800 space-y-0.5">
+                            {fichasAfetadas.slice(0, 4).map((f) => (
+                              <li key={f.id}>
+                                {f.expand?.produto?.nome || 'Ficha Técnica'} (Empresa:{' '}
+                                {f.expand?.empresa?.nome ||
+                                  f.expand?.produto?.expand?.empresa?.nome ||
+                                  'Origem'}
+                                )
+                              </li>
+                            ))}
+                            {fichasAfetadas.length > 4 && (
+                              <li>... e mais {fichasAfetadas.length - 4} fichas</li>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                      <p className="text-[11px] text-amber-800 border-t border-amber-200 pt-1.5">
+                        💡 <strong>Integridade preservada:</strong> Os dados históricos das fichas
+                        atuais permanecerão intactos, mas a matéria-prima passará a ser listada para
+                        a nova empresa de destino.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-emerald-800 flex items-center gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                      Nenhuma ficha técnica vinculada no momento. Transferência 100% livre.
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="empresa-destino-mp"
+                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                      Selecione a Empresa de Destino *
+                    </Label>
+                    <select
+                      id="empresa-destino-mp"
+                      value={empresaDestinoId}
+                      onChange={(e) => setEmpresaDestinoId(e.target.value)}
+                      className="w-full h-9 text-xs bg-white border border-slate-300 rounded-md px-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                    >
+                      <option value="" disabled>
+                        Selecione o destino...
+                      </option>
+                      {empresas
+                        .filter((emp) => emp.id !== mpParaTransferir.empresa)
+                        .map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.nome} {emp.cnpj ? `(${emp.cnpj})` : ''} - {emp.segmento || 'Geral'}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setTransferirModalOpen(false)}
+                  disabled={transferindo}
+                  className="text-xs h-9"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmarTransferencia}
+                  disabled={transferindo || !empresaDestinoId}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-9 shadow-xs"
+                >
+                  {transferindo ? 'Transferindo...' : 'Confirmar Transferência'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       ) : (
         /* ABA DA CURVA ABC DE MATÉRIAS-PRIMAS */
