@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-01T18:47:02.501Z",
+  "generatedAt": "2026-09-01T19:26:16.757Z",
   "collections": [
     {
       "name": "users",
@@ -3215,6 +3215,63 @@
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_benchmarks_user_empresa ON benchmarks_empresas (user, empresa)"
+      ]
+    },
+    {
+      "name": "grupos_empresariais",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresas",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_grupos_empresariais_nome ON grupos_empresariais (nome)",
+        "CREATE INDEX idx_grupos_empresariais_user ON grupos_empresariais (user)"
       ]
     }
   ]

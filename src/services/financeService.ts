@@ -1,6 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import type {
   EmpresaRecord,
+  GrupoEmpresarialRecord,
   BalancoRecord,
   DreRecord,
   CentroRecord,
@@ -14,6 +15,235 @@ import type {
   MetaLancamentoRecord,
 } from '@/types/finance'
 
+/**
+ * Funções de consolidação em tempo real para Grupos Empresariais
+ */
+export async function consolidarBalancosPorGrupo(grupoId: string): Promise<BalancoRecord[]> {
+  try {
+    const grupo = await pb.collection('grupos_empresariais').getOne<GrupoEmpresarialRecord>(grupoId)
+    const empresasIds = grupo.empresas || []
+    if (empresasIds.length === 0) return []
+
+    // Buscar todos os balanços das empresas participantes
+    const filterExp = empresasIds.map((id) => `empresa = '${id}'`).join(' || ')
+    const balancos = await pb.collection('balancos').getFullList<BalancoRecord>({
+      filter: filterExp,
+      sort: '-ano,-mes',
+    })
+
+    if (balancos.length === 0) return []
+
+    // Agrupar por ano e mês
+    const gruposPeriodo = new Map<string, BalancoRecord[]>()
+    for (const b of balancos) {
+      const mes = b.mes ?? 12
+      const key = `${b.ano}-${mes}`
+      const lista = gruposPeriodo.get(key) || []
+      lista.push(b)
+      gruposPeriodo.set(key, lista)
+    }
+
+    const resultado: BalancoRecord[] = []
+
+    for (const [key, lista] of gruposPeriodo.entries()) {
+      const [anoStr, mesStr] = key.split('-')
+      const ano = Number(anoStr)
+      const mes = Number(mesStr)
+
+      const consolidado: BalancoRecord = {
+        id: `grupo-${grupoId}-b-${ano}-${mes}`,
+        collectionId: 'grupos_empresariais',
+        collectionName: 'grupos_empresariais',
+        created: lista[0].created,
+        updated: lista[0].updated,
+        empresa: `grupo-${grupoId}`,
+        ano,
+        mes,
+        fechado: lista.every((b) => b.fechado),
+        fechado_em: lista.find((b) => b.fechado_em)?.fechado_em,
+        fechamento_obs: `Consolidado de ${lista.length} empresas do grupo`,
+        caixa_equivalentes: lista.reduce((acc, b) => acc + (b.caixa_equivalentes || 0), 0),
+        aplicacoes_financeiras: lista.reduce((acc, b) => acc + (b.aplicacoes_financeiras || 0), 0),
+        contas_receber: lista.reduce((acc, b) => acc + (b.contas_receber || 0), 0),
+        estoques: lista.reduce((acc, b) => acc + (b.estoques || 0), 0),
+        impostos_recuperar: lista.reduce((acc, b) => acc + (b.impostos_recuperar || 0), 0),
+        outros_ativo_circulante: lista.reduce(
+          (acc, b) => acc + (b.outros_ativo_circulante || 0),
+          0,
+        ),
+        realizavel_longo_prazo: lista.reduce((acc, b) => acc + (b.realizavel_longo_prazo || 0), 0),
+        investimentos: lista.reduce((acc, b) => acc + (b.investimentos || 0), 0),
+        imobilizado: lista.reduce((acc, b) => acc + (b.imobilizado || 0), 0),
+        intangivel: lista.reduce((acc, b) => acc + (b.intangivel || 0), 0),
+        fornecedores: lista.reduce((acc, b) => acc + (b.fornecedores || 0), 0),
+        emprestimos_curto_prazo: lista.reduce(
+          (acc, b) => acc + (b.emprestimos_curto_prazo || 0),
+          0,
+        ),
+        obrigacoes_trabalhistas: lista.reduce(
+          (acc, b) => acc + (b.obrigacoes_trabalhistas || 0),
+          0,
+        ),
+        obrigacoes_tributarias: lista.reduce((acc, b) => acc + (b.obrigacoes_tributarias || 0), 0),
+        outros_passivo_circulante: lista.reduce(
+          (acc, b) => acc + (b.outros_passivo_circulante || 0),
+          0,
+        ),
+        emprestimos_longo_prazo: lista.reduce(
+          (acc, b) => acc + (b.emprestimos_longo_prazo || 0),
+          0,
+        ),
+        outras_obrigacoes_longo_prazo: lista.reduce(
+          (acc, b) => acc + (b.outras_obrigacoes_longo_prazo || 0),
+          0,
+        ),
+        capital_social: lista.reduce((acc, b) => acc + (b.capital_social || 0), 0),
+        reservas_lucros: lista.reduce((acc, b) => acc + (b.reservas_lucros || 0), 0),
+        lucros_acumulados: lista.reduce((acc, b) => acc + (b.lucros_acumulados || 0), 0),
+        vinculos_contas: {},
+      }
+
+      resultado.push(consolidado)
+    }
+
+    resultado.sort((a, b) => {
+      if (b.ano !== a.ano) return b.ano - a.ano
+      return (b.mes ?? 12) - (a.mes ?? 12)
+    })
+
+    return resultado
+  } catch (err) {
+    console.error('Erro ao consolidar balanços por grupo:', err)
+    return []
+  }
+}
+
+export async function consolidarDrePorGrupo(grupoId: string): Promise<DreRecord[]> {
+  try {
+    const grupo = await pb.collection('grupos_empresariais').getOne<GrupoEmpresarialRecord>(grupoId)
+    const empresasIds = grupo.empresas || []
+    if (empresasIds.length === 0) return []
+
+    // Buscar todas as DREs das empresas participantes
+    const filterExp = empresasIds.map((id) => `empresa = '${id}'`).join(' || ')
+    const dres = await pb.collection('dre').getFullList<DreRecord>({
+      filter: filterExp,
+      sort: '-ano,-mes',
+    })
+
+    if (dres.length === 0) return []
+
+    // Agrupar por ano e mês
+    const gruposPeriodo = new Map<string, DreRecord[]>()
+    for (const d of dres) {
+      const mes = d.mes ?? 12
+      const key = `${d.ano}-${mes}`
+      const lista = gruposPeriodo.get(key) || []
+      lista.push(d)
+      gruposPeriodo.set(key, lista)
+    }
+
+    const resultado: DreRecord[] = []
+
+    for (const [key, lista] of gruposPeriodo.entries()) {
+      const [anoStr, mesStr] = key.split('-')
+      const ano = Number(anoStr)
+      const mes = Number(mesStr)
+
+      const consolidado: DreRecord = {
+        id: `grupo-${grupoId}-d-${ano}-${mes}`,
+        collectionId: 'grupos_empresariais',
+        collectionName: 'grupos_empresariais',
+        created: lista[0].created,
+        updated: lista[0].updated,
+        empresa: `grupo-${grupoId}`,
+        ano,
+        mes,
+        fechado: lista.every((d) => d.fechado),
+        fechado_em: lista.find((d) => d.fechado_em)?.fechado_em,
+        fechamento_obs: `Consolidado de ${lista.length} empresas do grupo`,
+        receita_bruta: lista.reduce((acc, d) => acc + (d.receita_bruta || 0), 0),
+        deducoes_receita: lista.reduce((acc, d) => acc + (d.deducoes_receita || 0), 0),
+        custo_mercadorias: lista.reduce((acc, d) => acc + (d.custo_mercadorias || 0), 0),
+        despesas_operacionais: lista.reduce((acc, d) => acc + (d.despesas_operacionais || 0), 0),
+        despesas_financeiras: lista.reduce((acc, d) => acc + (d.despesas_financeiras || 0), 0),
+        outras_receitas_despesas: lista.reduce(
+          (acc, d) => acc + (d.outras_receitas_despesas || 0),
+          0,
+        ),
+        imposto_renda: lista.reduce((acc, d) => acc + (d.imposto_renda || 0), 0),
+      }
+
+      resultado.push(consolidado)
+    }
+
+    resultado.sort((a, b) => {
+      if (b.ano !== a.ano) return b.ano - a.ano
+      return (b.mes ?? 12) - (a.mes ?? 12)
+    })
+
+    return resultado
+  } catch (err) {
+    console.error('Erro ao consolidar DRE por grupo:', err)
+    return []
+  }
+}
+
+export const gruposEmpresariaisService = {
+  async getAll(): Promise<GrupoEmpresarialRecord[]> {
+    return await pb.collection('grupos_empresariais').getFullList<GrupoEmpresarialRecord>({
+      sort: 'nome',
+      expand: 'empresas',
+    })
+  },
+
+  async getById(id: string): Promise<GrupoEmpresarialRecord> {
+    return await pb.collection('grupos_empresariais').getOne<GrupoEmpresarialRecord>(id, {
+      expand: 'empresas',
+    })
+  },
+
+  async create(data: {
+    nome: string
+    descricao?: string
+    empresas?: string[]
+  }): Promise<GrupoEmpresarialRecord> {
+    const userId = pb.authStore.record?.id
+    return await pb.collection('grupos_empresariais').create<GrupoEmpresarialRecord>(
+      {
+        nome: data.nome.trim(),
+        descricao: data.descricao?.trim() || undefined,
+        empresas: data.empresas || [],
+        user: userId || undefined,
+      },
+      {
+        expand: 'empresas',
+      },
+    )
+  },
+
+  async update(
+    id: string,
+    data: Partial<{
+      nome: string
+      descricao?: string
+      empresas?: string[]
+    }>,
+  ): Promise<GrupoEmpresarialRecord> {
+    const payload: Record<string, unknown> = {}
+    if (data.nome !== undefined) payload.nome = data.nome.trim()
+    if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
+    if (data.empresas !== undefined) payload.empresas = data.empresas
+    return await pb.collection('grupos_empresariais').update<GrupoEmpresarialRecord>(id, payload, {
+      expand: 'empresas',
+    })
+  },
+
+  async delete(id: string): Promise<boolean> {
+    return await pb.collection('grupos_empresariais').delete(id)
+  },
+}
+
 export const empresasService = {
   async getAll(): Promise<EmpresaRecord[]> {
     return await pb.collection('empresas').getFullList<EmpresaRecord>({
@@ -22,6 +252,35 @@ export const empresasService = {
   },
 
   async getById(id: string): Promise<EmpresaRecord> {
+    if (id.startsWith('grupo-')) {
+      const grupoId = id.replace('grupo-', '')
+      try {
+        const grupo = await pb
+          .collection('grupos_empresariais')
+          .getOne<GrupoEmpresarialRecord>(grupoId, {
+            expand: 'empresas',
+          })
+        const qtdEmpresas = (grupo.empresas || []).length
+        return {
+          id: `grupo-${grupo.id}`,
+          collectionId: grupo.collectionId,
+          collectionName: grupo.collectionName,
+          created: grupo.created,
+          updated: grupo.updated,
+          nome: grupo.nome,
+          nome_fantasia: `Grupo Econômico (${qtdEmpresas} ${qtdEmpresas === 1 ? 'empresa' : 'empresas'})`,
+          cnpj: 'CONSOLIDADO',
+          segmento: 'Outros' as any,
+          observacoes:
+            grupo.descricao || `Grupo consolidado com ${qtdEmpresas} empresas participantes`,
+          is_grupo: true,
+          grupo_id: grupo.id,
+          empresas_ids: grupo.empresas || [],
+        } as EmpresaRecord
+      } catch (err) {
+        console.error('Erro ao buscar grupo como empresa:', err)
+      }
+    }
     return await pb.collection('empresas').getOne<EmpresaRecord>(id)
   },
 
@@ -46,6 +305,10 @@ export const empresasService = {
 
 export const balancosService = {
   async getByEmpresa(empresaId: string): Promise<BalancoRecord[]> {
+    if (empresaId.startsWith('grupo-')) {
+      const grupoId = empresaId.replace('grupo-', '')
+      return await consolidarBalancosPorGrupo(grupoId)
+    }
     return await pb.collection('balancos').getFullList<BalancoRecord>({
       filter: `empresa = '${empresaId}'`,
       sort: '-ano,-mes',
@@ -103,6 +366,10 @@ export const balancosService = {
 
 export const dreService = {
   async getByEmpresa(empresaId: string): Promise<DreRecord[]> {
+    if (empresaId.startsWith('grupo-')) {
+      const grupoId = empresaId.replace('grupo-', '')
+      return await consolidarDrePorGrupo(grupoId)
+    }
     return await pb.collection('dre').getFullList<DreRecord>({
       filter: `empresa = '${empresaId}'`,
       sort: '-ano,-mes',

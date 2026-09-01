@@ -39,6 +39,7 @@ import {
   Percent,
   Bot,
   Sparkles,
+  Network,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -50,11 +51,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
 
 export default function Layout() {
   const { user, logout, isAuthenticated, isLoading } = useAuth()
   const {
     empresas,
+    todasEntidades,
+    isGrupoAtivo,
+    grupoAtivo,
     selectedEmpresaId,
     setSelectedEmpresaId,
     selectedAno,
@@ -71,6 +76,7 @@ export default function Layout() {
   // Itens do submenu Cadastros
   const cadastroSubItems = [
     { name: 'Empresas', path: '/empresas', icon: Building2 },
+    { name: 'Grupo Empresarial', path: '/cadastro/grupos-empresariais', icon: Network },
     { name: 'Centros de Custo', path: '/centros', icon: PieChart },
     { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
     { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
@@ -98,6 +104,7 @@ export default function Layout() {
 
   const isCadastroActive =
     (location.pathname.startsWith('/empresas') && !location.search.includes('novo=balanco-dre')) ||
+    location.pathname.startsWith('/cadastro/grupos-empresariais') ||
     location.pathname.startsWith('/centros') ||
     location.pathname.startsWith('/tipos-despesas') ||
     location.pathname.startsWith('/contas') ||
@@ -1833,11 +1840,10 @@ export default function Layout() {
                       <SelectValue placeholder="Selecione a empresa" />
                     </SelectTrigger>
                     <SelectContent>
-                      {empresas.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                          {emp.nome} ({emp.segmento})
-                        </SelectItem>
-                      ))}
+                      <SelectEmpresaOuGrupoItems
+                        todasEntidades={todasEntidades}
+                        empresas={empresas}
+                      />
                     </SelectContent>
                   </Select>
                 </div>

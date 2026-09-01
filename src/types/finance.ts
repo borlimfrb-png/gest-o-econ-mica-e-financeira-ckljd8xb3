@@ -63,6 +63,19 @@ export interface EmpresaRecord extends RecordModel {
   contato_principal?: string
   observacoes?: string
   emitir_nota_fiscal?: boolean
+  is_grupo?: boolean
+  grupo_id?: string
+  empresas_ids?: string[]
+}
+
+export interface GrupoEmpresarialRecord extends RecordModel {
+  nome: string
+  descricao?: string
+  user?: string
+  empresas?: string[]
+  expand?: {
+    empresas?: EmpresaRecord[]
+  }
 }
 
 // Mapeia cada campo do balanço patrimonial (chave = nome do campo) ao id da

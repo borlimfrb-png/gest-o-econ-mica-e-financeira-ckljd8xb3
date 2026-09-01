@@ -1,17 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { empresasService, balancosService } from '@/services/financeService'
-import type { EmpresaRecord, BalancoRecord } from '@/types/finance'
+import {
+  empresasService,
+  gruposEmpresariaisService,
+  balancosService,
+} from '@/services/financeService'
+import type { EmpresaRecord, GrupoEmpresarialRecord, BalancoRecord } from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from './AuthContext'
 
 interface FilterContextType {
   empresas: EmpresaRecord[]
+  grupos: GrupoEmpresarialRecord[]
+  todasEntidades: EmpresaRecord[]
   selectedEmpresaId: string
   setSelectedEmpresaId: (id: string) => void
   selectedAno: number
   setSelectedAno: (ano: number) => void
   anosDisponiveis: number[]
   selectedEmpresa: EmpresaRecord | null
+  isGrupoAtivo: boolean
+  grupoAtivo: GrupoEmpresarialRecord | null
   balancosEmpresa: BalancoRecord[]
   isLoadingEmpresas: boolean
   reloadEmpresas: () => Promise<void>
@@ -24,6 +32,7 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined)
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated } = useAuth()
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
+  const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('')
   const [selectedAno, setSelectedAno] = useState<number>(2024)
   const [balancosEmpresa, setBalancosEmpresa] = useState<BalancoRecord[]>([])
@@ -39,19 +48,30 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [selectedCentroCustoId])
 
-  const loadEmpresas = async () => {
+  const loadEmpresasEGrupos = async () => {
     if (!isAuthenticated) return
     try {
       setIsLoadingEmpresas(true)
-      const list = await empresasService.getAll()
-      setEmpresas(list)
-      if (list.length > 0) {
-        if (!selectedEmpresaId || !list.some((e) => e.id === selectedEmpresaId)) {
-          setSelectedEmpresaId(list[0].id)
+      const [listEmpresas, listGrupos] = await Promise.all([
+        empresasService.getAll(),
+        gruposEmpresariaisService.getAll().catch(() => [] as GrupoEmpresarialRecord[]),
+      ])
+      setEmpresas(listEmpresas)
+      setGrupos(listGrupos)
+
+      // Se não houver seleção ou a seleção atual não existir mais nem em empresas nem em grupos
+      const todasEntidadesIds = [
+        ...listEmpresas.map((e) => e.id),
+        ...listGrupos.map((g) => `grupo-${g.id}`),
+      ]
+
+      if (todasEntidadesIds.length > 0) {
+        if (!selectedEmpresaId || !todasEntidadesIds.includes(selectedEmpresaId)) {
+          setSelectedEmpresaId(todasEntidadesIds[0])
         }
       }
     } catch (err) {
-      console.error('Erro ao carregar empresas:', err)
+      console.error('Erro ao carregar empresas e grupos:', err)
     } finally {
       setIsLoadingEmpresas(false)
     }
@@ -59,9 +79,10 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadEmpresas()
+      loadEmpresasEGrupos()
     } else {
       setEmpresas([])
+      setGrupos([])
       setSelectedEmpresaId('')
     }
   }, [isAuthenticated])
@@ -70,7 +91,16 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useRealtime<EmpresaRecord>(
     'empresas',
     () => {
-      loadEmpresas()
+      loadEmpresasEGrupos()
+    },
+    isAuthenticated,
+  )
+
+  // Realtime grupos_empresariais
+  useRealtime<GrupoEmpresarialRecord>(
+    'grupos_empresariais',
+    () => {
+      loadEmpresasEGrupos()
     },
     isAuthenticated,
   )
@@ -112,21 +142,55 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isAuthenticated,
   )
 
-  const selectedEmpresa = empresas.find((e) => e.id === selectedEmpresaId) || null
+  // Converte grupos em formato compatível com EmpresaRecord para renderização uniforme
+  const entidadesGrupos: EmpresaRecord[] = grupos.map((g) => {
+    const qtdEmpresas = (g.empresas || []).length
+    return {
+      id: `grupo-${g.id}`,
+      collectionId: g.collectionId,
+      collectionName: g.collectionName,
+      created: g.created,
+      updated: g.updated,
+      nome: g.nome,
+      nome_fantasia: `Grupo (${qtdEmpresas} ${qtdEmpresas === 1 ? 'empresa' : 'empresas'})`,
+      cnpj: 'CONSOLIDADO',
+      segmento: 'Outros' as any,
+      observacoes: g.descricao || '',
+      is_grupo: true,
+      grupo_id: g.id,
+      empresas_ids: g.empresas || [],
+    } as EmpresaRecord
+  })
+
+  const todasEntidades = [...empresas, ...entidadesGrupos]
+
+  const isGrupoAtivo = selectedEmpresaId.startsWith('grupo-')
+  const grupoAtivo = isGrupoAtivo
+    ? grupos.find((g) => `grupo-${g.id}` === selectedEmpresaId) || null
+    : null
+
+  const selectedEmpresa =
+    todasEntidades.find((e) => e.id === selectedEmpresaId) ||
+    empresas.find((e) => e.id === selectedEmpresaId) ||
+    null
 
   return (
     <FilterContext.Provider
       value={{
         empresas,
+        grupos,
+        todasEntidades,
         selectedEmpresaId,
         setSelectedEmpresaId,
         selectedAno,
         setSelectedAno,
         anosDisponiveis,
         selectedEmpresa,
+        isGrupoAtivo,
+        grupoAtivo,
         balancosEmpresa,
         isLoadingEmpresas,
-        reloadEmpresas: loadEmpresas,
+        reloadEmpresas: loadEmpresasEGrupos,
         selectedCentroCustoId,
         setSelectedCentroCustoId,
       }}
