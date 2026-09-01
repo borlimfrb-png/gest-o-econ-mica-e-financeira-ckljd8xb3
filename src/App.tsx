@@ -42,6 +42,7 @@ import AgenteIA from './pages/AgenteIA'
 import Importacao from './pages/Importacao'
 import AnaliseTributaria from './pages/AnaliseTributaria'
 import Configuracoes from './pages/Configuracoes'
+import GruposEmpresariais from './pages/GruposEmpresariais'
 import DashboardEmpresa from './pages/DashboardEmpresa'
 import MinhaEmpresa from './pages/MinhaEmpresa'
 import NotFound from './pages/NotFound'
@@ -89,6 +90,8 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/dashboard/empresa/:id" element={<DashboardEmpresa />} />
                 <Route path="/empresas" element={<Empresas />} />
+                <Route path="/cadastro/grupos-empresariais" element={<GruposEmpresariais />} />
+                <Route path="/grupos-empresariais" element={<GruposEmpresariais />} />
                 <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
                 <Route path="/centros" element={<Centros />} />
                 <Route path="/tipos-despesas" element={<TiposDespesas />} />

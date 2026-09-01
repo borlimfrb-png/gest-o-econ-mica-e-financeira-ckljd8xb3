@@ -44,7 +44,12 @@ import { useFilter } from '@/contexts/FilterContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { gruposEmpresariaisService, empresasService } from '@/services/financeService'
 import type { GrupoEmpresarialRecord, EmpresaRecord } from '@/types/finance'
-import { formatCnpj } from '@/lib/taxCalculations'
+function formatCnpj(v: string) {
+  if (!v) return ''
+  const d = v.replace(/\D/g, '')
+  if (d.length !== 14) return v
+  return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+}
 
 export default function GruposEmpresariais() {
   const { toast } = useToast()
