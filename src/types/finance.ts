@@ -504,7 +504,11 @@ export interface HistoricoPrecoProdutoRecord extends RecordModel {
   created: string
   updated: string
   expand?: {
-    produto?: ProdutoRecord
+    produto?: ProdutoRecord & {
+      expand?: {
+        empresa?: EmpresaRecord
+      }
+    }
   }
 }
 

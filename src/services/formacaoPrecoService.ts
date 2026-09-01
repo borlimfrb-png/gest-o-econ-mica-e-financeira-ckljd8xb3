@@ -106,16 +106,30 @@ export const historicoPrecosService = {
     return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
       filter: `user = "${userId}" && produto = "${produtoId}"`,
       sort: '-created',
-      expand: 'produto',
+      expand: 'produto.empresa',
     })
   },
 
-  async getAll(): Promise<HistoricoPrecoProdutoRecord[]> {
+  async getByEmpresa(empresaId: string): Promise<HistoricoPrecoProdutoRecord[]> {
     const userId = getUserId()
+    if (!empresaId) return this.getAll()
     return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
-      filter: `user = "${userId}"`,
+      filter: `user = "${userId}" && produto.empresa = "${empresaId}"`,
       sort: '-created',
-      expand: 'produto',
+      expand: 'produto.empresa',
+    })
+  },
+
+  async getAll(empresaId?: string): Promise<HistoricoPrecoProdutoRecord[]> {
+    const userId = getUserId()
+    let filter = `user = "${userId}"`
+    if (empresaId) {
+      filter += ` && produto.empresa = "${empresaId}"`
+    }
+    return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
+      filter,
+      sort: '-created',
+      expand: 'produto.empresa',
     })
   },
 
@@ -252,6 +266,26 @@ export const produtosService = {
     return updated
   },
 
+  async transferirLote(
+    produtoIds: string[],
+    novaEmpresaId: string,
+  ): Promise<{ sucesso: number; total: number; falhas: string[] }> {
+    const falhas: string[] = []
+    let sucesso = 0
+
+    for (const id of produtoIds) {
+      try {
+        await this.transferirEmpresa(id, novaEmpresaId)
+        sucesso++
+      } catch (err: any) {
+        console.error(`Erro ao transferir produto ${id}:`, err)
+        falhas.push(id)
+      }
+    }
+
+    return { sucesso, total: produtoIds.length, falhas }
+  },
+
   async delete(id: string): Promise<boolean> {
     return pb.collection('produtos').delete(id)
   },
@@ -316,6 +350,55 @@ export const materiasPrimasService = {
     return pb.collection('materias_primas').update<MateriaPrimaRecord>(materiaPrimaId, {
       empresa: novaEmpresaId,
     })
+  },
+
+  async transferirLote(
+    materiaPrimaIds: string[],
+    novaEmpresaId: string,
+  ): Promise<{ sucesso: number; total: number; falhas: string[] }> {
+    const falhas: string[] = []
+    let sucesso = 0
+
+    for (const id of materiaPrimaIds) {
+      try {
+        await this.transferirEmpresa(id, novaEmpresaId)
+        sucesso++
+      } catch (err: any) {
+        console.error(`Erro ao transferir matéria-prima ${id}:`, err)
+        falhas.push(id)
+      }
+    }
+
+    return { sucesso, total: materiaPrimaIds.length, falhas }
+  },
+
+  async verificarUsoEmFichasLote(
+    materiaPrimaIds: string[],
+  ): Promise<Map<string, FichaTecnicaRecord[]>> {
+    const userId = getUserId()
+    const fichas = await pb.collection('fichas_tecnicas').getFullList<FichaTecnicaRecord>({
+      filter: `user = "${userId}"`,
+      expand: 'produto,empresa',
+    })
+
+    const mapa = new Map<string, FichaTecnicaRecord[]>()
+    for (const mpId of materiaPrimaIds) {
+      mapa.set(mpId, [])
+    }
+
+    for (const f of fichas) {
+      if (!f.itens || !Array.isArray(f.itens)) continue
+      for (const it of f.itens) {
+        if (it.materia_prima_id && mapa.has(it.materia_prima_id)) {
+          const list = mapa.get(it.materia_prima_id)!
+          if (!list.some((exist) => exist.id === f.id)) {
+            list.push(f)
+          }
+        }
+      }
+    }
+
+    return mapa
   },
 
   async delete(id: string): Promise<boolean> {

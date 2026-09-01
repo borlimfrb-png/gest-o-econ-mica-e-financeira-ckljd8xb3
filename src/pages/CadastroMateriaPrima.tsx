@@ -21,6 +21,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Dialog,
   DialogContent,
@@ -65,6 +66,7 @@ import {
   FileText,
   Building2,
   ArrowRightLeft,
+  CheckSquare,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -277,6 +279,14 @@ export default function CadastroMateriaPrima() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [mpToDelete, setMpToDelete] = useState<MateriaPrimaRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Multi-seleção em lote
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [transferirLoteModalOpen, setTransferirLoteModalOpen] = useState(false)
+  const [empresaDestinoLoteId, setEmpresaDestinoLoteId] = useState('')
+  const [mapaFichasLote, setMapaFichasLote] = useState<Map<string, FichaTecnicaRecord[]>>(new Map())
+  const [verificandoLote, setVerificandoLote] = useState(false)
+  const [transferindoLote, setTransferindoLote] = useState(false)
 
   // Modal Mover / Transferir Matéria-Prima de Empresa
   const [transferirModalOpen, setTransferirModalOpen] = useState(false)
@@ -597,6 +607,89 @@ export default function CadastroMateriaPrima() {
       return matchSearch && matchCat && matchStatus && matchTrib
     })
   }, [materiasPorPeriodo, search, categoriaFilter, statusFilter, tributacaoFilter])
+
+  // Multi-seleção handlers
+  const allFilteredSelected =
+    materiasFiltradas.length > 0 && materiasFiltradas.every((m) => selectedIds.includes(m.id))
+
+  const handleSelectAll = () => {
+    if (allFilteredSelected) {
+      const filteredIdsSet = new Set(materiasFiltradas.map((m) => m.id))
+      setSelectedIds((prev) => prev.filter((id) => !filteredIdsSet.has(id)))
+    } else {
+      const newIds = Array.from(new Set([...selectedIds, ...materiasFiltradas.map((m) => m.id)]))
+      setSelectedIds(newIds)
+    }
+  }
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id],
+    )
+  }
+
+  // Abertura do Modal de Transferência em Lote
+  const handleOpenTransferirLote = async () => {
+    if (selectedIds.length === 0) return
+    const primeiraEmpresa = materias.find((m) => m.id === selectedIds[0])?.empresa
+    const outraEmpresa = empresas.find((e) => e.id !== primeiraEmpresa)
+    setEmpresaDestinoLoteId(outraEmpresa ? outraEmpresa.id : '')
+    setTransferirLoteModalOpen(true)
+    setVerificandoLote(true)
+    try {
+      const mapa = await materiasPrimasService.verificarUsoEmFichasLote(selectedIds)
+      setMapaFichasLote(mapa)
+    } catch (err) {
+      console.warn('Erro ao verificar fichas do lote:', err)
+      setMapaFichasLote(new Map())
+    } finally {
+      setVerificandoLote(false)
+    }
+  }
+
+  const handleConfirmarTransferenciaLote = async () => {
+    if (selectedIds.length === 0 || !empresaDestinoLoteId) {
+      toast({
+        variant: 'destructive',
+        title: 'Selecione o destino',
+        description: 'Por favor, escolha a empresa de destino.',
+      })
+      return
+    }
+
+    const empresaDestinoObj = empresas.find((e) => e.id === empresaDestinoLoteId)
+    const nomeDestino = empresaDestinoObj?.nome || 'empresa de destino'
+
+    setTransferindoLote(true)
+    try {
+      const res = await materiasPrimasService.transferirLote(selectedIds, empresaDestinoLoteId)
+      if (res.sucesso > 0) {
+        toast({
+          title: 'Transferência em lote concluída!',
+          description: `${res.sucesso} de ${res.total} matérias-primas foram movidas com sucesso para ${nomeDestino}.`,
+        })
+      }
+      if (res.falhas.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: 'Algumas falhas ocorreram',
+          description: `${res.falhas.length} matéria(s)-prima(s) não puderam ser transferidas.`,
+        })
+      }
+      setTransferirLoteModalOpen(false)
+      setSelectedIds([])
+      loadData()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao transferir em lote',
+        description: err?.message || 'Não foi possível concluir a transferência em lote.',
+      })
+    } finally {
+      setTransferindoLote(false)
+    }
+  }
 
   // Estatísticas gerais e consolidado de créditos tributários e acréscimos
   const stats = useMemo(() => {
@@ -1595,6 +1688,42 @@ export default function CadastroMateriaPrima() {
               </div>
             </div>
           </div>
+          {/* Barra de Ações em Lote de Matérias-Primas (Quando há itens selecionados) */}
+          {selectedIds.length > 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                <CheckSquare className="w-4 h-4 text-amber-700" />
+                <span>
+                  <strong>{selectedIds.length}</strong>{' '}
+                  {selectedIds.length === 1
+                    ? 'matéria-prima selecionada'
+                    : 'matérias-primas selecionadas'}
+                </span>
+                <span className="text-amber-600 font-normal">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds([])}
+                  className="text-amber-800 underline text-[11px] hover:text-amber-950 font-normal"
+                >
+                  Desmarcar todas
+                </button>
+              </div>
+
+              {empresas.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={handleOpenTransferirLote}
+                    size="sm"
+                    className="h-8 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white shadow-xs gap-1.5"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" />
+                    Transferir Selecionadas de Empresa ({selectedIds.length})
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Catálogo de Matérias-Primas */}
           <Card className="bg-white border-slate-200 shadow-xs">
             <CardHeader className="pb-3 border-b border-slate-100">
@@ -1731,6 +1860,13 @@ export default function CadastroMateriaPrima() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/90 text-slate-700 font-semibold">
+                        <th className="py-3 px-3 w-10 text-center">
+                          <Checkbox
+                            checked={allFilteredSelected}
+                            onCheckedChange={handleSelectAll}
+                            aria-label="Selecionar todas as matérias-primas"
+                          />
+                        </th>
                         <th className="py-3 px-3">Código</th>
                         <th className="py-3 px-3.5 min-w-[180px]">Matéria-Prima</th>
                         <th className="py-3 px-2.5 text-center">Unid.</th>
@@ -1780,18 +1916,28 @@ export default function CadastroMateriaPrima() {
                         const estoque = m.estoque_atual || 0
                         const saldoEstoqueLiquido = calc.custoLiquido * estoque
                         const st = getStatusEstoque(m)
+                        const isSelected = selectedIds.includes(m.id)
 
                         return (
                           <tr
                             key={m.id}
                             className={`transition-colors ${
-                              st.status === 'critico'
-                                ? 'bg-rose-50/30 hover:bg-rose-50/60'
-                                : st.status === 'atencao'
-                                  ? 'bg-amber-50/20 hover:bg-amber-50/50'
-                                  : 'hover:bg-slate-50/70'
+                              isSelected
+                                ? 'bg-amber-50/50'
+                                : st.status === 'critico'
+                                  ? 'bg-rose-50/30 hover:bg-rose-50/60'
+                                  : st.status === 'atencao'
+                                    ? 'bg-amber-50/20 hover:bg-amber-50/50'
+                                    : 'hover:bg-slate-50/70'
                             }`}
                           >
+                            <td className="py-3 px-3 text-center">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => handleToggleSelect(m.id)}
+                                aria-label={`Selecionar matéria-prima ${m.nome}`}
+                              />
+                            </td>
                             <td className="py-3 px-3 font-mono font-semibold text-slate-600 whitespace-nowrap">
                               {m.codigo ? (
                                 <Badge
@@ -1998,9 +2144,9 @@ export default function CadastroMateriaPrima() {
                     </tbody>
                     <tfoot>
                       <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-900">
-                        <td colSpan={3} className="py-3 px-3 uppercase text-xs">
+                        <td colSpan={4} className="py-3 px-3 uppercase text-xs">
                           Totais ({materiasFiltradas.length} itens)
-                        </td>
+                        </td>{' '}
                         <td className="py-3 px-3 text-right font-mono text-slate-700">
                           {formatBrl(
                             materiasFiltradas.reduce(
@@ -2963,6 +3109,159 @@ export default function CadastroMateriaPrima() {
                   className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-9 shadow-xs"
                 >
                   {transferindo ? 'Transferindo...' : 'Confirmar Transferência'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal Transferência em Lote de Matérias-Primas */}
+          <Dialog open={transferirLoteModalOpen} onOpenChange={setTransferirLoteModalOpen}>
+            <DialogContent className="sm:max-w-[500px] bg-white">
+              <DialogHeader>
+                <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-amber-600" />
+                  Transferir {selectedIds.length} Matérias-Primas em Lote
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Mova os insumos selecionados para o catálogo de outra empresa cadastrada.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-3">
+                <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs space-y-2">
+                  <div className="flex justify-between font-semibold text-slate-800 border-b border-slate-200 pb-1.5">
+                    <span>Total Selecionado:</span>
+                    <span className="text-amber-700 font-bold">{selectedIds.length} insumo(s)</span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1 pr-1">
+                    {materias
+                      .filter((m) => selectedIds.includes(m.id))
+                      .map((m) => {
+                        const fichasDoItem = mapaFichasLote.get(m.id) || []
+                        return (
+                          <div
+                            key={m.id}
+                            className="flex items-center justify-between text-[11px] p-1.5 bg-white rounded border border-slate-200"
+                          >
+                            <span className="font-medium text-slate-800 truncate max-w-[200px]">
+                              {m.nome}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              {fichasDoItem.length > 0 && (
+                                <Badge className="text-[9px] px-1 py-0 bg-amber-50 text-amber-800 border border-amber-200">
+                                  {fichasDoItem.length} fichas
+                                </Badge>
+                              )}
+                              <span className="text-slate-400 font-mono text-[10px]">
+                                {m.codigo || m.unidade}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                  </div>
+                </div>
+
+                {/* Verificação de Integridade em Lote */}
+                {verificandoLote ? (
+                  <div className="p-3 bg-slate-50 rounded-lg text-xs text-slate-500 flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    Verificando vínculos em fichas técnicas...
+                  </div>
+                ) : (
+                  (() => {
+                    let totalFichasAfetadas = 0
+                    const nomesProdutosAfetados: string[] = []
+                    mapaFichasLote.forEach((fichasList) => {
+                      totalFichasAfetadas += fichasList.length
+                      fichasList.forEach((f) => {
+                        const pNome = f.expand?.produto?.nome || 'Produto sem nome'
+                        if (!nomesProdutosAfetados.includes(pNome)) {
+                          nomesProdutosAfetados.push(pNome)
+                        }
+                      })
+                    })
+
+                    if (totalFichasAfetadas > 0) {
+                      return (
+                        <div className="p-3 bg-amber-50 rounded-lg border border-amber-300 text-xs text-amber-900 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold">
+                                Atenção: Os insumos selecionados estão vinculados a{' '}
+                                {totalFichasAfetadas} ficha(s) técnica(s):
+                              </p>
+                              <p className="text-[11px] text-amber-800 mt-0.5">
+                                Produtos afetados: {nomesProdutosAfetados.slice(0, 4).join(', ')}
+                                {nomesProdutosAfetados.length > 4 &&
+                                  ` e mais ${nomesProdutosAfetados.length - 4}...`}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="text-[11px] text-amber-800 border-t border-amber-200 pt-1.5">
+                            💡 As composições e custos atuais das fichas serão preservados, mas os
+                            insumos passarão a pertencer ao catálogo da empresa de destino.
+                          </p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="p-2.5 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-emerald-800 flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                        Nenhuma ficha técnica vinculada aos itens selecionados. Transferência 100%
+                        livre.
+                      </div>
+                    )
+                  })()
+                )}
+
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="empresa-destino-lote-mp"
+                    className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    Selecione a Empresa de Destino *
+                  </Label>
+                  <select
+                    id="empresa-destino-lote-mp"
+                    value={empresaDestinoLoteId}
+                    onChange={(e) => setEmpresaDestinoLoteId(e.target.value)}
+                    className="w-full h-9 text-xs bg-white border border-slate-300 rounded-md px-2.5 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none"
+                  >
+                    <option value="" disabled>
+                      Selecione o destino...
+                    </option>
+                    {empresas.map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.nome} {emp.cnpj ? `(${emp.cnpj})` : ''} - {emp.segmento || 'Geral'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setTransferirLoteModalOpen(false)}
+                  disabled={transferindoLote}
+                  className="text-xs h-9"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleConfirmarTransferenciaLote}
+                  disabled={transferindoLote || !empresaDestinoLoteId}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-9 shadow-xs"
+                >
+                  {transferindoLote
+                    ? 'Transferindo em lote...'
+                    : `Transferir ${selectedIds.length} Matéria(s)`}
                 </Button>
               </DialogFooter>
             </DialogContent>

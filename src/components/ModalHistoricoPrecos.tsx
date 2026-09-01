@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -9,8 +9,6 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import {
   History,
   TrendingUp,
@@ -19,21 +17,22 @@ import {
   Calendar,
   Clock,
   ArrowRight,
-  Sparkles,
-  Plus,
-  Tag,
-  DollarSign,
-  Layers,
   Search,
+  Building2,
+  Package,
+  Layers,
+  Filter,
 } from 'lucide-react'
 import { historicoPrecosService } from '@/services/formacaoPrecoService'
-import type { ProdutoRecord, HistoricoPrecoProdutoRecord } from '@/types/finance'
+import type { ProdutoRecord, HistoricoPrecoProdutoRecord, EmpresaRecord } from '@/types/finance'
 import { useToast } from '@/hooks/use-toast'
 
-interface ModalHistoricoPrecosProps {
+export interface ModalHistoricoPrecosProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   produto: ProdutoRecord | null
+  empresaAtiva?: EmpresaRecord | null
+  empresas?: EmpresaRecord[]
   onPrecoUpdated?: () => void
 }
 
@@ -56,12 +55,25 @@ export function ModalHistoricoPrecos({
   open,
   onOpenChange,
   produto,
+  empresaAtiva,
+  empresas = [],
   onPrecoUpdated,
 }: ModalHistoricoPrecosProps) {
   const { toast } = useToast()
   const [historico, setHistorico] = useState<HistoricoPrecoProdutoRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [searchFilter, setSearchFilter] = useState('')
+  const [empresaFiltroId, setEmpresaFiltroId] = useState<string>('todas')
+
+  // Identifica a empresa vinculada ao produto atual
+  const empresaDoProduto = useMemo(() => {
+    if (!produto) return null
+    if (produto.expand?.empresa) return produto.expand.empresa
+    if (produto.empresa && empresas.length > 0) {
+      return empresas.find((e) => e.id === produto.empresa) || null
+    }
+    return empresaAtiva || null
+  }, [produto, empresas, empresaAtiva])
 
   const loadHistorico = async () => {
     if (!produto?.id) return
@@ -84,29 +96,51 @@ export function ModalHistoricoPrecos({
   useEffect(() => {
     if (open && produto?.id) {
       loadHistorico()
+      // Se tiver empresa no produto ou ativa, inicializa
+      if (empresaDoProduto?.id) {
+        setEmpresaFiltroId(empresaDoProduto.id)
+      } else {
+        setEmpresaFiltroId('todas')
+      }
     } else {
       setHistorico([])
       setSearchFilter('')
     }
-  }, [open, produto?.id])
+  }, [open, produto?.id, empresaDoProduto?.id])
 
-  const historicoFiltrado = historico.filter((item) => {
-    if (!searchFilter.trim()) return true
-    const q = searchFilter.toLowerCase()
-    return (
-      item.origem.toLowerCase().includes(q) ||
-      (item.observacao && item.observacao.toLowerCase().includes(q))
-    )
-  })
+  const historicoFiltrado = useMemo(() => {
+    return historico.filter((item) => {
+      // Filtro de Busca textual (origem, observação)
+      const q = searchFilter.trim().toLowerCase()
+      const matchSearch =
+        !q ||
+        item.origem.toLowerCase().includes(q) ||
+        (item.observacao && item.observacao.toLowerCase().includes(q))
+
+      // Filtro de Empresa: se selecionada uma empresa específica no modal, verifica compatibilidade
+      let matchEmpresa = true
+      if (empresaFiltroId !== 'todas') {
+        const itemEmpresaId =
+          item.expand?.produto?.empresa ||
+          item.expand?.produto?.expand?.empresa?.id ||
+          produto?.empresa
+        if (itemEmpresaId) {
+          matchEmpresa = itemEmpresaId === empresaFiltroId
+        }
+      }
+
+      return matchSearch && matchEmpresa
+    })
+  }, [historico, searchFilter, empresaFiltroId, produto])
 
   // Variação total entre o primeiro registro e o atual
-  const stats = React.useMemo(() => {
-    const total = historico.length
+  const stats = useMemo(() => {
+    const total = historicoFiltrado.length
     if (total === 0)
       return { total: 0, variacaoAbs: 0, variacaoPct: 0, precoAtual: produto?.preco_venda || 0 }
 
-    const maisRecente = historico[0]
-    const maisAntigo = historico[historico.length - 1]
+    const maisRecente = historicoFiltrado[0]
+    const maisAntigo = historicoFiltrado[historicoFiltrado.length - 1]
     const precoAtual = maisRecente.preco_novo
     const precoInicial = maisAntigo.preco_anterior ?? maisAntigo.preco_novo
 
@@ -120,7 +154,7 @@ export function ModalHistoricoPrecos({
       precoAtual,
       precoInicial,
     }
-  }, [historico, produto])
+  }, [historicoFiltrado, produto])
 
   const getBadgeOrigem = (origem: string) => {
     switch (origem) {
@@ -154,8 +188,8 @@ export function ModalHistoricoPrecos({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[650px] max-h-[88vh] overflow-y-auto bg-white p-0 gap-0">
-        <DialogHeader className="p-5 pb-4 border-b border-slate-100 bg-slate-50/50">
+      <DialogContent className="sm:max-w-[700px] max-h-[88vh] overflow-y-auto bg-white p-0 gap-0">
+        <DialogHeader className="p-5 pb-4 border-b border-slate-100 bg-slate-50/70">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -167,7 +201,8 @@ export function ModalHistoricoPrecos({
                     Histórico de Preços de Venda
                   </DialogTitle>
                   <DialogDescription className="text-xs text-slate-500">
-                    Registro detalhado de todas as alterações de preço praticadas para este produto.
+                    Registro de todas as alterações de preço praticadas para este produto com
+                    identificação da empresa vinculada.
                   </DialogDescription>
                 </div>
               </div>
@@ -179,32 +214,66 @@ export function ModalHistoricoPrecos({
             )}
           </div>
 
-          {/* Dados do Produto Atual */}
+          {/* Dados do Produto Atual e Empresa */}
           {produto && (
-            <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-              <div>
-                <span className="text-[10px] text-slate-400 block">Produto</span>
-                <span className="font-bold text-slate-900 truncate block" title={produto.nome}>
-                  {produto.nome}
-                </span>
+            <div className="mt-3 p-3 bg-white rounded-lg border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-1.5 text-xs">
+                  <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-slate-500">Empresa Vinculada:</span>
+                  <span className="font-bold text-blue-800">
+                    {empresaDoProduto?.nome || 'Não definida'}
+                  </span>
+                  {empresaDoProduto?.cnpj && (
+                    <span className="text-[10px] text-slate-400">({empresaDoProduto.cnpj})</span>
+                  )}
+                </div>
+
+                {empresas.length > 1 && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <Filter className="w-3 h-3 text-slate-400" />
+                    <span className="text-slate-500 text-[11px]">Filtrar Empresa:</span>
+                    <select
+                      value={empresaFiltroId}
+                      onChange={(e) => setEmpresaFiltroId(e.target.value)}
+                      className="h-6 text-[11px] bg-slate-50 border border-slate-200 rounded px-1.5 text-slate-700 font-medium focus:outline-none"
+                    >
+                      <option value="todas">Todas as empresas</option>
+                      {empresas.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block">Preço Atual</span>
-                <span className="font-bold text-blue-700 block">
-                  {formatBrl(produto.preco_venda)}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block">Custo Atual</span>
-                <span className="font-semibold text-slate-700 block">
-                  {formatBrl(produto.custo)}
-                </span>
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 block">Margem Praticada</span>
-                <span className="font-semibold text-emerald-700 block">
-                  {formatPct(produto.margem_desejada)}
-                </span>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-0.5">
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Produto</span>
+                  <span className="font-bold text-slate-900 truncate block" title={produto.nome}>
+                    {produto.nome}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Preço Atual</span>
+                  <span className="font-bold text-blue-700 block">
+                    {formatBrl(produto.preco_venda)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Custo Atual</span>
+                  <span className="font-semibold text-slate-700 block">
+                    {formatBrl(produto.custo)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 block">Margem Praticada</span>
+                  <span className="font-semibold text-emerald-700 block">
+                    {formatPct(produto.margem_desejada)}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -212,7 +281,7 @@ export function ModalHistoricoPrecos({
 
         <div className="p-5 space-y-4">
           {/* Métricas do Histórico */}
-          {historico.length > 0 && (
+          {historicoFiltrado.length > 0 && (
             <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-center">
               <div>
                 <span className="text-[10px] text-slate-500 font-medium block">
@@ -265,7 +334,7 @@ export function ModalHistoricoPrecos({
           )}
 
           {/* Campo de Busca no histórico */}
-          {historico.length > 3 && (
+          {historico.length > 2 && (
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
@@ -290,12 +359,12 @@ export function ModalHistoricoPrecos({
               <h5 className="text-xs font-semibold text-slate-800">
                 {historico.length === 0
                   ? 'Nenhum histórico registrado para este produto'
-                  : 'Nenhum registro encontrado no filtro'}
+                  : 'Nenhum registro encontrado no filtro aplicado'}
               </h5>
               <p className="text-[11px] text-slate-500 mt-1 max-w-xs mx-auto">
                 {historico.length === 0
                   ? 'As alterações de preço feitas no cadastro ou por vínculo de ficha técnica serão registradas aqui automaticamente com data e hora.'
-                  : 'Tente outros termos de busca.'}
+                  : 'Tente alterar os termos de busca ou o filtro por empresa.'}
               </p>
             </div>
           ) : (
@@ -322,6 +391,10 @@ export function ModalHistoricoPrecos({
                     hour: '2-digit',
                     minute: '2-digit',
                   })
+
+                  // Empresa do registro se expandida
+                  const empresaRegistro =
+                    item.expand?.produto?.expand?.empresa?.nome || empresaDoProduto?.nome
 
                   return (
                     <div key={item.id} className="relative pl-6">
@@ -357,6 +430,12 @@ export function ModalHistoricoPrecos({
                             {index === 0 && (
                               <span className="text-[10px] font-bold text-blue-700 bg-blue-100/70 px-1.5 py-0.2 rounded">
                                 Atual
+                              </span>
+                            )}
+                            {empresaRegistro && (
+                              <span className="text-[10px] text-slate-500 bg-slate-200/70 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Building2 className="w-2.5 h-2.5" />
+                                {empresaRegistro}
                               </span>
                             )}
                           </div>
