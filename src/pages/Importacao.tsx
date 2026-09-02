@@ -28,6 +28,7 @@ import {
   BookOpen,
 } from 'lucide-react'
 import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
+import { ImportarDespesasIA } from '@/components/ImportarDespesasIA'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1082,9 +1083,19 @@ export default function Importacao() {
         </div>
       </div>
 
-      {/* Abas Principais: Excel vs PDF */}
-      <Tabs defaultValue="balancete-mensal" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4 max-w-3xl bg-slate-100 p-1 rounded-xl">
+      {/* Abas Principais: Despesas (IA), Balancete, PDF para Excel, etc. */}
+      <Tabs defaultValue="despesas-ia" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 max-w-4xl bg-slate-100 p-1 rounded-xl">
+          <TabsTrigger
+            value="despesas-ia"
+            className="flex items-center gap-1.5 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-lg text-xs sm:text-sm"
+          >
+            <Bot className="w-4 h-4 text-blue-600 animate-pulse" />
+            Despesas (IA)
+            <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.2 rounded-full uppercase tracking-wider hidden sm:inline">
+              Novo
+            </span>
+          </TabsTrigger>
           <TabsTrigger
             value="balancete-mensal"
             className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
@@ -1122,12 +1133,24 @@ export default function Importacao() {
         </TabsList>
 
         {/* ========================================================================= */}
+        {/* ABA 0: IMPORTAÇÃO DE DESPESAS COM AGENTE DE IA (PDF & EXCEL)              */}
+        {/* ========================================================================= */}
+        <TabsContent value="despesas-ia" className="space-y-6 focus:outline-none">
+          <ImportarDespesasIA
+            empresas={empresas}
+            planoContas={planoContas}
+            centros={centros}
+            tiposDespesas={tiposDespesas}
+            onReloadCatalogs={loadInitialCatalogs}
+          />
+        </TabsContent>
+
+        {/* ========================================================================= */}
         {/* ABA BALANCETE MENSAL (EXCEL / PDF) -> BALANÇO & DRE MENSAL                */}
         {/* ========================================================================= */}
         <TabsContent value="balancete-mensal" className="space-y-6 focus:outline-none">
           <ImportarBalanceteMensal empresas={empresas} />
         </TabsContent>
-
         {/* ========================================================================= */}
         {/* ABA 0: PDF PARA EXCEL (.xlsx) - APRIMORADA                                 */}
         {/* ========================================================================= */}
