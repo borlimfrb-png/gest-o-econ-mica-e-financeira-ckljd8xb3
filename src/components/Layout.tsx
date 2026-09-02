@@ -370,34 +370,16 @@ export default function Layout() {
               <nav className="mt-6 space-y-1.5 overflow-y-auto max-h-[calc(100vh-210px)] pr-1">
                 {/* 1. Dashboard */}
                 <NavLink
-                  to="/agente-ia"
+                  to="/dashboard"
                   onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-                    location.pathname === '/agente-ia'
-                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
-                      : 'text-blue-300 bg-blue-950/40 border border-blue-900/40 hover:bg-slate-800 hover:text-white'
+                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                    location.pathname === '/dashboard'
+                      ? 'bg-white/15 text-white font-semibold shadow-inner'
+                      : 'text-slate-300 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <Bot className="w-4 h-4 text-blue-400" />
-                  <div className="flex items-center justify-between flex-1">
-                    <span>Agente de IA</span>
-                    <span className="text-[10px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.5 rounded">
-                      Skip AI
-                    </span>
-                  </div>
-                </NavLink>
-
-                <NavLink
-                  to="/relatorios"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    location.pathname === '/relatorios'
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 text-slate-400" />
-                  <span>Relatórios e Pareceres</span>
+                  <LayoutDashboard className="w-4 h-4 text-blue-400" />
+                  <span>Dashboard</span>
                 </NavLink>
                 {/* 2. Cadastros (Expansível / Colapsável) */}
                 <div className="space-y-1">
@@ -932,40 +914,20 @@ export default function Layout() {
                 </div>
                 <div className="hidden lg:block">
                   <NavLink
-                    to="/agente-ia"
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                      location.pathname === '/agente-ia'
-                        ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-sm'
-                        : 'text-blue-200 bg-blue-950/30 border border-blue-900/30 hover:bg-slate-800 hover:text-white'
+                    to="/dashboard"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/dashboard'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <Bot
-                      className={`w-4 h-4 ${
-                        location.pathname === '/agente-ia' ? 'text-blue-200' : 'text-blue-400'
+                    <LayoutDashboard
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
                       }`}
                     />
-                    <div className="flex items-center justify-between flex-1">
-                      <span>Agente de IA</span>
-                      <span className="text-[9px] uppercase font-bold bg-blue-500/20 text-blue-300 border border-blue-400/30 px-1.5 py-0.2 rounded">
-                        Skip AI
-                      </span>
-                    </div>
+                    <span className="truncate">Dashboard</span>
                   </NavLink>
-                  <NavLink
-                    to="/relatorios"
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                      location.pathname === '/relatorios'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <FileText
-                      className={`w-4 h-4 ${
-                        location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
-                      }`}
-                    />
-                    <span>Relatórios e Pareceres</span>
-                  </NavLink>{' '}
                 </div>
               </div>
 
@@ -1564,20 +1526,20 @@ export default function Layout() {
                 </div>
                 <div className="hidden lg:block">
                   <NavLink
-                    to="/relatorios"
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-                      location.pathname === '/relatorios'
-                        ? 'bg-blue-600 text-white'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    to="/importacao"
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/importacao'
+                        ? 'bg-white/15 text-white font-semibold shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    <FileText
-                      className={`w-4 h-4 ${
-                        location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
+                    <Upload
+                      className={`w-5 h-5 shrink-0 ${
+                        location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
                       }`}
                     />
-                    <span>Relatórios e Pareceres</span>
-                  </NavLink>{' '}
+                    <span className="truncate">Importação</span>
+                  </NavLink>
                 </div>
               </div>
               {/* 5. Relatório Anual */}
