@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T13:37:18.764Z",
+  "generatedAt": "2026-09-02T14:01:50.361Z",
   "collections": [
     {
       "name": "users",
@@ -3272,6 +3272,89 @@
       "indexes": [
         "CREATE INDEX idx_grupos_empresariais_nome ON grupos_empresariais (nome)",
         "CREATE INDEX idx_grupos_empresariais_user ON grupos_empresariais (user)"
+      ]
+    },
+    {
+      "name": "memoria_fornecedores_despesas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && user = @request.auth.id",
+        "view": "@request.auth.id != '' && user = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && user = @request.auth.id",
+        "delete": "@request.auth.id != '' && user = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "fornecedor_padrao",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "termo_busca",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "plano_conta",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "plano_contas"
+        },
+        {
+          "name": "categoria_sugerida",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_utilizacoes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultima_utilizacao",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_memoria_forn_user ON memoria_fornecedores_despesas (user)",
+        "CREATE INDEX idx_memoria_forn_termo ON memoria_fornecedores_despesas (termo_busca)",
+        "CREATE INDEX idx_memoria_forn_empresa ON memoria_fornecedores_despesas (empresa)"
       ]
     }
   ]

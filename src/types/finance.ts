@@ -755,3 +755,21 @@ export interface IndicadoresCalculados {
   imobilizacaoRecursosNaoCorrentes: number | null // % (Imobilizado / (PL + PNC))
   alavancagemFinanceira: number | null // ((PC + PNC) / PL)
 }
+
+export interface MemoriaFornecedorRecord {
+  id: string
+  user: string
+  empresa?: string
+  fornecedor_padrao: string
+  termo_busca: string
+  plano_conta: string
+  categoria_sugerida?: string
+  total_utilizacoes?: number
+  ultima_utilizacao?: string
+  created: string
+  updated: string
+  expand?: {
+    plano_conta?: PlanoContaRecord
+    empresa?: EmpresaRecord
+  }
+}

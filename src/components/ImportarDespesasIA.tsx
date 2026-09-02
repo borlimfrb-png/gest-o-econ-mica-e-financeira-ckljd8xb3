@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react'
+import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Upload,
@@ -25,6 +25,9 @@ import {
   Building,
   Info,
   SlidersHorizontal,
+  History,
+  Printer,
+  FileCheck2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -58,21 +61,25 @@ import {
   contasService,
   planoContasService,
   lancamentosService,
+  memoriaFornecedoresService,
 } from '@/services/financeService'
 import { aiDespesasService } from '@/services/aiDespesasService'
 import {
   parsePdfDespesas,
   parseExcelDespesas,
+  matchDespesaComPlanoContas,
   agruparDespesasPorCategoria,
   type DespesaExtraidaItem,
   type DespesaGrupoResumo,
 } from '@/lib/despesasParser'
+import { ModalRelatorioConferenciaDespesas } from '@/components/ModalRelatorioConferenciaDespesas'
 import type {
   EmpresaRecord,
   PlanoContaRecord,
   CentroRecord,
   TipoDespesaRecord,
   ContaRecord,
+  MemoriaFornecedorRecord,
 } from '@/types/finance'
 
 interface ImportarDespesasIAProps {
@@ -96,8 +103,11 @@ export function ImportarDespesasIA({
   // Lista viva de plano de contas (atualizada após novos cadastros)
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>(initialPlanoContas)
 
+  // Memória de Fornecedores Recorrentes
+  const [memoriasFornecedores, setMemoriasFornecedores] = useState<MemoriaFornecedorRecord[]>([])
+
   // Sincroniza se a prop mudar
-  React.useEffect(() => {
+  useEffect(() => {
     setPlanoContas(initialPlanoContas)
   }, [initialPlanoContas])
 
@@ -106,11 +116,25 @@ export function ImportarDespesasIA({
     return empresas.length > 0 ? empresas[0].id : ''
   })
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedEmpresaId && empresas.length > 0) {
       setSelectedEmpresaId(empresas[0].id)
     }
   }, [empresas, selectedEmpresaId])
+
+  // Carrega a memória de fornecedores da empresa/usuário
+  const loadMemoriaFornecedores = async () => {
+    try {
+      const data = await memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined)
+      setMemoriasFornecedores(data)
+    } catch (err) {
+      console.warn('Não foi possível carregar memória de fornecedores:', err)
+    }
+  }
+
+  useEffect(() => {
+    loadMemoriaFornecedores()
+  }, [selectedEmpresaId])
 
   // Arquivos adicionados
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
@@ -118,14 +142,27 @@ export function ImportarDespesasIA({
   const [processingProgress, setProcessingProgress] = useState(0)
   const [processingCurrentFile, setProcessingCurrentFile] = useState<string>('')
 
+  // Reprocessamento de Despesas Não Classificadas
+  const [isReprocessing, setIsReprocessing] = useState(false)
+
   // Lista de despesas extraídas e processadas
   const [despesas, setDespesas] = useState<DespesaExtraidaItem[]>([])
   const [step, setStep] = useState<'upload' | 'revisao' | 'sucesso'>('upload')
 
+  // Histórico de contas novas criadas nesta sessão de importação
+  const [novasContasCriadas, setNovasContasCriadas] = useState<
+    Array<{
+      nome: string
+      codigo?: string
+      centro?: string
+      tipo?: string
+    }>
+  >([])
+
   // Filtros na tela de revisão
-  const [filtroStatus, setFiltroStatus] = useState<'todos' | 'cadastradas' | 'nao_cadastradas'>(
-    'todos',
-  )
+  const [filtroStatus, setFiltroStatus] = useState<
+    'todos' | 'cadastradas' | 'nao_cadastradas' | 'memoria'
+  >('todos')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todas')
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -149,6 +186,9 @@ export function ImportarDespesasIA({
   const [editData, setEditData] = useState('')
   const [editValor, setEditValor] = useState<number>(0)
   const [editPlanoId, setEditPlanoId] = useState('')
+
+  // Modal de Relatório de Conferência da Importação em PDF A4
+  const [modalRelatorioOpen, setModalRelatorioOpen] = useState(false)
 
   // Consulta ao Agente de IA para suporte/chat contextual
   const [aiAnalysisPrompt, setAiAnalysisPrompt] = useState('')
@@ -207,6 +247,15 @@ export function ImportarDespesasIA({
     setIsProcessing(true)
     setProcessingProgress(0)
 
+    // Atualiza memória antes da extração
+    let memoriasAtuais = memoriasFornecedores
+    try {
+      memoriasAtuais = await memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined)
+      setMemoriasFornecedores(memoriasAtuais)
+    } catch {
+      /* intentionally ignored */
+    }
+
     const todasDespesas: DespesaExtraidaItem[] = []
     let arquivosComAvisoOcr = 0
 
@@ -217,11 +266,16 @@ export function ImportarDespesasIA({
         const ext = file.name.split('.').pop()?.toLowerCase()
 
         if (ext === 'pdf') {
-          const { itens, rawResult } = await parsePdfDespesas(file, planoContas, (pct) => {
-            const basePct = (idx / validFiles.length) * 100
-            const stepPct = pct / validFiles.length
-            setProcessingProgress(Math.round(basePct + stepPct))
-          })
+          const { itens, rawResult } = await parsePdfDespesas(
+            file,
+            planoContas,
+            (pct) => {
+              const basePct = (idx / validFiles.length) * 100
+              const stepPct = pct / validFiles.length
+              setProcessingProgress(Math.round(basePct + stepPct))
+            },
+            memoriasAtuais,
+          )
 
           if (rawResult.isScannedOrEmpty && itens.length === 0) {
             arquivosComAvisoOcr++
@@ -230,7 +284,7 @@ export function ImportarDespesasIA({
           todasDespesas.push(...itens)
         } else {
           // Excel / CSV
-          const itens = await parseExcelDespesas(file, planoContas)
+          const itens = await parseExcelDespesas(file, planoContas, memoriasAtuais)
           todasDespesas.push(...itens)
           setProcessingProgress(Math.round(((idx + 1) / validFiles.length) * 100))
         }
@@ -238,6 +292,8 @@ export function ImportarDespesasIA({
 
       setDespesas(todasDespesas)
       setStep('revisao')
+
+      const lembradasCount = todasDespesas.filter((d) => d.matchConfidence === 'memoria').length
 
       if (todasDespesas.length === 0) {
         toast({
@@ -247,9 +303,14 @@ export function ImportarDespesasIA({
           variant: 'destructive',
         })
       } else {
+        let descMsg = `Identificamos ${todasDespesas.length} despesas prontas para validação com o Plano de Contas.`
+        if (lembradasCount > 0) {
+          descMsg += ` 🧠 ${lembradasCount} foram reconhecidas automaticamente pela Memória de Fornecedores!`
+        }
+
         toast({
           title: 'Arquivos processados com sucesso!',
-          description: `Identificamos ${todasDespesas.length} despesas prontas para validação com o Plano de Contas.`,
+          description: descMsg,
         })
 
         if (arquivosComAvisoOcr > 0) {
@@ -280,6 +341,91 @@ export function ImportarDespesasIA({
     }
   }
 
+  // -------------------------------------------------------------------------
+  // 1. REPROCESSAR APENAS DESPESAS NÃO CLASSIFICADAS (SEM REFAZER UPLOAD)
+  // -------------------------------------------------------------------------
+  const handleReprocessarNaoClassificadas = async () => {
+    const naoClassificadas = despesas.filter((d) => !d.isCadastrada)
+    if (naoClassificadas.length === 0) {
+      toast({
+        title: 'Tudo já classificado!',
+        description: 'Todas as despesas atuais já possuem vínculo com o Plano de Contas.',
+      })
+      return
+    }
+
+    setIsReprocessing(true)
+
+    try {
+      // 1. Recarrega as contas do Plano de Contas e a Memória de Fornecedores mais recentes
+      const [todosPlanos, todasMemorias] = await Promise.all([
+        planoContasService.getAll(),
+        memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined),
+      ])
+
+      setPlanoContas(todosPlanos)
+      setMemoriasFornecedores(todasMemorias)
+
+      let reclassificadasCount = 0
+
+      // 2. Reavalia APENAS os itens não cadastrados, mantendo os já cadastrados/resolvidos intactos
+      const novasDespesas = despesas.map((item) => {
+        if (item.isCadastrada) {
+          return item // Mantém intacto o que já estava resolvido
+        }
+
+        const match = matchDespesaComPlanoContas(
+          item.descricao,
+          item.categoriaSugerida,
+          todosPlanos,
+          todasMemorias,
+        )
+
+        if (match.isCadastrada && match.planoConta) {
+          reclassificadasCount++
+          return {
+            ...item,
+            isCadastrada: true,
+            planoContaId: match.planoConta.id,
+            planoContaCodigo: match.planoConta.codigo,
+            planoContaNome: match.planoConta.expand?.conta?.nome,
+            categoriaSugerida: match.categoriaSugerida || item.categoriaSugerida,
+            matchConfidence: match.confidence,
+            matchScore: match.score,
+            origemSugestao: match.origemSugestao,
+            edited: true,
+          }
+        }
+
+        return item
+      })
+
+      setDespesas(novasDespesas)
+
+      if (reclassificadasCount > 0) {
+        toast({
+          title: 'Reprocessamento concluído com sucesso! 🎯',
+          description: `${reclassificadasCount} despesa(s) pendente(s) foram classificadas com o novo Plano de Contas/Memória.`,
+        })
+      } else {
+        toast({
+          title: 'Reprocessamento finalizado',
+          description:
+            'Nenhuma nova correspondência foi encontrada para as despesas pendentes. Cadastre as contas faltantes no Plano de Contas.',
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao reprocessar despesas:', err)
+      toast({
+        title: 'Erro ao reprocessar',
+        description: err?.message || 'Falha ao reexecutar classificação das despesas pendentes.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsReprocessing(false)
+    }
+  }
+
   // ----------------------------------------------------
   // Ações na Tabela de Revisão
   // ----------------------------------------------------
@@ -305,8 +451,10 @@ export function ImportarDespesasIA({
     setEditPlanoId(item.planoContaId || '')
   }
 
-  const handleSaveEdit = (id: string) => {
+  const handleSaveEdit = async (id: string) => {
     const pc = planoContas.find((p) => p.id === editPlanoId)
+    const itemTarget = despesas.find((d) => d.id === id)
+
     setDespesas((prev) =>
       prev.map((item) => {
         if (item.id === id) {
@@ -320,12 +468,30 @@ export function ImportarDespesasIA({
             planoContaNome: pc?.expand?.conta?.nome,
             isCadastrada: !!pc,
             matchConfidence: pc ? 'manual' : 'nenhuma',
+            origemSugestao: pc ? 'vínculo manual pelo usuário' : undefined,
             edited: true,
           }
         }
         return item
       }),
     )
+
+    // Se vinculou manualmente uma conta, salva na Memória de Fornecedores para importações futuras
+    if (pc && itemTarget) {
+      try {
+        await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+          fornecedor_padrao: editDescricao.trim() || itemTarget.descricao,
+          termo_busca: editDescricao.trim() || itemTarget.descricao,
+          plano_conta: pc.id,
+          empresa: selectedEmpresaId || undefined,
+          categoria_sugerida: itemTarget.categoriaSugerida,
+        })
+        loadMemoriaFornecedores()
+      } catch (err) {
+        console.warn('Erro ao salvar vínculo na memória:', err)
+      }
+    }
+
     setEditingItemId(null)
   }
 
@@ -381,14 +547,41 @@ export function ImportarDespesasIA({
         descricao: `Vínculo automático via Agente de IA para ${novoNomeConta.trim()}`,
       })
 
-      // 3. Atualiza catálogo local de plano de contas
+      // Registra no histórico de novas contas para o relatório PDF
+      const centroObj = centros.find((c) => c.id === novoCentroId)
+      const tipoObj = tiposDespesas.find((t) => t.id === novoTipoDespesaId)
+      setNovasContasCriadas((prev) => [
+        ...prev,
+        {
+          nome: novaConta.nome,
+          codigo: novoPlano.codigo || 'PC-Novo',
+          centro: centroObj?.nome,
+          tipo: tipoObj?.nome,
+        },
+      ])
+
+      // 3. Grava na Memória de Fornecedores Recorrentes para aprender com a ação
+      try {
+        await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+          fornecedor_padrao: cadastroItem.descricao,
+          termo_busca: cadastroItem.descricao,
+          plano_conta: novoPlano.id,
+          empresa: selectedEmpresaId || undefined,
+          categoria_sugerida: cadastroItem.categoriaSugerida,
+        })
+        loadMemoriaFornecedores()
+      } catch (errMem) {
+        console.warn('Erro ao salvar na memória de fornecedores:', errMem)
+      }
+
+      // 4. Atualiza catálogo local de plano de contas
       const todosAtualizados = await planoContasService.getAll()
       setPlanoContas(todosAtualizados)
       if (onReloadCatalogs) await onReloadCatalogs()
 
       const planoPopulada = todosAtualizados.find((p) => p.id === novoPlano.id) || novoPlano
 
-      // 4. Atualiza todas as despesas idênticas na lista
+      // 5. Atualiza todas as despesas idênticas na lista
       const nomeTarget = cadastroItem.descricao.toLowerCase()
       setDespesas((prev) =>
         prev.map((item) => {
@@ -406,6 +599,7 @@ export function ImportarDespesasIA({
               planoContaNome: planoPopulada.expand?.conta?.nome || novaConta.nome,
               matchConfidence: 'alta',
               matchScore: 100,
+              origemSugestao: 'conta recém-cadastrada no Plano de Contas',
             }
           }
           return item
@@ -414,7 +608,7 @@ export function ImportarDespesasIA({
 
       toast({
         title: 'Conta cadastrada no Plano de Contas!',
-        description: `A conta "${novoNomeConta.trim()}" (${planoPopulada.codigo || 'PC-Novo'}) foi criada e vinculada com sucesso.`,
+        description: `A conta "${novoNomeConta.trim()}" (${planoPopulada.codigo || 'PC-Novo'}) foi criada e aprendida na memória de fornecedores.`,
       })
 
       setModalCadastroOpen(false)
@@ -450,6 +644,12 @@ export function ImportarDespesasIA({
 
     setIsCadastrandoLote(true)
     let criadasCount = 0
+    const novasRegistradas: Array<{
+      nome: string
+      codigo?: string
+      centro?: string
+      tipo?: string
+    }> = []
 
     try {
       // Agrupa itens por nome de descrição único para não criar duplicados
@@ -464,12 +664,33 @@ export function ImportarDespesasIA({
             grupo: 'Despesas Operacionais',
           })
 
-          await planoContasService.create({
+          const novoPlano = await planoContasService.create({
             conta: novaConta.id,
             centro: loteCentroId,
             tipo_despesa: loteTipoDespesaId || undefined,
             descricao: `Vínculo em lote IA para ${nome}`,
           })
+
+          const centroObj = centros.find((c) => c.id === loteCentroId)
+          const tipoObj = tiposDespesas.find((t) => t.id === loteTipoDespesaId)
+          novasRegistradas.push({
+            nome,
+            codigo: novoPlano.codigo,
+            centro: centroObj?.nome,
+            tipo: tipoObj?.nome,
+          })
+
+          // Grava na memória de fornecedores
+          try {
+            await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+              fornecedor_padrao: nome,
+              termo_busca: nome,
+              plano_conta: novoPlano.id,
+              empresa: selectedEmpresaId || undefined,
+            })
+          } catch {
+            /* intentionally ignored */
+          }
 
           criadasCount++
         } catch (err) {
@@ -477,9 +698,16 @@ export function ImportarDespesasIA({
         }
       }
 
-      // Recarrega todos os planos atualizados
-      const todosAtualizados = await planoContasService.getAll()
+      setNovasContasCriadas((prev) => [...prev, ...novasRegistradas])
+
+      // Recarrega todos os planos atualizados e memórias
+      const [todosAtualizados, todasMemorias] = await Promise.all([
+        planoContasService.getAll(),
+        memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined),
+      ])
+
       setPlanoContas(todosAtualizados)
+      setMemoriasFornecedores(todasMemorias)
       if (onReloadCatalogs) await onReloadCatalogs()
 
       // Re-vincula todas as despesas
@@ -498,6 +726,7 @@ export function ImportarDespesasIA({
                 planoContaNome: match.expand?.conta?.nome,
                 matchConfidence: 'alta',
                 matchScore: 100,
+                origemSugestao: 'conta criada via lote no Plano de Contas',
               }
             }
           }
@@ -507,7 +736,7 @@ export function ImportarDespesasIA({
 
       toast({
         title: 'Contas cadastradas com sucesso!',
-        description: `${criadasCount} novas contas foram criadas no Plano de Contas e associadas às despesas.`,
+        description: `${criadasCount} novas contas foram criadas no Plano de Contas, associadas às despesas e salvas na memória.`,
       })
 
       setModalCadastroLoteOpen(false)
@@ -567,6 +796,19 @@ export function ImportarDespesasIA({
           })
           gerados++
           valorTotal += item.valor
+
+          // Reforça aprendizado na memória de fornecedores
+          try {
+            await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+              fornecedor_padrao: item.descricao,
+              termo_busca: item.descricao,
+              plano_conta: item.planoContaId!,
+              empresa: selectedEmpresaId,
+              categoria_sugerida: item.categoriaSugerida,
+            })
+          } catch {
+            /* intentionally ignored */
+          }
         } catch (err: any) {
           errors.push(`${item.descricao}: ${err?.message || 'Falha'}`)
         }
@@ -575,7 +817,7 @@ export function ImportarDespesasIA({
       setGenerationSummary({
         totalItens: itensParaLancamento.length,
         totalValor: valorTotal,
-        novasContasCount: 0,
+        novasContasCount: novasContasCriadas.length,
         lancamentosCount: gerados,
         empresaNome: empresaSelecionada?.nome || 'Empresa',
       })
@@ -618,6 +860,7 @@ export function ImportarDespesasIA({
         categoria: d.categoriaSugerida,
         valor: d.valor,
         plano: d.isCadastrada ? d.planoContaNome : 'NÃO CADASTRADA',
+        origem: d.origemSugestao || 'Padrão',
       }))
 
       const promptCompleto = `
@@ -627,7 +870,7 @@ ${JSON.stringify(contextoDespesas, null, 2)}
 Pergunta/Solicitação do usuário:
 "${aiAnalysisPrompt}"
 
-Por favor, responda de forma objetiva, com recomendações de classificação contábil e sugestões de Plano de Contas.
+Por favor, responda de forma objetiva, com recomendações de classificação contábil, centro de custo e sugestões de Plano de Contas.
 `
 
       const res = await aiDespesasService.sendMessageSync({
@@ -654,6 +897,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
       // Filtro status
       if (filtroStatus === 'cadastradas' && !d.isCadastrada) return false
       if (filtroStatus === 'nao_cadastradas' && d.isCadastrada) return false
+      if (filtroStatus === 'memoria' && d.matchConfidence !== 'memoria') return false
 
       // Filtro categoria
       if (filtroCategoria !== 'todas' && d.categoriaSugerida !== filtroCategoria) return false
@@ -665,7 +909,8 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
         const catMatch = d.categoriaSugerida.toLowerCase().includes(termo)
         const planoMatch = (d.planoContaNome || '').toLowerCase().includes(termo)
         const codMatch = (d.planoContaCodigo || '').toLowerCase().includes(termo)
-        if (!descMatch && !catMatch && !planoMatch && !codMatch) return false
+        const origemMatch = (d.origemSugestao || '').toLowerCase().includes(termo)
+        if (!descMatch && !catMatch && !planoMatch && !codMatch && !origemMatch) return false
       }
 
       return true
@@ -685,6 +930,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
   const totalDespesasValor = despesas.reduce((acc, d) => acc + (d.valor || 0), 0)
   const cadastradasCount = despesas.filter((d) => d.isCadastrada).length
   const naoCadastradasCount = totalDespesasCount - cadastradasCount
+  const memoriaCount = despesas.filter((d) => d.matchConfidence === 'memoria').length
   const selecionadasCount = despesas.filter((d) => d.selecionada).length
   const selecionadasValor = despesas
     .filter((d) => d.selecionada)
@@ -702,7 +948,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
           <div className="space-y-2 max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/20 px-3 py-1 text-xs font-semibold text-blue-300 border border-blue-400/30 uppercase tracking-wider">
               <Bot className="h-3.5 w-3.5 text-blue-400 animate-pulse" />
-              Agente Nativo de IA · Importação Inteligente
+              Agente Nativo de IA · Importação Inteligente & Memória Recorrente
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
               Importação de Despesas com IA
@@ -710,8 +956,8 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
             <p className="text-sm text-slate-300 leading-relaxed">
               Carregue faturas, relatórios bancários e notas em <strong>PDF</strong> ou planilhas{' '}
               <strong>Excel (.xlsx, .xls)</strong>. A IA lê as informações, separa despesa por
-              despesa, verifica o cadastro no Plano de Contas e prepara o envio para os Lançamentos
-              Rápidos.
+              despesa, <strong>lembra de fornecedores de importações passadas</strong>, verifica o
+              Plano de Contas e gera relatório formal de conferência.
             </p>
           </div>
 
@@ -758,9 +1004,23 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                   simultaneamente.
                 </CardDescription>
               </div>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
-                PDF + Excel Suportados
-              </Badge>
+              <div className="flex items-center gap-2">
+                {memoriasFornecedores.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="bg-purple-50 text-purple-700 border-purple-200 text-xs gap-1"
+                  >
+                    <History className="w-3 h-3 text-purple-600" />
+                    {memoriasFornecedores.length} fornecedor(es) na Memória
+                  </Badge>
+                )}
+                <Badge
+                  variant="outline"
+                  className="bg-blue-50 text-blue-700 border-blue-200 text-xs"
+                >
+                  PDF + Excel Suportados
+                </Badge>
+              </div>
             </div>
           </CardHeader>
 
@@ -846,17 +1106,17 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                 </div>
                 <div>
                   <strong className="text-slate-800 block">Extração Automática</strong>
-                  A IA lê faturas, extratos e linhas de despesas separando data, valor e fornecedor.
+                  A IA lê faturas e extratos, separando data, valor e fornecedores.
                 </div>
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex gap-2.5">
-                <div className="w-6 h-6 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 font-bold flex items-center justify-center shrink-0">
                   2
                 </div>
                 <div>
-                  <strong className="text-slate-800 block">Auditoria no Plano de Contas</strong>
-                  Compara cada despesa com as contas cadastradas e sinaliza quais são novas.
+                  <strong className="text-slate-800 block">Memória de Fornecedores</strong>
+                  Lembrança automática de contas associadas em importações anteriores.
                 </div>
               </div>
 
@@ -865,9 +1125,8 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                   3
                 </div>
                 <div>
-                  <strong className="text-slate-800 block">Lançamento Direto</strong>
-                  Você confirma se deseja cadastrar novas contas e gera os lançamentos rápidos num
-                  clique.
+                  <strong className="text-slate-800 block">Reprocessamento & Relatório</strong>
+                  Reprocesse pendentes sem novo upload e gere laudo de conferência em PDF A4.
                 </div>
               </div>
             </div>
@@ -950,7 +1209,35 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
             </Card>
           </div>
 
-          {/* Banner de Ação se houver contas NÃO CADASTRADAS */}
+          {/* Destaque de Memória de Fornecedores Recorrentes */}
+          {memoriaCount > 0 && (
+            <div className="p-3.5 bg-purple-50/90 border border-purple-200 rounded-xl flex items-center justify-between gap-3 text-xs text-purple-950">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-purple-200 text-purple-800 flex items-center justify-center shrink-0 font-bold">
+                  <History className="w-4 h-4" />
+                </div>
+                <div>
+                  <strong className="text-purple-900 block">
+                    Memória de Fornecedores Recorrentes Ativa
+                  </strong>
+                  <span>
+                    <strong>{memoriaCount} despesa(s)</strong> foram vinculadas automaticamente com
+                    base no seu histórico de importações anteriores.
+                  </span>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFiltroStatus(filtroStatus === 'memoria' ? 'todos' : 'memoria')}
+                className="h-7 text-[11px] bg-white border-purple-300 text-purple-800 hover:bg-purple-100 font-semibold shrink-0"
+              >
+                {filtroStatus === 'memoria' ? 'Mostrar Todas' : 'Filtrar Lembretes de Memória'}
+              </Button>
+            </div>
+          )}
+
+          {/* Banner de Ação se houver contas NÃO CADASTRADAS + Botão de Reprocessar */}
           {naoCadastradasCount > 0 && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-start gap-3">
@@ -961,13 +1248,27 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                     Plano de Contas
                   </p>
                   <p className="text-[11px] text-amber-800 mt-0.5">
-                    Deseja que o Agente de IA cadastre essas novas contas no Plano de Contas
-                    automaticamente antes de gerar os lançamentos?
+                    Você pode cadastrar novas contas ou reprocessar apenas as despesas não
+                    classificadas sem precisar reenviar o arquivo.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleReprocessarNaoClassificadas}
+                  disabled={isReprocessing}
+                  className="bg-white border-amber-300 text-amber-900 hover:bg-amber-100 font-semibold text-xs h-8 shadow-xs gap-1.5"
+                  title="Reexecuta a classificação apenas sobre as despesas pendentes mantendo as já resolvidas"
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 text-amber-700 ${isReprocessing ? 'animate-spin' : ''}`}
+                  />
+                  {isReprocessing ? 'Reprocessando...' : 'Reprocessar Não Classificadas'}
+                </Button>
+
                 <Button
                   size="sm"
                   onClick={() => {
@@ -978,7 +1279,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                   className="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 shadow-xs gap-1.5"
                 >
                   <FolderPlus className="w-3.5 h-3.5" />
-                  Cadastrar Todas no Plano de Contas
+                  Cadastrar Todas no Plano
                 </Button>
               </div>
             </div>
@@ -1049,9 +1350,9 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                   </CardDescription>
                 </div>
 
-                {/* Filtros da Tabela */}
+                {/* Filtros e Ações da Tabela */}
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="w-48">
+                  <div className="w-44">
                     <Input
                       placeholder="Buscar despesa, conta..."
                       value={searchTerm}
@@ -1080,11 +1381,14 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                       >
                         Não Cadastradas
                       </SelectItem>
+                      <SelectItem value="memoria" className="text-xs text-purple-700 font-medium">
+                        Memória Recorrente
+                      </SelectItem>
                     </SelectContent>
                   </Select>
 
                   <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
-                    <SelectTrigger className="h-8 text-xs bg-white w-44">
+                    <SelectTrigger className="h-8 text-xs bg-white w-40">
                       <SelectValue placeholder="Categoria" />
                     </SelectTrigger>
                     <SelectContent className="max-h-60">
@@ -1098,6 +1402,35 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {/* Botão Reprocessar Apenas Não Classificadas */}
+                  {naoCadastradasCount > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleReprocessarNaoClassificadas}
+                      disabled={isReprocessing}
+                      className="h-8 text-xs gap-1.5 bg-amber-50/70 border-amber-300 text-amber-900 hover:bg-amber-100 font-semibold"
+                      title="Reprocessar apenas despesas não classificadas"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 text-amber-700 ${isReprocessing ? 'animate-spin' : ''}`}
+                      />
+                      Reprocessar ({naoCadastradasCount})
+                    </Button>
+                  )}
+
+                  {/* Botão Relatório de Conferência em PDF */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setModalRelatorioOpen(true)}
+                    className="h-8 text-xs gap-1.5 bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-300 font-semibold"
+                    title="Visualizar e Imprimir Relatório de Conferência A4 em PDF"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-blue-700" />
+                    Relatório PDF
+                  </Button>
 
                   <Button
                     variant="outline"
@@ -1189,7 +1522,8 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                         <th className="py-3 px-3 min-w-[140px]">Categoria Sugerida</th>
                         <th className="py-3 px-3 text-right w-28">Valor (R$)</th>
                         <th className="py-3 px-3 min-w-[220px]">Status no Plano de Contas</th>
-                        <th className="py-3 px-3 text-right w-24">Ações</th>
+                        <th className="py-3 px-3 min-w-[150px]">Origem / Sugestão</th>
+                        <th className="py-3 px-3 text-right w-20">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -1201,7 +1535,9 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                             key={item.id}
                             className={`hover:bg-slate-50/80 transition-colors align-top ${
                               !item.selecionada ? 'opacity-50 bg-slate-50/40' : ''
-                            } ${!item.isCadastrada ? 'bg-amber-50/20' : ''}`}
+                            } ${!item.isCadastrada ? 'bg-amber-50/20' : ''} ${
+                              item.matchConfidence === 'memoria' ? 'bg-purple-50/20' : ''
+                            }`}
                           >
                             {/* Checkbox de seleção */}
                             <td className="py-3 px-3 text-center">
@@ -1294,7 +1630,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                                 </Select>
                               ) : item.isCadastrada ? (
                                 <div className="space-y-0.5">
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-[10px] font-bold px-1.5 py-0">
                                       <Check className="w-2.5 h-2.5 mr-1" />
                                       Encontrada no Plano
@@ -1324,10 +1660,31 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                                       className="h-6 text-[10px] px-2 bg-white text-amber-800 border-amber-300 hover:bg-amber-50 font-semibold gap-1"
                                     >
                                       <Plus className="w-2.5 h-2.5" />
-                                      Cadastrar no Plano de Contas
+                                      Cadastrar no Plano
                                     </Button>
                                   </div>
                                 </div>
+                              )}
+                            </td>
+
+                            {/* Origem da Sugestão / Memória */}
+                            <td className="py-3 px-3">
+                              {item.matchConfidence === 'memoria' ? (
+                                <div className="space-y-0.5">
+                                  <Badge className="bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-100 text-[9px] font-bold gap-1">
+                                    <History className="w-2.5 h-2.5 text-purple-700" />
+                                    Memória Recorrente
+                                  </Badge>
+                                  <p className="text-[10px] text-purple-700 leading-tight">
+                                    Baseado em importações anteriores
+                                  </p>
+                                </div>
+                              ) : item.origemSugestao ? (
+                                <span className="text-[10px] text-slate-500 leading-tight block">
+                                  {item.origemSugestao}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">Classificação IA</span>
                               )}
                             </td>
 
@@ -1392,7 +1749,18 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                         <td className="py-3 px-3 text-right text-xs font-mono text-emerald-700">
                           {formatMoeda(selecionadasValor)}
                         </td>
-                        <td colSpan={2} className="py-3 px-3"></td>
+                        <td colSpan={3} className="py-3 px-3 text-slate-500 text-[11px]">
+                          {memoriaCount > 0 && (
+                            <span className="text-purple-700 mr-2">
+                              🧠 {memoriaCount} lembrada(s)
+                            </span>
+                          )}
+                          {naoCadastradasCount > 0 && (
+                            <span className="text-amber-700">
+                              ⚠️ {naoCadastradasCount} pendente(s)
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
@@ -1400,16 +1768,27 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
               )}
             </CardContent>
 
-            {/* Rodapé com Botão Principal de Geração de Lançamentos */}
+            {/* Rodapé com Botão Principal de Geração de Lançamentos e Relatório */}
             <div className="p-4 bg-slate-50/90 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStep('upload')}
-                className="text-xs bg-white"
-              >
-                ← Carregar Outros Arquivos
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStep('upload')}
+                  className="text-xs bg-white"
+                >
+                  ← Carregar Outros Arquivos
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalRelatorioOpen(true)}
+                  className="text-xs bg-white text-slate-700 border-slate-300 gap-1.5"
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  Visualizar Relatório de Conferência (PDF)
+                </Button>
+              </div>
 
               <div className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
@@ -1460,8 +1839,8 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                 Lançamentos Gerados com Sucesso!
               </h2>
               <p className="text-sm text-slate-600">
-                As despesas foram devidamente processadas, validadas e registradas no módulo
-                financeiro.
+                As despesas foram devidamente processadas, vinculadas ao Plano de Contas e
+                registradas no módulo financeiro.
               </p>
             </div>
 
@@ -1494,6 +1873,15 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
             {/* Botões de Ação Final */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
               <Button
+                onClick={() => setModalRelatorioOpen(true)}
+                variant="outline"
+                className="text-xs h-10 px-5 gap-2 border-blue-200 text-blue-800 bg-blue-50/50 hover:bg-blue-100 w-full sm:w-auto font-semibold"
+              >
+                <Printer className="w-4 h-4 text-blue-600" />
+                Imprimir Relatório de Conferência (PDF)
+              </Button>
+
+              <Button
                 onClick={() => navigate('/lancamentos')}
                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs h-10 px-6 shadow-sm gap-2 w-full sm:w-auto"
               >
@@ -1506,6 +1894,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                 onClick={() => {
                   setDespesas([])
                   setUploadedFiles([])
+                  setNovasContasCriadas([])
                   setStep('upload')
                 }}
                 className="text-xs h-10 px-5 w-full sm:w-auto"
@@ -1695,6 +2084,24 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ========================================================================= */}
+      {/* MODAL: RELATÓRIO DE CONFERÊNCIA DA IMPORTAÇÃO EM PDF A4                   */}
+      {/* ========================================================================= */}
+      <ModalRelatorioConferenciaDespesas
+        open={modalRelatorioOpen}
+        onOpenChange={setModalRelatorioOpen}
+        empresa={empresaSelecionada}
+        arquivosImportados={uploadedFiles.map((f) => ({
+          name: f.name,
+          size: f.size,
+          type: f.type,
+        }))}
+        despesas={despesas}
+        gruposCategoria={gruposPorCategoria}
+        resumoLancamentos={generationSummary}
+        novasContasCriadas={novasContasCriadas}
+      />
     </div>
   )
 }

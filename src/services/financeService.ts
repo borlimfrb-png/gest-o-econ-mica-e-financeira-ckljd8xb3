@@ -1279,3 +1279,85 @@ export const metasLancamentosService = {
     return await pb.collection('metas_lancamentos').delete(id)
   },
 }
+
+export const memoriaFornecedoresService = {
+  async getAll(): Promise<import('@/types/finance').MemoriaFornecedorRecord[]> {
+    return await pb
+      .collection('memoria_fornecedores_despesas')
+      .getFullList<import('@/types/finance').MemoriaFornecedorRecord>({
+        sort: '-total_utilizacoes,-updated',
+        expand: 'plano_conta,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa,empresa',
+      })
+  },
+
+  async getByEmpresa(
+    empresaId?: string,
+  ): Promise<import('@/types/finance').MemoriaFornecedorRecord[]> {
+    const filter = empresaId ? `empresa = "${empresaId}" || empresa = null || empresa = ""` : ''
+    return await pb
+      .collection('memoria_fornecedores_despesas')
+      .getFullList<import('@/types/finance').MemoriaFornecedorRecord>({
+        filter: filter || undefined,
+        sort: '-total_utilizacoes,-updated',
+        expand: 'plano_conta,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa,empresa',
+      })
+  },
+
+  async registrarOuAtualizarVinculo(data: {
+    fornecedor_padrao: string
+    termo_busca: string
+    plano_conta: string
+    empresa?: string
+    categoria_sugerida?: string
+  }): Promise<import('@/types/finance').MemoriaFornecedorRecord> {
+    const userId = pb.authStore.record?.id || pb.authStore.model?.id
+    const termoNorm = data.termo_busca.toLowerCase().trim()
+    const filterEmpresa = data.empresa ? `empresa = "${data.empresa}" && ` : ''
+    const filter = `${filterEmpresa}termo_busca = "${termoNorm}"`
+
+    const existing = await pb
+      .collection('memoria_fornecedores_despesas')
+      .getList<import('@/types/finance').MemoriaFornecedorRecord>(1, 1, {
+        filter,
+      })
+
+    const hoje = new Date().toISOString().slice(0, 10)
+
+    if (existing.items.length > 0) {
+      const item = existing.items[0]
+      const total = (item.total_utilizacoes || 1) + 1
+      return await pb
+        .collection('memoria_fornecedores_despesas')
+        .update<import('@/types/finance').MemoriaFornecedorRecord>(
+          item.id,
+          {
+            plano_conta: data.plano_conta,
+            categoria_sugerida: data.categoria_sugerida || item.categoria_sugerida,
+            total_utilizacoes: total,
+            ultima_utilizacao: hoje,
+          },
+          {
+            expand: 'plano_conta,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+          },
+        )
+    }
+
+    return await pb
+      .collection('memoria_fornecedores_despesas')
+      .create<import('@/types/finance').MemoriaFornecedorRecord>(
+        {
+          user: userId,
+          empresa: data.empresa || undefined,
+          fornecedor_padrao: data.fornecedor_padrao.trim(),
+          termo_busca: termoNorm,
+          plano_conta: data.plano_conta,
+          categoria_sugerida: data.categoria_sugerida || undefined,
+          total_utilizacoes: 1,
+          ultima_utilizacao: hoje,
+        },
+        {
+          expand: 'plano_conta,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
+        },
+      )
+  },
+}

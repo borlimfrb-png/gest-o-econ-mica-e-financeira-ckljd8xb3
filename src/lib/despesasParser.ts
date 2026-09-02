@@ -5,7 +5,7 @@ import {
   normalizeText,
   type PdfExtractionResult,
 } from '@/lib/pdfParser'
-import type { PlanoContaRecord } from '@/types/finance'
+import type { PlanoContaRecord, MemoriaFornecedorRecord } from '@/types/finance'
 
 export interface DespesaExtraidaItem {
   id: string
@@ -22,8 +22,9 @@ export interface DespesaExtraidaItem {
   planoContaId?: string
   planoContaCodigo?: string
   planoContaNome?: string
-  matchConfidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'manual'
+  matchConfidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'manual' | 'memoria'
   matchScore: number // 0 a 100
+  origemSugestao?: string // ex: "baseado em importações anteriores", "similaridade semântica", "vínculo manual"
 
   // Sugestões para novo cadastro se não cadastrada
   sugestaoContaNome?: string
@@ -302,11 +303,14 @@ export function matchDespesaComPlanoContas(
   descricao: string,
   categoriaSugerida: string,
   planoContas: PlanoContaRecord[],
+  memoriasFornecedores?: MemoriaFornecedorRecord[],
 ): {
   isCadastrada: boolean
   planoConta?: PlanoContaRecord
-  confidence: 'alta' | 'media' | 'baixa' | 'nenhuma'
+  confidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'memoria'
   score: number
+  origemSugestao?: string
+  categoriaSugerida?: string
 } {
   if (!planoContas || planoContas.length === 0) {
     return { isCadastrada: false, confidence: 'nenhuma', score: 0 }
@@ -315,6 +319,35 @@ export function matchDespesaComPlanoContas(
   const descNorm = cleanForComparison(descricao)
   const catNorm = cleanForComparison(categoriaSugerida)
   const descWords = descNorm.split(' ').filter((w) => w.length > 2)
+
+  // 0. PRIORIDADE 1: VERIFICAÇÃO NA MEMÓRIA DE FORNECEDORES RECORRENTES
+  if (memoriasFornecedores && memoriasFornecedores.length > 0) {
+    for (const mem of memoriasFornecedores) {
+      const termoNorm = cleanForComparison(mem.termo_busca || mem.fornecedor_padrao || '')
+      if (!termoNorm || termoNorm.length < 3) continue
+
+      // Se a descrição contém o termo do fornecedor ou o termo contém a descrição
+      if (descNorm === termoNorm || descNorm.includes(termoNorm) || termoNorm.includes(descNorm)) {
+        // Encontra a conta no planoContas
+        const pcTarget =
+          planoContas.find((p) => p.id === mem.plano_conta) ||
+          (mem.expand?.plano_conta
+            ? planoContas.find((p) => p.id === mem.expand?.plano_conta?.id)
+            : null)
+
+        if (pcTarget) {
+          return {
+            isCadastrada: true,
+            planoConta: pcTarget,
+            confidence: 'memoria',
+            score: 99,
+            origemSugestao: 'baseado em importações anteriores',
+            categoriaSugerida: mem.categoria_sugerida || categoriaSugerida,
+          }
+        }
+      }
+    }
+  }
 
   let bestMatch: PlanoContaRecord | null = null
   let bestScore = 0
@@ -392,6 +425,7 @@ export function matchDespesaComPlanoContas(
       planoConta: bestMatch,
       confidence: 'alta',
       score: clampedScore,
+      origemSugestao: 'correspondência direta com Plano de Contas',
     }
   } else if (clampedScore >= 45 && bestMatch) {
     return {
@@ -399,6 +433,7 @@ export function matchDespesaComPlanoContas(
       planoConta: bestMatch,
       confidence: 'media',
       score: clampedScore,
+      origemSugestao: 'similaridade de nome e centro de custo',
     }
   } else if (clampedScore >= 25 && bestMatch) {
     return {
@@ -406,6 +441,7 @@ export function matchDespesaComPlanoContas(
       planoConta: bestMatch,
       confidence: 'baixa',
       score: clampedScore,
+      origemSugestao: 'sugestão parcial não confirmada',
     }
   }
 
@@ -413,6 +449,7 @@ export function matchDespesaComPlanoContas(
     isCadastrada: false,
     confidence: 'nenhuma',
     score: clampedScore,
+    origemSugestao: 'sem correspondência no Plano de Contas',
   }
 }
 
@@ -471,6 +508,7 @@ function normalizeDateStr(rawDate: unknown): string {
 export async function parseExcelDespesas(
   file: File,
   planoContas: PlanoContaRecord[],
+  memoriasFornecedores?: MemoriaFornecedorRecord[],
 ): Promise<DespesaExtraidaItem[]> {
   const buffer = await file.arrayBuffer()
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true })
@@ -567,7 +605,12 @@ export async function parseExcelDespesas(
 
     if (descVal && valorVal > 0) {
       const catSugerida = catVal || identificarCategoriaDespesa(descVal)
-      const match = matchDespesaComPlanoContas(descVal, catSugerida, planoContas)
+      const match = matchDespesaComPlanoContas(
+        descVal,
+        catSugerida,
+        planoContas,
+        memoriasFornecedores,
+      )
 
       result.push({
         id: `excel_${idx}_${Math.random().toString(36).slice(2, 7)}`,
@@ -575,7 +618,7 @@ export async function parseExcelDespesas(
         sourceType: 'excel',
         data: dateVal || new Date().toISOString().slice(0, 10),
         descricao: descVal,
-        categoriaSugerida: catSugerida,
+        categoriaSugerida: match.categoriaSugerida || catSugerida,
         valor: valorVal,
         pageOrRowInfo: `Linha ${idx + 2}`,
         isCadastrada: match.isCadastrada,
@@ -584,6 +627,7 @@ export async function parseExcelDespesas(
         planoContaNome: match.planoConta?.expand?.conta?.nome,
         matchConfidence: match.confidence,
         matchScore: match.score,
+        origemSugestao: match.origemSugestao,
         sugestaoContaNome: descVal,
         selecionada: true,
       })
@@ -605,6 +649,7 @@ export async function parsePdfDespesas(
   file: File,
   planoContas: PlanoContaRecord[],
   onProgress?: (pct: number, current: number, total: number) => void,
+  memoriasFornecedores?: MemoriaFornecedorRecord[],
 ): Promise<{ itens: DespesaExtraidaItem[]; rawResult: PdfExtractionResult }> {
   const pdfResult = await extractTextFromPdf(file, onProgress)
   const result: DespesaExtraidaItem[] = []
@@ -672,7 +717,12 @@ export async function parsePdfDespesas(
       }
 
       const catSugerida = identificarCategoriaDespesa(cleanDesc)
-      const match = matchDespesaComPlanoContas(cleanDesc, catSugerida, planoContas)
+      const match = matchDespesaComPlanoContas(
+        cleanDesc,
+        catSugerida,
+        planoContas,
+        memoriasFornecedores,
+      )
 
       result.push({
         id: `pdf_p${page.pageNumber}_${itemIdx++}_${Math.random().toString(36).slice(2, 7)}`,
@@ -680,7 +730,7 @@ export async function parsePdfDespesas(
         sourceType: 'pdf',
         data: extractedDate,
         descricao: cleanDesc,
-        categoriaSugerida: catSugerida,
+        categoriaSugerida: match.categoriaSugerida || catSugerida,
         valor: valor,
         pageOrRowInfo: `Pág. ${page.pageNumber}`,
         isCadastrada: match.isCadastrada,
@@ -689,6 +739,7 @@ export async function parsePdfDespesas(
         planoContaNome: match.planoConta?.expand?.conta?.nome,
         matchConfidence: match.confidence,
         matchScore: match.score,
+        origemSugestao: match.origemSugestao,
         sugestaoContaNome: cleanDesc,
         selecionada: true,
       })
