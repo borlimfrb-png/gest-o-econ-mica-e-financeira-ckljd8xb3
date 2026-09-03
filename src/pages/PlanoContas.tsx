@@ -59,8 +59,12 @@ import {
   Download,
   Filter,
   Building2,
+  Sparkles,
+  UploadCloud,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { ModalCopiarModeloPadrao } from '@/components/ModalCopiarModeloPadrao'
+import { ModalImportarPlanoContas } from '@/components/ModalImportarPlanoContas'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -126,6 +130,10 @@ export default function PlanoContas() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [toDelete, setToDelete] = useState<PlanoContaRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Modais de ações adicionais
+  const [copiarModeloOpen, setCopiarModeloOpen] = useState(false)
+  const [importarPlanilhaOpen, setImportarPlanilhaOpen] = useState(false)
 
   // Filtros
   const [busca, setBusca] = useState('')
@@ -453,7 +461,7 @@ export default function PlanoContas() {
                 variant="outline"
                 className="text-xs font-semibold bg-emerald-50 text-emerald-800 border-emerald-200"
               >
-                {totalItens} {totalItens === 1 ? 'vínculo' : 'vínculos'} ·{' '}
+                {totalItens} {totalItens === 1 ? 'conta' : 'contas'} ·{' '}
                 {selectedEmpresa?.nome || 'Geral'}
               </Badge>
             </div>
@@ -463,39 +471,71 @@ export default function PlanoContas() {
           </div>
         </div>
 
-        {empresas.length > 1 && (
-          <div className="flex items-center gap-2 w-full md:w-auto">
-            <label
-              htmlFor="empresa-filtro-plano"
-              className="text-xs font-medium text-slate-600 shrink-0"
-            >
-              Trocar Empresa:
-            </label>
-            <select
-              id="empresa-filtro-plano"
-              value={selectedEmpresaId}
-              onChange={(e) => setSelectedEmpresaId(e.target.value)}
-              className="h-9 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none w-full md:w-64"
-            >
-              {empresas.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.nome} ({emp.segmento || 'Empresa'})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full md:w-auto">
+          {empresas.length > 1 && (
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <label
+                htmlFor="empresa-filtro-plano"
+                className="text-xs font-medium text-slate-600 shrink-0"
+              >
+                Trocar Empresa:
+              </label>
+              <select
+                id="empresa-filtro-plano"
+                value={selectedEmpresaId}
+                onChange={(e) => setSelectedEmpresaId(e.target.value)}
+                className="h-9 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none w-full sm:w-60"
+              >
+                {empresas.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.nome} ({emp.segmento || 'Empresa'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
-          Plano de Contas por Empresa
-        </h1>
-        <p className="text-xs text-[#5B6B7F]">
-          Vincule contas a centros de custo (e tipos de despesa) para estruturar o plano operacional
-          isolado de cada empresa.
-        </p>
+      {/* Cabeçalho com Ações Rápidas */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+            Plano de Contas por Empresa
+          </h1>
+          <p className="text-xs text-[#5B6B7F]">
+            Vincule contas a centros de custo (e tipos de despesa) para estruturar o plano
+            operacional isolado de cada empresa.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setCopiarModeloOpen(true)}
+            disabled={!selectedEmpresaId}
+            className="h-9 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-2xs gap-1.5"
+            title="Copiar estrutura contábil completa para a empresa selecionada"
+          >
+            <Sparkles className="w-4 h-4 text-blue-600" />
+            Copiar Modelo Padrão
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setImportarPlanilhaOpen(true)}
+            disabled={!selectedEmpresaId}
+            className="h-9 text-xs font-semibold border-emerald-300 text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900 shadow-2xs gap-1.5"
+            title="Importar contas de arquivo Excel ou CSV"
+          >
+            <UploadCloud className="w-4 h-4 text-emerald-600" />
+            Importar Plano (Excel/CSV)
+          </Button>
+        </div>
       </div>
 
       {/* Cards de resumo */}
@@ -1179,6 +1219,23 @@ export default function PlanoContas() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ============ MODAIS DAS 3 MELHORIAS ============ */}
+      <ModalCopiarModeloPadrao
+        open={copiarModeloOpen}
+        onOpenChange={setCopiarModeloOpen}
+        selectedEmpresa={selectedEmpresa}
+        totalContasEmpresaAtual={totalItens}
+        onSuccess={loadData}
+      />
+
+      <ModalImportarPlanoContas
+        open={importarPlanilhaOpen}
+        onOpenChange={setImportarPlanilhaOpen}
+        selectedEmpresa={selectedEmpresa}
+        totalContasEmpresaAtual={totalItens}
+        onSuccess={loadData}
+      />
     </div>
   )
 }
