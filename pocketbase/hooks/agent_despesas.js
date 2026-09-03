@@ -12,12 +12,88 @@ routerAdd(
         return e.badRequestError('message is required')
       }
 
+      const empresaInfo = body.empresa || {}
+      const empresaId = empresaInfo.id || body.empresaId || ''
+      const empresaNome = empresaInfo.nome || empresaInfo.razao_social || 'Empresa'
+      const empresaSegmento = empresaInfo.segmento || 'Geral'
+
+      // Exige empresa na requisição para não expor plano de outras empresas nem sugerir contas fora do escopo
+      if (!empresaId) {
+        return e.json(400, {
+          error:
+            'Empresa de destino não informada. É obrigatório selecionar uma empresa para analisar e conciliar despesas com o Plano de Contas.',
+        })
+      }
+
+      // Consulta plano_contas filtrado ESTRITAMENTE pela empresa do usuário
+      let planoContasResumo = []
+      try {
+        const safeEmpresaId = empresaId.replace(/'/g, "\\'")
+        const records = $app.findRecordsByFilter(
+          'plano_contas',
+          `user = '${userId}' && empresa = '${safeEmpresaId}'`,
+          '+created',
+          80,
+          0,
+        )
+        planoContasResumo = records.map((r) => {
+          let contaNome = ''
+          let centroNome = ''
+          try {
+            const c = $app.findRecordById('contas', r.getString('conta'))
+            contaNome = c.getString('nome')
+          } catch (_) {}
+          try {
+            const cc = $app.findRecordById('centros', r.getString('centro'))
+            centroNome = cc.getString('nome')
+          } catch (_) {}
+          return `${r.getString('codigo')} - ${contaNome} (Centro: ${centroNome})`
+        })
+      } catch (_) {}
+
+      // Consulta memórias de fornecedores filtradas pela empresa (ou memórias gerais do usuário)
+      let memoriasResumo = []
+      try {
+        const safeEmpresaId = empresaId.replace(/'/g, "\\'")
+        const mems = $app.findRecordsByFilter(
+          'memoria_fornecedores_despesas',
+          `user = '${userId}' && (empresa = '${safeEmpresaId}' || empresa = null || empresa = '')`,
+          '-total_utilizacoes',
+          25,
+          0,
+        )
+        memoriasResumo = mems.map((m) => {
+          return `${m.getString('fornecedor_padrao')} -> categoria: ${m.getString('categoria_sugerida')}`
+        })
+      } catch (_) {}
+
+      const promptComContexto = `[CONTEXTO DA EMPRESA ATIVA]
+- Empresa: ${empresaNome} (ID: ${empresaId}, Segmento: ${empresaSegmento})
+- Plano de Contas desta Empresa (${planoContasResumo.length} contas cadastradas):
+${
+  planoContasResumo
+    .slice(0, 50)
+    .map((c) => `  * ${c}`)
+    .join('\n') || '  (Nenhuma conta cadastrada para esta empresa ainda)'
+}
+
+- Memória de Fornecedores Conhecidos desta Empresa (${memoriasResumo.length} fornecedores):
+${
+  memoriasResumo
+    .slice(0, 20)
+    .map((m) => `  * ${m}`)
+    .join('\n') || '  (Nenhum fornecedor registrado ainda)'
+}
+
+[SOLICITAÇÃO DO USUÁRIO]:
+${message}`
+
       const convId = body.conversation_id || null
 
       const result = $ai.agent('importador-despesas').chat({
         user_id: userId,
         conversation_id: convId,
-        message: message,
+        message: promptComContexto,
       })
 
       return e.json(200, {
@@ -65,16 +141,92 @@ routerAdd(
         return e.badRequestError('message is required')
       }
 
+      const empresaInfo = body.empresa || {}
+      const empresaId = empresaInfo.id || body.empresaId || ''
+      const empresaNome = empresaInfo.nome || empresaInfo.razao_social || 'Empresa'
+      const empresaSegmento = empresaInfo.segmento || 'Geral'
+
+      // Exige empresa na requisição para não expor plano de outras empresas nem sugerir contas fora do escopo
+      if (!empresaId) {
+        return e.json(400, {
+          error:
+            'Empresa de destino não informada. É obrigatório selecionar uma empresa para analisar e conciliar despesas com o Plano de Contas.',
+        })
+      }
+
+      // Consulta plano_contas filtrado ESTRITAMENTE pela empresa do usuário
+      let planoContasResumo = []
+      try {
+        const safeEmpresaId = empresaId.replace(/'/g, "\\'")
+        const records = $app.findRecordsByFilter(
+          'plano_contas',
+          `user = '${userId}' && empresa = '${safeEmpresaId}'`,
+          '+created',
+          80,
+          0,
+        )
+        planoContasResumo = records.map((r) => {
+          let contaNome = ''
+          let centroNome = ''
+          try {
+            const c = $app.findRecordById('contas', r.getString('conta'))
+            contaNome = c.getString('nome')
+          } catch (_) {}
+          try {
+            const cc = $app.findRecordById('centros', r.getString('centro'))
+            centroNome = cc.getString('nome')
+          } catch (_) {}
+          return `${r.getString('codigo')} - ${contaNome} (Centro: ${centroNome})`
+        })
+      } catch (_) {}
+
+      // Consulta memórias de fornecedores filtradas pela empresa (ou memórias gerais do usuário)
+      let memoriasResumo = []
+      try {
+        const safeEmpresaId = empresaId.replace(/'/g, "\\'")
+        const mems = $app.findRecordsByFilter(
+          'memoria_fornecedores_despesas',
+          `user = '${userId}' && (empresa = '${safeEmpresaId}' || empresa = null || empresa = '')`,
+          '-total_utilizacoes',
+          25,
+          0,
+        )
+        memoriasResumo = mems.map((m) => {
+          return `${m.getString('fornecedor_padrao')} -> categoria: ${m.getString('categoria_sugerida')}`
+        })
+      } catch (_) {}
+
+      const promptComContexto = `[CONTEXTO DA EMPRESA ATIVA]
+- Empresa: ${empresaNome} (ID: ${empresaId}, Segmento: ${empresaSegmento})
+- Plano de Contas desta Empresa (${planoContasResumo.length} contas cadastradas):
+${
+  planoContasResumo
+    .slice(0, 50)
+    .map((c) => `  * ${c}`)
+    .join('\n') || '  (Nenhuma conta cadastrada para esta empresa ainda)'
+}
+
+- Memória de Fornecedores Conhecidos desta Empresa (${memoriasResumo.length} fornecedores):
+${
+  memoriasResumo
+    .slice(0, 20)
+    .map((m) => `  * ${m}`)
+    .join('\n') || '  (Nenhum fornecedor registrado ainda)'
+}
+
+[SOLICITAÇÃO DO USUÁRIO]:
+${message}`
+
       const conv = $ai.agent('importador-despesas').getOrCreateConversation({
         user_id: userId,
         id: body.conversation_id || null,
-        title: body.title || 'Importação de Despesas',
+        title: body.title || `Importação Despesas - ${empresaNome}`,
       })
 
       const iter = $ai.agent('importador-despesas').chat({
         user_id: userId,
         conversation_id: conv.id,
-        message: message,
+        message: promptComContexto,
         stream: true,
       })
 

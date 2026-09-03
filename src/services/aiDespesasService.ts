@@ -28,6 +28,15 @@ export const aiDespesasService = {
       contextualizedMessage += `\n\n[Contexto da Empresa Ativa: "${empresa.nome}" (ID: ${empresa.id}, Segmento: ${empresa.segmento || 'Geral'})]`
     }
 
+    const empresaObj = empresa
+      ? {
+          id: empresa.id,
+          nome: empresa.nome || empresa.razao_social || 'Empresa',
+          razao_social: empresa.razao_social,
+          segmento: empresa.segmento,
+        }
+      : undefined
+
     const res = await fetch(`${backendUrl}/backend/v1/agent-despesas/stream`, {
       method: 'POST',
       headers: {
@@ -38,6 +47,8 @@ export const aiDespesasService = {
         message: contextualizedMessage,
         conversation_id: conversationId || null,
         title: empresa ? `Importação Despesas - ${empresa.nome}` : 'Importação de Despesas',
+        empresa: empresaObj,
+        empresaId: empresa?.id,
       }),
       signal,
     })
@@ -76,6 +87,15 @@ export const aiDespesasService = {
       contextualizedMessage += `\n\n[Contexto da Empresa Ativa: "${empresa.nome}" (ID: ${empresa.id}, Segmento: ${empresa.segmento || 'Geral'})]`
     }
 
+    const empresaObj = empresa
+      ? {
+          id: empresa.id,
+          nome: empresa.nome || empresa.razao_social || 'Empresa',
+          razao_social: empresa.razao_social,
+          segmento: empresa.segmento,
+        }
+      : undefined
+
     const res = await fetch(`${backendUrl}/backend/v1/agent-despesas/ask`, {
       method: 'POST',
       headers: {
@@ -85,6 +105,8 @@ export const aiDespesasService = {
       body: JSON.stringify({
         message: contextualizedMessage,
         conversation_id: conversationId || null,
+        empresa: empresaObj,
+        empresaId: empresa?.id,
       }),
     })
 

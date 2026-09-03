@@ -601,7 +601,10 @@ export function ImportarDespesasIA({
           empresa: selectedEmpresaId || undefined,
           categoria_sugerida: cadastroItem.categoriaSugerida,
         })
-        loadMemoriaFornecedores()
+        const memoriasAtualizadas = await memoriaFornecedoresService.getByEmpresa(
+          selectedEmpresaId || undefined,
+        )
+        setMemoriasFornecedores(memoriasAtualizadas)
       } catch (errMem) {
         console.warn('Erro ao salvar na memória de fornecedores:', errMem)
       }
