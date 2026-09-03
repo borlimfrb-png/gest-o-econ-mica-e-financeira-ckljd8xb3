@@ -13,6 +13,7 @@ import type {
   TipoConta,
   TipoCentro,
 } from '@/types/finance'
+import { useFilter } from '@/contexts/FilterContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -57,6 +58,7 @@ import {
   Search,
   Download,
   Filter,
+  Building2,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -64,6 +66,7 @@ const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'R
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
 
 interface PlanoFormData {
+  empresa: string
   conta: string
   centro: string
   tipo_despesa: string
@@ -71,6 +74,7 @@ interface PlanoFormData {
 }
 
 const EMPTY_FORM: PlanoFormData = {
+  empresa: '',
   conta: '',
   centro: '',
   tipo_despesa: '',
@@ -95,6 +99,7 @@ const TIPO_CENTRO_BADGE: Record<TipoCentro, string> = {
 
 export default function PlanoContas() {
   const { toast } = useToast()
+  const { selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, empresas } = useFilter()
 
   const [itens, setItens] = useState<PlanoContaRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
@@ -106,7 +111,10 @@ export default function PlanoContas() {
   const [proximoCodigo, setProximoCodigo] = useState<string>('PC-001')
 
   // Form criação
-  const [form, setForm] = useState<PlanoFormData>(EMPTY_FORM)
+  const [form, setForm] = useState<PlanoFormData>(() => ({
+    ...EMPTY_FORM,
+    empresa: selectedEmpresaId || '',
+  }))
   const [errors, setErrors] = useState<FormErrors>({})
   const [saving, setSaving] = useState(false)
 
@@ -128,7 +136,7 @@ export default function PlanoContas() {
     try {
       setLoading(true)
       const [list, contasList, centrosList, tiposList] = await Promise.all([
-        planoContasService.getAll(),
+        planoContasService.getAll(selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined),
         contasService.getAll(),
         centrosService.getAll(),
         tiposDespesaService.getAll(),
@@ -152,7 +160,11 @@ export default function PlanoContas() {
 
   useEffect(() => {
     loadData()
-  }, [])
+    setForm((prev) => ({
+      ...prev,
+      empresa: selectedEmpresaId || prev.empresa || (empresas.length > 0 ? empresas[0].id : ''),
+    }))
+  }, [selectedEmpresaId, empresas])
 
   useRealtime<PlanoContaRecord>('plano_contas', () => loadData())
 
@@ -311,6 +323,7 @@ export default function PlanoContas() {
 
   const validate = (f: PlanoFormData): boolean => {
     const errs: FormErrors = {}
+    if (!f.empresa) errs.empresa = 'Selecione a empresa'
     if (!f.conta) errs.conta = 'Selecione a conta'
     if (!f.centro) errs.centro = 'Selecione o centro de custo'
     setErrors(errs)
@@ -319,10 +332,14 @@ export default function PlanoContas() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!validate(form)) return
+    const targetEmpresa =
+      form.empresa || selectedEmpresaId || (empresas.length > 0 ? empresas[0].id : '')
+    const formToValidate = { ...form, empresa: targetEmpresa }
+    if (!validate(formToValidate)) return
     setSaving(true)
     try {
       const novo = await planoContasService.create({
+        empresa: targetEmpresa,
         conta: form.conta,
         centro: form.centro,
         tipo_despesa: form.tipo_despesa || undefined,
@@ -332,7 +349,11 @@ export default function PlanoContas() {
         title: 'Item do plano criado',
         description: `Vínculo cadastrado com o código ${novo.codigo}.`,
       })
-      setForm(EMPTY_FORM)
+      setForm({
+        ...EMPTY_FORM,
+        empresa: targetEmpresa,
+      })
+      loadData()
     } catch (err: any) {
       console.error(err)
       setErrors((prev) => ({
@@ -347,6 +368,7 @@ export default function PlanoContas() {
   const openEdit = (i: PlanoContaRecord) => {
     setEditing(i)
     setForm({
+      empresa: i.empresa || selectedEmpresaId || (empresas.length > 0 ? empresas[0].id : ''),
       conta: i.conta,
       centro: i.centro,
       tipo_despesa: i.tipo_despesa || '',
@@ -362,6 +384,7 @@ export default function PlanoContas() {
     setSaving(true)
     try {
       await planoContasService.update(editing.id, {
+        empresa: form.empresa,
         conta: form.conta,
         centro: form.centro,
         tipo_despesa: form.tipo_despesa,
@@ -370,6 +393,7 @@ export default function PlanoContas() {
       toast({ title: 'Item atualizado', description: 'As alterações foram salvas.' })
       setEditOpen(false)
       setEditing(null)
+      loadData()
     } catch (err: any) {
       console.error(err)
       setErrors((prev) => ({
@@ -411,12 +435,66 @@ export default function PlanoContas() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Banner / Seletor de Empresa */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Empresa Selecionada:
+              </span>
+              <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                {selectedEmpresa?.nome || 'Nenhuma selecionada'}
+              </span>
+              <Badge
+                variant="outline"
+                className="text-xs font-semibold bg-emerald-50 text-emerald-800 border-emerald-200"
+              >
+                {totalItens} {totalItens === 1 ? 'vínculo' : 'vínculos'} ·{' '}
+                {selectedEmpresa?.nome || 'Geral'}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              O plano de contas e os lançamentos abaixo pertencem exclusivamente a esta empresa.
+            </p>
+          </div>
+        </div>
+
+        {empresas.length > 1 && (
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <label
+              htmlFor="empresa-filtro-plano"
+              className="text-xs font-medium text-slate-600 shrink-0"
+            >
+              Trocar Empresa:
+            </label>
+            <select
+              id="empresa-filtro-plano"
+              value={selectedEmpresaId}
+              onChange={(e) => setSelectedEmpresaId(e.target.value)}
+              className="h-9 text-xs bg-white border border-slate-300 rounded-lg px-3 py-1 text-slate-800 font-medium focus:ring-2 focus:ring-blue-600 focus:outline-none w-full md:w-64"
+            >
+              {empresas.map((emp) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.nome} ({emp.segmento || 'Empresa'})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
       {/* Cabeçalho */}
       <div>
-        <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">Plano de Contas</h1>
+        <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+          Plano de Contas por Empresa
+        </h1>
         <p className="text-xs text-[#5B6B7F]">
-          Vincule contas a centros de custo (e tipos de despesa) para estruturar o plano de contas
-          operacional.
+          Vincule contas a centros de custo (e tipos de despesa) para estruturar o plano operacional
+          isolado de cada empresa.
         </p>
       </div>
 
@@ -487,6 +565,30 @@ export default function PlanoContas() {
                 </Alert>
               )}
               <div className="space-y-1.5">
+                <Label htmlFor="pc-empresa" className="text-xs font-semibold text-slate-700">
+                  Empresa *
+                </Label>
+                <Select
+                  value={form.empresa || selectedEmpresaId}
+                  onValueChange={(val) => setField('empresa', val)}
+                >
+                  <SelectTrigger id="pc-empresa" className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                        {emp.nome} ({emp.segmento || 'Empresa'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.empresa && (
+                  <p className="text-[11px] text-red-600 font-medium">{errors.empresa}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="pc-codigo" className="text-xs font-semibold text-slate-700">
                   Código
                 </Label>
@@ -497,7 +599,7 @@ export default function PlanoContas() {
                   className="h-9 text-xs font-mono font-semibold text-slate-600 bg-slate-50 border-slate-200 cursor-not-allowed"
                 />
                 <p className="text-[11px] text-slate-400">
-                  Gerado automaticamente ao salvar (sequencial por usuário).
+                  Gerado automaticamente ao salvar (sequencial por empresa).
                 </p>
               </div>
 
@@ -897,6 +999,27 @@ export default function PlanoContas() {
             )}
 
             <div className="space-y-3 py-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-pc-empresa" className="text-xs font-semibold text-slate-700">
+                  Empresa *
+                </Label>
+                <Select value={form.empresa} onValueChange={(val) => setField('empresa', val)}>
+                  <SelectTrigger id="edit-pc-empresa" className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                        {emp.nome} ({emp.segmento || 'Empresa'})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.empresa && (
+                  <p className="text-[11px] text-red-600 font-medium">{errors.empresa}</p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="edit-pc-codigo" className="text-xs font-semibold text-slate-700">
                   Código

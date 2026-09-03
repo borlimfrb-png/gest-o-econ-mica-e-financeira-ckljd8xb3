@@ -122,18 +122,48 @@ export function ImportarDespesasIA({
     }
   }, [empresas, selectedEmpresaId])
 
-  // Carrega a memória de fornecedores da empresa/usuário
-  const loadMemoriaFornecedores = async () => {
+  // Carrega o plano de contas e a memória de fornecedores da empresa selecionada
+  const loadCatalogoEmpresa = async (empId: string) => {
     try {
-      const data = await memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined)
-      setMemoriasFornecedores(data)
+      const [planos, memorias] = await Promise.all([
+        planoContasService.getAll(empId ? { empresaId: empId } : undefined),
+        memoriaFornecedoresService.getByEmpresa(empId || undefined),
+      ])
+      setPlanoContas(planos)
+      setMemoriasFornecedores(memorias)
+
+      // Se já houver despesas carregadas, reavalia a correspondência com o novo plano da empresa
+      setDespesas((prev) => {
+        if (prev.length === 0) return prev
+        return prev.map((item) => {
+          const match = matchDespesaComPlanoContas(
+            item.descricao,
+            item.categoriaSugerida,
+            planos,
+            memorias,
+          )
+          return {
+            ...item,
+            isCadastrada: match.isCadastrada,
+            planoContaId: match.planoConta?.id,
+            planoContaCodigo: match.planoConta?.codigo,
+            planoContaNome: match.planoConta?.expand?.conta?.nome,
+            categoriaSugerida: match.categoriaSugerida || item.categoriaSugerida,
+            matchConfidence: match.confidence,
+            matchScore: match.score,
+            origemSugestao: match.origemSugestao,
+          }
+        })
+      })
     } catch (err) {
-      console.warn('Não foi possível carregar memória de fornecedores:', err)
+      console.warn('Não foi possível carregar catálogo da empresa:', err)
     }
   }
 
   useEffect(() => {
-    loadMemoriaFornecedores()
+    if (selectedEmpresaId) {
+      loadCatalogoEmpresa(selectedEmpresaId)
+    }
   }, [selectedEmpresaId])
 
   // Arquivos adicionados
@@ -357,9 +387,9 @@ export function ImportarDespesasIA({
     setIsReprocessing(true)
 
     try {
-      // 1. Recarrega as contas do Plano de Contas e a Memória de Fornecedores mais recentes
+      // 1. Recarrega as contas do Plano de Contas e a Memória de Fornecedores mais recentes da empresa de destino
       const [todosPlanos, todasMemorias] = await Promise.all([
-        planoContasService.getAll(),
+        planoContasService.getAll(selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined),
         memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined),
       ])
 
@@ -486,7 +516,8 @@ export function ImportarDespesasIA({
           empresa: selectedEmpresaId || undefined,
           categoria_sugerida: itemTarget.categoriaSugerida,
         })
-        loadMemoriaFornecedores()
+        const data = await memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined)
+        setMemoriasFornecedores(data)
       } catch (err) {
         console.warn('Erro ao salvar vínculo na memória:', err)
       }
@@ -539,8 +570,9 @@ export function ImportarDespesasIA({
         grupo: 'Despesas Operacionais',
       })
 
-      // 2. Vincula no Plano de Contas
+      // 2. Vincula no Plano de Contas para a empresa selecionada
       const novoPlano: PlanoContaRecord = await planoContasService.create({
+        empresa: selectedEmpresaId || undefined,
         conta: novaConta.id,
         centro: novoCentroId,
         tipo_despesa: novoTipoDespesaId || undefined,
@@ -574,8 +606,10 @@ export function ImportarDespesasIA({
         console.warn('Erro ao salvar na memória de fornecedores:', errMem)
       }
 
-      // 4. Atualiza catálogo local de plano de contas
-      const todosAtualizados = await planoContasService.getAll()
+      // 4. Atualiza catálogo local de plano de contas da empresa
+      const todosAtualizados = await planoContasService.getAll(
+        selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined,
+      )
       setPlanoContas(todosAtualizados)
       if (onReloadCatalogs) await onReloadCatalogs()
 
@@ -665,6 +699,7 @@ export function ImportarDespesasIA({
           })
 
           const novoPlano = await planoContasService.create({
+            empresa: selectedEmpresaId || undefined,
             conta: novaConta.id,
             centro: loteCentroId,
             tipo_despesa: loteTipoDespesaId || undefined,
@@ -700,9 +735,9 @@ export function ImportarDespesasIA({
 
       setNovasContasCriadas((prev) => [...prev, ...novasRegistradas])
 
-      // Recarrega todos os planos atualizados e memórias
+      // Recarrega todos os planos atualizados e memórias da empresa de destino
       const [todosAtualizados, todasMemorias] = await Promise.all([
-        planoContasService.getAll(),
+        planoContasService.getAll(selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined),
         memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined),
       ])
 

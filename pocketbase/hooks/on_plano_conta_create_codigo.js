@@ -10,12 +10,19 @@ onRecordCreate((e) => {
     return e.next()
   }
 
-  // Encontra o maior número de código já existente para este usuário.
+  const empresaId = record.getString('empresa')
+
+  // Encontra o maior número de código já existente para esta empresa/usuário.
   let maxN = 0
   try {
-    const existentes = $app.findRecordsByFilter('plano_contas', 'user = {:uid}', '-created', 0, 0, {
-      uid: userId,
-    })
+    let filter = 'user = {:uid}'
+    let params = { uid: userId }
+    if (empresaId) {
+      filter += ' && empresa = {:empresaId}'
+      params.empresaId = empresaId
+    }
+
+    const existentes = $app.findRecordsByFilter('plano_contas', filter, '-created', 0, 0, params)
     for (const r of existentes) {
       const codigo = r.getString('codigo')
       if (codigo && codigo.indexOf('PC-') === 0) {

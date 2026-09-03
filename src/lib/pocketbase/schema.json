@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-02T14:01:50.361Z",
+  "generatedAt": "2026-09-03T11:14:03.444Z",
   "collections": [
     {
       "name": "users",
@@ -894,9 +894,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
-      "indexes": ["CREATE INDEX idx_plano_contas_user ON plano_contas (user)"]
+      "indexes": [
+        "CREATE INDEX idx_plano_contas_user ON plano_contas (user)",
+        "CREATE INDEX IF NOT EXISTS idx_plano_contas_empresa ON plano_contas (empresa)"
+      ]
     },
     {
       "name": "lancamentos",

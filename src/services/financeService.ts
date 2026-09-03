@@ -867,14 +867,18 @@ export const contasService = {
 }
 
 export const planoContasService = {
-  async getAll(): Promise<PlanoContaRecord[]> {
-    return await pb.collection('plano_contas').getFullList<PlanoContaRecord>({
+  async getAll(options?: { empresaId?: string }): Promise<PlanoContaRecord[]> {
+    const params: Record<string, unknown> = {
       sort: 'codigo',
-      expand: 'conta,centro,tipo_despesa',
-    })
+      expand: 'empresa,conta,centro,tipo_despesa',
+    }
+    if (options?.empresaId) {
+      params.filter = `empresa = '${options.empresaId}'`
+    }
+    return await pb.collection('plano_contas').getFullList<PlanoContaRecord>(params)
   },
 
-  // Calcula o próximo código (PC-NNN) com base nos códigos já existentes do usuário.
+  // Calcula o próximo código (PC-NNN) com base nos códigos já existentes.
   proximoCodigo(codigos: string[]): string {
     let maxN = 0
     for (const c of codigos) {
@@ -887,28 +891,39 @@ export const planoContasService = {
   },
 
   async create(data: {
+    empresa?: string
     conta: string
     centro: string
     tipo_despesa?: string
     descricao?: string
   }): Promise<PlanoContaRecord> {
-    return await pb.collection('plano_contas').create<PlanoContaRecord>({
-      conta: data.conta,
-      centro: data.centro,
-      tipo_despesa: data.tipo_despesa || undefined,
-      descricao: data.descricao?.trim() || undefined,
-      user: currentUserId(),
-    } as any)
+    return await pb.collection('plano_contas').create<PlanoContaRecord>(
+      {
+        empresa: data.empresa || undefined,
+        conta: data.conta,
+        centro: data.centro,
+        tipo_despesa: data.tipo_despesa || undefined,
+        descricao: data.descricao?.trim() || undefined,
+        user: currentUserId(),
+      } as any,
+      {
+        expand: 'empresa,conta,centro,tipo_despesa',
+      },
+    )
   },
 
   async update(
     id: string,
-    data: Partial<Pick<PlanoContaRecord, 'conta' | 'centro' | 'tipo_despesa' | 'descricao'>>,
+    data: Partial<
+      Pick<PlanoContaRecord, 'empresa' | 'conta' | 'centro' | 'tipo_despesa' | 'descricao'>
+    >,
   ): Promise<PlanoContaRecord> {
     const payload: Record<string, unknown> = { ...data }
     if (data.tipo_despesa === '') payload.tipo_despesa = null
     if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
-    return await pb.collection('plano_contas').update<PlanoContaRecord>(id, payload)
+    return await pb.collection('plano_contas').update<PlanoContaRecord>(id, payload, {
+      expand: 'empresa,conta,centro,tipo_despesa',
+    })
   },
 
   async delete(id: string): Promise<boolean> {
