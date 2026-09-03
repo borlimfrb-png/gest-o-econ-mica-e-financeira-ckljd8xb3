@@ -65,6 +65,17 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { ModalCopiarModeloPadrao } from '@/components/ModalCopiarModeloPadrao'
 import { ModalImportarPlanoContas } from '@/components/ModalImportarPlanoContas'
+import { ModalCompararPlanos } from '@/components/ModalCompararPlanos'
+import { ModalAssistenteSegmento } from '@/components/ModalAssistenteSegmento'
+import { exportarPlanoContasExcel, exportarPlanoContasCsv } from '@/lib/exportacaoPlanoContas'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
+import { FileSpreadsheet, GitCompare, Wand2, ChevronDown } from 'lucide-react'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -134,6 +145,8 @@ export default function PlanoContas() {
   // Modais de ações adicionais
   const [copiarModeloOpen, setCopiarModeloOpen] = useState(false)
   const [importarPlanilhaOpen, setImportarPlanilhaOpen] = useState(false)
+  const [compararPlanosOpen, setCompararPlanosOpen] = useState(false)
+  const [assistenteSegmentoOpen, setAssistenteSegmentoOpen] = useState(false)
 
   // Filtros
   const [busca, setBusca] = useState('')
@@ -263,8 +276,62 @@ export default function PlanoContas() {
     })
   }, [itens, busca, filtroConta, filtroCentro, contaMap, centroMap, tipoMap])
 
-  // Exportação CSV do Plano de Contas
-  const handleExportCsv = () => {
+  // Exportação Excel (.xlsx) do Plano de Contas da empresa selecionada
+  const handleExportExcelEmpresa = () => {
+    if (itens.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nenhum dado para exportar',
+        description: 'A empresa selecionada não possui itens cadastrados no plano de contas.',
+      })
+      return
+    }
+
+    try {
+      exportarPlanoContasExcel(selectedEmpresa, itens, contaMap, centroMap, tipoMap)
+      toast({
+        title: 'Excel exportado com sucesso!',
+        description: `Arquivo .xlsx com ${itens.length} conta(s) da empresa ${selectedEmpresa?.nome || ''} baixado.`,
+      })
+    } catch (err: any) {
+      console.error('Erro ao exportar Excel:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro na exportação Excel',
+        description: err?.message || 'Não foi possível gerar a planilha Excel.',
+      })
+    }
+  }
+
+  // Exportação CSV do Plano de Contas da empresa selecionada
+  const handleExportCsvEmpresa = () => {
+    if (itens.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nenhum dado para exportar',
+        description: 'A empresa selecionada não possui itens cadastrados no plano de contas.',
+      })
+      return
+    }
+
+    try {
+      exportarPlanoContasCsv(selectedEmpresa, itens, contaMap, centroMap, tipoMap)
+      toast({
+        title: 'CSV exportado com sucesso!',
+        description: `Arquivo .csv com ${itens.length} conta(s) da empresa ${selectedEmpresa?.nome || ''} baixado.`,
+      })
+    } catch (err: any) {
+      console.error('Erro ao exportar CSV:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro na exportação CSV',
+        description: err?.message || 'Não foi possível gerar o arquivo CSV.',
+      })
+    }
+  }
+
+  // Exportação rápida dos registros filtrados da tabela
+  const handleExportCsvFiltrados = () => {
     if (itensFiltrados.length === 0) {
       toast({
         variant: 'destructive',
@@ -274,46 +341,10 @@ export default function PlanoContas() {
       return
     }
 
-    const escapeCsv = (val: string | number | undefined | null): string => {
-      if (val === null || val === undefined) return ''
-      const s = String(val)
-      if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
-      return s
-    }
-
-    const colunas = ['Código', 'Conta', 'Centro', 'Tipo de Despesa', 'Descrição']
-
-    const linhas: string[] = []
-    linhas.push(colunas.map(escapeCsv).join(';'))
-
-    for (const item of itensFiltrados) {
-      const conta = contaMap.get(item.conta)
-      const centro = centroMap.get(item.centro)
-      const tipo = item.tipo_despesa ? tipoMap.get(item.tipo_despesa) : undefined
-
-      const codPlano = item.codigo || ''
-      const contaStr = conta ? `${conta.codigo || '—'} - ${conta.nome}` : ''
-      const centroStr = centro ? `${centro.codigo || '—'} - ${centro.nome}` : ''
-      const tipoStr = tipo ? `${tipo.codigo || '—'} - ${tipo.nome}` : ''
-      const descStr = item.descricao || ''
-
-      linhas.push([codPlano, contaStr, centroStr, tipoStr, descStr].map(escapeCsv).join(';'))
-    }
-
-    const csvContent = '\uFEFF' + linhas.join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    const dataStr = new Date().toISOString().slice(0, 10)
-    link.setAttribute('download', `plano-de-contas-${dataStr}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(link.href)
-
+    exportarPlanoContasCsv(selectedEmpresa, itensFiltrados, contaMap, centroMap, tipoMap)
     toast({
-      title: 'CSV exportado com sucesso',
-      description: `Arquivo com ${itensFiltrados.length} item(ns) do plano de contas baixado.`,
+      title: 'Itens filtrados exportados',
+      description: `Arquivo CSV com ${itensFiltrados.length} item(ns) baixado.`,
     })
   }
 
@@ -510,6 +541,92 @@ export default function PlanoContas() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* 1) Exportar Plano (Excel/CSV) da empresa ativa */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!selectedEmpresaId || itens.length === 0}
+                className="h-9 text-xs font-semibold border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs gap-1.5"
+                title="Exportar plano de contas da empresa ativa em Excel ou CSV"
+              >
+                <Download className="w-4 h-4 text-blue-600" />
+                Exportar Plano (Excel/CSV)
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 bg-white">
+              <DropdownMenuItem
+                onClick={handleExportExcelEmpresa}
+                className="text-xs cursor-pointer gap-2 py-2"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                <div className="flex flex-col">
+                  <span className="font-semibold text-slate-800">Planilha Excel (.xlsx)</span>
+                  <span className="text-[10px] text-slate-500">Formato formatado para backup</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={handleExportCsvEmpresa}
+                className="text-xs cursor-pointer gap-2 py-2"
+              >
+                <Download className="w-4 h-4 text-blue-600" />
+                <div className="flex flex-col">
+                  <span className="font-semibold text-slate-800">Arquivo CSV (.csv)</span>
+                  <span className="text-[10px] text-slate-500">Padrão UTF-8 brasileiro (;)</span>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => {
+                  handleExportExcelEmpresa()
+                  setTimeout(handleExportCsvEmpresa, 400)
+                }}
+                className="text-xs cursor-pointer gap-2 py-1.5 text-slate-600"
+              >
+                <span className="text-[11px] font-medium">Baixar ambos (.xlsx e .csv)</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* 2) Comparar Planos (Empresas) */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setCompararPlanosOpen(true)}
+            disabled={empresas.length < 2}
+            className={`h-9 text-xs font-semibold shadow-2xs gap-1.5 ${
+              empresas.length < 2
+                ? 'border-slate-200 text-slate-400 cursor-not-allowed'
+                : 'border-indigo-300 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800'
+            }`}
+            title={
+              empresas.length < 2
+                ? 'Necessário ter ao menos 2 empresas cadastradas para comparar planos'
+                : 'Comparar contas presentes, ausentes e divergências entre duas empresas'
+            }
+          >
+            <GitCompare className="w-4 h-4 text-indigo-600" />
+            Comparar Planos (Empresas)
+          </Button>
+
+          {/* 3) Assistente de Plano de Contas por Segmento */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setAssistenteSegmentoOpen(true)}
+            disabled={!selectedEmpresaId}
+            className="h-9 text-xs font-semibold border-violet-300 text-violet-700 hover:bg-violet-50 hover:text-violet-800 shadow-2xs gap-1.5"
+            title="Sugerir contas contábeis faltantes com base no segmento/setor da empresa"
+          >
+            <Wand2 className="w-4 h-4 text-violet-600" />
+            Assistente de Contas
+          </Button>
+
           <Button
             type="button"
             variant="outline"
@@ -779,10 +896,10 @@ export default function PlanoContas() {
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleExportCsv}
+                onClick={handleExportCsvFiltrados}
                 disabled={itensFiltrados.length === 0}
                 className="h-8 text-xs border-slate-200 hover:border-blue-300 hover:text-blue-700 font-medium self-start sm:self-auto shrink-0 gap-1.5"
-                title="Exportar registros filtrados para arquivo CSV (formato brasileiro)"
+                title="Exportar registros filtrados da tabela para arquivo CSV"
               >
                 <Download className="w-3.5 h-3.5 text-blue-600" />
                 Exportar CSV
@@ -1234,6 +1351,22 @@ export default function PlanoContas() {
         onOpenChange={setImportarPlanilhaOpen}
         selectedEmpresa={selectedEmpresa}
         totalContasEmpresaAtual={totalItens}
+        onSuccess={loadData}
+      />
+
+      <ModalCompararPlanos
+        open={compararPlanosOpen}
+        onOpenChange={setCompararPlanosOpen}
+        empresas={empresas}
+        empresaInicialId={selectedEmpresaId}
+      />
+
+      <ModalAssistenteSegmento
+        open={assistenteSegmentoOpen}
+        onOpenChange={setAssistenteSegmentoOpen}
+        selectedEmpresa={selectedEmpresa}
+        planoAtualEmpresa={itens}
+        catalogoContas={contas}
         onSuccess={loadData}
       />
     </div>

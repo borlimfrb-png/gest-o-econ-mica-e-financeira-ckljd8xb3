@@ -230,6 +230,89 @@ export const planoContasLoteService = {
   },
 
   /**
+   * Grava em lote uma lista arbitrária de itens modelo (usado pelo Assistente de Contas por Segmento).
+   * Valida duplicidade contra o plano atual da empresa e reaproveita cadastros de Contas/Centros.
+   */
+  async aplicarContasSugeridas(
+    empresaId: string,
+    itens: ItemModeloPadrao[],
+    onProgress?: (atual: number, total: number) => void,
+  ): Promise<ResultadoLotePlano> {
+    if (!empresaId) {
+      throw new Error('Empresa obrigatória para aplicar contas sugeridas.')
+    }
+
+    const catalogo = new CatalogoDependenciasCache()
+    await catalogo.carregar()
+
+    const itensAtuais = await planoContasService.getAll({ empresaId })
+    const chavesExistentes = new Set<string>()
+    for (const it of itensAtuais) {
+      chavesExistentes.add(`${it.conta}::${it.centro}::${it.tipo_despesa || ''}`)
+    }
+
+    const resultado: ResultadoLotePlano = {
+      totalSolicitados: itens.length,
+      totalCriados: 0,
+      totalIgnoradosDuplicados: 0,
+      totalErros: 0,
+      itensCriados: [],
+      errosDetalhes: [],
+    }
+
+    let indice = 0
+    for (const item of itens) {
+      indice++
+      if (onProgress) onProgress(indice, itens.length)
+
+      try {
+        const conta = await catalogo.obterOuCriarConta(
+          item.contaNome,
+          item.contaTipo,
+          item.contaGrupo,
+          item.codigoSugerido,
+        )
+
+        const centro = await catalogo.obterOuCriarCentro(item.centroNome, item.centroTipo)
+
+        let tipoDespesa: TipoDespesaRecord | undefined
+        if (item.tipoDespesaNome) {
+          tipoDespesa = await catalogo.obterOuCriarTipoDespesa(item.tipoDespesaNome)
+        }
+
+        const chaveVinculo = `${conta.id}::${centro.id}::${tipoDespesa?.id || ''}`
+        if (chavesExistentes.has(chaveVinculo)) {
+          resultado.totalIgnoradosDuplicados++
+          continue
+        }
+
+        const descricaoFinal = item.codigoSugerido
+          ? `[${item.codigoSugerido}] ${item.descricao || item.contaNome}`
+          : item.descricao
+
+        const novoPlano = await planoContasService.create({
+          empresa: empresaId,
+          conta: conta.id,
+          centro: centro.id,
+          tipo_despesa: tipoDespesa?.id,
+          descricao: descricaoFinal,
+        })
+
+        chavesExistentes.add(chaveVinculo)
+        resultado.totalCriados++
+        resultado.itensCriados.push(novoPlano)
+      } catch (err: any) {
+        resultado.totalErros++
+        const msg = `Conta "${item.contaNome}": ${err?.message || 'Falha ao gravar'}`
+        resultado.errosDetalhes.push(msg)
+        console.error('Erro ao gravar conta sugerida:', err)
+      }
+    }
+
+    return resultado
+  },
+
+  /**
    * Importa uma lista de itens analisados de arquivo Excel ou CSV para a empresa selecionada.
    */
   async importarItens(
