@@ -30,7 +30,7 @@ interface FilterContextType {
 const FilterContext = createContext<FilterContextType | undefined>(undefined)
 
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, isAdmin, empresaVinculadaId, user } = useAuth()
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('')
@@ -56,18 +56,33 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         empresasService.getAll(),
         gruposEmpresariaisService.getAll().catch(() => [] as GrupoEmpresarialRecord[]),
       ])
-      setEmpresas(listEmpresas)
-      setGrupos(listGrupos)
 
-      // Se não houver seleção ou a seleção atual não existir mais nem em empresas nem em grupos
-      const todasEntidadesIds = [
-        ...listEmpresas.map((e) => e.id),
-        ...listGrupos.map((g) => `grupo-${g.id}`),
-      ]
+      // Se for usuário de empresa (não admin), garante filtragem estrita pela empresa vinculada
+      let empresasFiltradas = listEmpresas
+      let gruposFiltrados = listGrupos
 
-      if (todasEntidadesIds.length > 0) {
-        if (!selectedEmpresaId || !todasEntidadesIds.includes(selectedEmpresaId)) {
-          setSelectedEmpresaId(todasEntidadesIds[0])
+      if (!isAdmin && empresaVinculadaId) {
+        empresasFiltradas = listEmpresas.filter((e) => e.id === empresaVinculadaId)
+        // Grupos que contenham a empresa do usuário
+        gruposFiltrados = listGrupos.filter((g) => (g.empresas || []).includes(empresaVinculadaId))
+      }
+
+      setEmpresas(empresasFiltradas)
+      setGrupos(gruposFiltrados)
+
+      // Se usuário for comum e tiver empresa vinculada, fixa nela
+      if (!isAdmin && empresaVinculadaId) {
+        setSelectedEmpresaId(empresaVinculadaId)
+      } else {
+        const todasEntidadesIds = [
+          ...empresasFiltradas.map((e) => e.id),
+          ...gruposFiltrados.map((g) => `grupo-${g.id}`),
+        ]
+
+        if (todasEntidadesIds.length > 0) {
+          if (!selectedEmpresaId || !todasEntidadesIds.includes(selectedEmpresaId)) {
+            setSelectedEmpresaId(todasEntidadesIds[0])
+          }
         }
       }
     } catch (err) {
@@ -85,7 +100,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setGrupos([])
       setSelectedEmpresaId('')
     }
-  }, [isAuthenticated])
+  }, [isAuthenticated, isAdmin, empresaVinculadaId, user?.role, user?.empresa])
 
   // Realtime empresas
   useRealtime<EmpresaRecord>(
@@ -181,7 +196,14 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         grupos,
         todasEntidades,
         selectedEmpresaId,
-        setSelectedEmpresaId,
+        setSelectedEmpresaId: (id: string) => {
+          // Se for usuário comum, não permite trocar empresa para outra diferente da vinculada
+          if (!isAdmin && empresaVinculadaId) {
+            setSelectedEmpresaId(empresaVinculadaId)
+            return
+          }
+          setSelectedEmpresaId(id)
+        },
         selectedAno,
         setSelectedAno,
         anosDisponiveis,

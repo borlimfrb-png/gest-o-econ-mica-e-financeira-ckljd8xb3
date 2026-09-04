@@ -43,6 +43,22 @@ export type UfEmpresa =
 
 import type { RecordModel } from 'pocketbase'
 
+export type UserRole = 'admin' | 'empresa'
+
+export interface UserRecord extends RecordModel {
+  name?: string
+  email: string
+  avatar?: string
+  role?: UserRole
+  empresa?: string
+  ativo?: boolean
+  receber_alertas_email?: boolean
+  notificacoes_vencimento?: boolean
+  expand?: {
+    empresa?: EmpresaRecord
+  }
+}
+
 export interface EmpresaRecord extends RecordModel {
   nome: string
   cnpj: string

@@ -21,6 +21,8 @@ import {
   Building,
   FolderTree,
   Folder,
+  Users,
+  Shield,
   Settings,
   DollarSign,
   CheckCircle2,
@@ -54,7 +56,7 @@ import {
 import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
 
 export default function Layout() {
-  const { user, logout, isAuthenticated, isLoading } = useAuth()
+  const { user, logout, isAuthenticated, isLoading, isAdmin } = useAuth()
   const {
     empresas,
     todasEntidades,
@@ -74,15 +76,22 @@ export default function Layout() {
   const [modalPerfilOpen, setModalPerfilOpen] = useState(false)
 
   // Itens do submenu Cadastros
-  const cadastroSubItems = [
-    { name: 'Empresas', path: '/empresas', icon: Building2 },
-    { name: 'Grupo Empresarial', path: '/cadastro/grupos-empresariais', icon: Network },
-    { name: 'Centros de Custo', path: '/centros', icon: PieChart },
-    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags },
-    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen },
-    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree },
-    { name: 'Minha Empresa', path: '/minha-empresa', icon: Building },
+  const rawCadastroSubItems = [
+    { name: 'Empresas', path: '/empresas', icon: Building2, adminOnly: false },
+    {
+      name: 'Grupo Empresarial',
+      path: '/cadastro/grupos-empresariais',
+      icon: Network,
+      adminOnly: false,
+    },
+    { name: 'Centros de Custo', path: '/centros', icon: PieChart, adminOnly: false },
+    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags, adminOnly: false },
+    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen, adminOnly: false },
+    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree, adminOnly: false },
+    { name: 'Minha Empresa', path: '/minha-empresa', icon: Building, adminOnly: false },
+    { name: 'Usuários & Permissões', path: '/admin/usuarios', icon: Users, adminOnly: true },
   ]
+  const cadastroSubItems = rawCadastroSubItems.filter((item) => !item.adminOnly || isAdmin)
 
   // Itens do submenu Formação de Preço - Custo
   const formacaoPrecoSubItems = [
@@ -109,7 +118,8 @@ export default function Layout() {
     location.pathname.startsWith('/tipos-despesas') ||
     location.pathname.startsWith('/contas') ||
     location.pathname.startsWith('/plano-contas') ||
-    location.pathname === '/minha-empresa'
+    location.pathname === '/minha-empresa' ||
+    location.pathname.startsWith('/admin/usuarios')
 
   // Atalho Balanço e DRE destino
   const balancoDreUrl = selectedEmpresaId
@@ -254,6 +264,8 @@ export default function Layout() {
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
   const userName = user?.name || 'Consultor Financeiro'
   const userEmail = user?.email || 'usuario@sistema.com'
+  const userRole = user?.role === 'admin' ? 'Administrador' : 'Empresa'
+  const isUserAdmin = user?.role === 'admin'
 
   const showHeaderFilters =
     location.pathname === '/dashboard' ||
@@ -821,7 +833,18 @@ export default function Layout() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="overflow-hidden">
-                    <p className="text-sm font-semibold text-white truncate">{userName}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-semibold text-white truncate">{userName}</p>
+                      <span
+                        className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                          isUserAdmin
+                            ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
+                            : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                        }`}
+                      >
+                        {userRole}
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-400 truncate">{userEmail}</p>
                   </div>
                 </div>
@@ -1667,9 +1690,20 @@ export default function Layout() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="overflow-hidden">
-                  <p className="text-xs font-semibold text-white truncate leading-tight">
-                    {userName}
-                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-white truncate leading-tight">
+                      {userName}
+                    </p>
+                    <span
+                      className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
+                        isUserAdmin
+                          ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
+                          : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                      }`}
+                    >
+                      {userRole}
+                    </span>
+                  </div>
                   <p className="text-[11px] text-blue-200/70 truncate">{userEmail}</p>
                 </div>
               </button>
@@ -1786,28 +1820,47 @@ export default function Layout() {
                 {/* Seletor Empresa */}
                 <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
                   <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <Select
-                    value={selectedEmpresaId}
-                    onValueChange={(id) => {
-                      setSelectedEmpresaId(id)
-                      if (
-                        location.pathname.startsWith('/empresas/') &&
-                        location.pathname !== `/empresas/${id}`
-                      ) {
-                        navigate(`/empresas/${id}`)
+                  {isUserAdmin ? (
+                    <Select
+                      value={selectedEmpresaId}
+                      onValueChange={(id) => {
+                        setSelectedEmpresaId(id)
+                        if (
+                          location.pathname.startsWith('/empresas/') &&
+                          location.pathname !== `/empresas/${id}`
+                        ) {
+                          navigate(`/empresas/${id}`)
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 p-0 focus:ring-0 w-[180px] sm:w-[220px]">
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectEmpresaOuGrupoItems
+                          todasEntidades={todasEntidades}
+                          empresas={empresas}
+                        />
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div
+                      className="flex items-center gap-1.5 py-1 text-xs font-semibold text-slate-800 max-w-[200px] truncate"
+                      title={
+                        empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                        'Sua Empresa'
                       }
-                    }}
-                  >
-                    <SelectTrigger className="h-7 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 p-0 focus:ring-0 w-[180px] sm:w-[220px]">
-                      <SelectValue placeholder="Selecione a empresa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectEmpresaOuGrupoItems
-                        todasEntidades={todasEntidades}
-                        empresas={empresas}
-                      />
-                    </SelectContent>
-                  </Select>
+                    >
+                      <span className="truncate">
+                        {empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                          empresas.find((e) => e.id === selectedEmpresaId)?.nome ||
+                          'Empresa Vinculada'}
+                      </span>
+                      <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-normal">
+                        Fixa
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Seletor Ano */}

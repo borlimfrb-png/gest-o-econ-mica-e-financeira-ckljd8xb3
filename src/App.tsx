@@ -45,8 +45,32 @@ import Configuracoes from './pages/Configuracoes'
 import GruposEmpresariais from './pages/GruposEmpresariais'
 import DashboardEmpresa from './pages/DashboardEmpresa'
 import MinhaEmpresa from './pages/MinhaEmpresa'
+import AdminUsuarios from './pages/AdminUsuarios'
 import NotFound from './pages/NotFound'
 import Layout from './components/Layout'
+
+// Componente para rotas exclusivas de administrador
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isAdmin, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
+}
 
 // Componente para rotas protegidas
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -141,6 +165,14 @@ const App = () => (
                 <Route path="/agente-ia" element={<AgenteIA />} />
                 <Route path="/importacao" element={<Importacao />} />
                 <Route path="/configuracoes" element={<Configuracoes />} />
+                <Route
+                  path="/admin/usuarios"
+                  element={
+                    <AdminRoute>
+                      <AdminUsuarios />
+                    </AdminRoute>
+                  }
+                />
               </Route>
 
               {/* Rota 404 */}
