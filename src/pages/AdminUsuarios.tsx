@@ -52,7 +52,9 @@ export default function AdminUsuarios() {
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterRole, setFilterRole] = useState<'todos' | 'admin' | 'empresa'>('todos')
+  const [filterRole, setFilterRole] = useState<'todos' | 'admin' | 'empresa' | 'financeiro'>(
+    'todos',
+  )
   const [filterEmpresa, setFilterEmpresa] = useState<string>('todas')
 
   // Modais
@@ -243,7 +245,7 @@ export default function AdminUsuarios() {
       return
     }
 
-    if (editForm.role === 'empresa' && !editForm.empresa) {
+    if (editForm.role !== 'admin' && !editForm.empresa) {
       toast({
         variant: 'destructive',
         title: 'Empresa obrigatória',

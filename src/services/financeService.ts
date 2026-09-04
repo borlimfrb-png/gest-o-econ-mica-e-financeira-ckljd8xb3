@@ -1461,7 +1461,7 @@ export const memoriaFornecedoresService = {
     empresa?: string
     categoria_sugerida?: string
   }): Promise<import('@/types/finance').MemoriaFornecedorRecord> {
-    const userId = pb.authStore.record?.id || pb.authStore.model?.id
+    const userId = pb.authStore.record?.id
     const termoNorm = data.termo_busca.toLowerCase().trim()
     const filterEmpresa = data.empresa ? `empresa = "${data.empresa}" && ` : ''
     const filter = `${filterEmpresa}termo_busca = "${termoNorm}"`

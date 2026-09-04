@@ -1,4 +1,4 @@
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import type { AuditoriaLancamentoRecord, AcaoAuditoriaLancamento } from '@/types/finance'
 
 export interface RegistrarAuditoriaInput {
@@ -23,7 +23,7 @@ export const auditoriaLancamentosService = {
    */
   async registrar(input: RegistrarAuditoriaInput): Promise<AuditoriaLancamentoRecord | null> {
     try {
-      const authModel = pb.authStore.model
+      const authModel = pb.authStore.record
       const usuarioId = authModel?.id || undefined
       const usuarioNome = (authModel as any)?.name || 'Usuário do Sistema'
       const usuarioEmail = (authModel as any)?.email || ''
