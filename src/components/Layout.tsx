@@ -75,6 +75,21 @@ export default function Layout() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [modalPerfilOpen, setModalPerfilOpen] = useState(false)
 
+  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
+  const userName = user?.name || 'Consultor Financeiro'
+  const userEmail = user?.email || 'usuario@sistema.com'
+  const userRole =
+    user?.role === 'admin'
+      ? 'Administrador'
+      : user?.role === 'financeiro'
+        ? 'Financeiro'
+        : user?.role === 'comercial'
+          ? 'Comercial'
+          : 'Empresa'
+  const isUserAdmin = user?.role === 'admin'
+  const isUserFinanceiro = user?.role === 'financeiro'
+  const isUserComercial = user?.role === 'comercial'
+
   // Itens do submenu Cadastros
   const rawCadastroSubItems = [
     {
@@ -338,21 +353,6 @@ export default function Layout() {
   if (!isAuthenticated && location.pathname === '/') {
     return <Outlet />
   }
-
-  const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
-  const userName = user?.name || 'Consultor Financeiro'
-  const userEmail = user?.email || 'usuario@sistema.com'
-  const userRole =
-    user?.role === 'admin'
-      ? 'Administrador'
-      : user?.role === 'financeiro'
-        ? 'Financeiro'
-        : user?.role === 'comercial'
-          ? 'Comercial'
-          : 'Empresa'
-  const isUserAdmin = user?.role === 'admin'
-  const isUserFinanceiro = user?.role === 'financeiro'
-  const isUserComercial = user?.role === 'comercial'
 
   const showHeaderFilters =
     location.pathname === '/dashboard' ||
