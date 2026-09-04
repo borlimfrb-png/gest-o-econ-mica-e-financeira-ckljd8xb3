@@ -95,7 +95,8 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
   }
 
   if (!perfilTemAcesso(user?.role, modulo)) {
-    return <Navigate to="/dashboard" replace />
+    const destino = user?.role === 'comercial' ? '/baixa-recebiveis' : '/dashboard'
+    return <Navigate to={destino} replace />
   }
 
   return <>{children}</>

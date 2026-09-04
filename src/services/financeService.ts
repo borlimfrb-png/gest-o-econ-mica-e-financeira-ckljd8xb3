@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { auditoriaCadastrosService } from './auditoriaCadastrosService'
 import type {
   EmpresaRecord,
   GrupoEmpresarialRecord,
@@ -291,15 +292,80 @@ export const empresasService = {
       segmento: string
     },
   ): Promise<EmpresaRecord> {
-    return await pb.collection('empresas').create<EmpresaRecord>(data)
+    const record = await pb.collection('empresas').create<EmpresaRecord>(data)
+    auditoriaCadastrosService
+      .registrar({
+        empresa: record.id,
+        entidade: 'empresas',
+        registro_id: record.id,
+        registro_descricao: `${record.nome} (${record.cnpj})`,
+        acao: 'criacao',
+        detalhes: { dados_novos: data },
+      })
+      .catch(() => {})
+    return record
   },
 
   async update(id: string, data: Partial<EmpresaRecord>): Promise<EmpresaRecord> {
-    return await pb.collection('empresas').update<EmpresaRecord>(id, data)
+    let anterior: EmpresaRecord | null = null
+    try {
+      anterior = await pb.collection('empresas').getOne<EmpresaRecord>(id)
+    } catch {
+      /* intentionally ignored */
+    }
+
+    const record = await pb.collection('empresas').update<EmpresaRecord>(id, data)
+
+    const camposAlterados: Record<string, { antes: any; depois: any }> = {}
+    if (anterior) {
+      for (const [k, v] of Object.entries(data)) {
+        if ((anterior as any)[k] !== v) {
+          camposAlterados[k] = { antes: (anterior as any)[k], depois: v }
+        }
+      }
+    }
+
+    auditoriaCadastrosService
+      .registrar({
+        empresa: record.id,
+        entidade: 'empresas',
+        registro_id: record.id,
+        registro_descricao: `${record.nome} (${record.cnpj})`,
+        acao: 'edicao',
+        detalhes: {
+          campos_alterados: camposAlterados,
+          dados_anteriores: anterior || undefined,
+          dados_novos: data,
+        },
+      })
+      .catch(() => {})
+
+    return record
   },
 
   async delete(id: string): Promise<boolean> {
-    return await pb.collection('empresas').delete(id)
+    let anterior: EmpresaRecord | null = null
+    try {
+      anterior = await pb.collection('empresas').getOne<EmpresaRecord>(id)
+    } catch {
+      /* intentionally ignored */
+    }
+
+    const res = await pb.collection('empresas').delete(id)
+
+    if (res) {
+      auditoriaCadastrosService
+        .registrar({
+          empresa: id,
+          entidade: 'empresas',
+          registro_id: id,
+          registro_descricao: anterior ? `${anterior.nome} (${anterior.cnpj})` : id,
+          acao: 'exclusao',
+          detalhes: { dados_anteriores: anterior || undefined },
+        })
+        .catch(() => {})
+    }
+    return res
   },
 }
 
@@ -897,7 +963,7 @@ export const planoContasService = {
     tipo_despesa?: string
     descricao?: string
   }): Promise<PlanoContaRecord> {
-    return await pb.collection('plano_contas').create<PlanoContaRecord>(
+    const record = await pb.collection('plano_contas').create<PlanoContaRecord>(
       {
         empresa: data.empresa || undefined,
         conta: data.conta,
@@ -910,6 +976,20 @@ export const planoContasService = {
         expand: 'empresa,conta,centro,tipo_despesa',
       },
     )
+
+    const desc = record.expand?.conta?.nome || record.descricao || `Plano Conta #${record.id}`
+    auditoriaCadastrosService
+      .registrar({
+        empresa: record.empresa || undefined,
+        entidade: 'plano_contas',
+        registro_id: record.id,
+        registro_descricao: desc,
+        acao: 'criacao',
+        detalhes: { dados_novos: data },
+      })
+      .catch(() => {})
+
+    return record
   },
 
   async update(
@@ -918,16 +998,83 @@ export const planoContasService = {
       Pick<PlanoContaRecord, 'empresa' | 'conta' | 'centro' | 'tipo_despesa' | 'descricao'>
     >,
   ): Promise<PlanoContaRecord> {
+    let anterior: PlanoContaRecord | null = null
+    try {
+      anterior = await pb.collection('plano_contas').getOne<PlanoContaRecord>(id, {
+        expand: 'conta',
+      })
+    } catch {
+      /* intentionally ignored */
+    }
+
     const payload: Record<string, unknown> = { ...data }
     if (data.tipo_despesa === '') payload.tipo_despesa = null
     if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
-    return await pb.collection('plano_contas').update<PlanoContaRecord>(id, payload, {
+    const record = await pb.collection('plano_contas').update<PlanoContaRecord>(id, payload, {
       expand: 'empresa,conta,centro,tipo_despesa',
     })
+
+    const camposAlterados: Record<string, { antes: any; depois: any }> = {}
+    if (anterior) {
+      for (const [k, v] of Object.entries(data)) {
+        if ((anterior as any)[k] !== v) {
+          camposAlterados[k] = { antes: (anterior as any)[k], depois: v }
+        }
+      }
+    }
+
+    const desc =
+      record.expand?.conta?.nome ||
+      record.descricao ||
+      anterior?.expand?.conta?.nome ||
+      anterior?.descricao ||
+      `Plano Conta #${record.id}`
+
+    auditoriaCadastrosService
+      .registrar({
+        empresa: record.empresa || anterior?.empresa || undefined,
+        entidade: 'plano_contas',
+        registro_id: record.id,
+        registro_descricao: desc,
+        acao: 'edicao',
+        detalhes: {
+          campos_alterados: Object.keys(camposAlterados).length > 0 ? camposAlterados : undefined,
+          dados_anteriores: anterior || undefined,
+          dados_novos: data,
+        },
+      })
+      .catch(() => {})
+
+    return record
   },
 
   async delete(id: string): Promise<boolean> {
-    return await pb.collection('plano_contas').delete(id)
+    let anterior: PlanoContaRecord | null = null
+    try {
+      anterior = await pb.collection('plano_contas').getOne<PlanoContaRecord>(id, {
+        expand: 'conta',
+      })
+    } catch {
+      /* intentionally ignored */
+    }
+
+    const res = await pb.collection('plano_contas').delete(id)
+
+    if (res) {
+      const desc = anterior?.expand?.conta?.nome || anterior?.descricao || `Plano Conta #${id}`
+      auditoriaCadastrosService
+        .registrar({
+          empresa: anterior?.empresa || undefined,
+          entidade: 'plano_contas',
+          registro_id: id,
+          registro_descricao: desc,
+          acao: 'exclusao',
+          detalhes: { dados_anteriores: anterior || undefined },
+        })
+        .catch(() => {})
+    }
+
+    return res
   },
 }
 

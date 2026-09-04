@@ -43,7 +43,7 @@ export type UfEmpresa =
 
 import type { RecordModel } from 'pocketbase'
 
-export type UserRole = 'admin' | 'empresa' | 'financeiro'
+export type UserRole = 'admin' | 'empresa' | 'financeiro' | 'comercial'
 
 export interface UserRecord extends RecordModel {
   name?: string
@@ -227,6 +227,32 @@ export interface AuditoriaLancamentoRecord extends RecordModel {
     motivo?: string
   }
   created: string
+  expand?: {
+    empresa?: EmpresaRecord
+    usuario?: UserRecord
+  }
+}
+
+export type EntidadeAuditoriaCadastro = 'empresas' | 'plano_contas' | 'users'
+export type AcaoAuditoriaCadastro = 'criacao' | 'edicao' | 'exclusao'
+
+export interface AuditoriaCadastroRecord extends RecordModel {
+  empresa?: string
+  entidade: EntidadeAuditoriaCadastro
+  registro_id: string
+  registro_descricao?: string
+  acao: AcaoAuditoriaCadastro
+  usuario?: string
+  usuario_nome?: string
+  usuario_email?: string
+  detalhes?: {
+    campos_alterados?: Record<string, { antes: any; depois: any }>
+    dados_anteriores?: Record<string, any>
+    dados_novos?: Record<string, any>
+    motivo?: string
+  }
+  created: string
+  updated?: string
   expand?: {
     empresa?: EmpresaRecord
     usuario?: UserRecord

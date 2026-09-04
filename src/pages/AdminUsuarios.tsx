@@ -21,7 +21,10 @@ import {
   Mail,
   Lock,
   AlertTriangle,
+  FileCheck2,
+  ShieldAlert,
 } from 'lucide-react'
+import { ModalAuditoriaCadastros } from '@/components/ModalAuditoriaCadastros'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -52,9 +55,9 @@ export default function AdminUsuarios() {
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterRole, setFilterRole] = useState<'todos' | 'admin' | 'empresa' | 'financeiro'>(
-    'todos',
-  )
+  const [filterRole, setFilterRole] = useState<
+    'todos' | 'admin' | 'empresa' | 'financeiro' | 'comercial'
+  >('todos')
   const [filterEmpresa, setFilterEmpresa] = useState<string>('todas')
 
   // Modais
@@ -62,6 +65,7 @@ export default function AdminUsuarios() {
   const [modalEditOpen, setModalEditOpen] = useState(false)
   const [modalPasswordOpen, setModalPasswordOpen] = useState(false)
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false)
+  const [modalAuditoriaOpen, setModalAuditoriaOpen] = useState(false)
 
   // Usuário selecionado para ação
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null)
@@ -138,7 +142,12 @@ export default function AdminUsuarios() {
 
   // Se não for admin e já carregou auth, redireciona
   if (!authLoading && !isAdmin) {
-    return <Navigate to="/dashboard" replace />
+    return (
+      <Navigate
+        to={currentUser?.role === 'comercial' ? '/baixa-recebiveis' : '/dashboard'}
+        replace
+      />
+    )
   }
 
   // Handlers CRUD
@@ -414,7 +423,16 @@ export default function AdminUsuarios() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalAuditoriaOpen(true)}
+            className="border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 gap-1.5"
+          >
+            <ShieldAlert className="w-4 h-4 text-purple-600" />
+            Auditoria de Cadastros
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -437,65 +455,81 @@ export default function AdminUsuarios() {
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <Card className="bg-white border-slate-200">
-          <CardContent className="p-4 flex items-center justify-between">
+          <CardContent className="p-3.5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Total de Usuários
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Total Geral
               </p>
-              <h3 className="text-2xl font-extrabold text-[#0B1F3A] mt-1">{usuarios.length}</h3>
+              <h3 className="text-xl font-extrabold text-[#0B1F3A] mt-0.5">{usuarios.length}</h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <Users className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <Users className="w-4 h-4" />
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-white border-slate-200">
-          <CardContent className="p-4 flex items-center justify-between">
+          <CardContent className="p-3.5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 Administradores
               </p>
-              <h3 className="text-2xl font-extrabold text-purple-700 mt-1">
+              <h3 className="text-xl font-extrabold text-purple-700 mt-0.5">
                 {usuarios.filter((u) => u.role === 'admin').length}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
-              <Shield className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+              <Shield className="w-4 h-4" />
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-white border-slate-200">
-          <CardContent className="p-4 flex items-center justify-between">
+          <CardContent className="p-3.5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Perfil Financeiro
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Financeiro
               </p>
-              <h3 className="text-2xl font-extrabold text-blue-700 mt-1">
+              <h3 className="text-xl font-extrabold text-blue-700 mt-0.5">
                 {usuarios.filter((u) => u.role === 'financeiro').length}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
-              <Shield className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <Shield className="w-4 h-4" />
             </div>
           </CardContent>
         </Card>
 
         <Card className="bg-white border-slate-200">
-          <CardContent className="p-4 flex items-center justify-between">
+          <CardContent className="p-3.5 flex items-center justify-between">
             <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Usuários Empresa
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Comercial
               </p>
-              <h3 className="text-2xl font-extrabold text-emerald-700 mt-1">
+              <h3 className="text-xl font-extrabold text-amber-700 mt-0.5">
+                {usuarios.filter((u) => u.role === 'comercial').length}
+              </h3>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 shrink-0">
+              <FileCheck2 className="w-4 h-4" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-3.5 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Empresa
+              </p>
+              <h3 className="text-xl font-extrabold text-emerald-700 mt-0.5">
                 {usuarios.filter((u) => (u.role || 'empresa') === 'empresa').length}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
-              <Building2 className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <Building2 className="w-4 h-4" />
             </div>
           </CardContent>
         </Card>
@@ -523,6 +557,7 @@ export default function AdminUsuarios() {
                   <SelectItem value="todos">Todos os Perfis</SelectItem>
                   <SelectItem value="admin">Administrador</SelectItem>
                   <SelectItem value="financeiro">Financeiro</SelectItem>
+                  <SelectItem value="comercial">Comercial</SelectItem>
                   <SelectItem value="empresa">Usuário Empresa</SelectItem>
                 </SelectContent>
               </Select>
@@ -628,6 +663,8 @@ export default function AdminUsuarios() {
                             >
                               {u.role === 'admin' ? (
                                 <Shield className="w-3 h-3" />
+                              ) : u.role === 'comercial' ? (
+                                <FileCheck2 className="w-3 h-3" />
                               ) : (
                                 <Building2 className="w-3 h-3" />
                               )}

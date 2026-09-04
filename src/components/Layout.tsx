@@ -137,6 +137,7 @@ export default function Layout() {
   const cadastroSubItems = rawCadastroSubItems.filter((item) => {
     if (item.adminOnly && !isAdmin) return false
     if (isUserFinanceiro && item.hideFinanceiro) return false
+    if (isUserComercial && item.path !== '/minha-empresa') return false
     return true
   })
 
@@ -177,13 +178,17 @@ export default function Layout() {
     location.pathname === '/lancamentos' ||
     (location.pathname.startsWith('/empresas') && location.search.includes('novo=balanco-dre'))
 
-  // Itens do submenu Financeiro
-  const financeiroSubItems = [
-    { name: 'Financeiro', path: '/financeiro', icon: Calendar },
+  // Itens do submenu Financeiro (Comercial não vê tela geral /financeiro)
+  const rawFinanceiroSubItems = [
+    { name: 'Financeiro', path: '/financeiro', icon: Calendar, hideComercial: true },
     { name: 'Baixa dos Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
     { name: 'Contratos', path: '/contratos', icon: FileText },
     { name: 'Nota Fiscal', path: '/notas-fiscais', icon: FileCheck2 },
   ]
+  const financeiroSubItems = rawFinanceiroSubItems.filter((item) => {
+    if (isUserComercial && item.hideComercial) return false
+    return true
+  })
 
   const isFinanceiroActive =
     location.pathname === '/financeiro' ||
@@ -342,9 +347,12 @@ export default function Layout() {
       ? 'Administrador'
       : user?.role === 'financeiro'
         ? 'Financeiro'
-        : 'Empresa'
+        : user?.role === 'comercial'
+          ? 'Comercial'
+          : 'Empresa'
   const isUserAdmin = user?.role === 'admin'
   const isUserFinanceiro = user?.role === 'financeiro'
+  const isUserComercial = user?.role === 'comercial'
 
   const showHeaderFilters =
     location.pathname === '/dashboard' ||
@@ -460,18 +468,20 @@ export default function Layout() {
 
               <nav className="mt-6 space-y-1.5 overflow-y-auto max-h-[calc(100vh-210px)] pr-1">
                 {/* 1. Dashboard */}
-                <NavLink
-                  to="/dashboard"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/dashboard'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <LayoutDashboard className="w-4 h-4 text-blue-400" />
-                  <span>Dashboard</span>
-                </NavLink>
+                {!isUserComercial && (
+                  <NavLink
+                    to="/dashboard"
+                    onClick={() => setMobileDrawerOpen(false)}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                      location.pathname === '/dashboard'
+                        ? 'bg-white/15 text-white font-semibold shadow-inner'
+                        : 'text-slate-300 hover:text-white hover:bg-white/5'
+                    }`}
+                  >
+                    <LayoutDashboard className="w-4 h-4 text-blue-400" />
+                    <span>Dashboard</span>
+                  </NavLink>
+                )}
                 {/* 2. Cadastros (Expansível / Colapsável) */}
                 <div className="space-y-1">
                   <button
@@ -545,86 +555,90 @@ export default function Layout() {
                 </div>
 
                 {/* 3. Lançamentos (Expansível / Colapsável com atalho para Balanço e DRE) */}
-                <div className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setLancamentosOpen((prev) => !prev)}
-                    style={
-                      isLancamentosActive
-                        ? {
-                            backgroundColor: `${corSecundaria}33`,
-                            borderColor: `${corSecundaria}66`,
-                          }
-                        : undefined
-                    }
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                      isLancamentosActive
-                        ? 'text-white font-semibold border'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText
-                        className={`w-4 h-4 ${isLancamentosActive ? 'text-blue-300' : 'text-blue-400'}`}
-                      />
-                      <span>Lançamentos</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                        lancamentosOpen ? 'rotate-0' : '-rotate-90'
+                {!isUserComercial && (
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setLancamentosOpen((prev) => !prev)}
+                      style={
+                        isLancamentosActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isLancamentosActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
                       }`}
-                    />
-                  </button>
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText
+                          className={`w-4 h-4 ${isLancamentosActive ? 'text-blue-300' : 'text-blue-400'}`}
+                        />
+                        <span>Lançamentos</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                          lancamentosOpen ? 'rotate-0' : '-rotate-90'
+                        }`}
+                      />
+                    </button>
 
-                  {/* Submenu Lançamentos com transição suave */}
-                  <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                      lancamentosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
-                        <NavLink
-                          to="/lancamentos"
-                          onClick={() => setMobileDrawerOpen(false)}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                            location.pathname === '/lancamentos'
-                              ? 'bg-white/15 text-white font-semibold shadow-xs'
-                              : 'text-slate-300 hover:text-white hover:bg-white/5'
-                          }`}
-                        >
-                          <FileText
-                            className={`w-3.5 h-3.5 ${
+                    {/* Submenu Lançamentos com transição suave */}
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        lancamentosOpen
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
+                          <NavLink
+                            to="/lancamentos"
+                            onClick={() => setMobileDrawerOpen(false)}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                               location.pathname === '/lancamentos'
-                                ? 'text-blue-300'
-                                : 'text-slate-400'
+                                ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                : 'text-slate-300 hover:text-white hover:bg-white/5'
                             }`}
-                          />
-                          <span className="truncate">Lançamentos Rápidos</span>
-                        </NavLink>
+                          >
+                            <FileText
+                              className={`w-3.5 h-3.5 ${
+                                location.pathname === '/lancamentos'
+                                  ? 'text-blue-300'
+                                  : 'text-slate-400'
+                              }`}
+                            />
+                            <span className="truncate">Lançamentos Rápidos</span>
+                          </NavLink>
 
-                        <NavLink
-                          to={balancoDreUrl}
-                          onClick={() => setMobileDrawerOpen(false)}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                            location.search.includes('novo=balanco-dre')
-                              ? 'bg-white/15 text-white font-semibold shadow-xs'
-                              : 'text-slate-300 hover:text-white hover:bg-white/5'
-                          }`}
-                        >
-                          <Scale
-                            className={`w-3.5 h-3.5 ${
+                          <NavLink
+                            to={balancoDreUrl}
+                            onClick={() => setMobileDrawerOpen(false)}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
                               location.search.includes('novo=balanco-dre')
-                                ? 'text-blue-300'
-                                : 'text-emerald-400'
+                                ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                : 'text-slate-300 hover:text-white hover:bg-white/5'
                             }`}
-                          />
-                          <span className="truncate">Balanço e DRE (Mensal)</span>
-                        </NavLink>
+                          >
+                            <Scale
+                              className={`w-3.5 h-3.5 ${
+                                location.search.includes('novo=balanco-dre')
+                                  ? 'text-blue-300'
+                                  : 'text-emerald-400'
+                              }`}
+                            />
+                            <span className="truncate">Balanço e DRE (Mensal)</span>
+                          </NavLink>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                )}
 
                 {/* 4. Financeiro (Expansível / Colapsável) */}
                 <div className="space-y-1">
@@ -696,7 +710,7 @@ export default function Layout() {
                 </div>
 
                 {/* 4.5. Formação de Preço - Custo (Expansível / Colapsável Mobile) */}
-                {!isUserFinanceiro && (
+                {!isUserFinanceiro && !isUserComercial && (
                   <div className="space-y-1">
                     <button
                       type="button"
@@ -769,7 +783,7 @@ export default function Layout() {
                 )}
 
                 {/* Novo Grupo: Indicadores (Abaixo de Financeiro) */}
-                {!isUserFinanceiro && (
+                {!isUserFinanceiro && !isUserComercial && (
                   <div className="space-y-1">
                     {' '}
                     <button
@@ -842,7 +856,7 @@ export default function Layout() {
                 )}
 
                 {/* 5. Análise Tributária */}
-                {!isUserFinanceiro && (
+                {!isUserFinanceiro && !isUserComercial && (
                   <NavLink
                     to="/analise-tributaria"
                     onClick={() => setMobileDrawerOpen(false)}
@@ -858,7 +872,7 @@ export default function Layout() {
                 )}
 
                 {/* 6. Importação */}
-                {!isUserFinanceiro && (
+                {!isUserFinanceiro && !isUserComercial && (
                   <NavLink
                     to="/importacao"
                     onClick={() => setMobileDrawerOpen(false)}
@@ -874,7 +888,7 @@ export default function Layout() {
                 )}
 
                 {/* 5. Relatório Anual */}
-                {!isUserFinanceiro && (
+                {!isUserFinanceiro && !isUserComercial && (
                   <NavLink
                     to="/relatorio-anual"
                     onClick={() => setMobileDrawerOpen(false)}
@@ -890,7 +904,7 @@ export default function Layout() {
                 )}
 
                 {/* 6. Relatórios */}
-                {!isUserFinanceiro && (
+                {!isUserFinanceiro && !isUserComercial && (
                   <NavLink
                     to="/relatorios"
                     onClick={() => setMobileDrawerOpen(false)}
@@ -935,9 +949,12 @@ export default function Layout() {
                             ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
                             : isUserFinanceiro
                               ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
-                              : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                              : isUserComercial
+                                ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
+                                : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
                         }`}
                       >
+                        {' '}
                         {userRole}
                       </span>{' '}
                     </div>
@@ -1004,51 +1021,55 @@ export default function Layout() {
             {/* Nav Desktop / Tablet */}
             <nav className="p-2 lg:p-3 space-y-1.5 mt-2 overflow-y-auto max-h-[calc(100vh-170px)]">
               {/* 1. Dashboard */}
-              <div>
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/dashboard"
-                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          location.pathname === '/dashboard'
-                            ? 'bg-white/15 text-white font-semibold shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <LayoutDashboard
-                          className={`w-5 h-5 ${
-                            location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
+              {!isUserComercial && (
+                <div>
+                  <div className="lg:hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <NavLink
+                          to="/dashboard"
+                          className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                            location.pathname === '/dashboard'
+                              ? 'bg-white/15 text-white font-semibold shadow-sm'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
                           }`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Dashboard
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <div className="hidden lg:block">
-                  <NavLink
-                    to="/dashboard"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/dashboard'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <LayoutDashboard
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
+                        >
+                          <LayoutDashboard
+                            className={`w-5 h-5 ${
+                              location.pathname === '/dashboard'
+                                ? 'text-blue-300'
+                                : 'text-slate-400'
+                            }`}
+                          />
+                        </NavLink>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="bg-[#0B1F3A] text-white border-blue-900"
+                      >
+                        Dashboard
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <div className="hidden lg:block">
+                    <NavLink
+                      to="/dashboard"
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                        location.pathname === '/dashboard'
+                          ? 'bg-white/15 text-white font-semibold shadow-sm'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
                       }`}
-                    />
-                    <span className="truncate">Dashboard</span>
-                  </NavLink>
+                    >
+                      <LayoutDashboard
+                        className={`w-5 h-5 shrink-0 ${
+                          location.pathname === '/dashboard' ? 'text-blue-300' : 'text-slate-400'
+                        }`}
+                      />
+                      <span className="truncate">Dashboard</span>
+                    </NavLink>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* 2. Cadastros - Grupo com Subitens */}
               <div className="space-y-1">
@@ -1153,117 +1174,121 @@ export default function Layout() {
               </div>
 
               {/* 3. Lançamentos - Grupo com Subitens (Lançamentos Rápidos e Balanço e DRE) */}
-              <div className="space-y-1">
-                {/* Visualização Tablet */}
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/lancamentos"
-                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          isLancamentosActive
-                            ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <FileText
-                          className={`w-5 h-5 ${
-                            isLancamentosActive ? 'text-blue-300' : 'text-slate-400'
-                          }`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Lançamentos (Rápidos, Balanço e DRE)
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-
-                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
-                <div className="hidden lg:block">
-                  <button
-                    type="button"
-                    onClick={() => setLancamentosOpen((prev) => !prev)}
-                    style={
-                      isLancamentosActive
-                        ? {
-                            backgroundColor: `${corSecundaria}33`,
-                            borderColor: `${corSecundaria}66`,
-                          }
-                        : undefined
-                    }
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                      isLancamentosActive
-                        ? 'text-white font-semibold border'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <FileText
-                        className={`w-5 h-5 shrink-0 ${
-                          isLancamentosActive ? 'text-blue-300' : 'text-slate-400'
-                        }`}
-                      />
-                      <span className="truncate font-medium">Lançamentos</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
-                        lancamentosOpen ? 'rotate-0' : '-rotate-90'
-                      }`}
-                    />
-                  </button>
-
-                  {/* Submenu com animação suave via grid template rows */}
-                  <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                      lancamentosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
+              {!isUserComercial && (
+                <div className="space-y-1">
+                  {/* Visualização Tablet */}
+                  <div className="lg:hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
                         <NavLink
                           to="/lancamentos"
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                            location.pathname === '/lancamentos'
-                              ? 'bg-white/15 text-white font-semibold shadow-xs'
+                          className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                            isLancamentosActive
+                              ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
                               : 'text-slate-300 hover:text-white hover:bg-white/5'
                           }`}
                         >
                           <FileText
-                            className={`w-4 h-4 shrink-0 ${
-                              location.pathname === '/lancamentos'
-                                ? 'text-blue-300'
-                                : 'text-slate-400'
+                            className={`w-5 h-5 ${
+                              isLancamentosActive ? 'text-blue-300' : 'text-slate-400'
                             }`}
                           />
-                          <span className="truncate">Lançamentos Rápidos</span>
                         </NavLink>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="bg-[#0B1F3A] text-white border-blue-900"
+                      >
+                        Lançamentos (Rápidos, Balanço e DRE)
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
 
-                        <NavLink
-                          to={balancoDreUrl}
-                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                            location.search.includes('novo=balanco-dre')
-                              ? 'bg-white/15 text-white font-semibold shadow-xs'
-                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                  {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                  <div className="hidden lg:block">
+                    <button
+                      type="button"
+                      onClick={() => setLancamentosOpen((prev) => !prev)}
+                      style={
+                        isLancamentosActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isLancamentosActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <FileText
+                          className={`w-5 h-5 shrink-0 ${
+                            isLancamentosActive ? 'text-blue-300' : 'text-slate-400'
                           }`}
-                        >
-                          <Scale
-                            className={`w-4 h-4 shrink-0 ${
-                              location.search.includes('novo=balanco-dre')
-                                ? 'text-blue-300'
-                                : 'text-emerald-400'
+                        />
+                        <span className="truncate font-medium">Lançamentos</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                          lancamentosOpen ? 'rotate-0' : '-rotate-90'
+                        }`}
+                      />
+                    </button>
+
+                    {/* Submenu com animação suave via grid template rows */}
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        lancamentosOpen
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
+                          <NavLink
+                            to="/lancamentos"
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                              location.pathname === '/lancamentos'
+                                ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                : 'text-slate-300 hover:text-white hover:bg-white/5'
                             }`}
-                          />
-                          <span className="truncate">Balanço e DRE (Mensal)</span>
-                        </NavLink>
+                          >
+                            <FileText
+                              className={`w-4 h-4 shrink-0 ${
+                                location.pathname === '/lancamentos'
+                                  ? 'text-blue-300'
+                                  : 'text-slate-400'
+                              }`}
+                            />
+                            <span className="truncate">Lançamentos Rápidos</span>
+                          </NavLink>
+
+                          <NavLink
+                            to={balancoDreUrl}
+                            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                              location.search.includes('novo=balanco-dre')
+                                ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                : 'text-slate-300 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            <Scale
+                              className={`w-4 h-4 shrink-0 ${
+                                location.search.includes('novo=balanco-dre')
+                                  ? 'text-blue-300'
+                                  : 'text-emerald-400'
+                              }`}
+                            />
+                            <span className="truncate">Balanço e DRE (Mensal)</span>
+                          </NavLink>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* 4. Financeiro - Grupo com Subitens (entre Lançamentos e Importação) */}
               <div className="space-y-1">
@@ -1365,7 +1390,7 @@ export default function Layout() {
               </div>
 
               {/* 4.5. Formação de Preço - Custo (Tablet & Desktop) */}
-              {!isUserFinanceiro && (
+              {!isUserFinanceiro && !isUserComercial && (
                 <div className="space-y-1">
                   {/* Visualização Tablet */}
                   <div className="lg:hidden">
@@ -1468,7 +1493,7 @@ export default function Layout() {
               )}
 
               {/* Novo Grupo: Indicadores - Abaixo de Financeiro */}
-              {!isUserFinanceiro && (
+              {!isUserFinanceiro && !isUserComercial && (
                 <div className="space-y-1">
                   {/* Visualização Tablet */}
                   <div className="lg:hidden">
@@ -1571,7 +1596,7 @@ export default function Layout() {
               )}
 
               {/* 5. Análise Tributária (Nível Superior entre Financeiro e Importação) */}
-              {!isUserFinanceiro && (
+              {!isUserFinanceiro && !isUserComercial && (
                 <div>
                   <div className="lg:hidden">
                     <Tooltip>
@@ -1624,7 +1649,7 @@ export default function Layout() {
               )}
 
               {/* 6. Importação */}
-              {!isUserFinanceiro && (
+              {!isUserFinanceiro && !isUserComercial && (
                 <div>
                   <div className="lg:hidden">
                     <Tooltip>
@@ -1675,7 +1700,7 @@ export default function Layout() {
               )}
 
               {/* 5. Relatório Anual */}
-              {!isUserFinanceiro && (
+              {!isUserFinanceiro && !isUserComercial && (
                 <div>
                   <div className="lg:hidden">
                     <Tooltip>
@@ -1728,7 +1753,7 @@ export default function Layout() {
               )}
 
               {/* 6. Relatórios */}
-              {!isUserFinanceiro && (
+              {!isUserFinanceiro && !isUserComercial && (
                 <div>
                   <div className="lg:hidden">
                     <Tooltip>
@@ -1815,7 +1840,9 @@ export default function Layout() {
                           ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
                           : isUserFinanceiro
                             ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
-                            : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                            : isUserComercial
+                              ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
+                              : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
                       }`}
                     >
                       {userRole}

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T11:33:44.097Z",
+  "generatedAt": "2026-09-04T15:00:45.391Z",
   "collections": [
     {
       "name": "users",
@@ -55,7 +55,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["admin", "empresa", "financeiro"]
+          "selectValues": ["admin", "empresa", "financeiro", "comercial"]
         },
         {
           "name": "empresa",
@@ -3480,6 +3480,97 @@
         "CREATE INDEX idx_audit_lanc_empresa ON auditoria_lancamentos (empresa)",
         "CREATE INDEX idx_audit_lanc_id ON auditoria_lancamentos (lancamento_id)",
         "CREATE INDEX idx_audit_lanc_created ON auditoria_lancamentos (created)"
+      ]
+    },
+    {
+      "name": "auditoria_cadastros",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || (entidade != 'users' && empresa != '' && empresa = @request.auth.empresa))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || (entidade != 'users' && empresa != '' && empresa = @request.auth.empresa))",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "entidade",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["empresas", "plano_contas", "users"]
+        },
+        {
+          "name": "registro_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "registro_descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "acao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["criacao", "edicao", "exclusao"]
+        },
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "usuario_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_email",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "detalhes",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audit_cad_entidade ON auditoria_cadastros (entidade)",
+        "CREATE INDEX idx_audit_cad_empresa ON auditoria_cadastros (empresa)",
+        "CREATE INDEX idx_audit_cad_reg_id ON auditoria_cadastros (registro_id)",
+        "CREATE INDEX idx_audit_cad_created ON auditoria_cadastros (created)"
       ]
     }
   ]
