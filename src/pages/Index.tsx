@@ -40,8 +40,8 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
 
   // Form states
-  const [loginEmail, setLoginEmail] = useState('flavio@borlim.com.br')
-  const [loginPassword, setLoginPassword] = useState('Skip@Pass')
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
   const [loginErrors, setLoginErrors] = useState<{ email?: string; password?: string }>({})
 
   const [signupName, setSignupName] = useState('')
@@ -348,15 +348,6 @@ export default function Index() {
                     {loginErrors.password && (
                       <p className="text-xs text-red-600 font-medium">{loginErrors.password}</p>
                     )}
-                  </div>
-
-                  <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-lg text-xs text-blue-900 flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-semibold">Credenciais de teste:</span>
-                      <br />
-                      flavio@borlim.com.br / Skip@Pass
-                    </div>
                   </div>
 
                   <Button
