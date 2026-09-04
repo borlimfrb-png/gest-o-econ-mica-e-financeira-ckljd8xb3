@@ -635,7 +635,7 @@ export default function AdminUsuarios() {
                             {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-800 truncate flex items-center gap-1.5">
+                            <div className="font-semibold text-slate-800 truncate flex items-center gap-1.5">
                               {u.name || 'Sem nome'}
                               {isSelf && (
                                 <Badge
@@ -645,7 +645,7 @@ export default function AdminUsuarios() {
                                   Você
                                 </Badge>
                               )}
-                            </p>
+                            </div>
                             <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
                               <Mail className="w-3 h-3" />
                               {u.email}
