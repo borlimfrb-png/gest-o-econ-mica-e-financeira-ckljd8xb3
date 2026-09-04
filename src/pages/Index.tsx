@@ -21,7 +21,12 @@ import {
 import { useToast } from '@/hooks/use-toast'
 
 export default function Index() {
-  const { login, signup, isAuthenticated, isLoading } = useAuth()
+  const { login, signup, isAuthenticated, isLoading, requestPasswordReset } = useAuth()
+  const [resetModalOpen, setResetModalOpen] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -304,13 +309,12 @@ export default function Index() {
                       <button
                         type="button"
                         onClick={() => {
-                          toast({
-                            title: 'Recuperação de Senha',
-                            description:
-                              'Para demonstração, utilize a senha padrão Skip@Pass para o usuário seed.',
-                          })
+                          setResetEmail(loginEmail || '')
+                          setResetSuccess(false)
+                          setResetError(null)
+                          setResetModalOpen(true)
                         }}
-                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium cursor-pointer"
                       >
                         Esqueceu a senha?
                       </button>
@@ -467,6 +471,133 @@ export default function Index() {
           </p>
         </div>
       </div>
+
+      {/* Modal de Recuperação de Senha */}
+      <Dialog open={resetModalOpen} onOpenChange={setResetModalOpen}>
+        <DialogContent className="sm:max-w-md bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+              <Mail className="w-5 h-5 text-blue-600" />
+              Recuperação de Senha
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Informe o e-mail cadastrado da sua conta corporativa. Enviaremos um link seguro para
+              você redefinir sua senha.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resetSuccess ? (
+            <div className="py-4 space-y-4">
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="text-xs font-bold text-emerald-900">
+                    E-mail de recuperação enviado!
+                  </p>
+                  <p className="text-xs text-emerald-800">
+                    Se o endereço <strong className="font-semibold">{resetEmail}</strong> estiver
+                    cadastrado no sistema, você receberá uma mensagem com as instruções para
+                    cadastrar uma nova senha.
+                  </p>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <strong>Nota:</strong> Caso a entrega de e-mails do servidor ainda não esteja com
+                SMTP personalizado configurado na infraestrutura, o administrador da sua empresa ou
+                suporte técnico pode redefinir sua credencial manualmente no módulo{' '}
+                <em>Usuários & Permissões</em>.
+              </div>
+              <Button
+                type="button"
+                onClick={() => setResetModalOpen(false)}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
+              >
+                Voltar ao Login
+              </Button>
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                const trimmed = resetEmail.trim().toLowerCase()
+                if (!trimmed || !trimmed.includes('@')) {
+                  setResetError('Informe um e-mail válido.')
+                  return
+                }
+
+                setResetLoading(true)
+                setResetError(null)
+
+                try {
+                  await requestPasswordReset(trimmed)
+                  setResetSuccess(true)
+                  toast({
+                    title: 'Solicitação enviada',
+                    description: 'Verifique sua caixa de entrada e spam para redefinir a senha.',
+                  })
+                } catch (err: any) {
+                  console.error('Erro no fluxo de recuperação:', err)
+                  // PocketBase normalmente retorna 200/true mesmo que não exista para evitar enumeration, ou erro de SMTP
+                  setResetError(
+                    err?.message ||
+                      'Não foi possível enviar o e-mail de recuperação. O serviço de envio pode estar em manutenção.',
+                  )
+                } finally {
+                  setResetLoading(false)
+                }
+              }}
+              className="space-y-4 pt-2"
+            >
+              {resetError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <span>{resetError}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="reset-email-input" className="text-xs font-semibold text-slate-700">
+                  Seu E-mail Corporativo
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="reset-email-input"
+                    type="email"
+                    required
+                    placeholder="seu.email@empresa.com"
+                    value={resetEmail}
+                    onChange={(e) => {
+                      setResetEmail(e.target.value)
+                      if (resetError) setResetError(null)
+                    }}
+                    className="pl-9 h-10 text-xs bg-slate-50/50"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setResetModalOpen(false)}
+                  disabled={resetLoading}
+                  className="text-xs h-9"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
+                >
+                  {resetLoading ? 'Enviando...' : 'Enviar Link de Redefinição'}
+                </Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

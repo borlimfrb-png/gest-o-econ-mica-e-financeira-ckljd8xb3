@@ -6,6 +6,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { FilterProvider } from '@/contexts/FilterContext'
 import { MinhaEmpresaProvider } from '@/contexts/MinhaEmpresaContext'
+import { perfilTemAcesso, type ModuloSistema } from '@/lib/permissoesPerfis'
 
 import Index from './pages/Index'
 import Dashboard from './pages/Dashboard'
@@ -72,6 +73,29 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Componente para rotas com verificação de perfil
+function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: React.ReactNode }) {
+  const { user, isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />
+  }
+
+  if (!perfilTemAcesso(user?.role, modulo)) {
+    return <Navigate to="/dashboard" replace />
+  }
+
+  return <>{children}</>
+}
+
 // Componente para rotas protegidas
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
@@ -127,43 +151,179 @@ const App = () => (
                 <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
                 <Route path="/contratos" element={<Contratos />} />
                 <Route path="/notas-fiscais" element={<NotasFiscais />} />
-
                 {/* Formação de Preço - Custo */}
-                <Route path="/formacao-preco/produtos" element={<CadastroProdutos />} />
-                <Route path="/formacao-preco/materia-prima" element={<CadastroMateriaPrima />} />
-                <Route path="/formacao-preco/fichas-tecnicas" element={<CadastroFichaTecnica />} />
-                <Route path="/formacao-preco/impostos" element={<Impostos />} />
-
-                <Route path="/indicadores/painel" element={<PainelIndicadores />} />
+                <Route
+                  path="/formacao-preco/produtos"
+                  element={
+                    <ModuloRoute modulo="formacao_preco">
+                      <CadastroProdutos />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/formacao-preco/materia-prima"
+                  element={
+                    <ModuloRoute modulo="formacao_preco">
+                      <CadastroMateriaPrima />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/formacao-preco/fichas-tecnicas"
+                  element={
+                    <ModuloRoute modulo="formacao_preco">
+                      <CadastroFichaTecnica />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/formacao-preco/impostos"
+                  element={
+                    <ModuloRoute modulo="formacao_preco">
+                      <Impostos />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/indicadores/painel"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <PainelIndicadores />
+                    </ModuloRoute>
+                  }
+                />
                 <Route
                   path="/indicadores"
                   element={<Navigate to="/indicadores/painel" replace />}
                 />
-                <Route path="/indicadores/liquidez" element={<IndicadoresLiquidez />} />
-                <Route path="/indicadores/capital-giro" element={<IndicadoresCapitalGiro />} />
-                <Route path="/indicadores/endividamento" element={<IndicadoresEndividamento />} />
-                <Route path="/indicadores/rentabilidade" element={<IndicadoresRentabilidade />} />
+                <Route
+                  path="/indicadores/liquidez"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresLiquidez />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/indicadores/capital-giro"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresCapitalGiro />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/indicadores/endividamento"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresEndividamento />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/indicadores/rentabilidade"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresRentabilidade />
+                    </ModuloRoute>
+                  }
+                />
                 <Route
                   path="/indicadores/estrutura-capital"
-                  element={<IndicadoresEstruturaCapital />}
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresEstruturaCapital />
+                    </ModuloRoute>
+                  }
                 />
-                <Route path="/indicadores/ebitda" element={<IndicadoresEbitda />} />
+                <Route
+                  path="/indicadores/ebitda"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresEbitda />
+                    </ModuloRoute>
+                  }
+                />
                 <Route
                   path="/indicadores/eficiencia-operacional"
-                  element={<IndicadoresEficienciaOperacional />}
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresEficienciaOperacional />
+                    </ModuloRoute>
+                  }
                 />
-                <Route path="/indicadores/economicos" element={<IndicadoresEconomicos />} />
-                <Route path="/indicadores/valuation" element={<IndicadoresValuation />} />
+                <Route
+                  path="/indicadores/economicos"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresEconomicos />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/indicadores/valuation"
+                  element={
+                    <ModuloRoute modulo="indicadores_valuation">
+                      <IndicadoresValuation />
+                    </ModuloRoute>
+                  }
+                />
                 <Route
                   path="/indicadores/ponto-equilibrio"
-                  element={<IndicadoresPontoEquilibrio />}
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresPontoEquilibrio />
+                    </ModuloRoute>
+                  }
                 />
-                <Route path="/indicadores/kanitz" element={<IndicadoresKanitz />} />
-                <Route path="/analise-tributaria" element={<AnaliseTributaria />} />
-                <Route path="/relatorios" element={<Relatorios />} />
-                <Route path="/relatorio-anual" element={<RelatorioAnual />} />
-                <Route path="/agente-ia" element={<AgenteIA />} />
-                <Route path="/importacao" element={<Importacao />} />
+                <Route
+                  path="/indicadores/kanitz"
+                  element={
+                    <ModuloRoute modulo="indicadores">
+                      <IndicadoresKanitz />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/analise-tributaria"
+                  element={
+                    <ModuloRoute modulo="analise_tributaria">
+                      <AnaliseTributaria />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/relatorios"
+                  element={
+                    <ModuloRoute modulo="relatorios">
+                      <Relatorios />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/relatorio-anual"
+                  element={
+                    <ModuloRoute modulo="relatorio_anual">
+                      <RelatorioAnual />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/agente-ia"
+                  element={
+                    <ModuloRoute modulo="agente_ia">
+                      <AgenteIA />
+                    </ModuloRoute>
+                  }
+                />
+                <Route
+                  path="/importacao"
+                  element={
+                    <ModuloRoute modulo="importacao">
+                      <Importacao />
+                    </ModuloRoute>
+                  }
+                />{' '}
                 <Route path="/configuracoes" element={<Configuracoes />} />
                 <Route
                   path="/admin/usuarios"

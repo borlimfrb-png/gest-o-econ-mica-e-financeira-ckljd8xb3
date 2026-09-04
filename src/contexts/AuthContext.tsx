@@ -28,6 +28,7 @@ interface AuthContextType {
   signup: (email: string, pass: string, name: string) => Promise<void>
   updateUser: (data: Partial<Record<string, any>>) => Promise<AuthModel>
   logout: () => void
+  requestPasswordReset: (email: string) => Promise<boolean>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -133,6 +134,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToken(null)
   }
 
+  const requestPasswordReset = async (email: string): Promise<boolean> => {
+    try {
+      await pb.collection('users').requestPasswordReset(email.trim().toLowerCase())
+      return true
+    } catch (err) {
+      console.error('Erro ao solicitar redefinição de senha:', err)
+      throw err
+    }
+  }
+
   const isAdmin = user?.role === 'admin'
   const empresaVinculadaId = !isAdmin && user?.empresa ? user.empresa : null
 
@@ -149,6 +160,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         signup,
         updateUser,
         logout,
+        requestPasswordReset,
       }}
     >
       {children}

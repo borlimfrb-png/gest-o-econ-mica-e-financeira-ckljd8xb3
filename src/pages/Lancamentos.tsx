@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ModalAuditoriaLancamentos } from '@/components/ModalAuditoriaLancamentos'
 import {
   Dialog,
   DialogContent,
@@ -198,6 +199,13 @@ export default function Lancamentos() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [toDelete, setToDelete] = useState<LancamentoRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Modal de log de auditoria
+  const [modalAuditoriaOpen, setModalAuditoriaOpen] = useState(false)
+  const [auditoriaLancamentoAlvo, setAuditoriaLancamentoAlvo] = useState<{
+    id?: string
+    descricao?: string
+  }>({})
 
   // ================== ESTADOS DA ABA HISTÓRICO ==================
   const initialPeriodo = useMemo(() => periodoMesCorrenteIso(), [])
@@ -872,6 +880,20 @@ export default function Lancamentos() {
         <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             type="button"
+            variant="outline"
+            onClick={() => {
+              setAuditoriaLancamentoAlvo({})
+              setModalAuditoriaOpen(true)
+            }}
+            className="border-slate-300 hover:bg-slate-100 text-slate-700 font-semibold text-xs h-8 shadow-xs gap-1.5"
+            title="Ver log de auditoria e rastreabilidade de alterações dos lançamentos"
+          >
+            <History className="w-3.5 h-3.5 text-blue-600" />
+            Auditoria
+          </Button>
+
+          <Button
+            type="button"
             onClick={() => {
               const empresaAlvoId = empresaFixaId || selectedEmpresaId
               if (empresaAlvoId) {
@@ -1493,6 +1515,23 @@ export default function Lancamentos() {
                                 <td className="py-3 px-3 text-right whitespace-nowrap">
                                   <div className="flex items-center justify-end gap-1">
                                     <Button
+                                      onClick={() => {
+                                        setAuditoriaLancamentoAlvo({
+                                          id: l.id,
+                                          descricao:
+                                            l.historico ||
+                                            `Lançamento ${formatarDataBr(l.data)} - ${formatarMoeda(l.valor)}`,
+                                        })
+                                        setModalAuditoriaOpen(true)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Ver histórico de auditoria deste lançamento"
+                                    >
+                                      <History className="w-3.5 h-3.5 text-blue-500" />
+                                    </Button>
+                                    <Button
                                       onClick={() => handleOpenEdit(l)}
                                       size="sm"
                                       variant="ghost"
@@ -1865,6 +1904,23 @@ export default function Lancamentos() {
                             {/* Ações */}
                             <td className="py-3 px-3 text-right whitespace-nowrap">
                               <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  onClick={() => {
+                                    setAuditoriaLancamentoAlvo({
+                                      id: l.id,
+                                      descricao:
+                                        l.historico ||
+                                        `Lançamento ${formatarDataBr(l.data)} - ${formatarMoeda(l.valor)}`,
+                                    })
+                                    setModalAuditoriaOpen(true)
+                                  }}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                  title="Ver histórico de auditoria deste lançamento"
+                                >
+                                  <History className="w-3.5 h-3.5 text-blue-500" />
+                                </Button>
                                 <Button
                                   onClick={() => handleOpenEdit(l)}
                                   size="sm"
@@ -2559,6 +2615,15 @@ export default function Lancamentos() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ============ MODAL DE AUDITORIA DE LANÇAMENTOS ============ */}
+      <ModalAuditoriaLancamentos
+        open={modalAuditoriaOpen}
+        onOpenChange={setModalAuditoriaOpen}
+        empresaId={empresaFixaId || selectedEmpresaId || ''}
+        lancamentoId={auditoriaLancamentoAlvo.id}
+        lancamentoDescricao={auditoriaLancamentoAlvo.descricao}
+      />
     </div>
   )
 }

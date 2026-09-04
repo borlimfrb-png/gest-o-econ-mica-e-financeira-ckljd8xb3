@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { empresasService } from '@/services/financeService'
 import { usuariosService } from '@/services/usuariosService'
 import type { UserRecord, EmpresaRecord, UserRole } from '@/types/finance'
+import { PERFIS_ACESSO, LISTA_PERFIS, getPerfilConfig } from '@/lib/permissoesPerfis'
 import { useToast } from '@/hooks/use-toast'
 import {
   Users,
@@ -181,7 +182,7 @@ export default function AdminUsuarios() {
       return
     }
 
-    if (createForm.role === 'empresa' && !createForm.empresa) {
+    if (createForm.role !== 'admin' && !createForm.empresa) {
       toast({
         variant: 'destructive',
         title: 'Empresa obrigatória',
@@ -192,7 +193,10 @@ export default function AdminUsuarios() {
 
     setCreating(true)
     try {
-      await usuariosService.create(createForm)
+      await usuariosService.create({
+        ...createForm,
+        empresa: createForm.role !== 'admin' ? createForm.empresa : undefined,
+      })
       toast({
         title: 'Usuário cadastrado com sucesso!',
         description: `${createForm.name} agora pode acessar o sistema.`,
@@ -254,7 +258,7 @@ export default function AdminUsuarios() {
         name: editForm.name,
         email: editForm.email,
         role: editForm.role,
-        empresa: editForm.role === 'empresa' ? editForm.empresa : null,
+        empresa: editForm.role !== 'admin' ? editForm.empresa : null,
         ativo: editForm.ativo,
       })
       toast({
@@ -431,7 +435,7 @@ export default function AdminUsuarios() {
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card className="bg-white border-slate-200">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
@@ -450,13 +454,13 @@ export default function AdminUsuarios() {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Administradores (Super)
+                Administradores
               </p>
-              <h3 className="text-2xl font-extrabold text-blue-700 mt-1">
+              <h3 className="text-2xl font-extrabold text-purple-700 mt-1">
                 {usuarios.filter((u) => u.role === 'admin').length}
               </h3>
             </div>
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
               <Shield className="w-5 h-5" />
             </div>
           </CardContent>
@@ -466,7 +470,23 @@ export default function AdminUsuarios() {
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                Usuários de Empresa (Isolados)
+                Perfil Financeiro
+              </p>
+              <h3 className="text-2xl font-extrabold text-blue-700 mt-1">
+                {usuarios.filter((u) => u.role === 'financeiro').length}
+              </h3>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+              <Shield className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Usuários Empresa
               </p>
               <h3 className="text-2xl font-extrabold text-emerald-700 mt-1">
                 {usuarios.filter((u) => (u.role || 'empresa') === 'empresa').length}
@@ -478,7 +498,6 @@ export default function AdminUsuarios() {
           </CardContent>
         </Card>
       </div>
-
       {/* Filtros e Busca */}
       <Card className="bg-white border-slate-200 shadow-2xs">
         <CardContent className="p-4">
@@ -500,12 +519,12 @@ export default function AdminUsuarios() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos os Perfis</SelectItem>
-                  <SelectItem value="admin">Administrador (Total)</SelectItem>
-                  <SelectItem value="empresa">Usuário de Empresa</SelectItem>
+                  <SelectItem value="admin">Administrador</SelectItem>
+                  <SelectItem value="financeiro">Financeiro</SelectItem>
+                  <SelectItem value="empresa">Usuário Empresa</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
             <div>
               <Select value={filterEmpresa} onValueChange={(val) => setFilterEmpresa(val)}>
                 <SelectTrigger className="text-xs">
@@ -599,17 +618,21 @@ export default function AdminUsuarios() {
                       </td>
 
                       <td className="py-3 px-4">
-                        {isUserAdmin ? (
-                          <Badge className="bg-purple-100 text-purple-800 hover:bg-purple-100 border border-purple-200 text-xs font-semibold gap-1">
-                            <Shield className="w-3 h-3" />
-                            Administrador
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-semibold gap-1">
-                            <Building2 className="w-3 h-3" />
-                            Usuário Empresa
-                          </Badge>
-                        )}
+                        {(() => {
+                          const conf = getPerfilConfig(u.role)
+                          return (
+                            <Badge
+                              className={`${conf.badgeCor} hover:${conf.badgeCor} border text-xs font-semibold gap-1`}
+                            >
+                              {u.role === 'admin' ? (
+                                <Shield className="w-3 h-3" />
+                              ) : (
+                                <Building2 className="w-3 h-3" />
+                              )}
+                              {conf.nome}
+                            </Badge>
+                          )
+                        })()}
                       </td>
 
                       <td className="py-3 px-4">
@@ -759,17 +782,17 @@ export default function AdminUsuarios() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="empresa" className="text-xs">
-                    Usuário de Empresa (Acessa apenas sua empresa)
-                  </SelectItem>
-                  <SelectItem value="admin" className="text-xs">
-                    Administrador (Acesso total e gerenciamento)
-                  </SelectItem>
+                  {LISTA_PERFIS.map((p) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      <span className="font-semibold">{p.nome}</span>
+                      <span className="text-[11px] text-slate-500 block">{p.descricao}</span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {createForm.role === 'empresa' && (
+            {createForm.role !== 'admin' && (
               <div className="space-y-1.5 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
                 <Label className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
                   <Building2 className="w-4 h-4 text-blue-600" />
@@ -796,7 +819,6 @@ export default function AdminUsuarios() {
                 </Select>
               </div>
             )}
-
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
               <div>
                 <Label className="text-xs font-semibold text-slate-800">Status Ativo</Label>
@@ -875,17 +897,17 @@ export default function AdminUsuarios() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="empresa" className="text-xs">
-                    Usuário de Empresa (Acessa apenas sua empresa)
-                  </SelectItem>
-                  <SelectItem value="admin" className="text-xs">
-                    Administrador (Acesso total e gerenciamento)
-                  </SelectItem>
+                  {LISTA_PERFIS.map((p) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      <span className="font-semibold">{p.nome}</span>
+                      <span className="text-[11px] text-slate-500 block">{p.descricao}</span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {editForm.role === 'empresa' && (
+            {editForm.role !== 'admin' && (
               <div className="space-y-1.5 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
                 <Label className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
                   <Building2 className="w-4 h-4 text-blue-600" />
@@ -908,7 +930,6 @@ export default function AdminUsuarios() {
                 </Select>
               </div>
             )}
-
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
               <div>
                 <Label className="text-xs font-semibold text-slate-800">Status Ativo</Label>

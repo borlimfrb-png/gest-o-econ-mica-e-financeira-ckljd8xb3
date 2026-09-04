@@ -986,7 +986,7 @@ export const lancamentosService = {
     const dateFormatted =
       data.data.includes(' ') || data.data.includes('T') ? data.data : `${data.data} 12:00:00`
 
-    return await pb.collection('lancamentos').create<LancamentoRecord>(
+    const record = await pb.collection('lancamentos').create<LancamentoRecord>(
       {
         empresa: data.empresa,
         plano_conta: data.plano_conta,
@@ -999,6 +999,34 @@ export const lancamentosService = {
         expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
       },
     )
+
+    try {
+      const { auditoriaLancamentosService } = await import('@/services/auditoriaLancamentosService')
+      const contaNome =
+        record.expand?.plano_conta?.expand?.conta?.nome ||
+        record.expand?.plano_conta?.descricao ||
+        'Conta'
+      await auditoriaLancamentosService.registrar({
+        empresa: record.empresa,
+        lancamento_id: record.id,
+        acao: 'criacao',
+        valor: record.valor,
+        historico: record.historico,
+        conta_info: contaNome,
+        detalhes: {
+          dados_novos: {
+            data: record.data,
+            valor: record.valor,
+            historico: record.historico,
+            plano_conta: record.plano_conta,
+          },
+        },
+      })
+    } catch (auditErr) {
+      console.warn('Erro ao registrar auditoria de criação:', auditErr)
+    }
+
+    return record
   },
 
   async update(
@@ -1007,6 +1035,15 @@ export const lancamentosService = {
       Pick<LancamentoRecord, 'empresa' | 'plano_conta' | 'data' | 'valor' | 'historico'>
     >,
   ): Promise<LancamentoRecord> {
+    let registroAnterior: LancamentoRecord | null = null
+    try {
+      registroAnterior = await pb.collection('lancamentos').getOne<LancamentoRecord>(id, {
+        expand: 'empresa,plano_conta.conta',
+      })
+    } catch {
+      /* intentionally ignored */
+    }
+
     const payload: Record<string, unknown> = { ...data }
     if (data.historico !== undefined) {
       payload.historico = data.historico.trim() || undefined
@@ -1018,13 +1055,112 @@ export const lancamentosService = {
       payload.data =
         data.data.includes(' ') || data.data.includes('T') ? data.data : `${data.data} 12:00:00`
     }
-    return await pb.collection('lancamentos').update<LancamentoRecord>(id, payload, {
+    const updated = await pb.collection('lancamentos').update<LancamentoRecord>(id, payload, {
       expand: 'empresa,plano_conta.conta,plano_conta.centro,plano_conta.tipo_despesa',
     })
+
+    try {
+      const { auditoriaLancamentosService } = await import('@/services/auditoriaLancamentosService')
+      const camposAlterados: Record<string, { antes: any; depois: any }> = {}
+      if (registroAnterior) {
+        if (data.valor !== undefined && data.valor !== registroAnterior.valor) {
+          camposAlterados.valor = { antes: registroAnterior.valor, depois: updated.valor }
+        }
+        if (data.historico !== undefined && data.historico !== (registroAnterior.historico || '')) {
+          camposAlterados.historico = {
+            antes: registroAnterior.historico,
+            depois: updated.historico,
+          }
+        }
+        if (data.data !== undefined && data.data !== registroAnterior.data) {
+          camposAlterados.data = { antes: registroAnterior.data, depois: updated.data }
+        }
+        if (data.plano_conta !== undefined && data.plano_conta !== registroAnterior.plano_conta) {
+          camposAlterados.plano_conta = {
+            antes: registroAnterior.plano_conta,
+            depois: updated.plano_conta,
+          }
+        }
+      }
+
+      const contaNome =
+        updated.expand?.plano_conta?.expand?.conta?.nome ||
+        updated.expand?.plano_conta?.descricao ||
+        'Conta'
+
+      await auditoriaLancamentosService.registrar({
+        empresa: updated.empresa,
+        lancamento_id: updated.id,
+        acao: 'edicao',
+        valor: updated.valor,
+        historico: updated.historico,
+        conta_info: contaNome,
+        detalhes: {
+          campos_alterados: Object.keys(camposAlterados).length > 0 ? camposAlterados : undefined,
+          dados_anteriores: registroAnterior
+            ? {
+                data: registroAnterior.data,
+                valor: registroAnterior.valor,
+                historico: registroAnterior.historico,
+              }
+            : undefined,
+          dados_novos: {
+            data: updated.data,
+            valor: updated.valor,
+            historico: updated.historico,
+          },
+        },
+      })
+    } catch (auditErr) {
+      console.warn('Erro ao registrar auditoria de edição:', auditErr)
+    }
+
+    return updated
   },
 
   async delete(id: string): Promise<boolean> {
-    return await pb.collection('lancamentos').delete(id)
+    let registroAnterior: LancamentoRecord | null = null
+    try {
+      registroAnterior = await pb.collection('lancamentos').getOne<LancamentoRecord>(id, {
+        expand: 'plano_conta.conta',
+      })
+    } catch {
+      /* intentionally ignored */
+    }
+
+    const result = await pb.collection('lancamentos').delete(id)
+
+    if (registroAnterior) {
+      try {
+        const { auditoriaLancamentosService } =
+          await import('@/services/auditoriaLancamentosService')
+        const contaNome =
+          registroAnterior.expand?.plano_conta?.expand?.conta?.nome ||
+          registroAnterior.expand?.plano_conta?.descricao ||
+          'Conta'
+
+        await auditoriaLancamentosService.registrar({
+          empresa: registroAnterior.empresa,
+          lancamento_id: registroAnterior.id,
+          acao: 'exclusao',
+          valor: registroAnterior.valor,
+          historico: registroAnterior.historico,
+          conta_info: contaNome,
+          detalhes: {
+            dados_anteriores: {
+              data: registroAnterior.data,
+              valor: registroAnterior.valor,
+              historico: registroAnterior.historico,
+              plano_conta: registroAnterior.plano_conta,
+            },
+          },
+        })
+      } catch (auditErr) {
+        console.warn('Erro ao registrar auditoria de exclusão:', auditErr)
+      }
+    }
+
+    return result
   },
 }
 

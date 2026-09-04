@@ -77,21 +77,26 @@ export default function Layout() {
 
   // Itens do submenu Cadastros
   const rawCadastroSubItems = [
-    { name: 'Empresas', path: '/empresas', icon: Building2, adminOnly: false },
+    { name: 'Empresas', path: '/empresas', icon: Building2, adminOnly: false, hideFinanceiro: true },
     {
       name: 'Grupo Empresarial',
       path: '/cadastro/grupos-empresariais',
       icon: Network,
       adminOnly: false,
+      hideFinanceiro: true,
     },
-    { name: 'Centros de Custo', path: '/centros', icon: PieChart, adminOnly: false },
-    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags, adminOnly: false },
-    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen, adminOnly: false },
-    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree, adminOnly: false },
-    { name: 'Minha Empresa', path: '/minha-empresa', icon: Building, adminOnly: false },
-    { name: 'Usuários & Permissões', path: '/admin/usuarios', icon: Users, adminOnly: true },
+    { name: 'Centros de Custo', path: '/centros', icon: PieChart, adminOnly: false, hideFinanceiro: false },
+    { name: 'Tipos de Despesas', path: '/tipos-despesas', icon: Tags, adminOnly: false, hideFinanceiro: false },
+    { name: 'Cadastro de Contas', path: '/contas', icon: BookOpen, adminOnly: false, hideFinanceiro: false },
+    { name: 'Plano de Contas', path: '/plano-contas', icon: FolderTree, adminOnly: false, hideFinanceiro: false },
+    { name: 'Minha Empresa', path: '/minha-empresa', icon: Building, adminOnly: false, hideFinanceiro: false },
+    { name: 'Usuários & Permissões', path: '/admin/usuarios', icon: Users, adminOnly: true, hideFinanceiro: true },
   ]
-  const cadastroSubItems = rawCadastroSubItems.filter((item) => !item.adminOnly || isAdmin)
+  const cadastroSubItems = rawCadastroSubItems.filter((item) => {
+    if (item.adminOnly && !isAdmin) return false
+    if (isUserFinanceiro && item.hideFinanceiro) return false
+    return true
+  })
 
   // Itens do submenu Formação de Preço - Custo
   const formacaoPrecoSubItems = [
@@ -144,53 +149,64 @@ export default function Layout() {
     location.pathname === '/contratos' ||
     location.pathname === '/notas-fiscais'
 
-  // Itens do submenu Indicadores
-  const indicadoresSubItems = [
-    { name: 'Painel & Benchmarks', path: '/indicadores/painel', icon: Gauge },
-    { name: 'Indicadores de Liquidez', path: '/indicadores/liquidez', icon: Activity },
-    { name: 'Análise do Capital de Giro', path: '/indicadores/capital-giro', icon: Coins },
+  // Itens do submenu Indicadores (Financeiro não vê Valuation)
+  const rawIndicadoresSubItems = [
+    { name: 'Painel & Benchmarks', path: '/indicadores/painel', icon: Gauge, hideFinanceiro: true },
+    { name: 'Indicadores de Liquidez', path: '/indicadores/liquidez', icon: Activity, hideFinanceiro: true },
+    { name: 'Análise do Capital de Giro', path: '/indicadores/capital-giro', icon: Coins, hideFinanceiro: true },
     {
       name: 'Indicadores de Endividamento',
       path: '/indicadores/endividamento',
       icon: TrendingDown,
+      hideFinanceiro: true,
     },
-    { name: 'Indicadores de Rentabilidade', path: '/indicadores/rentabilidade', icon: TrendingUp },
+    { name: 'Indicadores de Rentabilidade', path: '/indicadores/rentabilidade', icon: TrendingUp, hideFinanceiro: true },
     {
       name: 'Indicadores de Estrutura de Capital',
       path: '/indicadores/estrutura-capital',
       icon: Building2,
+      hideFinanceiro: true,
     },
     {
       name: 'EBITDA',
       path: '/indicadores/ebitda',
       icon: TrendingUp,
+      hideFinanceiro: true,
     },
     {
       name: 'Eficiência Operacional',
       path: '/indicadores/eficiencia-operacional',
       icon: Clock,
+      hideFinanceiro: true,
     },
     {
       name: 'Econômicos (análise mais avançada)',
       path: '/indicadores/economicos',
       icon: TrendingUp,
+      hideFinanceiro: true,
     },
     {
       name: 'Valuation',
       path: '/indicadores/valuation',
       icon: TrendingUp,
+      hideFinanceiro: true,
     },
     {
       name: 'Ponto de Equilíbrio',
       path: '/indicadores/ponto-equilibrio',
       icon: Scale,
+      hideFinanceiro: true,
     },
     {
       name: 'Kanitz (Insolvência)',
       path: '/indicadores/kanitz',
       icon: Flame,
+      hideFinanceiro: true,
     },
   ]
+  const indicadoresSubItems = rawIndicadoresSubItems.filter(
+    (item) => !isUserFinanceiro || !item.hideFinanceiro,
+  )
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
 
@@ -264,8 +280,14 @@ export default function Layout() {
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
   const userName = user?.name || 'Consultor Financeiro'
   const userEmail = user?.email || 'usuario@sistema.com'
-  const userRole = user?.role === 'admin' ? 'Administrador' : 'Empresa'
+  const userRole =
+    user?.role === 'admin'
+      ? 'Administrador'
+      : user?.role === 'financeiro'
+        ? 'Financeiro'
+        : 'Empresa'
   const isUserAdmin = user?.role === 'admin'
+  const isUserFinanceiro = user?.role === 'financeiro'
 
   const showHeaderFilters =
     location.pathname === '/dashboard' ||
@@ -617,6 +639,7 @@ export default function Layout() {
                 </div>
 
                 {/* 4.5. Formação de Preço - Custo (Expansível / Colapsável Mobile) */}
+                {!isUserFinanceiro && (
                 <div className="space-y-1">
                   <button
                     type="button"
@@ -686,10 +709,11 @@ export default function Layout() {
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* Novo Grupo: Indicadores (Abaixo de Financeiro) */}
-                <div className="space-y-1">
-                  <button
+                {!isUserFinanceiro && (
+                <div className="space-y-1">                  <button
                     type="button"
                     onClick={() => setIndicadoresOpen((prev) => !prev)}
                     style={
@@ -755,61 +779,71 @@ export default function Layout() {
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* 5. Análise Tributária */}
-                <NavLink
-                  to="/analise-tributaria"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/analise-tributaria'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <Calculator className="w-4 h-4 text-emerald-400" />
-                  Análise Tributária
-                </NavLink>
+{!isUserFinanceiro && (
+<NavLink
+  to="/analise-tributaria"
+  onClick={() => setMobileDrawerOpen(false)}
+  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+    location.pathname === '/analise-tributaria'
+      ? 'bg-white/15 text-white font-semibold shadow-inner'
+      : 'text-slate-300 hover:text-white hover:bg-white/5'
+  }`}
+>
+  <Calculator className="w-4 h-4 text-emerald-400" />
+  Análise Tributária
+</NavLink>
+)}
 
-                {/* 6. Importação */}
-                <NavLink
-                  to="/importacao"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/importacao'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <Upload className="w-4 h-4 text-blue-400" />
-                  Importação
-                </NavLink>
-                {/* 5. Relatório Anual */}
-                <NavLink
-                  to="/relatorio-anual"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/relatorio-anual'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 text-blue-400" />
-                  Relatório Anual
-                </NavLink>
+{/* 6. Importação */}
+{!isUserFinanceiro && (
+<NavLink
+  to="/importacao"
+  onClick={() => setMobileDrawerOpen(false)}
+  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+    location.pathname === '/importacao'
+      ? 'bg-white/15 text-white font-semibold shadow-inner'
+      : 'text-slate-300 hover:text-white hover:bg-white/5'
+  }`}
+>
+  <Upload className="w-4 h-4 text-blue-400" />
+  Importação
+</NavLink>
+)}
 
-                {/* 6. Relatórios */}
-                <NavLink
-                  to="/relatorios"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    location.pathname === '/relatorios'
-                      ? 'bg-white/15 text-white font-semibold shadow-inner'
-                      : 'text-slate-300 hover:text-white hover:bg-white/5'
-                  }`}
-                >
-                  <FileText className="w-4 h-4 text-blue-400" />
-                  Relatórios
-                </NavLink>
+{/* 5. Relatório Anual */}
+{!isUserFinanceiro && (
+<NavLink
+  to="/relatorio-anual"
+  onClick={() => setMobileDrawerOpen(false)}
+  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+    location.pathname === '/relatorio-anual'
+      ? 'bg-white/15 text-white font-semibold shadow-inner'
+      : 'text-slate-300 hover:text-white hover:bg-white/5'
+  }`}
+>
+  <FileText className="w-4 h-4 text-blue-400" />
+  Relatório Anual
+</NavLink>
+)}
+
+{/* 6. Relatórios */}
+{!isUserFinanceiro && (
+<NavLink
+  to="/relatorios"
+  onClick={() => setMobileDrawerOpen(false)}
+  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
+    location.pathname === '/relatorios'
+      ? 'bg-white/15 text-white font-semibold shadow-inner'
+      : 'text-slate-300 hover:text-white hover:bg-white/5'
+  }`}
+>
+  <FileText className="w-4 h-4 text-blue-400" />
+  Relatórios
+</NavLink>
+)}
               </nav>
             </div>
 
@@ -839,12 +873,13 @@ export default function Layout() {
                         className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
                           isUserAdmin
                             ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
-                            : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                            : isUserFinanceiro
+                              ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
+                              : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
                         }`}
                       >
                         {userRole}
-                      </span>
-                    </div>
+                      </span>                    </div>
                     <p className="text-xs text-slate-400 truncate">{userEmail}</p>
                   </div>
                 </div>
@@ -1269,399 +1304,412 @@ export default function Layout() {
               </div>
 
               {/* 4.5. Formação de Preço - Custo (Tablet & Desktop) */}
-              <div className="space-y-1">
-                {/* Visualização Tablet */}
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/formacao-preco/produtos"
-                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          isFormacaoPrecoActive
-                            ? 'bg-amber-600/30 text-white font-semibold shadow-sm border border-amber-500/40'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
+              {!isUserFinanceiro && (
+                <div className="space-y-1">
+                  {/* Visualização Tablet */}
+                  <div className="lg:hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <NavLink
+                          to="/formacao-preco/produtos"
+                          className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                            isFormacaoPrecoActive
+                              ? 'bg-amber-600/30 text-white font-semibold shadow-sm border border-amber-500/40'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <Calculator
+                            className={`w-5 h-5 ${isFormacaoPrecoActive ? 'text-amber-300' : 'text-slate-400'}`}
+                          />
+                        </NavLink>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="bg-[#0B1F3A] text-white border-blue-900"
                       >
-                        <Calculator
-                          className={`w-5 h-5 ${isFormacaoPrecoActive ? 'text-amber-300' : 'text-slate-400'}`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Formação de Preço - Custo (Produtos, MP, Ficha Técnica, Impostos)
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
+                        Formação de Preço - Custo (Produtos, MP, Ficha Técnica, Impostos)
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
 
-                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
-                <div className="hidden lg:block">
-                  <button
-                    type="button"
-                    onClick={() => setFormacaoPrecoOpen((prev) => !prev)}
-                    style={
-                      isFormacaoPrecoActive
-                        ? {
-                            backgroundColor: `${corSecundaria}33`,
-                            borderColor: `${corSecundaria}66`,
-                          }
-                        : undefined
-                    }
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                      isFormacaoPrecoActive
-                        ? 'text-white font-semibold border'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Calculator
-                        className={`w-5 h-5 shrink-0 ${
-                          isFormacaoPrecoActive ? 'text-amber-300' : 'text-amber-400'
+                  {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                  <div className="hidden lg:block">
+                    <button
+                      type="button"
+                      onClick={() => setFormacaoPrecoOpen((prev) => !prev)}
+                      style={
+                        isFormacaoPrecoActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isFormacaoPrecoActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Calculator
+                          className={`w-5 h-5 shrink-0 ${
+                            isFormacaoPrecoActive ? 'text-amber-300' : 'text-amber-400'
+                          }`}
+                        />
+                        <span className="truncate font-medium">Formação de Preço - Custo</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                          formacaoPrecoOpen ? 'rotate-0' : '-rotate-90'
                         }`}
                       />
-                      <span className="truncate font-medium">Formação de Preço - Custo</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
-                        formacaoPrecoOpen ? 'rotate-0' : '-rotate-90'
+                    </button>
+
+                    {/* Submenu com animação suave via grid template rows */}
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        formacaoPrecoOpen
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
                       }`}
-                    />
-                  </button>
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-4 pl-3 border-l border-amber-500/30 space-y-1 py-1 mt-1">
+                          {formacaoPrecoSubItems.map((sub) => {
+                            const SubIcon = sub.icon
+                            const isSubActive = location.pathname === sub.path
 
-                  {/* Submenu com animação suave via grid template rows */}
-                  <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                      formacaoPrecoOpen
-                        ? 'grid-rows-[1fr] opacity-100'
-                        : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="ml-4 pl-3 border-l border-amber-500/30 space-y-1 py-1 mt-1">
-                        {formacaoPrecoSubItems.map((sub) => {
-                          const SubIcon = sub.icon
-                          const isSubActive = location.pathname === sub.path
-
-                          return (
-                            <NavLink
-                              key={sub.path}
-                              to={sub.path}
-                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                isSubActive
-                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              <SubIcon
-                                className={`w-4 h-4 shrink-0 ${
-                                  isSubActive ? 'text-amber-300' : 'text-slate-400'
+                            return (
+                              <NavLink
+                                key={sub.path}
+                                to={sub.path}
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                  isSubActive
+                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
                                 }`}
-                              />
-                              <span className="truncate">{sub.name}</span>
-                            </NavLink>
-                          )
-                        })}
+                              >
+                                <SubIcon
+                                  className={`w-4 h-4 shrink-0 ${
+                                    isSubActive ? 'text-amber-300' : 'text-slate-400'
+                                  }`}
+                                />
+                                <span className="truncate">{sub.name}</span>
+                              </NavLink>
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Novo Grupo: Indicadores - Abaixo de Financeiro */}
-              <div className="space-y-1">
-                {/* Visualização Tablet */}
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/indicadores/painel"
-                        className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          isIndicadoresActive
-                            ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
+              {!isUserFinanceiro && (
+                <div className="space-y-1">
+                  {/* Visualização Tablet */}
+                  <div className="lg:hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <NavLink
+                          to="/indicadores/painel"
+                          className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                            isIndicadoresActive
+                              ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <Gauge
+                            className={`w-5 h-5 ${isIndicadoresActive ? 'text-blue-300' : 'text-slate-400'}`}
+                          />
+                        </NavLink>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="bg-[#0B1F3A] text-white border-blue-900"
                       >
-                        <Gauge
-                          className={`w-5 h-5 ${isIndicadoresActive ? 'text-blue-300' : 'text-slate-400'}`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Painel de Indicadores & Benchmarks
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
+                        Painel de Indicadores & Benchmarks
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
 
-                {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
-                <div className="hidden lg:block">
-                  <button
-                    type="button"
-                    onClick={() => setIndicadoresOpen((prev) => !prev)}
-                    style={
-                      isIndicadoresActive
-                        ? {
-                            backgroundColor: `${corSecundaria}33`,
-                            borderColor: `${corSecundaria}66`,
-                          }
-                        : undefined
-                    }
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                      isIndicadoresActive
-                        ? 'text-white font-semibold border'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Gauge
-                        className={`w-5 h-5 shrink-0 ${
-                          isIndicadoresActive ? 'text-blue-300' : 'text-blue-400'
+                  {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                  <div className="hidden lg:block">
+                    <button
+                      type="button"
+                      onClick={() => setIndicadoresOpen((prev) => !prev)}
+                      style={
+                        isIndicadoresActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isIndicadoresActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Gauge
+                          className={`w-5 h-5 shrink-0 ${
+                            isIndicadoresActive ? 'text-blue-300' : 'text-blue-400'
+                          }`}
+                        />
+                        <span className="truncate font-medium">Indicadores</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                          indicadoresOpen ? 'rotate-0' : '-rotate-90'
                         }`}
                       />
-                      <span className="truncate font-medium">Indicadores</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
-                        indicadoresOpen ? 'rotate-0' : '-rotate-90'
+                    </button>
+
+                    {/* Submenu com animação suave via grid template rows */}
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        indicadoresOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
                       }`}
-                    />
-                  </button>
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
+                          {indicadoresSubItems.map((sub) => {
+                            const SubIcon = sub.icon
+                            const isSubActive = location.pathname === sub.path
 
-                  {/* Submenu com animação suave via grid template rows */}
-                  <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                      indicadoresOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
-                        {indicadoresSubItems.map((sub) => {
-                          const SubIcon = sub.icon
-                          const isSubActive = location.pathname === sub.path
-
-                          return (
-                            <NavLink
-                              key={sub.path}
-                              to={sub.path}
-                              className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                                isSubActive
-                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              <SubIcon
-                                className={`w-4 h-4 shrink-0 ${
-                                  isSubActive ? 'text-blue-300' : 'text-slate-400'
+                            return (
+                              <NavLink
+                                key={sub.path}
+                                to={sub.path}
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                  isSubActive
+                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
                                 }`}
-                              />
-                              <span className="truncate">{sub.name}</span>
-                            </NavLink>
-                          )
-                        })}
+                              >
+                                <SubIcon
+                                  className={`w-4 h-4 shrink-0 ${
+                                    isSubActive ? 'text-blue-300' : 'text-slate-400'
+                                  }`}
+                                />
+                                <span className="truncate">{sub.name}</span>
+                              </NavLink>
+                            )
+                          })}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* 5. Análise Tributária (Nível Superior entre Financeiro e Importação) */}
-              <div>
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/analise-tributaria"
-                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          location.pathname === '/analise-tributaria'
-                            ? 'bg-white/15 text-white font-semibold shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <Calculator
-                          className={`w-5 h-5 ${
-                            location.pathname === '/analise-tributaria'
-                              ? 'text-emerald-300'
-                              : 'text-slate-400'
-                          }`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Análise Tributária
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <div className="hidden lg:block">
-                  <NavLink
-                    to="/analise-tributaria"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/analise-tributaria'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Calculator
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/analise-tributaria'
-                          ? 'text-emerald-300'
-                          : 'text-slate-400'
-                      }`}
-                    />
-                    <span className="truncate">Análise Tributária</span>
-                  </NavLink>
-                </div>
-              </div>
+{!isUserFinanceiro && (
+<div>
+  <div className="lg:hidden">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <NavLink
+          to="/analise-tributaria"
+          className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+            location.pathname === '/analise-tributaria'
+              ? 'bg-white/15 text-white font-semibold shadow-sm'
+              : 'text-slate-300 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Calculator
+            className={`w-5 h-5 ${
+              location.pathname === '/analise-tributaria'
+                ? 'text-emerald-300'
+                : 'text-slate-400'
+            }`}
+          />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        className="bg-[#0B1F3A] text-white border-blue-900"
+      >
+        Análise Tributária
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  <div className="hidden lg:block">
+    <NavLink
+      to="/analise-tributaria"
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        location.pathname === '/analise-tributaria'
+          ? 'bg-white/15 text-white font-semibold shadow-sm'
+          : 'text-slate-300 hover:text-white hover:bg-white/5'
+      }`}
+    >
+      <Calculator
+        className={`w-5 h-5 shrink-0 ${
+          location.pathname === '/analise-tributaria'
+            ? 'text-emerald-300'
+            : 'text-slate-400'
+        }`}
+      />
+      <span className="truncate">Análise Tributária</span>
+    </NavLink>
+  </div>
+</div>
+)}
 
-              {/* 6. Importação */}
-              <div>
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/importacao"
-                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          location.pathname === '/importacao'
-                            ? 'bg-white/15 text-white font-semibold shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <Upload
-                          className={`w-5 h-5 ${
-                            location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
-                          }`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Importação
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <div className="hidden lg:block">
-                  <NavLink
-                    to="/importacao"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/importacao'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Upload
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
-                      }`}
-                    />
-                    <span className="truncate">Importação</span>
-                  </NavLink>
-                </div>
-              </div>
-              {/* 5. Relatório Anual */}
-              <div>
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/relatorio-anual"
-                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          location.pathname === '/relatorio-anual'
-                            ? 'bg-white/15 text-white font-semibold shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <FileText
-                          className={`w-5 h-5 ${
-                            location.pathname === '/relatorio-anual'
-                              ? 'text-blue-300'
-                              : 'text-slate-400'
-                          }`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Relatório Anual
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <div className="hidden lg:block">
-                  <NavLink
-                    to="/relatorio-anual"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/relatorio-anual'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <FileText
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/relatorio-anual'
-                          ? 'text-blue-300'
-                          : 'text-slate-400'
-                      }`}
-                    />
-                    <span className="truncate">Relatório Anual</span>
-                  </NavLink>
-                </div>
-              </div>
+{/* 6. Importação */}
+{!isUserFinanceiro && (
+<div>
+  <div className="lg:hidden">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <NavLink
+          to="/importacao"
+          className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+            location.pathname === '/importacao'
+              ? 'bg-white/15 text-white font-semibold shadow-sm'
+              : 'text-slate-300 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Upload
+            className={`w-5 h-5 ${
+              location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
+            }`}
+          />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        className="bg-[#0B1F3A] text-white border-blue-900"
+      >
+        Importação
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  <div className="hidden lg:block">
+    <NavLink
+      to="/importacao"
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        location.pathname === '/importacao'
+          ? 'bg-white/15 text-white font-semibold shadow-sm'
+          : 'text-slate-300 hover:text-white hover:bg-white/5'
+      }`}
+    >
+      <Upload
+        className={`w-5 h-5 shrink-0 ${
+          location.pathname === '/importacao' ? 'text-blue-300' : 'text-slate-400'
+        }`}
+      />
+      <span className="truncate">Importação</span>
+    </NavLink>
+  </div>
+</div>
+)}
 
-              {/* 6. Relatórios */}
-              <div>
-                <div className="lg:hidden">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <NavLink
-                        to="/relatorios"
-                        className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
-                          location.pathname === '/relatorios'
-                            ? 'bg-white/15 text-white font-semibold shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <FileText
-                          className={`w-5 h-5 ${
-                            location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
-                          }`}
-                        />
-                      </NavLink>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-[#0B1F3A] text-white border-blue-900"
-                    >
-                      Relatórios
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <div className="hidden lg:block">
-                  <NavLink
-                    to="/relatorios"
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/relatorios'
-                        ? 'bg-white/15 text-white font-semibold shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <FileText
-                      className={`w-5 h-5 shrink-0 ${
-                        location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
-                      }`}
-                    />
-                    <span className="truncate">Relatórios</span>
-                  </NavLink>
-                </div>
-              </div>
+{/* 5. Relatório Anual */}
+{!isUserFinanceiro && (
+<div>
+  <div className="lg:hidden">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <NavLink
+          to="/relatorio-anual"
+          className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+            location.pathname === '/relatorio-anual'
+              ? 'bg-white/15 text-white font-semibold shadow-sm'
+              : 'text-slate-300 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <FileText
+            className={`w-5 h-5 ${
+              location.pathname === '/relatorio-anual'
+                ? 'text-blue-300'
+                : 'text-slate-400'
+            }`}
+          />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        className="bg-[#0B1F3A] text-white border-blue-900"
+      >
+        Relatório Anual
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  <div className="hidden lg:block">
+    <NavLink
+      to="/relatorio-anual"
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        location.pathname === '/relatorio-anual'
+          ? 'bg-white/15 text-white font-semibold shadow-sm'
+          : 'text-slate-300 hover:text-white hover:bg-white/5'
+      }`}
+    >
+      <FileText
+        className={`w-5 h-5 shrink-0 ${
+          location.pathname === '/relatorio-anual'
+            ? 'text-blue-300'
+            : 'text-slate-400'
+        }`}
+      />
+      <span className="truncate">Relatório Anual</span>
+    </NavLink>
+  </div>
+</div>
+)}
+
+{/* 6. Relatórios */}
+{!isUserFinanceiro && (
+<div>
+  <div className="lg:hidden">
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <NavLink
+          to="/relatorios"
+          className={`flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+            location.pathname === '/relatorios'
+              ? 'bg-white/15 text-white font-semibold shadow-sm'
+              : 'text-slate-300 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <FileText
+            className={`w-5 h-5 ${
+              location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
+            }`}
+          />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        className="bg-[#0B1F3A] text-white border-blue-900"
+      >
+        Relatórios
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  <div className="hidden lg:block">
+    <NavLink
+      to="/relatorios"
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        location.pathname === '/relatorios'
+          ? 'bg-white/15 text-white font-semibold shadow-sm'
+          : 'text-slate-300 hover:text-white hover:bg-white/5'
+      }`}
+    >
+      <FileText
+        className={`w-5 h-5 shrink-0 ${
+          location.pathname === '/relatorios' ? 'text-blue-300' : 'text-slate-400'
+        }`}
+      />
+      <span className="truncate">Relatórios</span>
+    </NavLink>
+  </div>
+</div>
+)}
             </nav>
           </div>
 
@@ -1698,12 +1746,13 @@ export default function Layout() {
                       className={`text-[9px] px-1 py-0.2 rounded font-semibold uppercase ${
                         isUserAdmin
                           ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
-                          : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                          : isUserFinanceiro
+                            ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
+                            : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
                       }`}
                     >
                       {userRole}
-                    </span>
-                  </div>
+                    </span>                  </div>
                   <p className="text-[11px] text-blue-200/70 truncate">{userEmail}</p>
                 </div>
               </button>
