@@ -1,4 +1,4 @@
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import {
   AuditoriaCadastroRecord,
   EntidadeAuditoriaCadastro,
@@ -26,7 +26,7 @@ export const auditoriaCadastrosService = {
    */
   async registrar(input: RegistrarAuditoriaCadastroInput): Promise<AuditoriaCadastroRecord | null> {
     try {
-      const currentUser = pb.authStore.model
+      const currentUser = pb.authStore.record
       const usuarioId = currentUser?.id || undefined
       const usuarioNome = currentUser?.name || currentUser?.nome || currentUser?.email || 'Sistema'
       const usuarioEmail = currentUser?.email || ''
