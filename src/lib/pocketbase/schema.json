@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T13:57:01.900Z",
+  "generatedAt": "2026-09-05T15:02:58.698Z",
   "collections": [
     {
       "name": "users",
@@ -2248,6 +2248,12 @@
           "required": false,
           "system": false,
           "collectionRef": "empresas"
+        },
+        {
+          "name": "capacidade_producao",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

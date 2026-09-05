@@ -648,6 +648,18 @@ export function ModalPdfFichaTecnica({
                       {produto.unidade || 'UN'}
                     </span>
                   </div>
+                  {produto.capacidade_producao !== undefined &&
+                    produto.capacidade_producao !== null &&
+                    produto.capacidade_producao > 0 && (
+                      <div className="flex justify-between border-t border-slate-200/60 pt-1">
+                        <span className="text-slate-500 font-semibold">
+                          Capacidade de Produção:
+                        </span>
+                        <span className="text-indigo-800 font-bold font-mono">
+                          {produto.capacidade_producao.toLocaleString('pt-BR')} {produto.unidade}
+                        </span>
+                      </div>
+                    )}
                 </div>
 
                 <div className="space-y-1.5 sm:border-l sm:border-slate-200 sm:pl-3">

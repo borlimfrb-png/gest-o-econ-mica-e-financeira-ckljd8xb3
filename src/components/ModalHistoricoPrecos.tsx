@@ -274,6 +274,16 @@ export function ModalHistoricoPrecos({
                     {formatPct(produto.margem_desejada)}
                   </span>
                 </div>
+                {produto.capacidade_producao !== undefined &&
+                  produto.capacidade_producao !== null &&
+                  produto.capacidade_producao > 0 && (
+                    <div className="col-span-2 sm:col-span-4 pt-1 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Capacidade de Produção:</span>
+                      <span className="font-semibold text-indigo-700">
+                        {produto.capacidade_producao.toLocaleString('pt-BR')} {produto.unidade}
+                      </span>
+                    </div>
+                  )}
               </div>
             </div>
           )}

@@ -76,6 +76,7 @@ interface ProdutoFormData {
   nome: string
   unidade: string
   categoria: string
+  capacidade_producao: string
   custo: string
   preco_venda: string
   margem_desejada: string
@@ -88,6 +89,7 @@ const EMPTY_PRODUTO: ProdutoFormData = {
   nome: '',
   unidade: 'UN',
   categoria: '',
+  capacidade_producao: '',
   custo: '',
   preco_venda: '',
   margem_desejada: '',
@@ -283,6 +285,13 @@ export default function CadastroProdutos() {
     if (!form.unidade.trim()) {
       errs.unidade = 'Informe a unidade de medida (ex: UN, KG, CX)'
     }
+    if (form.capacidade_producao.trim() !== '') {
+      const cap = Number(form.capacidade_producao.replace(',', '.'))
+      if (isNaN(cap) || cap < 0) {
+        errs.capacidade_producao =
+          'Informe um número válido para a capacidade de produção (maior ou igual a zero)'
+      }
+    }
     if (form.custo.trim() !== '') {
       const c = Number(form.custo.replace(',', '.'))
       if (isNaN(c) || c < 0) errs.custo = 'Informe um custo válido'
@@ -318,6 +327,10 @@ export default function CadastroProdutos() {
       nome: p.nome,
       unidade: p.unidade || 'UN',
       categoria: p.categoria || '',
+      capacidade_producao:
+        p.capacidade_producao !== undefined && p.capacidade_producao !== null
+          ? String(p.capacidade_producao)
+          : '',
       custo: p.custo !== undefined && p.custo !== null ? String(p.custo) : '',
       preco_venda:
         p.preco_venda !== undefined && p.preco_venda !== null ? String(p.preco_venda) : '',
@@ -337,6 +350,10 @@ export default function CadastroProdutos() {
 
     setSaving(true)
     try {
+      const capNum =
+        formData.capacidade_producao.trim() !== ''
+          ? Number(formData.capacidade_producao.replace(',', '.'))
+          : null
       const custoNum =
         formData.custo.trim() !== '' ? Number(formData.custo.replace(',', '.')) : undefined
       const precoNum =
@@ -354,6 +371,7 @@ export default function CadastroProdutos() {
         nome: formData.nome.trim(),
         unidade: formData.unidade.trim().toUpperCase(),
         categoria: formData.categoria.trim() || undefined,
+        capacidade_producao: capNum,
         custo: custoNum,
         preco_venda: precoNum,
         margem_desejada: margemNum,
@@ -564,11 +582,15 @@ export default function CadastroProdutos() {
         ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : ''
 
+    const fmtCap = (c?: number | null) =>
+      c !== undefined && c !== null ? c.toLocaleString('pt-BR', { maximumFractionDigits: 2 }) : ''
+
     const headers = [
       'Código',
       'Produto',
       'Unidade',
       'Categoria',
+      'Capacidade de Produção',
       'Custo (R$)',
       'Preço Venda (R$)',
       'Margem (%)',
@@ -592,6 +614,7 @@ export default function CadastroProdutos() {
           p.nome,
           p.unidade,
           p.categoria || '',
+          fmtCap(p.capacidade_producao),
           fmtNum(custoFinal),
           fmtNum(p.preco_venda),
           margemFinal !== undefined ? margemFinal.toFixed(1) + '%' : '',
@@ -845,6 +868,7 @@ export default function CadastroProdutos() {
                     <th className="py-3 px-3.5">Produto</th>
                     <th className="py-3 px-3.5">Unidade</th>
                     <th className="py-3 px-3.5">Categoria</th>
+                    <th className="py-3 px-3.5 text-right">Capacidade</th>
                     <th className="py-3 px-3.5 text-right">Custo (R$)</th>
                     <th className="py-3 px-3.5 text-right">Preço Venda (R$)</th>
                     <th className="py-3 px-3.5 text-right">Margem (%)</th>
@@ -898,6 +922,25 @@ export default function CadastroProdutos() {
                             </Badge>
                           ) : (
                             <span className="text-slate-400 italic">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3.5 text-right whitespace-nowrap">
+                          {p.capacidade_producao !== undefined &&
+                          p.capacidade_producao !== null &&
+                          p.capacidade_producao > 0 ? (
+                            <div className="inline-flex items-center gap-1">
+                              <Badge
+                                variant="outline"
+                                className="text-[11px] font-semibold bg-indigo-50/80 text-indigo-700 border-indigo-200"
+                                title={`Capacidade de Produção: ${p.capacidade_producao.toLocaleString('pt-BR')} ${p.unidade || 'unidades'}`}
+                              >
+                                {p.capacidade_producao.toLocaleString('pt-BR')} {p.unidade}
+                              </Badge>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 italic" title="Não informada">
+                              —
+                            </span>
                           )}
                         </td>
                         <td className="py-3 px-3.5 text-right font-medium text-slate-800 whitespace-nowrap">
@@ -1127,6 +1170,41 @@ export default function CadastroProdutos() {
                     className="h-9 text-xs"
                   />
                 </div>
+              </div>
+
+              {/* Capacidade de Produção */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label
+                    htmlFor="prod-capacidade"
+                    className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                    Capacidade de Produção
+                  </Label>
+                  <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
+                </div>
+                <Input
+                  id="prod-capacidade"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="any"
+                  placeholder="Ex: 5000 (quantidade produzida por período)"
+                  value={formData.capacidade_producao}
+                  onChange={(e) => setField('capacidade_producao', e.target.value)}
+                  className={`h-9 text-xs ${errors.capacidade_producao ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                />
+                {errors.capacidade_producao ? (
+                  <p className="text-[11px] text-red-600 font-medium">
+                    {errors.capacidade_producao}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-500">
+                    Quantidade que a empresa consegue produzir deste item (ex.: unidades por mês ou
+                    ciclo).
+                  </p>
+                )}
               </div>
 
               {/* Bloco de Formação de Preço */}
@@ -1425,6 +1503,17 @@ export default function CadastroProdutos() {
                     <span className="font-mono text-slate-700">{produtoParaTransferir.codigo}</span>
                   </div>
                 )}
+                {produtoParaTransferir.capacidade_producao !== undefined &&
+                  produtoParaTransferir.capacidade_producao !== null &&
+                  produtoParaTransferir.capacidade_producao > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Capacidade de Produção:</span>
+                      <span className="font-semibold text-indigo-700">
+                        {produtoParaTransferir.capacidade_producao.toLocaleString('pt-BR')}{' '}
+                        {produtoParaTransferir.unidade}
+                      </span>
+                    </div>
+                  )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Empresa de Origem:</span>
                   <span className="font-semibold text-slate-700">

@@ -16,6 +16,7 @@ export interface ProdutoInput {
   nome: string
   unidade: string
   categoria?: string
+  capacidade_producao?: number | null
   custo?: number
   preco_venda?: number
   margem_desejada?: number
@@ -668,6 +669,7 @@ export const fichasTecnicasService = {
         nome: novoNome,
         unidade: novaUnidade,
         categoria: novaCategoria,
+        capacidade_producao: originalProd?.capacidade_producao ?? null,
         custo: originalFicha.custo_total,
         preco_venda: originalFicha.preco_venda_sugerido ?? originalProd?.preco_venda,
         margem_desejada: originalFicha.margem_desejada ?? originalProd?.margem_desejada,
