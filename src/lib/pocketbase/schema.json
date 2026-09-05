@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T15:02:58.698Z",
+  "generatedAt": "2026-09-05T20:51:08.882Z",
   "collections": [
     {
       "name": "users",
@@ -2251,6 +2251,12 @@
         },
         {
           "name": "capacidade_producao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "quantidade_vendida",
           "type": "number",
           "required": false,
           "system": false

@@ -53,6 +53,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react'
 import { ModalHistoricoPrecos } from '@/components/ModalHistoricoPrecos'
+import { ModalPdfCapacidadeA4 } from '@/components/ModalPdfCapacidadeA4'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 function formatBrl(val: number | null | undefined): string {
@@ -77,6 +78,7 @@ interface ProdutoFormData {
   unidade: string
   categoria: string
   capacidade_producao: string
+  quantidade_vendida: string
   custo: string
   preco_venda: string
   margem_desejada: string
@@ -90,6 +92,7 @@ const EMPTY_PRODUTO: ProdutoFormData = {
   unidade: 'UN',
   categoria: '',
   capacidade_producao: '',
+  quantidade_vendida: '',
   custo: '',
   preco_venda: '',
   margem_desejada: '',
@@ -132,6 +135,9 @@ export default function CadastroProdutos() {
   // Modal Histórico de Preços
   const [historicoModalOpen, setHistoricoModalOpen] = useState(false)
   const [produtoParaHistorico, setProdutoParaHistorico] = useState<ProdutoRecord | null>(null)
+
+  // Modal Relatório PDF A4 Utilização da Capacidade
+  const [modalPdfCapacidadeOpen, setModalPdfCapacidadeOpen] = useState(false)
 
   // Modal Mover / Transferir Empresa
   const [transferirModalOpen, setTransferirModalOpen] = useState(false)
@@ -221,7 +227,48 @@ export default function CadastroProdutos() {
           }, 0) / produtos.length
         : 0
 
-    return { total, comFicha, valorTotalEstoque, margemMedia }
+    // Métricas de Capacidade e Utilização
+    const produtosComCapacidade = produtos.filter(
+      (p) =>
+        p.capacidade_producao !== undefined &&
+        p.capacidade_producao !== null &&
+        Number(p.capacidade_producao) > 0,
+    )
+
+    let somaUtilizacao = 0
+    let ociososCount = 0 // < 50%
+    let moderadosCount = 0 // 50-79%
+    let gargaloCount = 0 // >= 90% (e semáforo verde se >= 80%)
+
+    for (const p of produtosComCapacidade) {
+      const cap = Number(p.capacidade_producao) || 0
+      const vendida = Number(p.quantidade_vendida) || 0
+      const utilPct = cap > 0 ? (vendida / cap) * 100 : 0
+      somaUtilizacao += utilPct
+      if (utilPct < 50) {
+        ociososCount++
+      } else if (utilPct < 80) {
+        moderadosCount++
+      }
+      if (utilPct >= 90) {
+        gargaloCount++
+      }
+    }
+
+    const utilizacaoMedia =
+      produtosComCapacidade.length > 0 ? somaUtilizacao / produtosComCapacidade.length : 0
+
+    return {
+      total,
+      comFicha,
+      valorTotalEstoque,
+      margemMedia,
+      produtosComCapacidadeCount: produtosComCapacidade.length,
+      utilizacaoMedia,
+      ociososCount,
+      moderadosCount,
+      gargaloCount,
+    }
   }, [produtos, fichasMap])
 
   // Handlers do Formulário
@@ -292,6 +339,13 @@ export default function CadastroProdutos() {
           'Informe um número válido para a capacidade de produção (maior ou igual a zero)'
       }
     }
+    if (form.quantidade_vendida.trim() !== '') {
+      const qtd = Number(form.quantidade_vendida.replace(',', '.'))
+      if (isNaN(qtd) || qtd < 0) {
+        errs.quantidade_vendida =
+          'Informe um número válido para a quantidade vendida (maior ou igual a zero)'
+      }
+    }
     if (form.custo.trim() !== '') {
       const c = Number(form.custo.replace(',', '.'))
       if (isNaN(c) || c < 0) errs.custo = 'Informe um custo válido'
@@ -331,6 +385,10 @@ export default function CadastroProdutos() {
         p.capacidade_producao !== undefined && p.capacidade_producao !== null
           ? String(p.capacidade_producao)
           : '',
+      quantidade_vendida:
+        p.quantidade_vendida !== undefined && p.quantidade_vendida !== null
+          ? String(p.quantidade_vendida)
+          : '',
       custo: p.custo !== undefined && p.custo !== null ? String(p.custo) : '',
       preco_venda:
         p.preco_venda !== undefined && p.preco_venda !== null ? String(p.preco_venda) : '',
@@ -354,6 +412,10 @@ export default function CadastroProdutos() {
         formData.capacidade_producao.trim() !== ''
           ? Number(formData.capacidade_producao.replace(',', '.'))
           : null
+      const qtdVendidaNum =
+        formData.quantidade_vendida.trim() !== ''
+          ? Number(formData.quantidade_vendida.replace(',', '.'))
+          : null
       const custoNum =
         formData.custo.trim() !== '' ? Number(formData.custo.replace(',', '.')) : undefined
       const precoNum =
@@ -372,6 +434,7 @@ export default function CadastroProdutos() {
         unidade: formData.unidade.trim().toUpperCase(),
         categoria: formData.categoria.trim() || undefined,
         capacidade_producao: capNum,
+        quantidade_vendida: qtdVendidaNum,
         custo: custoNum,
         preco_venda: precoNum,
         margem_desejada: margemNum,
@@ -591,6 +654,9 @@ export default function CadastroProdutos() {
       'Unidade',
       'Categoria',
       'Capacidade de Produção',
+      'Quantidade Vendida',
+      'Utilização (%)',
+      'Status Utilização',
       'Custo (R$)',
       'Preço Venda (R$)',
       'Margem (%)',
@@ -608,6 +674,22 @@ export default function CadastroProdutos() {
           ? ((p.preco_venda - custoFinal) / p.preco_venda) * 100
           : p.margem_desejada
 
+      const cap = Number(p.capacidade_producao)
+      const hasCap =
+        p.capacidade_producao !== undefined &&
+        p.capacidade_producao !== null &&
+        !isNaN(cap) &&
+        cap > 0
+      const qtdVendida = Number(p.quantidade_vendida) || 0
+      const utilPct = hasCap ? (qtdVendida / cap) * 100 : null
+      const statusUtilizacao = !hasCap
+        ? 'Não informada'
+        : utilPct! >= 80
+          ? 'Gargalo Próximo'
+          : utilPct! >= 50
+            ? 'Moderada'
+            : 'Ocioso'
+
       linhas.push(
         [
           p.codigo || '',
@@ -615,6 +697,11 @@ export default function CadastroProdutos() {
           p.unidade,
           p.categoria || '',
           fmtCap(p.capacidade_producao),
+          p.quantidade_vendida !== undefined && p.quantidade_vendida !== null
+            ? fmtCap(p.quantidade_vendida)
+            : '',
+          utilPct !== null ? utilPct.toFixed(1) + '%' : '',
+          statusUtilizacao,
           fmtNum(custoFinal),
           fmtNum(p.preco_venda),
           margemFinal !== undefined ? margemFinal.toFixed(1) + '%' : '',
@@ -705,14 +792,17 @@ export default function CadastroProdutos() {
         )}
       </div>
 
-      {/* Cards de Métricas Rápidas */}
+      {/* Cards de Métricas Rápidas & KPIs de Utilização da Capacidade */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-white border-slate-200 shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-slate-500 font-medium">Total de Produtos</p>
               <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{stats.total}</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Itens cadastrados</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {stats.comFicha} com ficha técnica (
+                {stats.total > 0 ? Math.round((stats.comFicha / stats.total) * 100) : 0}%)
+              </p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
               <Package className="w-5 h-5" />
@@ -720,46 +810,54 @@ export default function CadastroProdutos() {
           </CardContent>
         </Card>
 
+        {/* KPI 1: Média de Utilização da Capacidade */}
         <Card className="bg-white border-slate-200 shadow-xs">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500 font-medium">Com Ficha Técnica</p>
-              <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{stats.comFicha}</h3>
-              <p className="text-[11px] text-emerald-600 font-medium mt-0.5">
-                {stats.total > 0 ? Math.round((stats.comFicha / stats.total) * 100) : 0}% com
-                composição
+              <p className="text-xs text-slate-500 font-medium">Média de Utilização</p>
+              <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">
+                {stats.produtosComCapacidadeCount > 0
+                  ? `${stats.utilizacaoMedia.toFixed(1)}%`
+                  : '—'}
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {stats.produtosComCapacidadeCount} de {stats.total} produtos com capacidade
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Layers className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI 2: Produtos Ociosos (<50%) */}
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Produtos Ociosos</p>
+              <h3 className="text-xl font-bold text-rose-600 mt-1">{stats.ociososCount}</h3>
+              <p className="text-[11px] text-rose-600/80 font-medium mt-0.5">
+                Utilização &lt; 50% da capacidade
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* KPI 3: Produtos em Gargalo (≥90%) */}
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Em Gargalo</p>
+              <h3 className="text-xl font-bold text-emerald-600 mt-1">{stats.gargaloCount}</h3>
+              <p className="text-[11px] text-emerald-700 font-medium mt-0.5">
+                Utilização ≥ 90% (limite fabril)
               </p>
             </div>
             <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <ClipboardList className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Margem Média</p>
-              <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">
-                {formatPct(stats.margemMedia)}
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Sobre preço de venda</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-              <Percent className="w-5 h-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Categorias Ativas</p>
-              <h3 className="text-xl font-bold text-[#0B1F3A] mt-1">{categorias.length}</h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">Segmentações</p>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Tag className="w-5 h-5" />
+              <TrendingUp className="w-5 h-5" />
             </div>
           </CardContent>
         </Card>
@@ -779,6 +877,18 @@ export default function CadastroProdutos() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Botão Relatório PDF A4 Utilização da Capacidade */}
+              <Button
+                type="button"
+                onClick={() => setModalPdfCapacidadeOpen(true)}
+                variant="outline"
+                size="sm"
+                className="h-9 text-xs font-semibold bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 border-indigo-200 shadow-2xs"
+                title="Emitir relatório executivo A4 com análise de capacidade e ociosidade"
+              >
+                <Layers className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+                Utilização da Capacidade (PDF/A4)
+              </Button>
               <Button
                 type="button"
                 onClick={handleExportCsv}
@@ -869,6 +979,8 @@ export default function CadastroProdutos() {
                     <th className="py-3 px-3.5">Unidade</th>
                     <th className="py-3 px-3.5">Categoria</th>
                     <th className="py-3 px-3.5 text-right">Capacidade</th>
+                    <th className="py-3 px-3.5 text-right">Qtd Vendida</th>
+                    <th className="py-3 px-3.5 text-center">Utilização</th>
                     <th className="py-3 px-3.5 text-right">Custo (R$)</th>
                     <th className="py-3 px-3.5 text-right">Preço Venda (R$)</th>
                     <th className="py-3 px-3.5 text-right">Margem (%)</th>
@@ -942,6 +1054,64 @@ export default function CadastroProdutos() {
                               —
                             </span>
                           )}
+                        </td>
+                        <td className="py-3 px-3.5 text-right whitespace-nowrap font-medium text-slate-700">
+                          {p.quantidade_vendida !== undefined && p.quantidade_vendida !== null ? (
+                            <span>
+                              {p.quantidade_vendida.toLocaleString('pt-BR')} {p.unidade}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-3.5 text-center whitespace-nowrap">
+                          {(() => {
+                            const cap = Number(p.capacidade_producao)
+                            const hasCap =
+                              p.capacidade_producao !== undefined &&
+                              p.capacidade_producao !== null &&
+                              !isNaN(cap) &&
+                              cap > 0
+                            if (!hasCap) {
+                              return (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] font-medium bg-slate-100 text-slate-500 border-slate-200"
+                                >
+                                  Não informada
+                                </Badge>
+                              )
+                            }
+
+                            const vendida = Number(p.quantidade_vendida) || 0
+                            const utilPct = (vendida / cap) * 100
+
+                            if (utilPct >= 80) {
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <Badge className="text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                    {utilPct.toFixed(1)}%{utilPct >= 90 ? ' · Gargalo' : ' · Alta'}
+                                  </Badge>
+                                </div>
+                              )
+                            } else if (utilPct >= 50) {
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <Badge className="text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                    {utilPct.toFixed(1)}% · Moderada
+                                  </Badge>
+                                </div>
+                              )
+                            } else {
+                              return (
+                                <div className="inline-flex flex-col items-center gap-0.5">
+                                  <Badge className="text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                    {utilPct.toFixed(1)}% · Ocioso
+                                  </Badge>
+                                </div>
+                              )
+                            }
+                          })()}
                         </td>
                         <td className="py-3 px-3.5 text-right font-medium text-slate-800 whitespace-nowrap">
                           {formatBrl(custoFinal)}
@@ -1172,39 +1342,73 @@ export default function CadastroProdutos() {
                 </div>
               </div>
 
-              {/* Capacidade de Produção */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label
-                    htmlFor="prod-capacidade"
-                    className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
-                  >
-                    <Layers className="w-3.5 h-3.5 text-indigo-600" />
-                    Capacidade de Produção
-                  </Label>
-                  <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
+              {/* Capacidade de Produção e Quantidade Vendida */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50/70 border border-slate-200 rounded-lg">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="prod-capacidade"
+                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                      Capacidade de Produção
+                    </Label>
+                    <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
+                  </div>
+                  <Input
+                    id="prod-capacidade"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    placeholder="Ex: 5000"
+                    value={formData.capacidade_producao}
+                    onChange={(e) => setField('capacidade_producao', e.target.value)}
+                    className={`h-9 text-xs bg-white ${errors.capacidade_producao ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  />
+                  {errors.capacidade_producao ? (
+                    <p className="text-[10px] text-red-600 font-medium">
+                      {errors.capacidade_producao}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">
+                      Capacidade máx. produtiva no período.
+                    </p>
+                  )}
                 </div>
-                <Input
-                  id="prod-capacidade"
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="any"
-                  placeholder="Ex: 5000 (quantidade produzida por período)"
-                  value={formData.capacidade_producao}
-                  onChange={(e) => setField('capacidade_producao', e.target.value)}
-                  className={`h-9 text-xs ${errors.capacidade_producao ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                />
-                {errors.capacidade_producao ? (
-                  <p className="text-[11px] text-red-600 font-medium">
-                    {errors.capacidade_producao}
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-slate-500">
-                    Quantidade que a empresa consegue produzir deste item (ex.: unidades por mês ou
-                    ciclo).
-                  </p>
-                )}
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label
+                      htmlFor="prod-quantidade-vendida"
+                      className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+                    >
+                      <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                      Quantidade Vendida no Período
+                    </Label>
+                    <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
+                  </div>
+                  <Input
+                    id="prod-quantidade-vendida"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    placeholder="Ex: 3800"
+                    value={formData.quantidade_vendida}
+                    onChange={(e) => setField('quantidade_vendida', e.target.value)}
+                    className={`h-9 text-xs bg-white ${errors.quantidade_vendida ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  />
+                  {errors.quantidade_vendida ? (
+                    <p className="text-[10px] text-red-600 font-medium">
+                      {errors.quantidade_vendida}
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-slate-500">
+                      Volume realizado para cálculo da utilização.
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Bloco de Formação de Preço */}
@@ -1475,6 +1679,13 @@ export default function CadastroProdutos() {
         onOpenChange={setHistoricoModalOpen}
         produto={produtoParaHistorico}
         onPrecoUpdated={loadData}
+      />
+
+      {/* Modal Relatório PDF A4 Utilização da Capacidade */}
+      <ModalPdfCapacidadeA4
+        open={modalPdfCapacidadeOpen}
+        onOpenChange={setModalPdfCapacidadeOpen}
+        produtos={produtosFiltrados}
       />
 
       {/* Modal Mover / Transferir Produto de Empresa */}

@@ -558,6 +558,7 @@ export interface ProdutoRecord extends RecordModel {
   unidade: string
   categoria?: string
   capacidade_producao?: number | null
+  quantidade_vendida?: number | null
   custo?: number
   preco_venda?: number
   margem_desejada?: number

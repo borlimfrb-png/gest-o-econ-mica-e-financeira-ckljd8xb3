@@ -32,6 +32,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useToast } from '@/hooks/use-toast'
 import {
   Select,
@@ -119,6 +120,7 @@ export default function Impostos() {
   const [fichas, setFichas] = useState<FichaTecnicaRecord[]>([])
   const [materiasPrimas, setMateriasPrimas] = useState<MateriaPrimaRecord[]>([])
   const [selectedProdutoId, setSelectedProdutoId] = useState<string>('custom')
+  const [volumeProjetadoSimulacao, setVolumeProjetadoSimulacao] = useState<number | ''>('')
   const [custoBaseSimulacao, setCustoBaseSimulacao] = useState<number>(50.0)
   const [margemDesejadaSimulacao, setMargemDesejadaSimulacao] = useState<number>(30.0)
   const [despesasVariaveisSimulacao, setDespesasVariaveisSimulacao] = useState<number>(0.0)
@@ -446,6 +448,30 @@ export default function Impostos() {
     return map
   }, [materiasPrimas])
 
+  // Produto selecionado no simulador (com ficha técnica ou não)
+  const produtoSelecionadoSimulador = useMemo(() => {
+    if (selectedProdutoId === 'custom') return null
+    return produtos.find((p) => p.id === selectedProdutoId) || null
+  }, [selectedProdutoId, produtos])
+
+  // Validador de Capacidade de Produção vs Volume Projetado
+  const alertaCapacidadeSimulador = useMemo(() => {
+    if (!produtoSelecionadoSimulador) return null
+    const cap = Number(produtoSelecionadoSimulador.capacidade_producao)
+    if (isNaN(cap) || cap <= 0) return null
+
+    const vol = typeof volumeProjetadoSimulacao === 'number' ? volumeProjetadoSimulacao : 0
+    if (vol > cap) {
+      return {
+        volumeProjetado: vol,
+        capacidade: cap,
+        unidade: produtoSelecionadoSimulador.unidade || 'un',
+        mensagem: `Atenção: o volume projetado de ${vol.toLocaleString('pt-BR')} ${produtoSelecionadoSimulador.unidade || 'un'} excede a capacidade de produção cadastrada (${cap.toLocaleString('pt-BR')} ${produtoSelecionadoSimulador.unidade || 'un'}). Revise o volume ou planeje expansão de capacidade.`,
+      }
+    }
+    return null
+  }, [produtoSelecionadoSimulador, volumeProjetadoSimulacao])
+
   // Detalhamento de Custo dos Insumos da Ficha do Produto Selecionado
   const detalhesProdutoSimulado = useMemo(() => {
     if (selectedProdutoId === 'custom') return null
@@ -546,10 +572,21 @@ export default function Impostos() {
   const handleSelectProduto = (prodId: string) => {
     setSelectedProdutoId(prodId)
     if (prodId === 'custom') {
+      setVolumeProjetadoSimulacao('')
       return
     }
     const prod = produtos.find((p) => p.id === prodId)
     if (!prod) return
+
+    if (
+      prod.quantidade_vendida !== undefined &&
+      prod.quantidade_vendida !== null &&
+      prod.quantidade_vendida > 0
+    ) {
+      setVolumeProjetadoSimulacao(Number(prod.quantidade_vendida))
+    } else {
+      setVolumeProjetadoSimulacao('')
+    }
 
     const ficha = fichas.find((f) => f.produto === prodId)
     if (ficha) {
@@ -1539,10 +1576,68 @@ export default function Impostos() {
                           <SelectItem key={p.id} value={p.id}>
                             {p.codigo ? `[${p.codigo}] ` : ''}
                             {p.nome} (Custo: R$ {(p.custo || 0).toFixed(2)})
+                            {p.capacidade_producao
+                              ? ` · Cap: ${p.capacidade_producao} ${p.unidade || 'un'}`
+                              : ''}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  {/* Volume Projetado de Venda e Validação de Capacidade */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="vol-proj-simulacao"
+                        className="text-xs font-medium text-slate-700 flex items-center gap-1.5"
+                      >
+                        <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                        Volume Projetado de Venda (
+                        {produtoSelecionadoSimulador?.unidade || 'unidades'})
+                      </Label>
+                      {produtoSelecionadoSimulador?.capacidade_producao !== undefined &&
+                        produtoSelecionadoSimulador?.capacidade_producao !== null &&
+                        produtoSelecionadoSimulador.capacidade_producao > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200"
+                          >
+                            Capacidade:{' '}
+                            {produtoSelecionadoSimulador.capacidade_producao.toLocaleString(
+                              'pt-BR',
+                            )}{' '}
+                            {produtoSelecionadoSimulador.unidade || 'un'}
+                          </Badge>
+                        )}
+                    </div>
+                    <Input
+                      id="vol-proj-simulacao"
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder={
+                        produtoSelecionadoSimulador?.capacidade_producao
+                          ? `Ex: ${produtoSelecionadoSimulador.capacidade_producao}`
+                          : 'Ex: 1000'
+                      }
+                      value={volumeProjetadoSimulacao}
+                      onChange={(e) => {
+                        const val = e.target.value.trim()
+                        setVolumeProjetadoSimulacao(val === '' ? '' : parseFloat(val) || 0)
+                      }}
+                      className="bg-white text-xs font-semibold"
+                    />
+
+                    {/* Alerta de estouro de capacidade */}
+                    {alertaCapacidadeSimulador && (
+                      <Alert className="bg-amber-50 border-amber-300 text-amber-900 py-2.5 animate-in fade-in-50">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <AlertDescription className="text-xs font-medium leading-relaxed">
+                          {alertaCapacidadeSimulador.mensagem}
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
                   {/* Quadro Demonstrativo da Apuração do Insumo: Créditos vs Acréscimos (quando produto selecionado) */}
