@@ -129,6 +129,7 @@ export interface ItemSimulado {
   fichaId?: string
   temFicha: boolean
   precoVendaAtual?: number
+  precoInformado?: number // Preço de venda praticado/sugerido inserido pelo usuário
 }
 
 function formatBrl(val?: number | null): string {
@@ -469,10 +470,14 @@ export default function SimuladorPrecos() {
       const custo = Math.max(0, item.custoFicha || 0)
       const divisor = calculoMarkup.divisor > 0 ? calculoMarkup.divisor : 0.01
 
-      // Preço de venda = Custo da Ficha Técnica dividido pelo Mark-Up Divisor
+      // Preço de venda sugerido calculado = Custo da Ficha Técnica dividido pelo Mark-Up Divisor
       const precoSugerido = custo > 0 ? Math.round((custo / divisor) * 100) / 100 : 0
 
-      // Componentes calculados em R$ sobre o preço de venda final
+      // Preço de venda efetivamente informado/inserido pelo usuário (default: precoSugerido)
+      const precoVendaInformado =
+        item.precoInformado !== undefined ? Math.max(0, item.precoInformado) : precoSugerido
+
+      // Componentes calculados em R$ sobre o preço de venda final sugerido
       const vImpostos = (precoSugerido * calculoMarkup.totalImpostosPct) / 100
       const vComissao = (precoSugerido * calculoMarkup.comissao) / 100
       const vFrete = (precoSugerido * calculoMarkup.frete) / 100
@@ -486,12 +491,40 @@ export default function SimuladorPrecos() {
       const diffPreco = precoAtual > 0 ? precoSugerido - precoAtual : 0
       const diffPrecoPct = precoAtual > 0 ? (diffPreco / precoAtual) * 100 : 0
 
+      // --- CÁLCULO DO LUCRO DA VENDA EM TEMPO REAL PELO PREÇO INFORMADO ---
+      // Deduções da venda incidentes sobre o preço informado:
+      // Impostos (ICMS, IRPJ, CSLL, PIS, COFINS ou Simples)
+      const vImpostosInf = (precoVendaInformado * calculoMarkup.totalImpostosPct) / 100
+      // Despesas variáveis (Comissão, Frete, Assistência, Outros, Custo financeiro / Juros período)
+      const vComissaoInf = (precoVendaInformado * calculoMarkup.comissao) / 100
+      const vFreteInf = (precoVendaInformado * calculoMarkup.frete) / 100
+      const vJurosInf = (precoVendaInformado * calculoMarkup.jurosPeriodoPct) / 100
+      const vAssistenciaInf = (precoVendaInformado * calculoMarkup.assistencia) / 100
+      const vOutrosInf = (precoVendaInformado * calculoMarkup.outros) / 100
+
+      // Total de deduções da venda em R$ (tributos + despesas variáveis e financeiras)
+      const totalDeducoesVendaInf =
+        vImpostosInf + vComissaoInf + vFreteInf + vJurosInf + vAssistenciaInf + vOutrosInf
+
+      // Lucro Líquido da Venda = Preço de Venda Informado - Total de Deduções da Venda - Custo Líquido da Ficha
+      const lucroVendaInf =
+        precoVendaInformado > 0
+          ? Math.round((precoVendaInformado - totalDeducoesVendaInf - custo) * 100) / 100
+          : 0
+
+      // Margem Líquida % sobre a receita informada
+      const margemLucroInfPct =
+        precoVendaInformado > 0 ? (lucroVendaInf / precoVendaInformado) * 100 : 0
+
+      const isPrejuizo = lucroVendaInf < 0
+
       return {
         ...item,
         custo,
         divisor: calculoMarkup.divisor,
         fatorMultiplicador: calculoMarkup.fatorMultiplicador,
         precoSugerido,
+        precoVendaInformado,
         vImpostos,
         vComissao,
         vFrete,
@@ -501,25 +534,50 @@ export default function SimuladorPrecos() {
         vMargemLucro,
         diffPreco,
         diffPrecoPct,
+        // Novas métricas do Preço Informado e Lucro da Venda
+        vImpostosInf,
+        totalDeducoesVendaInf,
+        lucroVendaInf,
+        margemLucroInfPct,
+        isPrejuizo,
       }
     })
   }, [itensSimulacao, calculoMarkup])
 
-  // Totais consolidados da simulação
+  // Totais consolidados da simulação (incluindo receita e lucro com o preço informado)
   const totaisSimulacao = useMemo(() => {
     const totalItens = itensCalculados.length
     const somaCustos = itensCalculados.reduce((acc, it) => acc + it.custo, 0)
     const somaPrecos = itensCalculados.reduce((acc, it) => acc + it.precoSugerido, 0)
     const somaLucros = itensCalculados.reduce((acc, it) => acc + it.vMargemLucro, 0)
     const somaImpostos = itensCalculados.reduce((acc, it) => acc + it.vImpostos, 0)
+
+    // Consolidados do Preço Informado pelo Usuário
+    const somaReceitaInformada = itensCalculados.reduce(
+      (acc, it) => acc + it.precoVendaInformado,
+      0,
+    )
+    const somaLucroInformado = itensCalculados.reduce((acc, it) => acc + it.lucroVendaInf, 0)
+    const somaDeducoesInformadas = itensCalculados.reduce(
+      (acc, it) => acc + it.totalDeducoesVendaInf,
+      0,
+    )
+    const margemMediaInformadaPct =
+      somaReceitaInformada > 0 ? (somaLucroInformado / somaReceitaInformada) * 100 : 0
+
     const custoMedio = totalItens > 0 ? somaCustos / totalItens : 0
     const precoMedio = totalItens > 0 ? somaPrecos / totalItens : 0
+
     return {
       totalItens,
       somaCustos,
       somaPrecos,
       somaLucros,
       somaImpostos,
+      somaReceitaInformada,
+      somaLucroInformado,
+      somaDeducoesInformadas,
+      margemMediaInformadaPct,
       custoMedio,
       precoMedio,
     }
@@ -698,6 +756,18 @@ export default function SimuladorPrecos() {
     )
   }
 
+  const handleEditarPrecoInformado = (id: string, novoPreco: number) => {
+    setItensSimulacao((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, precoInformado: Math.max(0, novoPreco) } : it)),
+    )
+  }
+
+  const handleResetarPrecoParaSugerido = (id: string, precoSugeridoCalculado: number) => {
+    setItensSimulacao((prev) =>
+      prev.map((it) => (it.id === id ? { ...it, precoInformado: precoSugeridoCalculado } : it)),
+    )
+  }
+
   // Predefinições rápidas de regime de mark-up
   const handleAplicarPreset = (preset: 'simples' | 'presumido' | 'lucroReal' | 'comercio') => {
     if (preset === 'simples') {
@@ -868,14 +938,16 @@ export default function SimuladorPrecos() {
         'Unidade',
         'Custo Ficha Técnica (R$)',
         'Mark-Up Divisor',
-        'Preço de Venda Sugerido (R$)',
+        'Preço Sugerido (R$)',
+        'Preço Informado/Praticado (R$)',
+        'Deduções da Venda (R$)',
+        'Lucro da Venda (R$)',
+        'Margem Líquida da Venda (%)',
+        'Situação do Lucro',
         'Preço Atual Cadastrado (R$)',
-        'Diferença Preço (R$)',
-        'Impostos (R$)',
-        'Comissão (R$)',
-        'Frete (R$)',
-        'Juros Período (R$)',
-        'Margem de Lucro (R$)',
+        'Diferença Preço Sugerido × Atual (R$)',
+        'Impostos Sugerido (R$)',
+        'Margem Sugerida (R$)',
         'Possui Ficha Técnica',
       ]
         .map(escapeCsv)
@@ -891,12 +963,14 @@ export default function SimuladorPrecos() {
           fmtNum(it.custo),
           it.divisor.toFixed(4),
           fmtNum(it.precoSugerido),
+          fmtNum(it.precoVendaInformado),
+          fmtNum(it.totalDeducoesVendaInf),
+          fmtNum(it.lucroVendaInf),
+          `${it.margemLucroInfPct.toFixed(2)}%`,
+          it.isPrejuizo ? 'PREJUÍZO (Abaixo do Custo com Encargos)' : 'LUCRO',
           fmtNum(it.precoVendaAtual),
           fmtNum(it.diffPreco),
           fmtNum(it.vImpostos),
-          fmtNum(it.vComissao),
-          fmtNum(it.vFrete),
-          fmtNum(it.vJuros),
           fmtNum(it.vMargemLucro),
           it.temFicha ? 'Sim' : 'Não (Custo Base/Manual)',
         ]
@@ -908,19 +982,22 @@ export default function SimuladorPrecos() {
     linhas.push('')
     linhas.push(
       [
-        'TOTAIS',
+        'TOTAIS CONSOLIDADOS',
         `Qtd Itens: ${totaisSimulacao.totalItens}`,
         '',
         fmtNum(totaisSimulacao.somaCustos),
         '',
         fmtNum(totaisSimulacao.somaPrecos),
+        fmtNum(totaisSimulacao.somaReceitaInformada),
+        fmtNum(totaisSimulacao.somaDeducoesInformadas),
+        fmtNum(totaisSimulacao.somaLucroInformado),
+        `${totaisSimulacao.margemMediaInformadaPct.toFixed(2)}%`,
+        totaisSimulacao.somaLucroInformado < 0 ? 'PREJUÍZO CONSOLIDADO' : 'LUCRO CONSOLIDADO',
         '',
         '',
         fmtNum(totaisSimulacao.somaImpostos),
-        '',
-        '',
-        '',
         fmtNum(totaisSimulacao.somaLucros),
+        '',
       ]
         .map(escapeCsv)
         .join(';'),
@@ -1840,22 +1917,44 @@ export default function SimuladorPrecos() {
                     <Table>
                       <TableHeader className="bg-slate-50">
                         <TableRow className="text-[11px] text-slate-600">
-                          <TableHead className="w-[90px] font-bold">Código</TableHead>
-                          <TableHead className="min-w-[140px] font-bold">Produto</TableHead>
+                          <TableHead className="w-[85px] font-bold">Código</TableHead>
+                          <TableHead className="min-w-[130px] font-bold">Produto</TableHead>
                           <TableHead className="text-right font-bold">Custo Ficha</TableHead>
-                          <TableHead className="text-center font-bold">Mark-Up Divisor</TableHead>
-                          <TableHead className="text-right font-bold text-emerald-700 bg-emerald-50/70">
+                          <TableHead className="text-center font-bold">Mark-Up Div.</TableHead>
+                          <TableHead className="text-right font-bold text-emerald-800 bg-emerald-50/70">
                             Preço Sugerido
                           </TableHead>
+                          {/* NOVA COLUNA SOLICITADA PELO USUÁRIO: PREÇO SUGERIDO / PRATICADO INFORMADO */}
+                          <TableHead className="text-right font-bold text-blue-900 bg-blue-50/80 min-w-[130px]">
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Preço Informado</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="w-3 h-3 text-blue-600 inline" />
+                                </TooltipTrigger>
+                                <TooltipContent className="text-[11px] max-w-xs">
+                                  Insira o preço sugerido/praticado desejado para simular o lucro da
+                                  venda e a margem líquida real em tempo real.
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableHead>
+                          {/* NOVA COLUNA: LUCRO DA VENDA EM R$ E % */}
+                          <TableHead className="text-right font-bold text-slate-900 bg-amber-50/60 min-w-[125px]">
+                            Lucro da Venda
+                          </TableHead>
                           <TableHead className="text-right font-bold">Preço Atual</TableHead>
-                          <TableHead className="text-right font-bold">Margem R$</TableHead>
-                          <TableHead className="text-right font-bold">Impostos R$</TableHead>
                           <TableHead className="text-center font-bold">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {itensCalculados.map((it) => (
-                          <TableRow key={it.id} className="text-xs hover:bg-slate-50/80">
+                          <TableRow
+                            key={it.id}
+                            className={`text-xs hover:bg-slate-50/80 ${
+                              it.isPrejuizo ? 'bg-red-50/40' : ''
+                            }`}
+                          >
                             <TableCell className="font-mono font-semibold text-slate-900">
                               <div className="flex items-center gap-1.5">
                                 <Badge
@@ -1869,7 +1968,7 @@ export default function SimuladorPrecos() {
 
                             <TableCell>
                               <div
-                                className="font-medium text-slate-900 truncate max-w-[200px]"
+                                className="font-medium text-slate-900 truncate max-w-[170px]"
                                 title={it.nome}
                               >
                                 {it.nome}
@@ -1902,7 +2001,7 @@ export default function SimuladorPrecos() {
                                       onChange={(e) =>
                                         handleEditarCustoManual(it.id, Number(e.target.value) || 0)
                                       }
-                                      className="w-20 text-right font-semibold text-slate-800 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded px-1 py-0.5 text-xs bg-slate-50"
+                                      className="w-18 text-right font-semibold text-slate-800 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded px-1 py-0.5 text-xs bg-slate-50"
                                     />
                                   </div>
                                 </TooltipTrigger>
@@ -1918,8 +2017,93 @@ export default function SimuladorPrecos() {
                               ÷ {it.divisor.toFixed(4)}
                             </TableCell>
 
-                            <TableCell className="text-right font-bold text-emerald-700 bg-emerald-50/50 text-sm">
-                              {formatBrl(it.precoSugerido)}
+                            <TableCell className="text-right font-bold text-emerald-800 bg-emerald-50/50">
+                              <div>{formatBrl(it.precoSugerido)}</div>
+                              <div className="text-[10px] text-slate-500 font-normal">
+                                margem {formatPct(calculoMarkup.margem)}
+                              </div>
+                            </TableCell>
+
+                            {/* CAMPO EDITÁVEL: INSERIR PREÇO SUGERIDO / PRATICADO */}
+                            <TableCell className="text-right bg-blue-50/40 p-2">
+                              <div className="flex items-center justify-end gap-1">
+                                <div className="relative">
+                                  <span className="absolute left-1.5 top-1.5 text-[10px] font-semibold text-slate-400">
+                                    R$
+                                  </span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={
+                                      it.precoInformado !== undefined
+                                        ? it.precoInformado
+                                        : it.precoSugerido
+                                    }
+                                    onChange={(e) =>
+                                      handleEditarPrecoInformado(it.id, Number(e.target.value) || 0)
+                                    }
+                                    placeholder={it.precoSugerido.toFixed(2)}
+                                    className="w-24 pl-6 pr-1.5 py-1 text-right font-bold text-blue-950 bg-white border border-blue-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded text-xs shadow-2xs"
+                                    title="Inserir preço de venda sugerido/praticado"
+                                  />
+                                </div>
+                                {it.precoInformado !== undefined &&
+                                  it.precoInformado !== it.precoSugerido && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleResetarPrecoParaSugerido(it.id, it.precoSugerido)
+                                      }
+                                      className="text-[10px] p-1 text-slate-400 hover:text-blue-600"
+                                      title="Redefinir para o Preço Sugerido Calculado"
+                                    >
+                                      <RotateCcw className="w-3 h-3" />
+                                    </button>
+                                  )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                Deduções: {formatBrl(it.totalDeducoesVendaInf)}
+                              </div>
+                            </TableCell>
+
+                            {/* RESULTADO: LUCRO DA VENDA EM R$ E % COM DESTAQUE EM VERMELHO SE PREJUÍZO */}
+                            <TableCell
+                              className={`text-right p-2 font-mono ${
+                                it.isPrejuizo
+                                  ? 'bg-red-50 text-red-700'
+                                  : 'bg-amber-50/40 text-slate-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-end gap-1">
+                                {it.isPrejuizo && (
+                                  <AlertTriangle className="w-3 h-3 text-red-600 shrink-0" />
+                                )}
+                                <span
+                                  className={`font-black text-xs ${
+                                    it.isPrejuizo
+                                      ? 'text-red-700 font-extrabold'
+                                      : it.lucroVendaInf > 0
+                                        ? 'text-emerald-700'
+                                        : 'text-slate-600'
+                                  }`}
+                                >
+                                  {formatBrl(it.lucroVendaInf)}
+                                </span>
+                              </div>
+                              <div className="mt-0.5">
+                                <Badge
+                                  variant="outline"
+                                  className={`text-[9px] px-1.5 py-0 h-4 border ${
+                                    it.isPrejuizo
+                                      ? 'bg-red-100 text-red-800 border-red-300 font-bold'
+                                      : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  }`}
+                                >
+                                  {it.isPrejuizo ? 'Prejuízo ' : 'Margem '}
+                                  {formatPct(it.margemLucroInfPct)}
+                                </Badge>
+                              </div>
                             </TableCell>
 
                             <TableCell className="text-right text-slate-600">
@@ -1944,22 +2128,19 @@ export default function SimuladorPrecos() {
                               )}
                             </TableCell>
 
-                            <TableCell className="text-right font-medium text-amber-700">
-                              {formatBrl(it.vMargemLucro)}
-                            </TableCell>
-
-                            <TableCell className="text-right text-purple-700 font-medium">
-                              {formatBrl(it.vImpostos)}
-                            </TableCell>
-
                             <TableCell className="text-center">
                               <div className="flex items-center justify-center gap-1">
-                                {podeAplicarPreco && it.produtoId && it.precoSugerido > 0 && (
+                                {podeAplicarPreco && it.produtoId && it.precoVendaInformado > 0 && (
                                   <Button
                                     size="sm"
-                                    onClick={() => handleAbrirAplicarPrecoItem(it)}
+                                    onClick={() =>
+                                      handleAbrirAplicarPrecoItem({
+                                        ...it,
+                                        precoSugerido: it.precoVendaInformado,
+                                      })
+                                    }
                                     className="h-7 px-2 text-[11px] bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-300 font-medium transition-colors"
-                                    title="Aplicar este preço sugerido diretamente no cadastro do produto"
+                                    title="Aplicar este preço no cadastro oficial do produto"
                                   >
                                     <CheckCircle2 className="w-3 h-3 mr-1" />
                                     Aplicar
@@ -2007,7 +2188,7 @@ export default function SimuladorPrecos() {
 
                   <div className="flex items-center gap-3 text-slate-600">
                     <span>
-                      Lucro Total Estimado:{' '}
+                      Lucro Sugerido Total:{' '}
                       <strong className="text-amber-700 font-bold">
                         {formatBrl(totaisSimulacao.somaLucros)}
                       </strong>
@@ -2017,17 +2198,114 @@ export default function SimuladorPrecos() {
               )}
             </Card>
 
-            {/* MEMÓRIA DE CÁLCULO E DETALHAMENTO DOS ENCARGOS */}
+            {/* QUADRO RESUMO: CONSOLIDADO DA VENDA COM PREÇO INFORMADO */}
+            {itensCalculados.length > 0 && (
+              <Card className="border-blue-200 shadow-xs bg-linear-to-br from-white to-blue-50/30">
+                <CardHeader className="py-3 px-4 border-b border-blue-100 flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-xs font-bold text-blue-950 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-blue-600" />
+                      Resultado Consolidado da Venda (Preços Informados)
+                    </CardTitle>
+                    <CardDescription className="text-[11px] text-slate-500">
+                      Receita bruta total, deduções variáveis + tributárias e lucro líquido
+                      consolidado.
+                    </CardDescription>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] font-bold px-2 py-0.5 ${
+                      totaisSimulacao.somaLucroInformado < 0
+                        ? 'bg-red-100 text-red-800 border-red-300'
+                        : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                    }`}
+                  >
+                    {totaisSimulacao.somaLucroInformado < 0
+                      ? 'Operação com Prejuízo'
+                      : `Margem Líquida Média: ${formatPct(totaisSimulacao.margemMediaInformadaPct)}`}
+                  </Badge>
+                </CardHeader>
+                <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Receita Total Informada
+                    </span>
+                    <p className="text-base font-extrabold text-blue-950 mt-1">
+                      {formatBrl(totaisSimulacao.somaReceitaInformada)}
+                    </p>
+                    <span className="text-[10px] text-slate-500">
+                      {totaisSimulacao.totalItens} item(ns)
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Deduções da Venda
+                    </span>
+                    <p className="text-base font-bold text-purple-900 mt-1">
+                      {formatBrl(totaisSimulacao.somaDeducoesInformadas)}
+                    </p>
+                    <span className="text-[10px] text-slate-500">
+                      Tributos + comissão + frete + juros
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Custo Fichas Técnicas
+                    </span>
+                    <p className="text-base font-bold text-slate-800 mt-1">
+                      {formatBrl(totaisSimulacao.somaCustos)}
+                    </p>
+                    <span className="text-[10px] text-slate-500">Custo líquido acumulado</span>
+                  </div>
+
+                  <div
+                    className={`p-3 rounded-xl border shadow-2xs ${
+                      totaisSimulacao.somaLucroInformado < 0
+                        ? 'bg-red-50 border-red-300'
+                        : 'bg-emerald-50 border-emerald-300'
+                    }`}
+                  >
+                    <span
+                      className={`text-[10px] uppercase font-bold block tracking-wider ${
+                        totaisSimulacao.somaLucroInformado < 0 ? 'text-red-700' : 'text-emerald-800'
+                      }`}
+                    >
+                      {totaisSimulacao.somaLucroInformado < 0
+                        ? 'Prejuízo Consolidado'
+                        : 'Lucro Líquido Consolidado'}
+                    </span>
+                    <p
+                      className={`text-base font-black mt-1 font-mono ${
+                        totaisSimulacao.somaLucroInformado < 0 ? 'text-red-700' : 'text-emerald-800'
+                      }`}
+                    >
+                      {formatBrl(totaisSimulacao.somaLucroInformado)}
+                    </p>
+                    <span
+                      className={`text-[10px] font-semibold ${
+                        totaisSimulacao.somaLucroInformado < 0 ? 'text-red-600' : 'text-emerald-700'
+                      }`}
+                    >
+                      {formatPct(totaisSimulacao.margemMediaInformadaPct)} sobre a receita
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* MEMÓRIA DE CÁLCULO E DETALHAMENTO DOS ENCARGOS SOBRE O PREÇO INFORMADO */}
             {itensCalculados.length > 0 && (
               <Card className="border-slate-200 shadow-xs bg-white">
                 <CardHeader className="py-3 px-4 border-b border-slate-100">
                   <CardTitle className="text-xs font-bold text-slate-800 flex items-center gap-2">
                     <Info className="w-4 h-4 text-blue-600" />
-                    Detalhamento dos Componentes do Preço Sugerido
+                    Detalhamento dos Componentes do Preço Informado (em R$)
                   </CardTitle>
                   <CardDescription className="text-[11px] text-slate-500">
-                    Distribuição dos encargos em R$ sobre o preço de venda para cada produto
-                    informado.
+                    Abertura das deduções em R$ calculadas sobre o preço de venda inserido pelo
+                    usuário.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -2036,6 +2314,9 @@ export default function SimuladorPrecos() {
                       <TableHeader className="bg-slate-50/70">
                         <TableRow className="text-[10px] text-slate-600">
                           <TableHead className="font-bold">Produto</TableHead>
+                          <TableHead className="text-right font-bold text-blue-900">
+                            Preço Informado
+                          </TableHead>
                           <TableHead className="text-right font-bold text-purple-700">
                             Impostos ({formatPct(calculoMarkup.totalImpostosPct)})
                           </TableHead>
@@ -2052,40 +2333,61 @@ export default function SimuladorPrecos() {
                             Ass./Outros (
                             {formatPct(calculoMarkup.assistencia + calculoMarkup.outros)})
                           </TableHead>
-                          <TableHead className="text-right font-bold text-amber-700">
-                            Margem Líquida ({formatPct(calculoMarkup.margem)})
+                          <TableHead className="text-right font-bold text-emerald-800">
+                            Lucro da Venda
                           </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {itensCalculados.map((it) => (
-                          <TableRow key={it.id} className="text-xs">
-                            <TableCell className="font-medium text-slate-800">
-                              <span className="font-mono text-[10px] text-slate-500 mr-1.5">
-                                [{it.codigo}]
-                              </span>
-                              {it.nome}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-purple-700">
-                              {formatBrl(it.vImpostos)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-slate-600">
-                              {formatBrl(it.vComissao)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-slate-600">
-                              {formatBrl(it.vFrete)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-blue-700 font-semibold">
-                              {formatBrl(it.vJuros)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-slate-600">
-                              {formatBrl(it.vAssistencia + it.vOutros)}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-amber-700 font-bold">
-                              {formatBrl(it.vMargemLucro)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {itensCalculados.map((it) => {
+                          const vCom = (it.precoVendaInformado * calculoMarkup.comissao) / 100
+                          const vFr = (it.precoVendaInformado * calculoMarkup.frete) / 100
+                          const vJur =
+                            (it.precoVendaInformado * calculoMarkup.jurosPeriodoPct) / 100
+                          const vAssOut =
+                            (it.precoVendaInformado *
+                              (calculoMarkup.assistencia + calculoMarkup.outros)) /
+                            100
+
+                          return (
+                            <TableRow
+                              key={it.id}
+                              className={`text-xs ${it.isPrejuizo ? 'bg-red-50/30' : ''}`}
+                            >
+                              <TableCell className="font-medium text-slate-800">
+                                <span className="font-mono text-[10px] text-slate-500 mr-1.5">
+                                  [{it.codigo}]
+                                </span>
+                                {it.nome}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-bold text-blue-950">
+                                {formatBrl(it.precoVendaInformado)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-purple-700">
+                                {formatBrl(it.vImpostosInf)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-slate-600">
+                                {formatBrl(vCom)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-slate-600">
+                                {formatBrl(vFr)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-blue-700 font-semibold">
+                                {formatBrl(vJur)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono text-slate-600">
+                                {formatBrl(vAssOut)}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-mono font-bold ${
+                                  it.isPrejuizo ? 'text-red-700' : 'text-emerald-700'
+                                }`}
+                              >
+                                {formatBrl(it.lucroVendaInf)}
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -2135,6 +2437,9 @@ export default function SimuladorPrecos() {
             custoTotal: it.custo,
             precoSugerido: it.precoSugerido,
             precoAtual: it.precoVendaAtual,
+            precoInformado: it.precoVendaInformado,
+            lucroVenda: it.lucroVendaInf,
+            margemLucroPct: it.margemLucroInfPct,
           }))}
           consultoriaNome={minhaEmpresa?.razao_social || 'Gestão Econômica e Financeira'}
         />
@@ -2308,41 +2613,69 @@ export default function SimuladorPrecos() {
               {/* TABELA DE PRODUTOS SIMULADOS */}
               <div>
                 <h3 className="font-bold text-slate-900 text-xs mb-2 uppercase tracking-wider text-blue-900 border-b pb-1">
-                  2. Tabela de Preços Sugeridos por Produto
+                  2. Tabela de Preços & Lucro da Venda por Produto
                 </h3>
 
-                <table className="w-full text-[11px] border-collapse">
+                <table className="w-full text-[10px] border-collapse">
                   <thead>
                     <tr className="bg-slate-800 text-white text-left">
                       <th className="p-1.5">Código</th>
                       <th className="p-1.5">Produto</th>
                       <th className="p-1.5 text-right">Custo Ficha</th>
-                      <th className="p-1.5 text-center">Mark-Up Div.</th>
+                      <th className="p-1.5 text-center">Divisor</th>
                       <th className="p-1.5 text-right">Preço Sugerido</th>
-                      <th className="p-1.5 text-right">Impostos R$</th>
-                      <th className="p-1.5 text-right">Margem R$</th>
+                      <th className="p-1.5 text-right bg-blue-900 text-white font-bold">
+                        Preço Informado
+                      </th>
+                      <th className="p-1.5 text-right">Deduções</th>
+                      <th className="p-1.5 text-right bg-emerald-900 text-white font-bold">
+                        Lucro Venda (R$)
+                      </th>
+                      <th className="p-1.5 text-right">Margem Líq.</th>
                     </tr>
                   </thead>
                   <tbody>
                     {itensCalculados.map((it, idx) => (
                       <tr
                         key={it.id}
-                        className={`border-b border-slate-200 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
+                        className={`border-b border-slate-200 ${
+                          it.isPrejuizo
+                            ? 'bg-red-50 text-red-900 font-medium'
+                            : idx % 2 === 0
+                              ? 'bg-white'
+                              : 'bg-slate-50'
+                        }`}
                       >
                         <td className="p-1.5 font-mono font-bold text-slate-900">{it.codigo}</td>
-                        <td className="p-1.5">{it.nome}</td>
-                        <td className="p-1.5 text-right font-mono">{formatBrl(it.custo)}</td>
-                        <td className="p-1.5 text-center font-mono font-semibold">
-                          ÷ {it.divisor.toFixed(4)}
+                        <td className="p-1.5 max-w-[150px] truncate" title={it.nome}>
+                          {it.nome}
                         </td>
-                        <td className="p-1.5 text-right font-mono font-bold text-emerald-800">
+                        <td className="p-1.5 text-right font-mono">{formatBrl(it.custo)}</td>
+                        <td className="p-1.5 text-center font-mono">÷ {it.divisor.toFixed(4)}</td>
+                        <td className="p-1.5 text-right font-mono text-slate-700">
                           {formatBrl(it.precoSugerido)}
                         </td>
-                        <td className="p-1.5 text-right font-mono text-purple-700">
-                          {formatBrl(it.vImpostos)}
+                        <td className="p-1.5 text-right font-mono font-bold text-blue-950 bg-blue-50/50">
+                          {formatBrl(it.precoVendaInformado)}
                         </td>
-                        <td className="p-1.5 text-right font-mono text-amber-700 font-semibold">
-                          {formatBrl(it.vMargemLucro)}
+                        <td className="p-1.5 text-right font-mono text-slate-600">
+                          {formatBrl(it.totalDeducoesVendaInf)}
+                        </td>
+                        <td
+                          className={`p-1.5 text-right font-mono font-black ${
+                            it.isPrejuizo
+                              ? 'text-red-700 bg-red-100'
+                              : 'text-emerald-800 bg-emerald-50/70'
+                          }`}
+                        >
+                          {formatBrl(it.lucroVendaInf)}
+                        </td>
+                        <td
+                          className={`p-1.5 text-right font-mono font-semibold ${
+                            it.isPrejuizo ? 'text-red-700 font-bold' : 'text-slate-700'
+                          }`}
+                        >
+                          {formatPct(it.margemLucroInfPct)}
                         </td>
                       </tr>
                     ))}
@@ -2354,18 +2687,77 @@ export default function SimuladorPrecos() {
                         {formatBrl(totaisSimulacao.somaCustos)}
                       </td>
                       <td></td>
-                      <td className="p-1.5 text-right font-mono text-emerald-900 text-xs">
+                      <td className="p-1.5 text-right font-mono text-slate-800">
                         {formatBrl(totaisSimulacao.somaPrecos)}
                       </td>
-                      <td className="p-1.5 text-right font-mono text-purple-900">
-                        {formatBrl(totaisSimulacao.somaImpostos)}
+                      <td className="p-1.5 text-right font-mono text-blue-950 font-black">
+                        {formatBrl(totaisSimulacao.somaReceitaInformada)}
                       </td>
-                      <td className="p-1.5 text-right font-mono text-amber-900">
-                        {formatBrl(totaisSimulacao.somaLucros)}
+                      <td className="p-1.5 text-right font-mono text-purple-900">
+                        {formatBrl(totaisSimulacao.somaDeducoesInformadas)}
+                      </td>
+                      <td
+                        className={`p-1.5 text-right font-mono text-xs font-black ${
+                          totaisSimulacao.somaLucroInformado < 0
+                            ? 'text-red-800'
+                            : 'text-emerald-900'
+                        }`}
+                      >
+                        {formatBrl(totaisSimulacao.somaLucroInformado)}
+                      </td>
+                      <td className="p-1.5 text-right font-mono text-xs">
+                        {formatPct(totaisSimulacao.margemMediaInformadaPct)}
                       </td>
                     </tr>
                   </tbody>
                 </table>
+
+                {/* QUADRO RESUMO NO LAUDO A4 */}
+                <div className="grid grid-cols-3 gap-2 mt-3 pt-2 border-t border-slate-200 text-center">
+                  <div className="p-2 bg-blue-50 rounded border border-blue-200">
+                    <span className="text-[10px] text-blue-700 font-semibold block uppercase">
+                      Receita Total Praticada
+                    </span>
+                    <strong className="text-xs text-blue-950">
+                      {formatBrl(totaisSimulacao.somaReceitaInformada)}
+                    </strong>
+                  </div>
+                  <div className="p-2 bg-slate-50 rounded border border-slate-200">
+                    <span className="text-[10px] text-slate-600 font-semibold block uppercase">
+                      Total Encargos & Custos
+                    </span>
+                    <strong className="text-xs text-slate-900">
+                      {formatBrl(
+                        totaisSimulacao.somaCustos + totaisSimulacao.somaDeducoesInformadas,
+                      )}
+                    </strong>
+                  </div>
+                  <div
+                    className={`p-2 rounded border ${
+                      totaisSimulacao.somaLucroInformado < 0
+                        ? 'bg-red-50 border-red-300'
+                        : 'bg-emerald-50 border-emerald-300'
+                    }`}
+                  >
+                    <span
+                      className={`text-[10px] font-semibold block uppercase ${
+                        totaisSimulacao.somaLucroInformado < 0 ? 'text-red-700' : 'text-emerald-800'
+                      }`}
+                    >
+                      {totaisSimulacao.somaLucroInformado < 0
+                        ? 'Prejuízo Total'
+                        : 'Lucro Líquido Total'}
+                    </span>
+                    <strong
+                      className={`text-xs font-black font-mono ${
+                        totaisSimulacao.somaLucroInformado < 0 ? 'text-red-700' : 'text-emerald-900'
+                      }`}
+                    >
+                      {formatBrl(totaisSimulacao.somaLucroInformado)} (
+                      {formatPct(totaisSimulacao.margemMediaInformadaPct)})
+                    </strong>
+                  </div>
+                </div>
               </div>
 
               {/* NOTA DE RODAPÉ DO LAUDO */}

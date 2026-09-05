@@ -35,6 +35,9 @@ export interface ItemLaudoSimulado {
   custoTotal: number
   precoSugerido: number
   precoAtual?: number
+  precoInformado?: number
+  lucroVenda?: number
+  margemLucroPct?: number
 }
 
 export interface ModalEnviarLaudoSimuladorEmailProps {
@@ -100,13 +103,22 @@ export function ModalEnviarLaudoSimuladorEmail({
     // Linhas da tabela de produtos
     const linhasTabela = itensSimulados
       .map((item) => {
-        const dif = (item.precoSugerido || 0) - (item.precoAtual || 0)
-        const difColor = dif >= 0 ? '#16a34a' : '#d97706'
-        const difText =
-          item.precoAtual && item.precoAtual > 0 ? `${dif >= 0 ? '+' : ''}${formatBrl(dif)}` : '-'
+        const precoPrat =
+          item.precoInformado !== undefined ? item.precoInformado : item.precoSugerido
+        const lucro =
+          item.lucroVenda !== undefined
+            ? item.lucroVenda
+            : (item.precoSugerido * (parametros.margemLucroPct || 0)) / 100
+        const isPrejuizo = lucro < 0
+        const lucroColor = isPrejuizo ? '#b91c1c' : '#15803d'
+        const lucroBg = isPrejuizo ? '#fef2f2' : '#f0fdf4'
+        const margemPct =
+          item.margemLucroPct !== undefined
+            ? `${item.margemLucroPct.toFixed(1)}%`
+            : formatPct(parametros.margemLucroPct)
 
         return `
-        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px;">
+        <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px; ${isPrejuizo ? 'background-color: #fff1f2;' : ''}">
           <td style="padding: 10px 8px; text-align: left; font-weight: 600; color: #0f172a;">
             ${item.codigo ? `<span style="font-family: monospace; color: #64748b; font-size: 11px;">[${item.codigo}] </span>` : ''}
             ${item.nome}
@@ -115,13 +127,13 @@ export function ModalEnviarLaudoSimuladorEmail({
             ${formatBrl(item.custoTotal)}
           </td>
           <td style="padding: 10px 8px; text-align: right; color: #475569;">
-            ${item.precoAtual ? formatBrl(item.precoAtual) : '-'}
-          </td>
-          <td style="padding: 10px 8px; text-align: right; font-weight: 700; color: #0f766e; background-color: #f0fdf4;">
             ${formatBrl(item.precoSugerido)}
           </td>
-          <td style="padding: 10px 8px; text-align: right; font-weight: 600; color: ${difColor};">
-            ${difText}
+          <td style="padding: 10px 8px; text-align: right; font-weight: 700; color: #1e3a8a; background-color: #eff6ff;">
+            ${formatBrl(precoPrat)}
+          </td>
+          <td style="padding: 10px 8px; text-align: right; font-weight: 800; color: ${lucroColor}; background-color: ${lucroBg};">
+            ${formatBrl(lucro)} (${margemPct})
           </td>
         </tr>
       `
@@ -215,9 +227,9 @@ export function ModalEnviarLaudoSimuladorEmail({
                     <tr style="background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; font-size: 11px; text-transform: uppercase; color: #475569;">
                       <th style="padding: 10px 8px; font-weight: 700;">Produto</th>
                       <th style="padding: 10px 8px; text-align: right; font-weight: 700;">Custo Total</th>
-                      <th style="padding: 10px 8px; text-align: right; font-weight: 700;">Preço Atual</th>
-                      <th style="padding: 10px 8px; text-align: right; font-weight: 700; color: #0f766e;">Preço Sugerido</th>
-                      <th style="padding: 10px 8px; text-align: right; font-weight: 700;">Variação</th>
+                      <th style="padding: 10px 8px; text-align: right; font-weight: 700;">Preço Sugerido</th>
+                      <th style="padding: 10px 8px; text-align: right; font-weight: 700; color: #1e3a8a;">Preço Informado</th>
+                      <th style="padding: 10px 8px; text-align: right; font-weight: 700; color: #166534;">Lucro da Venda</th>
                     </tr>
                   </thead>
                   <tbody>
