@@ -52,8 +52,12 @@ import {
   Mail,
   Send,
   CheckCheck,
+  TrendingDown,
+  BarChart3,
+  PieChart as PieChartIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { GraficoContribuicaoProdutos } from '@/components/GraficoContribuicaoProdutos'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -130,6 +134,51 @@ export interface ItemSimulado {
   temFicha: boolean
   precoVendaAtual?: number
   precoInformado?: number // Preço de venda praticado/sugerido inserido pelo usuário
+}
+
+export interface ItemCalculadoSimulacao extends ItemSimulado {
+  custo: number
+  divisor: number
+  fatorMultiplicador: number
+  precoSugerido: number
+  precoVendaInformado: number
+  vImpostos: number
+  vComissao: number
+  vFrete: number
+  vJuros: number
+  vAssistencia: number
+  vOutros: number
+  vMargemLucro: number
+  diffPreco: number
+  diffPrecoPct: number
+  vImpostosInf: number
+  totalDeducoesVendaInf: number
+  lucroVendaInf: number
+  margemLucroInfPct: number
+  isPrejuizo: boolean
+  encargosVariaveisPct: number
+  precoMinimoVenda: number
+  descontoMaximoPct: number
+  semMargemDesconto: boolean
+}
+
+export interface TotaisSimulacaoData {
+  totalItens: number
+  somaCustos: number
+  somaPrecos: number
+  somaLucros: number
+  somaImpostos: number
+  somaReceitaInformada: number
+  somaLucroInformado: number
+  somaDeducoesInformadas: number
+  margemMediaInformadaPct: number
+  custoMedio: number
+  precoMedio: number
+  somaPrecoMinimo: number
+  descontoMaximoCarteiraPct: number
+  menorDescontoPermitidoPct: number
+  maiorDescontoPermitidoPct: number
+  qtdSemMargem: number
 }
 
 function formatBrl(val?: number | null): string {
@@ -518,6 +567,41 @@ export default function SimuladorPrecos() {
 
       const isPrejuizo = lucroVendaInf < 0
 
+      // --- CÁLCULO DO DESCONTO MÁXIMO SEM PREJUÍZO (LUCRO = 0) ---
+      // Soma dos encargos percentuais incidentes sobre o preço de venda:
+      // impostos (%) + comissão (%) + frete (%) + assistência (%) + outros (%) + juros no período (%)
+      const encargosVariaveisPct =
+        calculoMarkup.totalImpostosPct + calculoMarkup.totalDespesasVariaveisPct
+      const fatorMargemContribuicao = (100 - encargosVariaveisPct) / 100
+
+      // Preço mínimo de venda para Lucro = 0: PreçoMínimo = Custo / (1 - Encargos%)
+      let precoMinimoVenda = 0
+      if (fatorMargemContribuicao > 0.0001 && custo > 0) {
+        precoMinimoVenda = Math.round((custo / fatorMargemContribuicao) * 100) / 100
+      } else {
+        precoMinimoVenda = custo
+      }
+
+      // Desconto máximo percentual sobre o Preço Informado
+      let descontoMaximoPct = 0
+      let semMargemDesconto = false
+
+      if (precoVendaInformado > 0 && precoMinimoVenda > 0) {
+        if (precoVendaInformado <= precoMinimoVenda || isPrejuizo) {
+          // Preço informado já está no ponto de equilíbrio ou abaixo (dando prejuízo com desconto zero)
+          descontoMaximoPct = 0
+          semMargemDesconto = true
+        } else {
+          // Desconto Máx % = (PreçoInformado - PreçoMínimo) / PreçoInformado * 100
+          descontoMaximoPct =
+            Math.round(((precoVendaInformado - precoMinimoVenda) / precoVendaInformado) * 10000) /
+            100
+          semMargemDesconto = false
+        }
+      } else {
+        semMargemDesconto = true
+      }
+
       return {
         ...item,
         custo,
@@ -540,6 +624,11 @@ export default function SimuladorPrecos() {
         lucroVendaInf,
         margemLucroInfPct,
         isPrejuizo,
+        // Funcionalidade 1: Desconto Máximo sem Prejuízo
+        encargosVariaveisPct,
+        precoMinimoVenda,
+        descontoMaximoPct,
+        semMargemDesconto,
       }
     })
   }, [itensSimulacao, calculoMarkup])
@@ -568,6 +657,24 @@ export default function SimuladorPrecos() {
     const custoMedio = totalItens > 0 ? somaCustos / totalItens : 0
     const precoMedio = totalItens > 0 ? somaPrecos / totalItens : 0
 
+    // Resumo de Desconto Máximo da Carteira
+    // Preço Mínimo Consolidado para toda a carteira não dar prejuízo
+    const somaPrecoMinimo = itensCalculados.reduce((acc, it) => acc + it.precoMinimoVenda, 0)
+    const descontoMaximoCarteiraPct =
+      somaReceitaInformada > somaPrecoMinimo && somaReceitaInformada > 0
+        ? Math.round(((somaReceitaInformada - somaPrecoMinimo) / somaReceitaInformada) * 10000) /
+          100
+        : 0
+
+    const itensComMargem = itensCalculados.filter(
+      (it) => !it.semMargemDesconto && it.descontoMaximoPct > 0,
+    )
+    const menorDescontoPermitidoPct =
+      itensComMargem.length > 0 ? Math.min(...itensComMargem.map((it) => it.descontoMaximoPct)) : 0
+    const maiorDescontoPermitidoPct =
+      itensComMargem.length > 0 ? Math.max(...itensComMargem.map((it) => it.descontoMaximoPct)) : 0
+    const qtdSemMargem = itensCalculados.filter((it) => it.semMargemDesconto).length
+
     return {
       totalItens,
       somaCustos,
@@ -580,6 +687,12 @@ export default function SimuladorPrecos() {
       margemMediaInformadaPct,
       custoMedio,
       precoMedio,
+      // Desconto máximo consolidado
+      somaPrecoMinimo,
+      descontoMaximoCarteiraPct,
+      menorDescontoPermitidoPct,
+      maiorDescontoPermitidoPct,
+      qtdSemMargem,
     }
   }, [itensCalculados])
 
@@ -944,6 +1057,9 @@ export default function SimuladorPrecos() {
         'Lucro da Venda (R$)',
         'Margem Líquida da Venda (%)',
         'Situação do Lucro',
+        'Desconto Máx. (%)',
+        'Preço Mínimo sem Prejuízo (R$)',
+        'Status Desconto',
         'Preço Atual Cadastrado (R$)',
         'Diferença Preço Sugerido × Atual (R$)',
         'Impostos Sugerido (R$)',
@@ -968,6 +1084,9 @@ export default function SimuladorPrecos() {
           fmtNum(it.lucroVendaInf),
           `${it.margemLucroInfPct.toFixed(2)}%`,
           it.isPrejuizo ? 'PREJUÍZO (Abaixo do Custo com Encargos)' : 'LUCRO',
+          it.semMargemDesconto ? '0,00%' : `${it.descontoMaximoPct.toFixed(2)}%`,
+          fmtNum(it.precoMinimoVenda),
+          it.semMargemDesconto ? 'Sem margem para desconto' : 'Margem disponível',
           fmtNum(it.precoVendaAtual),
           fmtNum(it.diffPreco),
           fmtNum(it.vImpostos),
@@ -993,6 +1112,11 @@ export default function SimuladorPrecos() {
         fmtNum(totaisSimulacao.somaLucroInformado),
         `${totaisSimulacao.margemMediaInformadaPct.toFixed(2)}%`,
         totaisSimulacao.somaLucroInformado < 0 ? 'PREJUÍZO CONSOLIDADO' : 'LUCRO CONSOLIDADO',
+        `${totaisSimulacao.descontoMaximoCarteiraPct.toFixed(2)}%`,
+        fmtNum(totaisSimulacao.somaPrecoMinimo),
+        totaisSimulacao.qtdSemMargem > 0
+          ? `${totaisSimulacao.qtdSemMargem} item(ns) sem margem`
+          : 'Todos com margem',
         '',
         '',
         fmtNum(totaisSimulacao.somaImpostos),
@@ -1943,6 +2067,22 @@ export default function SimuladorPrecos() {
                           <TableHead className="text-right font-bold text-slate-900 bg-amber-50/60 min-w-[125px]">
                             Lucro da Venda
                           </TableHead>
+                          {/* FUNCIONALIDADE 1: NOVA COLUNA DESCONTO MÁXIMO SEM PREJUÍZO */}
+                          <TableHead className="text-right font-bold text-amber-950 bg-amber-100/60 min-w-[130px]">
+                            <div className="flex items-center justify-end gap-1">
+                              <span>Desconto Máx.</span>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <HelpCircle className="w-3 h-3 text-amber-700 inline" />
+                                </TooltipTrigger>
+                                <TooltipContent className="text-[11px] max-w-xs">
+                                  Percentual máximo de desconto aplicável sobre o preço informado
+                                  antes de entrar em prejuízo (lucro = 0), já absorvendo todos os
+                                  encargos tributários e variáveis.
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
+                          </TableHead>
                           <TableHead className="text-right font-bold">Preço Atual</TableHead>
                           <TableHead className="text-center font-bold">Ações</TableHead>
                         </TableRow>
@@ -2104,6 +2244,37 @@ export default function SimuladorPrecos() {
                                   {formatPct(it.margemLucroInfPct)}
                                 </Badge>
                               </div>
+                            </TableCell>
+
+                            {/* FUNCIONALIDADE 1: DESCONTO MÁXIMO SEM PREJUÍZO (LUCRO = 0) */}
+                            <TableCell className="text-right p-2 bg-amber-50/30">
+                              {it.semMargemDesconto ? (
+                                <div className="flex flex-col items-end">
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-red-100 text-red-800 border-red-300 text-[10px] font-bold px-1.5 py-0 h-5"
+                                  >
+                                    Sem margem para desconto
+                                  </Badge>
+                                  <span className="text-[10px] text-slate-400 mt-0.5">
+                                    Preço Mín: {formatBrl(it.precoMinimoVenda)}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <span className="font-extrabold text-xs text-amber-950 font-mono">
+                                      {formatPct(it.descontoMaximoPct)}
+                                    </span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 font-medium">
+                                    Mínimo:{' '}
+                                    <span className="font-semibold text-slate-800">
+                                      {formatBrl(it.precoMinimoVenda)}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </TableCell>
 
                             <TableCell className="text-right text-slate-600">
@@ -2292,7 +2463,55 @@ export default function SimuladorPrecos() {
                     </span>
                   </div>
                 </CardContent>
+
+                {/* Sub-faixa de Resumo do Desconto Máximo da Carteira */}
+                <div className="px-4 py-2.5 bg-amber-50/70 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-950">
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="w-4 h-4 text-amber-700 shrink-0" />
+                    <div>
+                      <span className="font-bold text-amber-900">Desconto Máximo da Carteira:</span>{' '}
+                      <span className="font-extrabold text-amber-950 font-mono text-sm ml-1">
+                        {totaisSimulacao.somaLucroInformado <= 0
+                          ? '0,00%'
+                          : formatPct(totaisSimulacao.descontoMaximoCarteiraPct)}
+                      </span>{' '}
+                      <span className="text-[11px] text-amber-800">
+                        (antes do lucro global zerar)
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-[11px] text-amber-900 flex-wrap">
+                    <span>
+                      Faturamento mínimo de equilíbrio:{' '}
+                      <strong className="text-amber-950 font-mono">
+                        {formatBrl(totaisSimulacao.somaPrecoMinimo)}
+                      </strong>
+                    </span>
+                    {totaisSimulacao.qtdSemMargem > 0 ? (
+                      <span className="text-red-700 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-red-600 inline" />
+                        {totaisSimulacao.qtdSemMargem} produto(s) já sem margem
+                      </span>
+                    ) : (
+                      <span>
+                        Desconto mais restrito por item:{' '}
+                        <strong className="text-amber-950 font-mono">
+                          {formatPct(totaisSimulacao.menorDescontoPermitidoPct)}
+                        </strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
               </Card>
+            )}
+
+            {/* FUNCIONALIDADE 2: GRÁFICO DE CONTRIBUIÇÃO POR PRODUTO */}
+            {itensCalculados.length > 0 && (
+              <GraficoContribuicaoProdutos
+                itensCalculados={itensCalculados}
+                totaisSimulacao={totaisSimulacao}
+              />
             )}
 
             {/* MEMÓRIA DE CÁLCULO E DETALHAMENTO DOS ENCARGOS SOBRE O PREÇO INFORMADO */}
@@ -2440,6 +2659,9 @@ export default function SimuladorPrecos() {
             precoInformado: it.precoVendaInformado,
             lucroVenda: it.lucroVendaInf,
             margemLucroPct: it.margemLucroInfPct,
+            descontoMaximoPct: it.descontoMaximoPct,
+            precoMinimoVenda: it.precoMinimoVenda,
+            semMargemDesconto: it.semMargemDesconto,
           }))}
           consultoriaNome={minhaEmpresa?.razao_social || 'Gestão Econômica e Financeira'}
         />
@@ -2632,6 +2854,9 @@ export default function SimuladorPrecos() {
                         Lucro Venda (R$)
                       </th>
                       <th className="p-1.5 text-right">Margem Líq.</th>
+                      <th className="p-1.5 text-right bg-amber-900 text-white font-bold">
+                        Desconto Máx.
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2677,6 +2902,18 @@ export default function SimuladorPrecos() {
                         >
                           {formatPct(it.margemLucroInfPct)}
                         </td>
+                        <td className="p-1.5 text-right font-mono">
+                          {it.semMargemDesconto ? (
+                            <span className="text-red-600 font-bold text-[9px]">Sem margem</span>
+                          ) : (
+                            <span>
+                              <strong>{formatPct(it.descontoMaximoPct)}</strong>
+                              <span className="text-[9px] text-slate-500 block">
+                                (Mín: {formatBrl(it.precoMinimoVenda)})
+                              </span>
+                            </span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     <tr className="bg-slate-200 font-bold border-t-2 border-slate-400">
@@ -2707,6 +2944,9 @@ export default function SimuladorPrecos() {
                       </td>
                       <td className="p-1.5 text-right font-mono text-xs">
                         {formatPct(totaisSimulacao.margemMediaInformadaPct)}
+                      </td>
+                      <td className="p-1.5 text-right font-mono text-xs font-black text-amber-900">
+                        {formatPct(totaisSimulacao.descontoMaximoCarteiraPct)}
                       </td>
                     </tr>
                   </tbody>

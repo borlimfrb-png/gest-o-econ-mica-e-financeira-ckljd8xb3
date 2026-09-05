@@ -38,6 +38,9 @@ export interface ItemLaudoSimulado {
   precoInformado?: number
   lucroVenda?: number
   margemLucroPct?: number
+  descontoMaximoPct?: number
+  precoMinimoVenda?: number
+  semMargemDesconto?: boolean
 }
 
 export interface ModalEnviarLaudoSimuladorEmailProps {
@@ -117,6 +120,10 @@ export function ModalEnviarLaudoSimuladorEmail({
             ? `${item.margemLucroPct.toFixed(1)}%`
             : formatPct(parametros.margemLucroPct)
 
+        const descTexto = item.semMargemDesconto
+          ? '<span style="color: #b91c1c; font-weight: 700; font-size: 10px; background: #fee2e2; padding: 2px 6px; border-radius: 4px;">Sem margem</span>'
+          : `<strong style="color: #1e293b;">${(item.descontoMaximoPct ?? 0).toFixed(2)}%</strong><br/><span style="font-size: 10px; color: #64748b;">(Mín: ${formatBrl(item.precoMinimoVenda)})</span>`
+
         return `
         <tr style="border-bottom: 1px solid #f1f5f9; font-size: 12px; ${isPrejuizo ? 'background-color: #fff1f2;' : ''}">
           <td style="padding: 10px 8px; text-align: left; font-weight: 600; color: #0f172a;">
@@ -134,6 +141,9 @@ export function ModalEnviarLaudoSimuladorEmail({
           </td>
           <td style="padding: 10px 8px; text-align: right; font-weight: 800; color: ${lucroColor}; background-color: ${lucroBg};">
             ${formatBrl(lucro)} (${margemPct})
+          </td>
+          <td style="padding: 10px 8px; text-align: right; color: #334155;">
+            ${descTexto}
           </td>
         </tr>
       `
@@ -230,6 +240,7 @@ export function ModalEnviarLaudoSimuladorEmail({
                       <th style="padding: 10px 8px; text-align: right; font-weight: 700;">Preço Sugerido</th>
                       <th style="padding: 10px 8px; text-align: right; font-weight: 700; color: #1e3a8a;">Preço Informado</th>
                       <th style="padding: 10px 8px; text-align: right; font-weight: 700; color: #166534;">Lucro da Venda</th>
+                      <th style="padding: 10px 8px; text-align: right; font-weight: 700; color: #7c2d12;">Desconto Máx.</th>
                     </tr>
                   </thead>
                   <tbody>
