@@ -172,6 +172,11 @@ export default function Layout() {
       path: '/formacao-preco/impostos',
       icon: Percent,
     },
+    {
+      name: 'Simulador de Preços',
+      path: '/formacao-preco/simulador',
+      icon: Calculator,
+    },
   ]
 
   const isFormacaoPrecoActive = location.pathname.startsWith('/formacao-preco')
@@ -2133,6 +2138,10 @@ export default function Layout() {
                     'Cadastro de Matéria Prima'}
                   {location.pathname === '/formacao-preco/fichas-tecnicas' &&
                     'Cadastro da Ficha Técnica'}
+                  {location.pathname === '/formacao-preco/impostos' &&
+                    'Configuração e Análise de Impostos'}
+                  {location.pathname === '/formacao-preco/simulador' &&
+                    'Simulador de Preços & Mark-Up'}
                   {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
                 </h1>
                 <p className="text-xs text-[#5B6B7F]">
@@ -2154,6 +2163,10 @@ export default function Layout() {
                     'Cadastre insumos, matérias-primas, custos unitários e controle de estoque'}
                   {location.pathname === '/formacao-preco/fichas-tecnicas' &&
                     'Composição da ficha técnica, custo de matéria-prima, outros custos e cálculo do preço sugerido com margem'}
+                  {location.pathname === '/formacao-preco/impostos' &&
+                    'Carga tributária, regimes e impacto nos custos'}
+                  {location.pathname === '/formacao-preco/simulador' &&
+                    'Cálculo de mark-up divisor por parâmetros percentuais e simulação por produto com custo da ficha técnica'}
                   {location.pathname.startsWith('/empresas/') &&
                     'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
                 </p>{' '}
