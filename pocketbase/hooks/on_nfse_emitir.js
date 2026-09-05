@@ -57,6 +57,46 @@ onRecordAfterCreateSuccess((e) => {
       $app.save(record)
     }
 
+    // Se esta nota está substituindo uma nota anterior
+    const notaSubstituidaId = record.get('nota_substituida')
+    const justificativaCorrecao = record.get('justificativa_correcao')
+    let notaOriginal = null
+
+    if (notaSubstituidaId) {
+      try {
+        notaOriginal = $app.findFirstRecordByData('notas_fiscais', 'id', notaSubstituidaId)
+        if (notaOriginal) {
+          // Marca nota original como Substituída
+          notaOriginal.set('status', 'Substituída')
+          $app.save(notaOriginal)
+
+          // Registrar auditoria específica de substituição
+          const auditCol = $app.findCollectionByNameOrId('auditoria_cadastros')
+          if (auditCol) {
+            const auditSubst = new Record(auditCol, {
+              empresa: record.get('empresa'),
+              user: record.get('user'),
+              usuario_nome: 'Sistema / Emissor Nacional NFS-e',
+              entidade: 'nfse',
+              registro_id: record.id,
+              acao: 'edicao',
+              descricao: `NFS-e nº ${notaOriginal.get('numero')} substituída pela NFS-e nº ${record.get('numero')} (Motivo: ${justificativaCorrecao || 'Correção de dados'})`,
+              detalhes: JSON.stringify({
+                nota_substituida_id: notaOriginal.id,
+                nota_substituida_numero: notaOriginal.get('numero'),
+                nota_nova_id: record.id,
+                nota_nova_numero: record.get('numero'),
+                motivo: justificativaCorrecao,
+              }),
+            })
+            $app.save(auditSubst)
+          }
+        }
+      } catch (substErr) {
+        console.log('Aviso ao processar nota substituída no hook:', substErr)
+      }
+    }
+
     // Registrar evento na auditoria_cadastros
     try {
       const auditCol = $app.findCollectionByNameOrId('auditoria_cadastros')
@@ -68,7 +108,10 @@ onRecordAfterCreateSuccess((e) => {
           entidade: 'nfse',
           registro_id: record.id,
           acao: 'criacao',
-          descricao: `Emissão de NFS-e Nacional Nº ${record.get('numero')} (DPS Série ${record.get('dps_serie') || '1'} Nº ${dpsNumero}) para ${record.get('tomador_razao_social') || 'Tomador'} - Valor: R$ ${record.get('valor_liquido') || record.get('valor_servicos')}`,
+          descricao:
+            notaSubstituidaId && notaOriginal
+              ? `Reemissão/Substituição de NFS-e Nacional Nº ${record.get('numero')} (substitui Nº ${notaOriginal.get('numero')}) para ${record.get('tomador_razao_social') || 'Tomador'} - Valor: R$ ${record.get('valor_liquido') || record.get('valor_servicos')}`
+              : `Emissão de NFS-e Nacional Nº ${record.get('numero')} (DPS Série ${record.get('dps_serie') || '1'} Nº ${dpsNumero}) para ${record.get('tomador_razao_social') || 'Tomador'} - Valor: R$ ${record.get('valor_liquido') || record.get('valor_servicos')}`,
           dados_depois: JSON.stringify({
             id: record.id,
             numero: record.get('numero'),
@@ -76,6 +119,8 @@ onRecordAfterCreateSuccess((e) => {
             chave_acesso: record.get('chave_acesso'),
             tomador: record.get('tomador_razao_social'),
             valor_liquido: record.get('valor_liquido'),
+            nota_substituida: notaSubstituidaId || null,
+            justificativa_correcao: justificativaCorrecao || null,
           }),
         })
         $app.save(auditRecord)

@@ -169,7 +169,7 @@ export const notasFiscaisService = {
     return await pb.collection('notas_fiscais').getFullList<NotaFiscalRecord>({
       filter: `user = '${userId}'`,
       sort: '-data_emissao,-numero',
-      expand: 'empresa,contrato,nota_referencia,recebivel',
+      expand: 'empresa,contrato,nota_referencia,recebivel,nota_substituida',
     })
   },
 
@@ -178,7 +178,7 @@ export const notasFiscaisService = {
    */
   async getById(id: string): Promise<NotaFiscalRecord> {
     return await pb.collection('notas_fiscais').getOne<NotaFiscalRecord>(id, {
-      expand: 'empresa,contrato,nota_referencia,recebivel',
+      expand: 'empresa,contrato,nota_referencia,recebivel,nota_substituida',
     })
   },
 
@@ -220,7 +220,7 @@ export const notasFiscaisService = {
     return await pb.collection('notas_fiscais').getFullList<NotaFiscalRecord>({
       filter: filters.join(' && '),
       sort: '-data_emissao,-numero',
-      expand: 'empresa,contrato,nota_referencia,recebivel',
+      expand: 'empresa,contrato,nota_referencia,recebivel,nota_substituida',
     })
   },
 
@@ -357,6 +357,14 @@ export const notasFiscaisService = {
 
       const nota = await pb.collection('notas_fiscais').create<NotaFiscalRecord>(payloadNota)
 
+      // Sincronizar com lançamentos rápidos se habilitado
+      try {
+        const { nfseLancamentosService } = await import('./nfseLancamentosService')
+        await nfseLancamentosService.sincronizarLancamentoNota(nota)
+      } catch (lancErr) {
+        console.warn('Aviso: falha na integração com Lançamentos:', lancErr)
+      }
+
       return {
         success: true,
         message: 'NFS-e Nacional homologada e autorizada com sucesso (Modo DPS Nacional).',
@@ -436,6 +444,14 @@ export const notasFiscaisService = {
         protocolo_cancelamento: protocolo,
         gateway_status_resposta: 'Cancelamento registrado em homologação/simulação ABRASF.',
       })
+
+      // Estornar lançamento vinculado
+      try {
+        const { nfseLancamentosService } = await import('./nfseLancamentosService')
+        await nfseLancamentosService.estornarLancamentoNota(notaId, motivo.trim())
+      } catch (estornoErr) {
+        console.warn('Aviso: falha no estorno de lançamento contábil:', estornoErr)
+      }
 
       return {
         success: true,

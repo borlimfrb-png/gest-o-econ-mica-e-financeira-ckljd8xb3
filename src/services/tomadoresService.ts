@@ -1,4 +1,4 @@
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import { NfseTomadorRecord } from '@/types/finance'
 import { auditoriaCadastrosService } from './auditoriaCadastrosService'
 

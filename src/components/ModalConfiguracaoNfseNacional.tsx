@@ -14,8 +14,10 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
-import { Settings, ShieldCheck, Server, AlertCircle } from 'lucide-react'
+import { Settings, ShieldCheck, Server, AlertCircle, RefreshCw } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 import { servicoTransmissaoNfse, CredenciaisNfseNacional } from '@/services/transmissaoNfseService'
+import { nfseLancamentosService } from '@/services/nfseLancamentosService'
 
 interface ModalConfiguracaoNfseNacionalProps {
   open: boolean
@@ -40,6 +42,7 @@ export function ModalConfiguracaoNfseNacional({
   const [ambiente, setAmbiente] = useState<'1' | '2'>('2')
   const [endpoint, setEndpoint] = useState('https://hom.nfse.fazenda.gov.br/portal')
   const [certNome, setCertNome] = useState('')
+  const [integrarLancamentos, setIntegrarLancamentos] = useState<boolean>(true)
 
   useEffect(() => {
     if (open) {
@@ -50,10 +53,18 @@ export function ModalConfiguracaoNfseNacional({
       if (config.endpointCustomizado) {
         setEndpoint(config.endpointCustomizado)
       }
+
+      // Carregar flag de integração com lançamentos da empresa
+      if (empresaId) {
+        nfseLancamentosService
+          .verificarIntegracaoHabilitada(empresaId)
+          .then((habilitada) => setIntegrarLancamentos(habilitada))
+          .catch(() => setIntegrarLancamentos(true))
+      }
     }
   }, [open, serieAtual, proximoNumeroAtual, empresaId])
 
-  const handleSalvar = () => {
+  const handleSalvar = async () => {
     const num = Number(proximoNumero)
     if (!serie.trim()) {
       toast({
@@ -80,9 +91,18 @@ export function ModalConfiguracaoNfseNacional({
     servicoTransmissaoNfse.salvarConfiguracoes(config, empresaId)
     onSalvarSerieNumero(serie.trim(), num)
 
+    // Atualiza preferência de integração na empresa
+    if (empresaId) {
+      try {
+        await nfseLancamentosService.alternarIntegracaoEmpresa(empresaId, integrarLancamentos)
+      } catch (err) {
+        console.warn('Falha ao atualizar integracao com lancamentos na empresa:', err)
+      }
+    }
+
     toast({
       title: 'Configurações salvas',
-      description: `Série ${serie} e próximo número ${num} atualizados com sucesso.`,
+      description: `Série ${serie}, número ${num} e integração com lançamentos atualizados com sucesso.`,
     })
     onOpenChange(false)
   }
@@ -102,6 +122,30 @@ export function ModalConfiguracaoNfseNacional({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Integração NFS-e com Lançamentos Rápidos */}
+          <div className="border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="toggle-integrar"
+                  className="text-sm font-semibold flex items-center gap-2 cursor-pointer text-foreground"
+                >
+                  <RefreshCw className="w-4 h-4 text-primary" />
+                  Integrar NFS-e com Lançamentos Rápidos
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Gera automaticamente a receita contábil líquida no módulo financeiro e estorna em
+                  caso de cancelamento.
+                </p>
+              </div>
+              <Switch
+                id="toggle-integrar"
+                checked={integrarLancamentos}
+                onCheckedChange={setIntegrarLancamentos}
+              />
+            </div>
+          </div>
+
           {/* Numeração e Série */}
           <div className="border rounded-lg p-4 bg-muted/20 space-y-3">
             <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">

@@ -31,10 +31,16 @@ import {
   AlertTriangle,
   Building2,
   Info,
+  AlertCircle,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
-import { EmpresaRecord, NfseTomadorRecord, ItemServicoNfse } from '@/types/finance'
+import {
+  EmpresaRecord,
+  NfseTomadorRecord,
+  ItemServicoNfse,
+  NotaFiscalRecord,
+} from '@/types/finance'
 import { tomadoresService } from '@/services/tomadoresService'
 import { notasFiscaisService, EmitirNfseInput } from '@/services/notasFiscaisService'
 import { servicoTransmissaoNfse } from '@/services/transmissaoNfseService'
@@ -54,6 +60,8 @@ interface ModalEmitirNfseNacionalProps {
   seriePadrao: string
   proximoNumeroPadrao: number
   onEmitida: () => void
+  // Modo de reemissão corrigida
+  notaParaSubstituir?: NotaFiscalRecord | null
 }
 
 export function ModalEmitirNfseNacional({
@@ -64,6 +72,7 @@ export function ModalEmitirNfseNacional({
   seriePadrao,
   proximoNumeroPadrao,
   onEmitida,
+  notaParaSubstituir,
 }: ModalEmitirNfseNacionalProps) {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -83,6 +92,9 @@ export function ModalEmitirNfseNacional({
   const [competencia, setCompetencia] = useState<string>(new Date().toISOString().slice(0, 10))
   const [codigoTributacao, setCodigoTributacao] = useState<string>('010701') // Suporte técnico/consultoria LC 116
   const [municipioPrestacao, setMunicipioPrestacao] = useState<string>('3550308') // São Paulo
+
+  // Campo obrigatório para substituição
+  const [justificativaCorrecao, setJustificativaCorrecao] = useState<string>('')
 
   // Itens de Serviço
   const [itens, setItens] = useState<ItemServicoNfse[]>([
@@ -119,9 +131,93 @@ export function ModalEmitirNfseNacional({
     if (open) {
       setSerie(seriePadrao || '1')
       setNumeroDps(proximoNumeroPadrao || 1)
+
+      if (notaParaSubstituir) {
+        // Pré-preencher com dados da nota original
+        setJustificativaCorrecao('')
+        if (notaParaSubstituir.empresa) setEmpresaId(notaParaSubstituir.empresa)
+        if (notaParaSubstituir.competencia) {
+          setCompetencia(notaParaSubstituir.competencia.slice(0, 10))
+        }
+        if (notaParaSubstituir.codigo_tributacao_nacional) {
+          setCodigoTributacao(notaParaSubstituir.codigo_tributacao_nacional)
+        }
+        if (notaParaSubstituir.codigo_municipio_prestacao) {
+          setMunicipioPrestacao(notaParaSubstituir.codigo_municipio_prestacao)
+        }
+        if (notaParaSubstituir.aliquota_iss !== undefined) {
+          setAliquotaIss(notaParaSubstituir.aliquota_iss)
+        }
+        setIssRetido(Boolean(notaParaSubstituir.iss_retido))
+        if (notaParaSubstituir.outras_retencoes !== undefined) {
+          setOutrasRetencoes(notaParaSubstituir.outras_retencoes)
+        }
+        if (notaParaSubstituir.desconto_incondicionado !== undefined) {
+          setDescontoIncondicionado(notaParaSubstituir.desconto_incondicionado)
+        }
+
+        // Alíquotas aproximadas a partir dos valores se existirem
+        const valServ = notaParaSubstituir.valor_servicos || 1
+        if (notaParaSubstituir.valor_pis) {
+          setAliquotaPis(Number(((notaParaSubstituir.valor_pis / valServ) * 100).toFixed(2)))
+        }
+        if (notaParaSubstituir.valor_cofins) {
+          setAliquotaCofins(Number(((notaParaSubstituir.valor_cofins / valServ) * 100).toFixed(2)))
+        }
+        if (notaParaSubstituir.valor_inss) {
+          setAliquotaInss(Number(((notaParaSubstituir.valor_inss / valServ) * 100).toFixed(2)))
+        }
+        if (notaParaSubstituir.valor_ir) {
+          setAliquotaIr(Number(((notaParaSubstituir.valor_ir / valServ) * 100).toFixed(2)))
+        }
+        if (notaParaSubstituir.valor_csll) {
+          setAliquotaCsll(Number(((notaParaSubstituir.valor_csll / valServ) * 100).toFixed(2)))
+        }
+
+        // Itens
+        if (
+          notaParaSubstituir.servicos_itens &&
+          Array.isArray(notaParaSubstituir.servicos_itens) &&
+          notaParaSubstituir.servicos_itens.length > 0
+        ) {
+          setItens(
+            notaParaSubstituir.servicos_itens.map((it: any, idx: number) => ({
+              item: it.item || idx + 1,
+              descricao: it.descricao || '',
+              quantidade: Number(it.quantidade) || 1,
+              valor_unitario: Number(it.valor_unitario || it.valor_total) || 0,
+              valor_total: Number(it.valor_total) || 0,
+              codigo_tributacao_nacional:
+                it.codigo_tributacao_nacional ||
+                notaParaSubstituir.codigo_tributacao_nacional ||
+                '010701',
+              desconto: Number(it.desconto) || 0,
+            })),
+          )
+        } else if (notaParaSubstituir.discriminacao) {
+          setItens([
+            {
+              item: 1,
+              descricao: notaParaSubstituir.discriminacao,
+              quantidade: 1,
+              valor_unitario: notaParaSubstituir.valor_servicos || 0,
+              valor_total: notaParaSubstituir.valor_servicos || 0,
+              codigo_tributacao_nacional: notaParaSubstituir.codigo_tributacao_nacional || '010701',
+              desconto: 0,
+            },
+          ])
+        }
+
+        if (notaParaSubstituir.tomador_ref) {
+          setTomadorSelecionadoId(notaParaSubstituir.tomador_ref)
+        }
+      } else {
+        setJustificativaCorrecao('')
+      }
+
       carregarTomadores()
     }
-  }, [open, empresaId, seriePadrao, proximoNumeroPadrao])
+  }, [open, empresaId, seriePadrao, proximoNumeroPadrao, notaParaSubstituir])
 
   const carregarTomadores = async () => {
     try {
@@ -216,6 +312,17 @@ export function ModalEmitirNfseNacional({
       toast({
         title: 'Valor inválido',
         description: 'O total dos serviços deve ser maior que R$ 0,00.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // Validação obrigatória da Justificativa em caso de substituição/reemissão
+    if (notaParaSubstituir && !justificativaCorrecao.trim()) {
+      toast({
+        title: 'Justificativa Obrigatória',
+        description:
+          'Para reemitir uma nota substituindo a anterior, informe o Motivo/Justificativa da Correção.',
         variant: 'destructive',
       })
       return
@@ -348,12 +455,36 @@ export function ModalEmitirNfseNacional({
         },
       }
 
-      await notasFiscaisService.emitirNfse(inputNfse)
+      if (notaParaSubstituir) {
+        // Fluxo de Substituição / Reemissão Corrigida
+        const { nfseLancamentosService } = await import('@/services/nfseLancamentosService')
+        await nfseLancamentosService.processarReemissaoCorrigida({
+          notaOriginal: notaParaSubstituir,
+          justificativaCorrecao: justificativaCorrecao.trim(),
+          novaNotaData: {
+            ...inputNfse,
+            empresa: empresaId,
+            status: 'Emitida',
+            chave_acesso: retornoTransmissao.chaveAcessoNfse,
+            codigo_verificacao: retornoTransmissao.codigoVerificacao,
+            protocolo_autorizacao: retornoTransmissao.protocoloAutorizacao,
+          } as any,
+          userId: user?.id,
+          userName: user?.name || user?.email,
+        })
 
-      toast({
-        title: 'NFS-e Nacional Emitida com Sucesso!',
-        description: `DPS Série ${serie} Nº ${numeroDps} protocolada e autorizada no ambiente de homologação.`,
-      })
+        toast({
+          title: 'NFS-e Reemitida e Corrigida com Sucesso!',
+          description: `Nova NFS-e Nº ${numeroDps} autorizada. Nota original nº ${notaParaSubstituir.numero} marcada como 'Substituída'.`,
+        })
+      } else {
+        await notasFiscaisService.emitirNfse(inputNfse)
+
+        toast({
+          title: 'NFS-e Nacional Emitida com Sucesso!',
+          description: `DPS Série ${serie} Nº ${numeroDps} protocolada e autorizada no ambiente de homologação.`,
+        })
+      }
 
       onEmitida()
       onOpenChange(false)
@@ -377,23 +508,60 @@ export function ModalEmitirNfseNacional({
               <div>
                 <DialogTitle className="flex items-center gap-2 text-lg">
                   <FileCheck2 className="w-5 h-5 text-primary" />
-                  Nova Emissão NFS-e Nacional (Padrão DPS Nacional v1.01)
+                  {notaParaSubstituir
+                    ? `Reemissão Corrigida de NFS-e (Substituição da Nota nº ${notaParaSubstituir.numero})`
+                    : 'Nova Emissão NFS-e Nacional (Padrão DPS Nacional v1.01)'}
                 </DialogTitle>
                 <DialogDescription>
-                  Declaração de Prestação de Serviços (DPS) em lote único com itens detalhados e
-                  tributação unificada.
+                  {notaParaSubstituir
+                    ? `Todos os dados da nota original foram carregados com novo sequencial de DPS. A nota original nº ${notaParaSubstituir.numero} será marcada como Substituída.`
+                    : 'Declaração de Prestação de Serviços (DPS) em lote único com itens detalhados e tributação unificada.'}
                 </DialogDescription>
               </div>
               <Badge
                 variant="outline"
-                className="border-primary/40 bg-primary/5 text-primary text-xs"
+                className={
+                  notaParaSubstituir
+                    ? 'border-amber-500 bg-amber-50 text-amber-800 text-xs'
+                    : 'border-primary/40 bg-primary/5 text-primary text-xs'
+                }
               >
-                Homologação Nacional Ativa
+                {notaParaSubstituir
+                  ? 'Modo Substituição / Reemissão'
+                  : 'Homologação Nacional Ativa'}
               </Badge>
             </div>
           </DialogHeader>
 
           <div className="space-y-4 py-2 text-xs">
+            {/* Bloco de Justificativa Obrigatória em caso de Reemissão */}
+            {notaParaSubstituir && (
+              <div className="border border-amber-300 bg-amber-50/70 dark:bg-amber-950/20 rounded-lg p-3.5 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-300 text-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600" />
+                  Substituição da NFS-e nº {notaParaSubstituir.numero} (Chave:{' '}
+                  {notaParaSubstituir.chave_acesso?.slice(0, 20)}...)
+                </div>
+                <p className="text-[11px] text-amber-800 dark:text-amber-200">
+                  A emissão desta nova nota substituirá a nota original sem gerar duplicidade
+                  contábil no plano de contas. O motivo / justificativa da correção é obrigatório
+                  por exigência fiscal e será registrado no histórico de auditoria.
+                </p>
+                <div className="space-y-1 pt-1">
+                  <Label className="text-xs font-bold text-amber-950 dark:text-amber-100">
+                    Justificativa / Motivo da Correção *
+                  </Label>
+                  <Textarea
+                    required
+                    rows={2}
+                    value={justificativaCorrecao}
+                    onChange={(e) => setJustificativaCorrecao(e.target.value)}
+                    placeholder="Ex: Correção de alíquota de ISS e detalhamento da discriminação conforme solicitação do tomador..."
+                    className="text-xs bg-white border-amber-300 focus:border-amber-500"
+                  />
+                </div>
+              </div>
+            )}
             {/* CABEÇALHO DO DPS / PRESTADOR */}
             <div className="border rounded-lg p-3 bg-muted/20 space-y-3">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -747,11 +915,13 @@ export function ModalEmitirNfseNacional({
             <Button onClick={handleEmitirNfse} disabled={loading} className="gap-2">
               {loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Transmitindo DPS...
+                  <Loader2 className="w-4 h-4 animate-spin" />{' '}
+                  {notaParaSubstituir ? 'Substituindo e Transmitindo...' : 'Transmitindo DPS...'}
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4" /> Emitir NFS-e Nacional
+                  <Send className="w-4 h-4" />{' '}
+                  {notaParaSubstituir ? 'Confirmar Reemissão Corrigida' : 'Emitir NFS-e Nacional'}
                 </>
               )}
             </Button>

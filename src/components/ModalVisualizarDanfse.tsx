@@ -147,7 +147,7 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
           ref={printRef}
           className="bg-background border rounded-lg p-5 text-xs text-foreground space-y-4 print:border-black print:text-black print:m-0"
         >
-          {/* Tarja de Homologação / Cancelada */}
+          {/* Tarja de Homologação / Cancelada / Substituída */}
           {isHomologacao && (
             <div className="border border-dashed border-amber-500 bg-amber-500/10 p-2 text-center font-semibold text-amber-800 dark:text-amber-300 rounded uppercase tracking-wider text-[11px]">
               Sem Valor Fiscal — Ambiente de Homologação / Testes do Novo Padrão Nacional
@@ -156,6 +156,46 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
           {isCancelada && (
             <div className="border-2 border-red-500 bg-red-500/10 p-2.5 text-center font-bold text-red-700 dark:text-red-400 rounded uppercase tracking-widest text-sm">
               NOTA FISCAL CANCELADA - {nota.protocolo_cancelamento || 'CAN-0000'}
+            </div>
+          )}
+          {nota.status === 'Substituída' && (
+            <div className="border-2 border-amber-500 bg-amber-500/15 p-2.5 text-center font-bold text-amber-800 dark:text-amber-300 rounded uppercase tracking-widest text-sm">
+              NOTA FISCAL SUBSTITUÍDA — REEMITIDA POR CORREÇÃO
+            </div>
+          )}
+
+          {/* Destaque de Nota Substituída / Reemissão Corrigida */}
+          {(nota.nota_substituida || nota.expand?.nota_substituida) && (
+            <div className="border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 space-y-1.5 text-xs text-amber-950 dark:text-amber-100">
+              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                <Info className="w-4 h-4 text-amber-600" />
+                NFS-e de Substituição / Reemissão Corrigida
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Esta nota substitui expressamente a{' '}
+                <strong>
+                  NFS-e anterior nº {nota.expand?.nota_substituida?.numero || nota.nota_substituida}
+                </strong>
+                {nota.expand?.nota_substituida?.chave_acesso && (
+                  <span>
+                    {' '}
+                    (Chave:{' '}
+                    <code className="font-mono text-[10px] bg-amber-100 dark:bg-amber-900/50 px-1 py-0.5 rounded">
+                      {nota.expand.nota_substituida.chave_acesso}
+                    </code>
+                    )
+                  </span>
+                )}
+                .
+              </p>
+              {nota.justificativa_correcao && (
+                <div className="bg-white/80 dark:bg-amber-900/30 p-2 rounded border border-amber-200 dark:border-amber-800/50 text-[11px] mt-1">
+                  <span className="font-semibold block text-amber-900 dark:text-amber-200">
+                    Justificativa / Motivo da Correção:
+                  </span>
+                  <span className="italic">{nota.justificativa_correcao}</span>
+                </div>
+              )}
             </div>
           )}
 

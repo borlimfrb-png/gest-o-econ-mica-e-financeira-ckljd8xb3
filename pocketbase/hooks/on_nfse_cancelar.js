@@ -26,6 +26,25 @@ onRecordAfterUpdateSuccess((e) => {
 
       $app.save(record)
 
+      // Estornar lançamento vinculado, se existir
+      const lancRefId = record.get('lancamento_ref')
+      if (lancRefId) {
+        try {
+          const lancRecord = $app.findFirstRecordByData('lancamentos', 'id', lancRefId)
+          if (lancRecord && !lancRecord.get('estornado')) {
+            lancRecord.set('estornado', true)
+            lancRecord.set('estornado_em', dataHora.replace('T', ' ').slice(0, 19))
+            lancRecord.set(
+              'motivo_estorno',
+              `Cancelamento da NFS-e nº ${record.get('numero')}: ${motivoCancelamento}`,
+            )
+            $app.save(lancRecord)
+          }
+        } catch (lancErr) {
+          console.log('Aviso ao estornar lançamento vinculado no hook on_nfse_cancelar:', lancErr)
+        }
+      }
+
       // Registrar auditoria
       try {
         const auditCol = $app.findCollectionByNameOrId('auditoria_cadastros')
@@ -45,6 +64,7 @@ onRecordAfterUpdateSuccess((e) => {
               motivo_cancelamento: motivoCancelamento,
               protocolo_cancelamento: protocolo,
               cancelada_em: dataHora,
+              lancamento_ref: lancRefId || null,
             }),
           })
           $app.save(auditRecord)

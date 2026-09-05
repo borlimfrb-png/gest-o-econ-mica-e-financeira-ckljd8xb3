@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { notasFiscaisService, type EmitirNfseInput } from '@/services/notasFiscaisService'
 import { empresasService } from '@/services/financeService'
+import { useAuth } from '@/contexts/AuthContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
@@ -114,7 +115,10 @@ interface NfseFormData {
 
 export default function NotasFiscais() {
   const { toast } = useToast()
+  const { user, isAdmin } = useAuth()
   const { minhaEmpresa } = useMinhaEmpresa()
+
+  const podeEmitir = isAdmin || user?.role === 'empresa' || user?.role === 'admin' || !user?.role
 
   const [notas, setNotas] = useState<NotaFiscalRecord[]>([])
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
@@ -187,6 +191,8 @@ export default function NotasFiscais() {
   const [modalTomadoresOpen, setModalTomadoresOpen] = useState(false)
   const [modalConfigNacionalOpen, setModalConfigNacionalOpen] = useState(false)
   const [serieConfig, setSerieConfig] = useState('1')
+  // Reemissão corrigida / Substituição
+  const [notaParaSubstituir, setNotaParaSubstituir] = useState<NotaFiscalRecord | null>(null)
 
   const loadData = async () => {
     try {
@@ -848,6 +854,12 @@ export default function NotasFiscais() {
             <CheckCircle2 className="w-3 h-3 mr-1" /> Emitida
           </Badge>
         )
+      case 'Substituída':
+        return (
+          <Badge className="bg-amber-50 text-amber-800 hover:bg-amber-100 border-amber-300 text-[10px] font-semibold">
+            <AlertCircle className="w-3 h-3 mr-1 text-amber-600" /> Substituída
+          </Badge>
+        )
       case 'Enviada':
         return (
           <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 text-[10px] font-semibold">
@@ -875,6 +887,19 @@ export default function NotasFiscais() {
       default:
         return <Badge variant="outline">{status}</Badge>
     }
+  }
+
+  const handleAbrirReemissaoCorrigida = (nota: NotaFiscalRecord) => {
+    if (nota.status !== 'Emitida') {
+      toast({
+        variant: 'destructive',
+        title: 'Ação não permitida',
+        description: 'Apenas notas com status "Emitida" podem ser reemitidas por correção.',
+      })
+      return
+    }
+    setNotaParaSubstituir(nota)
+    setModalNacionalOpen(true)
   }
 
   return (
@@ -949,13 +974,22 @@ export default function NotasFiscais() {
           </Button>
 
           {/* Botão de Emissão Principal: Novo Padrão Nacional DPS */}
-          <Button
-            onClick={() => setModalNacionalOpen(true)}
-            className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs h-9 shadow-sm gap-1.5"
-          >
-            <Plus className="w-4 h-4" />
-            Emitir NFS-e Nacional (DPS)
-          </Button>
+          {podeEmitir ? (
+            <Button
+              onClick={() => {
+                setNotaParaSubstituir(null)
+                setModalNacionalOpen(true)
+              }}
+              className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs h-9 shadow-sm gap-1.5"
+            >
+              <Plus className="w-4 h-4" />
+              Emitir NFS-e Nacional (DPS)
+            </Button>
+          ) : (
+            <Badge variant="outline" className="text-slate-500 text-xs px-2.5 py-1.5 bg-slate-50">
+              Modo Consulta (Financeiro)
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -1077,6 +1111,9 @@ export default function NotasFiscais() {
                 <SelectItem value="Emitida" className="text-xs">
                   Emitidas
                 </SelectItem>
+                <SelectItem value="Substituída" className="text-xs">
+                  Substituídas
+                </SelectItem>
                 <SelectItem value="Enviada" className="text-xs">
                   Enviadas
                 </SelectItem>
@@ -1162,6 +1199,19 @@ export default function NotasFiscais() {
                               Cód: {nota.codigo_verificacao}
                             </span>
                           )}
+                          {/* Legenda de substituição se houver */}
+                          {(nota.nota_substituida || nota.expand?.nota_substituida) && (
+                            <span
+                              className="text-[10px] text-amber-700 dark:text-amber-400 font-medium block truncate max-w-[210px] bg-amber-50 dark:bg-amber-950/30 px-1 py-0.5 rounded mt-0.5"
+                              title={`Substitui NFS-e nº ${nota.expand?.nota_substituida?.numero || nota.nota_substituida} (chave: ${nota.expand?.nota_substituida?.chave_acesso || ''})`}
+                            >
+                              ↳ Substitui NFS-e nº{' '}
+                              {nota.expand?.nota_substituida?.numero || nota.nota_substituida}
+                              {nota.expand?.nota_substituida?.chave_acesso
+                                ? ` (chave ${nota.expand.nota_substituida.chave_acesso.slice(0, 8)}...)`
+                                : ''}
+                            </span>
+                          )}
                           {nota.status === 'Cancelada' && nota.cancelada_em && (
                             <span
                               className="text-[10px] text-red-600 font-medium block truncate max-w-[180px]"
@@ -1196,24 +1246,37 @@ export default function NotasFiscais() {
                           {formatBrlMoeda(nota.valor_liquido)}
                         </td>
 
-                        {/* Conciliação (nota ↔ parcela) */}
+                        {/* Conciliação (nota ↔ parcela) & Vínculo com Lançamento */}
                         <td className="py-3 px-4 text-center whitespace-nowrap">
-                          {nota.conciliada ? (
-                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold gap-1 px-2 py-0.5">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                              Conciliada
-                            </Badge>
-                          ) : nota.recebivel ? (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] text-blue-700 border-blue-200 bg-blue-50/50 gap-1 px-1.5 py-0"
-                            >
-                              <Link2 className="w-3 h-3 text-blue-500" />
-                              Vinculada
-                            </Badge>
-                          ) : (
-                            <span className="text-[11px] text-slate-400">—</span>
-                          )}
+                          <div className="flex flex-col items-center gap-1">
+                            {nota.conciliada ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold gap-1 px-2 py-0.5">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                Conciliada
+                              </Badge>
+                            ) : nota.recebivel ? (
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] text-blue-700 border-blue-200 bg-blue-50/50 gap-1 px-1.5 py-0"
+                              >
+                                <Link2 className="w-3 h-3 text-blue-500" />
+                                Vinculada
+                              </Badge>
+                            ) : (
+                              <span className="text-[11px] text-slate-400">—</span>
+                            )}
+                            {/* Badge/Link Lançamento Gerado no histórico financeiro */}
+                            {nota.lancamento_ref && (
+                              <Link
+                                to="/lancamentos"
+                                className="inline-flex items-center gap-1 text-[9px] font-medium text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.2 rounded transition-colors"
+                                title="Ver lançamento contábil em Lançamentos Rápidos"
+                              >
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                                Lançamento gerado
+                              </Link>
+                            )}
+                          </div>
                           {nota.agendamento_automatico && (
                             <div className="text-[9px] text-slate-400 flex items-center justify-center gap-0.5 mt-0.5">
                               <CalendarClock className="w-2.5 h-2.5 text-blue-500" /> Auto
@@ -1247,18 +1310,33 @@ export default function NotasFiscais() {
                               <Download className="w-3.5 h-3.5" />
                             </Button>
 
-                            {/* Botão de Cancelar NFSe (apenas para Emitida / Enviada) */}
-                            {(nota.status === 'Emitida' || nota.status === 'Enviada') && (
+                            {/* Ação "Reemitir corrigida" APENAS para notas com status 'Emitida' e perfil com permissão de emitir */}
+                            {nota.status === 'Emitida' && podeEmitir && (
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                onClick={() => abrirModalCancelar(nota)}
-                                className="h-7 px-1.5 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                                title="Cancelar Nota Fiscal no Gateway/SEFAZ"
+                                variant="outline"
+                                onClick={() => handleAbrirReemissaoCorrigida(nota)}
+                                className="h-7 px-2 text-[11px] font-semibold border-amber-300 text-amber-800 hover:bg-amber-50 hover:text-amber-900 bg-white"
+                                title="Reemitir corrigida (substituição desta nota com novo sequencial DPS e sem duplicar lançamento)"
                               >
-                                <Ban className="w-3.5 h-3.5 mr-1" /> Cancelar
+                                <RefreshCw className="w-3 h-3 mr-1 text-amber-600" /> Reemitir
+                                corrigida
                               </Button>
                             )}
+
+                            {/* Botão de Cancelar NFSe (apenas para Emitida / Enviada) */}
+                            {(nota.status === 'Emitida' || nota.status === 'Enviada') &&
+                              podeEmitir && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => abrirModalCancelar(nota)}
+                                  className="h-7 px-1.5 text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                                  title="Cancelar Nota Fiscal no Gateway/SEFAZ"
+                                >
+                                  <Ban className="w-3.5 h-3.5 mr-1" /> Cancelar
+                                </Button>
+                              )}
 
                             {/* Botão de Envio por E-mail (desabilitado se Cancelada) */}
                             <Button
@@ -1782,12 +1860,23 @@ export default function NotasFiscais() {
       {/* NOVO PADRÃO NACIONAL: Modal de Emissão Completa com Itens e DPS */}
       <ModalEmitirNfseNacional
         open={modalNacionalOpen}
-        onOpenChange={setModalNacionalOpen}
-        empresaAtiva={empresas.find((e) => e.id === formData.empresa_id) || empresas[0] || null}
+        onOpenChange={(isOpen) => {
+          setModalNacionalOpen(isOpen)
+          if (!isOpen) {
+            setNotaParaSubstituir(null)
+          }
+        }}
+        empresaAtiva={
+          notaParaSubstituir
+            ? empresas.find((e) => e.id === notaParaSubstituir.empresa) || empresas[0] || null
+            : empresas.find((e) => e.id === formData.empresa_id) || empresas[0] || null
+        }
         empresasLista={empresas}
         seriePadrao={serieConfig}
         proximoNumeroPadrao={proximoNumeroSugerido}
+        notaParaSubstituir={notaParaSubstituir}
         onEmitida={() => {
+          setNotaParaSubstituir(null)
           loadData()
         }}
       />
