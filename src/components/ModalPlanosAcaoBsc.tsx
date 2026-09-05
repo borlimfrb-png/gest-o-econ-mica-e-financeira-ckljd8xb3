@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -55,6 +55,8 @@ export interface ModalPlanosAcaoBscProps {
   ano: number
   atingimentoPct?: number
   onIniciativasChange?: () => void
+  iniciativaInicialParaEditar?: BscIniciativaRecord | null
+  listaKpisDisponiveis?: BscKpiRecord[]
 }
 
 export function ModalPlanosAcaoBsc({
@@ -65,6 +67,8 @@ export function ModalPlanosAcaoBsc({
   ano,
   atingimentoPct,
   onIniciativasChange,
+  iniciativaInicialParaEditar,
+  listaKpisDisponiveis = [],
 }: ModalPlanosAcaoBscProps) {
   const { toast } = useToast()
 
@@ -77,12 +81,21 @@ export function ModalPlanosAcaoBsc({
   const [iniciativaEmEdicao, setIniciativaEmEdicao] = useState<BscIniciativaRecord | null>(null)
   const [iniciativaToDelete, setIniciativaToDelete] = useState<BscIniciativaRecord | null>(null)
 
+  const [formKpiId, setFormKpiId] = useState<string>('')
   const [formTitulo, setFormTitulo] = useState('')
   const [formDescricao, setFormDescricao] = useState('')
   const [formResponsavel, setFormResponsavel] = useState('')
   const [formPrazo, setFormPrazo] = useState('')
   const [formStatus, setFormStatus] = useState<BscIniciativaStatus>('planejada')
   const [formProgresso, setFormProgresso] = useState<string>('0')
+
+  const kpiAtivo = useMemo(() => {
+    if (kpi) return kpi
+    if (formKpiId && listaKpisDisponiveis.length > 0) {
+      return listaKpisDisponiveis.find((k) => k.id === formKpiId) || null
+    }
+    return null
+  }, [kpi, formKpiId, listaKpisDisponiveis])
 
   const carregarIniciativas = async () => {
     if (!kpi) return
@@ -103,15 +116,25 @@ export function ModalPlanosAcaoBsc({
   }
 
   useEffect(() => {
-    if (open && kpi) {
-      carregarIniciativas()
+    if (open) {
+      if (kpi) {
+        carregarIniciativas()
+      } else {
+        setIniciativas([])
+      }
+
+      if (iniciativaInicialParaEditar) {
+        handleEditarIniciativa(iniciativaInicialParaEditar)
+      }
     } else {
       setIniciativas([])
+      setModalFormOpen(false)
     }
-  }, [open, kpi?.id])
+  }, [open, kpi?.id, iniciativaInicialParaEditar?.id])
 
   const handleNovaIniciativa = () => {
     setIniciativaEmEdicao(null)
+    setFormKpiId(kpi?.id || (listaKpisDisponiveis[0]?.id ?? ''))
     setFormTitulo('')
     setFormDescricao('')
     setFormResponsavel('')
@@ -126,6 +149,7 @@ export function ModalPlanosAcaoBsc({
 
   const handleEditarIniciativa = (ini: BscIniciativaRecord) => {
     setIniciativaEmEdicao(ini)
+    setFormKpiId(ini.kpi || kpi?.id || '')
     setFormTitulo(ini.titulo)
     setFormDescricao(ini.descricao || '')
     setFormResponsavel(ini.responsavel || '')
@@ -137,7 +161,16 @@ export function ModalPlanosAcaoBsc({
 
   const handleSalvarIniciativa = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!kpi) return
+    const targetKpiId = formKpiId || kpi?.id || ''
+    if (!targetKpiId) {
+      toast({
+        title: 'KPI obrigatório',
+        description: 'Selecione a qual indicador do BSC este plano pertence.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     if (!formTitulo.trim()) {
       toast({
         title: 'Título obrigatório',
@@ -152,7 +185,7 @@ export function ModalPlanosAcaoBsc({
     setIsSaving(true)
     try {
       const payload = {
-        kpi: kpi.id,
+        kpi: targetKpiId,
         empresa: empresaId || undefined,
         ano: ano,
         titulo: formTitulo.trim(),
@@ -173,12 +206,14 @@ export function ModalPlanosAcaoBsc({
         await bscService.createIniciativa(payload)
         toast({
           title: 'Plano de ação criado',
-          description: `A iniciativa "${formTitulo}" foi vinculada ao KPI ${kpi.nome}.`,
+          description: `A iniciativa "${formTitulo}" foi criada com sucesso.`,
         })
       }
 
       setModalFormOpen(false)
-      await carregarIniciativas()
+      if (kpi) {
+        await carregarIniciativas()
+      }
       onIniciativasChange?.()
     } catch (err) {
       console.error('Erro ao salvar iniciativa:', err)
@@ -255,27 +290,29 @@ export function ModalPlanosAcaoBsc({
         </DialogHeader>
 
         {/* Resumo do KPI e Meta */}
-        <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-          <div>
-            <span className="text-slate-500 block">Objetivo / Descrição:</span>
-            <span className="text-slate-800 font-medium">
-              {kpi?.descricao || 'Atingir meta pactuada do Balanced Scorecard.'}
-            </span>
+        {kpiAtivo && (
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div>
+              <span className="text-slate-500 block">Objetivo / Descrição:</span>
+              <span className="text-slate-800 font-medium">
+                {kpiAtivo.descricao || 'Atingir meta pactuada do Balanced Scorecard.'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Badge variant="outline" className="text-xs font-mono">
+                Meta: {kpiAtivo.meta} {kpiAtivo.unidade || ''}
+              </Badge>
+              <Button
+                onClick={handleNovaIniciativa}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-8"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Novo Plano de Ação
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className="text-xs font-mono">
-              Meta: {kpi?.meta} {kpi?.unidade || ''}
-            </Badge>
-            <Button
-              onClick={handleNovaIniciativa}
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold h-8"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Novo Plano de Ação
-            </Button>
-          </div>
-        </div>
+        )}
 
         {/* Lista de Iniciativas Cadastradas */}
         <div className="space-y-2 py-2">
@@ -469,6 +506,33 @@ export function ModalPlanosAcaoBsc({
           </DialogHeader>
 
           <form onSubmit={handleSalvarIniciativa} className="space-y-3.5 py-2">
+            {/* Seletor de KPI se houver lista disponível ou se nenhum kpi foi fixado */}
+            {(!kpi || listaKpisDisponiveis.length > 1) && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold text-slate-700">KPI Vinculado *</Label>
+                <Select
+                  value={formKpiId || kpi?.id || ''}
+                  onValueChange={(val) => setFormKpiId(val)}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Selecione o KPI..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(listaKpisDisponiveis.length > 0
+                      ? listaKpisDisponiveis
+                      : kpi
+                        ? [kpi]
+                        : []
+                    ).map((item) => (
+                      <SelectItem key={item.id} value={item.id} className="text-xs">
+                        {item.nome} ({item.perspectiva})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">Título da Ação *</Label>
               <Input

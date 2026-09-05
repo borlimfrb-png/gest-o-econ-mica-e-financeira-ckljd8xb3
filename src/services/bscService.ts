@@ -385,6 +385,19 @@ export const bscService = {
   },
 
   /**
+   * Busca todas as iniciativas de uma empresa (todos os anos ou filtrado por ano)
+   */
+  async getIniciativasByEmpresa(empresaId: string, ano?: number): Promise<BscIniciativaRecord[]> {
+    if (!empresaId) return []
+    const filter = ano ? `empresa = '${empresaId}' && ano = ${ano}` : `empresa = '${empresaId}'`
+    return await pb.collection('bsc_iniciativas').getFullList<BscIniciativaRecord>({
+      filter,
+      sort: 'status,prazo,created',
+      expand: 'kpi',
+    })
+  },
+
+  /**
    * Busca as iniciativas vinculadas a um KPI específico
    */
   async getIniciativasByKpi(kpiId: string): Promise<BscIniciativaRecord[]> {
