@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T22:42:38.735Z",
+  "generatedAt": "2026-09-05T22:56:42.838Z",
   "collections": [
     {
       "name": "users",
@@ -253,6 +253,12 @@
         },
         {
           "name": "emitir_nota_fiscal",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "integrar_nfse_lancamentos",
           "type": "bool",
           "required": false,
           "system": false
@@ -991,6 +997,31 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "nota_fiscal_ref",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "notas_fiscais"
+        },
+        {
+          "name": "estornado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estornado_em",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "motivo_estorno",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
@@ -1869,7 +1900,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["Rascunho", "Emitida", "Enviada", "Cancelada", "Erro"]
+          "selectValues": ["Rascunho", "Emitida", "Enviada", "Cancelada", "Substituída", "Erro"]
         },
         {
           "name": "data_emissao",
@@ -2220,6 +2251,26 @@
           "required": false,
           "system": false,
           "collectionRef": "nfse_tomadores"
+        },
+        {
+          "name": "nota_substituida",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "notas_fiscais"
+        },
+        {
+          "name": "justificativa_correcao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "lancamento_ref",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "lancamentos"
         }
       ],
       "indexes": []

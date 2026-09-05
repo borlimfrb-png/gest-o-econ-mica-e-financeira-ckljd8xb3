@@ -79,6 +79,7 @@ export interface EmpresaRecord extends RecordModel {
   contato_principal?: string
   observacoes?: string
   emitir_nota_fiscal?: boolean
+  integrar_nfse_lancamentos?: boolean
   is_grupo?: boolean
   grupo_id?: string
   empresas_ids?: string[]
@@ -271,8 +272,13 @@ export interface LancamentoRecord extends RecordModel {
   valor: number
   historico?: string
   user: string
+  nota_fiscal_ref?: string
+  estornado?: boolean
+  estornado_em?: string
+  motivo_estorno?: string
   expand?: {
     empresa?: EmpresaRecord
+    nota_fiscal_ref?: NotaFiscalRecord
     plano_conta?: PlanoContaRecord & {
       expand?: {
         conta?: ContaRecord
@@ -441,7 +447,13 @@ export interface ContratoRecord extends RecordModel {
   }
 }
 
-export type StatusNotaFiscal = 'Rascunho' | 'Emitida' | 'Enviada' | 'Cancelada' | 'Erro'
+export type StatusNotaFiscal =
+  | 'Rascunho'
+  | 'Emitida'
+  | 'Enviada'
+  | 'Cancelada'
+  | 'Substituída'
+  | 'Erro'
 export type ModoEmissaoNFSe = 'Homologação / Simulação' | 'Produção SEFAZ / Gateway'
 export type TipoDocumentoFiscal = 'NFSe' | 'Debito' | 'Credito'
 
@@ -558,10 +570,17 @@ export interface NotaFiscalRecord extends RecordModel {
   tipo_ambiente?: '1 - Producao' | '2 - Homologacao'
   tomador_ref?: string
 
+  // Substituição / Reemissão corrigida e Integração Lançamentos
+  nota_substituida?: string
+  justificativa_correcao?: string
+  lancamento_ref?: string
+
   expand?: {
     empresa?: EmpresaRecord
     contrato?: ContratoRecord
     nota_referencia?: NotaFiscalRecord
+    nota_substituida?: NotaFiscalRecord
+    lancamento_ref?: LancamentoRecord
     recebivel?: RecebivelRecord
     tomador_ref?: NfseTomadorRecord
   }
