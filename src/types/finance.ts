@@ -572,6 +572,7 @@ export type OrigemAlteracaoPreco =
   | 'Edição Manual'
   | 'Preço Sugerido Margem'
   | 'Preço Sugerido Markup'
+  | 'Preço Sugerido Simulador'
   | 'Cadastro Inicial'
   | 'Outro'
 
@@ -924,6 +925,37 @@ export interface BscIniciativaHistoricoRecord {
   updated: string
   expand?: {
     iniciativa?: BscIniciativaRecord
+    empresa?: EmpresaRecord
+    usuario?: UserRecord
+  }
+}
+
+export interface SimuladorParametrosJson {
+  prazoDias: number
+  jurosMesPct: number
+  icmsPct: number
+  irpjPct: number
+  csllPct: number
+  pisPct: number
+  cofinsPct: number
+  simplesPct: number
+  comissaoPct: number
+  fretePct: number
+  assistenciaPct: number
+  outrosPct: number
+  margemLucroPct: number
+}
+
+export interface SimuladorCenarioRecord extends RecordModel {
+  usuario?: string
+  empresa: string
+  nome: string
+  descricao?: string
+  parametros: SimuladorParametrosJson
+  divisor_calculado?: number
+  created: string
+  updated: string
+  expand?: {
     empresa?: EmpresaRecord
     usuario?: UserRecord
   }

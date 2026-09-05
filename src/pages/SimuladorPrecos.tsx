@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import {
@@ -9,12 +10,22 @@ import {
   materiasPrimasService,
   configuracoesTributariasService,
 } from '@/services/formacaoPrecoService'
+import { simuladorCenariosService } from '@/services/simuladorCenariosService'
+import { auditoriaCadastrosService } from '@/services/auditoriaCadastrosService'
+import { ModalCenariosSimulador } from '@/components/ModalCenariosSimulador'
+import {
+  ModalAplicarPrecoSugerido,
+  type ItemAplicacaoPreco,
+} from '@/components/ModalAplicarPrecoSugerido'
+import { ModalEnviarLaudoSimuladorEmail } from '@/components/ModalEnviarLaudoSimuladorEmail'
 import { calcularTributosMateriaPrima } from '@/lib/taxCalculations'
 import type {
   ProdutoRecord,
   FichaTecnicaRecord,
   MateriaPrimaRecord,
   ConfiguracaoTributariaRecord,
+  SimuladorCenarioRecord,
+  SimuladorParametrosJson,
 } from '@/types/finance'
 import {
   Calculator,
@@ -37,6 +48,10 @@ import {
   Sliders,
   DollarSign,
   FileSpreadsheet,
+  BookmarkCheck,
+  Mail,
+  Send,
+  CheckCheck,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -128,8 +143,12 @@ function formatPct(val?: number | null, dec: number = 2): string {
 
 export default function SimuladorPrecos() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const { selectedEmpresaId, selectedEmpresa } = useFilter()
   const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
+
+  // Permissão: Admin e Empresa podem aplicar preços nos produtos
+  const podeAplicarPreco = user?.role === 'admin' || user?.role === 'empresa'
 
   // Dados carregados do backend
   const [loading, setLoading] = useState(false)
@@ -139,6 +158,7 @@ export default function SimuladorPrecos() {
   const [configTributaria, setConfigTributaria] = useState<ConfiguracaoTributariaRecord | null>(
     null,
   )
+  const [cenarios, setCenarios] = useState<SimuladorCenarioRecord[]>([])
 
   // Coluna esquerda: Parâmetros de Mark-Up
   const [params, setParams] = useState<ParametrosMarkup>(PARAMETROS_INICIAIS)
@@ -150,11 +170,22 @@ export default function SimuladorPrecos() {
   const [codigoInput, setCodigoInput] = useState<string>('')
   const [produtoBuscaSelect, setProdutoBuscaSelect] = useState<string>('')
 
+  // Modal de Cenários Salvos
+  const [modalCenariosOpen, setModalCenariosOpen] = useState(false)
+
+  // Modal de Aplicação de Preço Sugerido
+  const [modalAplicarPrecoOpen, setModalAplicarPrecoOpen] = useState(false)
+  const [itensParaAplicar, setItensParaAplicar] = useState<ItemAplicacaoPreco[]>([])
+  const [isLoteAplicacao, setIsLoteAplicacao] = useState(false)
+
+  // Modal de Envio por E-mail
+  const [modalEmailOpen, setModalEmailOpen] = useState(false)
+
   // Modal de Relatório PDF/A4
   const [modalPdfOpen, setModalPdfOpen] = useState(false)
   const printContainerRef = useRef<HTMLDivElement>(null)
 
-  // Realtime para coleções de formação de preço
+  // Realtime para coleções de formação de preço e cenários
   useRealtime('produtos', () => {
     loadDados()
   })
@@ -164,6 +195,23 @@ export default function SimuladorPrecos() {
   useRealtime('configuracoes_tributarias', () => {
     loadDados()
   })
+  useRealtime('simulador_cenarios', () => {
+    carregarCenarios()
+  })
+
+  // Carrega cenários salvos da empresa ativa
+  const carregarCenarios = useCallback(async () => {
+    if (!selectedEmpresaId) {
+      setCenarios([])
+      return
+    }
+    try {
+      const lista = await simuladorCenariosService.listarPorEmpresa(selectedEmpresaId)
+      setCenarios(lista)
+    } catch (err) {
+      console.warn('Erro ao carregar cenários salvos:', err)
+    }
+  }, [selectedEmpresaId])
 
   // Carrega produtos, fichas e configuração tributária da empresa ativa
   const loadDados = useCallback(async () => {
@@ -180,6 +228,20 @@ export default function SimuladorPrecos() {
       setFichas(fchs)
       setMaterias(mats)
       setConfigTributaria(cfg)
+
+      // Atualiza preços de venda atuais nos itens da simulação caso já estejam na tela
+      setItensSimulacao((prev) =>
+        prev.map((it) => {
+          const prodAtual = prods.find((p) => p.id === it.produtoId)
+          if (prodAtual) {
+            return {
+              ...it,
+              precoVendaAtual: Number(prodAtual.preco_venda) || undefined,
+            }
+          }
+          return it
+        }),
+      )
 
       // Se a empresa possui configuração tributária gravada, pode pré-carregar os impostos dela
       if (cfg) {
@@ -211,7 +273,29 @@ export default function SimuladorPrecos() {
 
   useEffect(() => {
     loadDados()
-  }, [loadDados])
+    carregarCenarios()
+  }, [loadDados, carregarCenarios])
+
+  // Aplicar cenário selecionado aos parâmetros de mark-up
+  const handleCarregarCenario = (cenario: SimuladorCenarioRecord) => {
+    if (!cenario || !cenario.parametros) return
+    const p = cenario.parametros
+    setParams({
+      prazoDias: p.prazoDias ?? 30,
+      jurosMesPct: p.jurosMesPct ?? 0,
+      icmsPct: p.icmsPct ?? 0,
+      irpjPct: p.irpjPct ?? 0,
+      csllPct: p.csllPct ?? 0,
+      pisPct: p.pisPct ?? 0,
+      cofinsPct: p.cofinsPct ?? 0,
+      simplesPct: p.simplesPct ?? 0,
+      comissaoPct: p.comissaoPct ?? 0,
+      fretePct: p.fretePct ?? 0,
+      assistenciaPct: p.assistenciaPct ?? 0,
+      outrosPct: p.outrosPct ?? 0,
+      margemLucroPct: p.margemLucroPct ?? 15,
+    })
+  }
 
   // Map rápido de matérias-primas
   const materiasMap = useMemo(() => {
@@ -863,6 +947,133 @@ export default function SimuladorPrecos() {
     })
   }
 
+  // -------------------------------------------------------------
+  // APLICAÇÃO DE PREÇO SUGERIDO NO CADASTRO DO PRODUTO
+  // -------------------------------------------------------------
+  const handleAbrirAplicarPrecoItem = (it: (typeof itensCalculados)[0]) => {
+    if (!it.produtoId) {
+      toast({
+        variant: 'destructive',
+        title: 'Produto não vinculado',
+        description:
+          'Este item foi inserido manualmente e não possui cadastro correspondente na empresa.',
+      })
+      return
+    }
+
+    setItensParaAplicar([
+      {
+        produtoId: it.produtoId,
+        codigo: it.codigo,
+        nome: it.nome,
+        precoAntigo: it.precoVendaAtual,
+        precoNovo: it.precoSugerido,
+        custo: it.custo,
+      },
+    ])
+    setIsLoteAplicacao(false)
+    setModalAplicarPrecoOpen(true)
+  }
+
+  const handleAbrirAplicarTodos = () => {
+    // Apenas produtos vinculados com precoSugerido > 0
+    const itensValidos = itensCalculados
+      .filter((it) => it.produtoId && it.precoSugerido > 0)
+      .map((it) => ({
+        produtoId: it.produtoId,
+        codigo: it.codigo,
+        nome: it.nome,
+        precoAntigo: it.precoVendaAtual,
+        precoNovo: it.precoSugerido,
+        custo: it.custo,
+      }))
+
+    if (itensValidos.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nenhum produto apto para aplicação',
+        description: 'Adicione produtos cadastrados à simulação para aplicar os preços em lote.',
+      })
+      return
+    }
+
+    setItensParaAplicar(itensValidos)
+    setIsLoteAplicacao(true)
+    setModalAplicarPrecoOpen(true)
+  }
+
+  const handleConfirmarAplicacaoPrecos = async (itens: ItemAplicacaoPreco[]) => {
+    let sucessos = 0
+    const falhas: string[] = []
+
+    for (const item of itens) {
+      try {
+        const margemCalculada =
+          item.precoNovo > 0 && item.custo >= 0
+            ? ((item.precoNovo - item.custo) / item.precoNovo) * 100
+            : params.margemLucroPct
+
+        await produtosService.update(
+          item.produtoId,
+          {
+            preco_venda: item.precoNovo,
+            margem_desejada: Math.round(margemCalculada * 10) / 10,
+          },
+          {
+            origem: 'Preço Sugerido Simulador',
+            observacao: `Preço sugerido aplicado via Simulador de Preços (Mark-Up Divisor: ÷ ${calculoMarkup.divisor.toFixed(4)}, Margem: ${params.margemLucroPct}%)`,
+          },
+        )
+
+        // Registrar na auditoria de cadastros se disponível
+        try {
+          await auditoriaCadastrosService.registrar({
+            entidade: 'empresas',
+            registro_id: item.produtoId,
+            registro_descricao: `Produto: ${item.nome}`,
+            empresa: selectedEmpresaId || undefined,
+            acao: 'edicao',
+            detalhes: {
+              motivo: `Preço sugerido aplicado via Simulador de Preços (anterior: ${formatBrl(item.precoAntigo)} → novo: ${formatBrl(item.precoNovo)})`,
+              dados_anteriores: { preco_venda: item.precoAntigo },
+              dados_novos: { preco_venda: item.precoNovo },
+            },
+          })
+        } catch (audErr) {
+          console.warn('Auditoria de produto ignorada:', audErr)
+        }
+
+        sucessos++
+      } catch (err: any) {
+        console.error(`Erro ao aplicar preço no produto ${item.produtoId}:`, err)
+        falhas.push(item.nome)
+      }
+    }
+
+    if (sucessos > 0) {
+      toast({
+        title:
+          sucessos === 1
+            ? 'Preço atualizado com sucesso!'
+            : `${sucessos} produtos atualizados com sucesso!`,
+        description:
+          sucessos === 1
+            ? `O preço de venda do produto foi gravado no cadastro oficial.`
+            : `Os novos preços sugeridos foram gravados em lote na base de produtos da empresa.`,
+      })
+      // Recarrega lista de produtos e itens
+      await loadDados()
+    }
+
+    if (falhas.length > 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Alguns itens não puderam ser atualizados',
+        description: `Falha em: ${falhas.slice(0, 3).join(', ')}${falhas.length > 3 ? '...' : ''}`,
+      })
+    }
+  }
+
   // Impressão A4 do relatório
   const handleImprimirA4 = () => {
     window.print()
@@ -897,6 +1108,34 @@ export default function SimuladorPrecos() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {/* Botão de Cenários Salvos */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalCenariosOpen(true)}
+              className="text-xs gap-1.5 border-amber-300 bg-amber-50/60 hover:bg-amber-100 text-amber-900 font-medium"
+            >
+              <BookmarkCheck className="w-4 h-4 text-amber-700" />
+              Cenários Salvos
+              {cenarios.length > 0 && (
+                <Badge className="bg-amber-600 text-white text-[10px] px-1.5 py-0 h-4">
+                  {cenarios.length}
+                </Badge>
+              )}
+            </Button>
+
+            {/* Botão de Enviar por E-mail */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalEmailOpen(true)}
+              disabled={itensCalculados.length === 0}
+              className="text-xs gap-1.5 border-blue-300 bg-blue-50/60 hover:bg-blue-100 text-blue-900 font-medium"
+            >
+              <Mail className="w-4 h-4 text-blue-600" />
+              Enviar por E-mail
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -920,7 +1159,10 @@ export default function SimuladorPrecos() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={loadDados}
+              onClick={() => {
+                loadDados()
+                carregarCenarios()
+              }}
               disabled={loading}
               className="text-xs gap-1 text-slate-600 hover:text-slate-900"
               title="Recarregar dados"
@@ -979,47 +1221,63 @@ export default function SimuladorPrecos() {
                   Informe prazo, juros e os percentuais de impostos, despesas variáveis e margem.
                 </CardDescription>
 
-                {/* Atalhos de Predefinição */}
-                <div className="flex items-center gap-1.5 pt-2 flex-wrap">
-                  <span className="text-[10px] text-slate-400 font-semibold uppercase">
-                    Predefinições:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleAplicarPreset('simples')}
-                    className="text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
-                  >
-                    Simples Nac.
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAplicarPreset('presumido')}
-                    className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
-                  >
-                    Presumido
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAplicarPreset('lucroReal')}
-                    className="text-[11px] px-2 py-0.5 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors"
-                  >
-                    Lucro Real
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleAplicarPreset('comercio')}
-                    className="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors"
-                  >
-                    Comércio 45d
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setParams(PARAMETROS_INICIAIS)}
-                    title="Restaurar padrão"
-                    className="text-[11px] px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 border border-slate-200"
-                  >
-                    <RotateCcw className="w-3 h-3 inline" />
-                  </button>
+                {/* Atalhos de Predefinição e Cenários Salvos */}
+                <div className="flex items-center justify-between gap-1.5 pt-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] text-slate-400 font-semibold uppercase">
+                      Predefinições:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleAplicarPreset('simples')}
+                      className="text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors"
+                    >
+                      Simples Nac.
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAplicarPreset('presumido')}
+                      className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+                    >
+                      Presumido
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAplicarPreset('lucroReal')}
+                      className="text-[11px] px-2 py-0.5 rounded bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors"
+                    >
+                      Lucro Real
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleAplicarPreset('comercio')}
+                      className="text-[11px] px-2 py-0.5 rounded bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition-colors"
+                    >
+                      Comércio 45d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setParams(PARAMETROS_INICIAIS)}
+                      title="Restaurar padrão"
+                      className="text-[11px] px-1.5 py-0.5 rounded text-slate-500 hover:bg-slate-100 border border-slate-200"
+                    >
+                      <RotateCcw className="w-3 h-3 inline" />
+                    </button>
+                  </div>
+
+                  {/* Dropdown / Botão de carregar cenário direto */}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setModalCenariosOpen(true)}
+                      className="h-6 px-2 text-[10px] border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 gap-1 font-semibold"
+                    >
+                      <BookmarkCheck className="w-3 h-3 text-amber-600" />
+                      {cenarios.length > 0 ? `Cenários (${cenarios.length})` : 'Salvar Cenário'}
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
 
@@ -1461,6 +1719,19 @@ export default function SimuladorPrecos() {
                   </div>
 
                   <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Botão de Aplicar a Todos visível para perfis autorizados */}
+                    {podeAplicarPreco && itensCalculados.length > 0 && (
+                      <Button
+                        size="sm"
+                        onClick={handleAbrirAplicarTodos}
+                        className="h-7 text-[11px] gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+                        title="Gravar os preços sugeridos calculados diretamente no cadastro de todos os produtos simulados"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5" />
+                        Aplicar a Todos ({itensCalculados.filter((i) => i.produtoId).length})
+                      </Button>
+                    )}
+
                     <Button
                       variant="outline"
                       size="sm"
@@ -1478,7 +1749,7 @@ export default function SimuladorPrecos() {
                         onClick={handleLimparItens}
                         className="h-7 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
-                        Limpar Lista
+                        Limpar
                       </Button>
                     )}
                   </div>
@@ -1569,8 +1840,8 @@ export default function SimuladorPrecos() {
                     <Table>
                       <TableHeader className="bg-slate-50">
                         <TableRow className="text-[11px] text-slate-600">
-                          <TableHead className="w-[100px] font-bold">Código</TableHead>
-                          <TableHead className="min-w-[150px] font-bold">Produto</TableHead>
+                          <TableHead className="w-[90px] font-bold">Código</TableHead>
+                          <TableHead className="min-w-[140px] font-bold">Produto</TableHead>
                           <TableHead className="text-right font-bold">Custo Ficha</TableHead>
                           <TableHead className="text-center font-bold">Mark-Up Divisor</TableHead>
                           <TableHead className="text-right font-bold text-emerald-700 bg-emerald-50/70">
@@ -1579,7 +1850,7 @@ export default function SimuladorPrecos() {
                           <TableHead className="text-right font-bold">Preço Atual</TableHead>
                           <TableHead className="text-right font-bold">Margem R$</TableHead>
                           <TableHead className="text-right font-bold">Impostos R$</TableHead>
-                          <TableHead className="w-[50px] text-center"></TableHead>
+                          <TableHead className="text-center font-bold">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1682,15 +1953,28 @@ export default function SimuladorPrecos() {
                             </TableCell>
 
                             <TableCell className="text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoverItem(it.id)}
-                                className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
-                                title="Remover item da simulação"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              <div className="flex items-center justify-center gap-1">
+                                {podeAplicarPreco && it.produtoId && it.precoSugerido > 0 && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleAbrirAplicarPrecoItem(it)}
+                                    className="h-7 px-2 text-[11px] bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-300 font-medium transition-colors"
+                                    title="Aplicar este preço sugerido diretamente no cadastro do produto"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 mr-1" />
+                                    Aplicar
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoverItem(it.id)}
+                                  className="h-7 w-7 p-0 text-slate-400 hover:text-red-600"
+                                  title="Remover item da simulação"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1810,6 +2094,50 @@ export default function SimuladorPrecos() {
             )}
           </div>
         </div>
+
+        {/* MODAL: CENÁRIOS DE SIMULAÇÃO (MELHORIA 1) */}
+        <ModalCenariosSimulador
+          open={modalCenariosOpen}
+          onOpenChange={setModalCenariosOpen}
+          empresaId={selectedEmpresaId || ''}
+          empresaNome={selectedEmpresa?.nome || selectedEmpresa?.razao_social || 'Empresa Ativa'}
+          cenarios={cenarios}
+          parametrosAtuais={params}
+          divisorAtual={calculoMarkup.divisor}
+          onCarregarCenario={handleCarregarCenario}
+          onCenariosChanged={carregarCenarios}
+        />
+
+        {/* MODAL: APLICAR PREÇO SUGERIDO (MELHORIA 2) */}
+        <ModalAplicarPrecoSugerido
+          open={modalAplicarPrecoOpen}
+          onOpenChange={setModalAplicarPrecoOpen}
+          itensParaAplicar={itensParaAplicar}
+          isLote={isLoteAplicacao}
+          onConfirmar={handleConfirmarAplicacaoPrecos}
+        />
+
+        {/* MODAL: ENVIAR LAUDO POR E-MAIL (MELHORIA 3) */}
+        <ModalEnviarLaudoSimuladorEmail
+          open={modalEmailOpen}
+          onOpenChange={setModalEmailOpen}
+          empresaId={selectedEmpresaId || ''}
+          empresaNome={selectedEmpresa?.nome || selectedEmpresa?.razao_social || 'Empresa Ativa'}
+          empresaEmail={selectedEmpresa?.email || ''}
+          parametros={params}
+          divisorCalculado={calculoMarkup.divisor}
+          itensSimulados={itensCalculados.map((it) => ({
+            id: it.id,
+            produtoId: it.produtoId,
+            codigo: it.codigo,
+            nome: it.nome,
+            unidade: it.unidade,
+            custoTotal: it.custo,
+            precoSugerido: it.precoSugerido,
+            precoAtual: it.precoVendaAtual,
+          }))}
+          consultoriaNome={minhaEmpresa?.razao_social || 'Gestão Econômica e Financeira'}
+        />
 
         {/* MODAL / RELATÓRIO A4 PARA IMPRESSÃO E LAUDO */}
         <Dialog open={modalPdfOpen} onOpenChange={setModalPdfOpen}>
