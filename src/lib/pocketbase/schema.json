@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-04T16:35:26.856Z",
+  "generatedAt": "2026-09-05T11:44:08.533Z",
   "collections": [
     {
       "name": "users",
@@ -3571,6 +3571,133 @@
         "CREATE INDEX idx_audit_cad_empresa ON auditoria_cadastros (empresa)",
         "CREATE INDEX idx_audit_cad_reg_id ON auditoria_cadastros (registro_id)",
         "CREATE INDEX idx_audit_cad_created ON auditoria_cadastros (created)"
+      ]
+    },
+    {
+      "name": "bsc_kpis",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "perspectiva",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": [
+            "financeira",
+            "clientes",
+            "processos_internos",
+            "aprendizado_crescimento"
+          ]
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "unidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "meta",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_atual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["auto", "manual"]
+        },
+        {
+          "name": "formula",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sentido",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["maior_melhor", "menor_melhor"]
+        },
+        {
+          "name": "ordem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bsc_kpis_empresa ON bsc_kpis (empresa)",
+        "CREATE INDEX idx_bsc_kpis_ano ON bsc_kpis (ano)",
+        "CREATE INDEX idx_bsc_kpis_perspectiva ON bsc_kpis (perspectiva)",
+        "CREATE INDEX idx_bsc_kpis_empresa_ano ON bsc_kpis (empresa, ano)"
       ]
     }
   ]

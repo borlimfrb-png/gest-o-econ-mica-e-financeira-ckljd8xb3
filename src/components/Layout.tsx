@@ -42,6 +42,8 @@ import {
   Bot,
   Sparkles,
   Network,
+  Target,
+  Compass,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -287,6 +289,16 @@ export default function Layout() {
 
   const isIndicadoresActive = location.pathname.startsWith('/indicadores')
 
+  // Itens do submenu Planejamento (Balanced Scorecard)
+  const planejamentoSubItems = [
+    {
+      name: 'Balanced Scorecard',
+      path: '/planejamento/bsc',
+      icon: Target,
+    },
+  ]
+  const isPlanejamentoActive = location.pathname.startsWith('/planejamento')
+
   // Grupo "Cadastros" expansível/colapsável
   const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
 
@@ -301,6 +313,9 @@ export default function Layout() {
 
   // Grupo "Indicadores" expansível/colapsável
   const [indicadoresOpen, setIndicadoresOpen] = useState<boolean>(isIndicadoresActive || true)
+
+  // Grupo "Planejamento" expansível/colapsável
+  const [planejamentoOpen, setPlanejamentoOpen] = useState<boolean>(isPlanejamentoActive || true)
 
   React.useEffect(() => {
     if (isCadastroActive) {
@@ -332,6 +347,12 @@ export default function Layout() {
     }
   }, [isIndicadoresActive])
 
+  React.useEffect(() => {
+    if (isPlanejamentoActive) {
+      setPlanejamentoOpen(true)
+    }
+  }, [isPlanejamentoActive])
+
   // Redirect to login if not authenticated
   React.useEffect(() => {
     if (!isLoading && !isAuthenticated && location.pathname !== '/') {
@@ -360,6 +381,7 @@ export default function Layout() {
     location.pathname === '/relatorio-anual' ||
     location.pathname === '/agente-ia' ||
     location.pathname === '/analise-tributaria' ||
+    location.pathname === '/planejamento/bsc' ||
     location.pathname === '/notas-fiscais' ||
     location.pathname.startsWith('/empresas/') ||
     location.pathname.startsWith('/formacao-preco')
@@ -826,6 +848,78 @@ export default function Layout() {
                       <div className="overflow-hidden">
                         <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
                           {indicadoresSubItems.map((sub) => {
+                            const SubIcon = sub.icon
+                            const isSubActive = location.pathname === sub.path
+
+                            return (
+                              <NavLink
+                                key={sub.path}
+                                to={sub.path}
+                                onClick={() => setMobileDrawerOpen(false)}
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                  isSubActive
+                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                <SubIcon
+                                  className={`w-3.5 h-3.5 ${
+                                    isSubActive ? 'text-blue-300' : 'text-slate-400'
+                                  }`}
+                                />
+                                <span className="truncate">{sub.name}</span>
+                              </NavLink>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4.5 Planejamento (Balanced Scorecard) - Apenas Admin e Empresa */}
+                {!isUserFinanceiro && !isUserComercial && (
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setPlanejamentoOpen((prev) => !prev)}
+                      style={
+                        isPlanejamentoActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isPlanejamentoActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Compass
+                          className={`w-4 h-4 ${isPlanejamentoActive ? 'text-blue-300' : 'text-blue-400'}`}
+                        />
+                        <span>Planejamento</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                          planejamentoOpen ? 'rotate-0' : '-rotate-90'
+                        }`}
+                      />
+                    </button>
+
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        planejamentoOpen
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
+                          {planejamentoSubItems.map((sub) => {
                             const SubIcon = sub.icon
                             const isSubActive = location.pathname === sub.path
 
@@ -1595,6 +1689,109 @@ export default function Layout() {
                 </div>
               )}
 
+              {/* 4.5 Planejamento - Balanced Scorecard (Apenas Admin e Empresa) */}
+              {!isUserFinanceiro && !isUserComercial && (
+                <div className="space-y-1">
+                  {/* Visualização Tablet */}
+                  <div className="lg:hidden">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <NavLink
+                          to="/planejamento/bsc"
+                          className={`w-full flex items-center justify-center p-2.5 rounded-xl text-sm font-medium transition-all ${
+                            isPlanejamentoActive
+                              ? 'bg-blue-600/30 text-white font-semibold shadow-sm border border-blue-500/40'
+                              : 'text-slate-300 hover:text-white hover:bg-white/5'
+                          }`}
+                        >
+                          <Compass
+                            className={`w-5 h-5 ${isPlanejamentoActive ? 'text-blue-300' : 'text-slate-400'}`}
+                          />
+                        </NavLink>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side="right"
+                        className="bg-[#0B1F3A] text-white border-blue-900"
+                      >
+                        Planejamento (Balanced Scorecard)
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+
+                  {/* Visualização Desktop (Expansível / Colapsável com subitens) */}
+                  <div className="hidden lg:block">
+                    <button
+                      type="button"
+                      onClick={() => setPlanejamentoOpen((prev) => !prev)}
+                      style={
+                        isPlanejamentoActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isPlanejamentoActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Compass
+                          className={`w-5 h-5 shrink-0 ${
+                            isPlanejamentoActive ? 'text-blue-300' : 'text-blue-400'
+                          }`}
+                        />
+                        <span className="truncate font-medium">Planejamento</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                          planejamentoOpen ? 'rotate-0' : '-rotate-90'
+                        }`}
+                      />
+                    </button>
+
+                    {/* Submenu com animação suave via grid template rows */}
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        planejamentoOpen
+                          ? 'grid-rows-[1fr] opacity-100'
+                          : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-4 pl-3 border-l border-blue-500/30 space-y-1 py-1 mt-1">
+                          {planejamentoSubItems.map((sub) => {
+                            const SubIcon = sub.icon
+                            const isSubActive = location.pathname === sub.path
+
+                            return (
+                              <NavLink
+                                key={sub.path}
+                                to={sub.path}
+                                className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                                  isSubActive
+                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                                }`}
+                              >
+                                <SubIcon
+                                  className={`w-4 h-4 shrink-0 ${
+                                    isSubActive ? 'text-blue-300' : 'text-slate-400'
+                                  }`}
+                                />
+                                <span className="truncate">{sub.name}</span>
+                              </NavLink>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* 5. Análise Tributária (Nível Superior entre Financeiro e Importação) */}
               {!isUserFinanceiro && !isUserComercial && (
                 <div>
@@ -1927,6 +2124,7 @@ export default function Layout() {
                   {location.pathname === '/agente-ia' && 'Agente de Diagnóstico & Estratégia de IA'}
                   {location.pathname === '/relatorios' && 'Relatórios e Pareceres'}
                   {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
+                  {location.pathname === '/planejamento/bsc' && 'Balanced Scorecard (BSC)'}
                   {location.pathname === '/analise-tributaria' &&
                     'Análise Tributária e Planejamento'}
                   {location.pathname === '/notas-fiscais' && 'Emissão de Nota Fiscal (NFS-e)'}
@@ -1944,6 +2142,8 @@ export default function Layout() {
                     'Gere relatórios executivos para impressão ou exportação'}
                   {location.pathname === '/relatorio-anual' &&
                     'Visão consolidada de 12 meses por tipo de conta com exportação CSV'}
+                  {location.pathname === '/planejamento/bsc' &&
+                    'Gestão estratégica em 4 perspectivas com metas, peso e apuração automática'}
                   {location.pathname === '/analise-tributaria' &&
                     'Comparativo entre Simples Nacional, Lucro Presumido e Lucro Real'}
                   {location.pathname === '/notas-fiscais' &&

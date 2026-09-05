@@ -18,6 +18,7 @@ export type ModuloSistema =
   | 'formacao_preco'
   | 'indicadores'
   | 'indicadores_valuation'
+  | 'planejamento'
   | 'analise_tributaria'
   | 'importacao'
   | 'relatorios'
@@ -62,6 +63,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'formacao_preco',
       'indicadores',
       'indicadores_valuation',
+      'planejamento',
       'analise_tributaria',
       'importacao',
       'relatorios',
@@ -92,6 +94,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'formacao_preco',
       'indicadores',
       'indicadores_valuation',
+      'planejamento',
       'analise_tributaria',
       'importacao',
       'relatorios',

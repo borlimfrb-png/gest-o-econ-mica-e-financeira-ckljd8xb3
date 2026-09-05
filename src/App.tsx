@@ -48,6 +48,7 @@ const IndicadoresKanitz = lazy(() => import('./pages/IndicadoresKanitz'))
 const AgenteIA = lazy(() => import('./pages/AgenteIA'))
 const Importacao = lazy(() => import('./pages/Importacao'))
 const AnaliseTributaria = lazy(() => import('./pages/AnaliseTributaria'))
+const BalancedScorecard = lazy(() => import('./pages/BalancedScorecard'))
 const Configuracoes = lazy(() => import('./pages/Configuracoes'))
 const GruposEmpresariais = lazy(() => import('./pages/GruposEmpresariais'))
 const DashboardEmpresa = lazy(() => import('./pages/DashboardEmpresa'))
@@ -296,6 +297,18 @@ const App = () => (
                         <IndicadoresKanitz />
                       </ModuloRoute>
                     }
+                  />
+                  <Route
+                    path="/planejamento/bsc"
+                    element={
+                      <ModuloRoute modulo="planejamento">
+                        <BalancedScorecard />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/planejamento"
+                    element={<Navigate to="/planejamento/bsc" replace />}
                   />
                   <Route
                     path="/analise-tributaria"

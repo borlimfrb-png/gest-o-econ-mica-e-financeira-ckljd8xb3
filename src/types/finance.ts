@@ -842,3 +842,38 @@ export interface MemoriaFornecedorRecord {
     empresa?: EmpresaRecord
   }
 }
+
+export type BscPerspectiva =
+  | 'financeira'
+  | 'clientes'
+  | 'processos_internos'
+  | 'aprendizado_crescimento'
+
+export type BscKpiTipo = 'auto' | 'manual'
+export type BscSentido = 'maior_melhor' | 'menor_melhor'
+
+export interface BscKpiRecord {
+  id: string
+  collectionId: string
+  collectionName: string
+  usuario?: string
+  empresa?: string
+  ano: number
+  perspectiva: BscPerspectiva
+  nome: string
+  descricao?: string
+  unidade?: string
+  meta: number
+  valor_atual?: number
+  tipo: BscKpiTipo
+  formula?: string // ex: 'liquidez_corrente', 'liquidez_seca', 'endividamento_geral', 'margem_bruta', 'margem_liquida', 'roe', 'roa', 'ebitda', 'crescimento_receita', 'pmr', 'pmp', 'pme'
+  peso?: number
+  sentido: BscSentido
+  ordem?: number
+  created: string
+  updated: string
+  expand?: {
+    empresa?: EmpresaRecord
+    usuario?: UserRecord
+  }
+}
