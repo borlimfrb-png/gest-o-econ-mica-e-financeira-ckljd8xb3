@@ -36,7 +36,13 @@ import {
   Target,
   Building2,
   Sparkles,
+  BookOpen,
 } from 'lucide-react'
+import {
+  CATALOGO_MODELOS_PLANOS,
+  CATEGORIAS_PROBLEMAS,
+  type ModeloPlanoAcao,
+} from '@/lib/catalogoModelosPlanosAcao'
 
 export interface PainelPlanosAcaoEmpresaProps {
   empresa: EmpresaRecord | null
@@ -76,6 +82,8 @@ export function PainelPlanosAcaoEmpresa({
   const [buscaTexto, setBuscaTexto] = useState<string>('')
   const [filtroCritico, setFiltroCritico] = useState<boolean>(false) // se apenas planos de KPIs críticos
   const [isUpdatingId, setIsUpdatingId] = useState<string | null>(null)
+  const [catalogoAberto, setCatalogoAberto] = useState<boolean>(false)
+  const [filtroCategoriaCatalogo, setFiltroCategoriaCatalogo] = useState<string>('todos')
 
   // Mapa de KPI por ID para acesso rápido
   const mapaKpis = useMemo(() => {
@@ -320,6 +328,18 @@ export function PainelPlanosAcaoEmpresa({
 
         <div className="flex items-center gap-2 flex-wrap">
           <Button
+            onClick={() => setCatalogoAberto(!catalogoAberto)}
+            variant="outline"
+            size="sm"
+            className={`h-9 text-xs font-semibold border-blue-200 text-blue-700 hover:bg-blue-50 ${
+              catalogoAberto ? 'bg-blue-50 border-blue-300' : ''
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+            {catalogoAberto ? 'Fechar Catálogo' : 'Catálogo de Modelos'}
+          </Button>
+
+          <Button
             onClick={() => onRecarregar()}
             variant="outline"
             size="sm"
@@ -340,6 +360,102 @@ export function PainelPlanosAcaoEmpresa({
           </Button>
         </div>
       </div>
+
+      {/* CATÁLOGO RÁPIDO EXPANSÍVEL DE MODELOS PRONTOS */}
+      {catalogoAberto && (
+        <Card className="bg-gradient-to-r from-blue-50/50 to-indigo-50/50 border-blue-200 shadow-sm animate-fadeIn">
+          <CardHeader className="p-4 pb-2 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                Catálogo de Modelos de Plano de Ação por Tipo de Problema
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-600">
+                Selecione um modelo testado para criar um plano com título, diagnóstico e etapas
+                pré-estruturadas.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 font-medium">Classificar:</span>
+              <Select
+                value={filtroCategoriaCatalogo}
+                onValueChange={(val) => setFiltroCategoriaCatalogo(val)}
+              >
+                <SelectTrigger className="h-8 text-xs w-[180px] bg-white">
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos" className="text-xs">
+                    Todos os Problemas
+                  </SelectItem>
+                  {CATEGORIAS_PROBLEMAS.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id} className="text-xs">
+                      {cat.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {CATALOGO_MODELOS_PLANOS.filter(
+                (m) =>
+                  filtroCategoriaCatalogo === 'todos' || m.categoria === filtroCategoriaCatalogo,
+              ).map((modelo) => {
+                // Sugerir o primeiro KPI compatível
+                const kpiSugerido =
+                  kpis.find((k) =>
+                    modelo.kpisRelacionados.some(
+                      (rel) =>
+                        (k.formula || '').includes(rel) || k.nome.toLowerCase().includes(rel),
+                    ),
+                  ) || null
+
+                return (
+                  <div
+                    key={modelo.id}
+                    className="p-3.5 bg-white rounded-xl border border-blue-200 hover:border-blue-400 shadow-2xs transition-all flex flex-col justify-between gap-2.5"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-1">
+                        <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[9px] font-bold">
+                          {modelo.categoriaNome}
+                        </Badge>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          ~{modelo.prazoSugeridoDias} dias
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-900 leading-tight">
+                        {modelo.titulo}
+                      </h4>
+                      <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed">
+                        {modelo.descricao}
+                      </p>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+                      <span className="text-[10px] text-slate-500 italic truncate max-w-[150px]">
+                        {kpiSugerido ? `Sugere: ${kpiSugerido.nome}` : 'Aplicável a qualquer KPI'}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          onNovoPlano(kpiSugerido)
+                        }}
+                        className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold px-2.5 shadow-2xs"
+                      >
+                        + Criar c/ Modelo
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* 2. CARDS RESUMO DE INDICADORES / KPI METRICS */}
       <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">

@@ -443,4 +443,14 @@ export const bscService = {
   async deleteIniciativa(id: string): Promise<boolean> {
     return await pb.collection('bsc_iniciativas').delete(id)
   },
+
+  /**
+   * Busca todas as iniciativas de todas as empresas (visão geral/dashboard)
+   */
+  async getAllIniciativas(): Promise<BscIniciativaRecord[]> {
+    return await pb.collection('bsc_iniciativas').getFullList<BscIniciativaRecord>({
+      sort: 'status,prazo,created',
+      expand: 'kpi',
+    })
+  },
 }

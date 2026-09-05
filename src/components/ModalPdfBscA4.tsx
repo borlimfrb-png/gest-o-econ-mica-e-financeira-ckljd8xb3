@@ -56,6 +56,18 @@ export interface ResumoPerspectivaPdf {
   }[]
 }
 
+export interface ComparativoGrupoItemPdf {
+  empresaId: string
+  empresaNome: string
+  scoreGlobal: number
+  scoresPerspectivas: {
+    perspectiva: BscPerspectiva
+    perspectivaNome: string
+    score: number
+  }[]
+  totalKpis: number
+}
+
 export interface ModalPdfBscA4Props {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -68,6 +80,9 @@ export interface ModalPdfBscA4Props {
   resumosPerspectivas: ResumoPerspectivaPdf[]
   totalKpisCount: number
   iniciativas?: BscIniciativaRecord[]
+  // Evolução 1: Comparativo entre empresas do grupo empresarial (se grupo ativo)
+  grupoAtivo?: { id: string; nome: string } | null
+  comparativoGrupo?: ComparativoGrupoItemPdf[]
 }
 
 export function ModalPdfBscA4({
@@ -82,6 +97,8 @@ export function ModalPdfBscA4({
   resumosPerspectivas,
   totalKpisCount,
   iniciativas = [],
+  grupoAtivo = null,
+  comparativoGrupo = [],
 }: ModalPdfBscA4Props) {
   const { toast } = useToast()
 
@@ -141,6 +158,21 @@ export function ModalPdfBscA4({
       csv += `Título;KPI;Responsável;Prazo;Status;Progresso (%)\n`
       iniciativas.forEach((ini) => {
         csv += `"${ini.titulo}";"${ini.expand?.kpi?.nome || 'KPI'}";"${ini.responsavel || '—'}";"${ini.prazo || '—'}";"${ini.status}";"${ini.progresso ?? 0}%"\n`
+      })
+    }
+
+    if (grupoAtivo && comparativoGrupo.length > 0) {
+      csv += `\n--- COMPARATIVO ENTRE EMPRESAS DO GRUPO (${grupoAtivo.nome}) ---\n`
+      csv += `Empresa;Score Global BSC (%);Finan;Clientes;Processos;Pessoas;Total KPIs\n`
+      comparativoGrupo.forEach((comp) => {
+        const f = comp.scoresPerspectivas.find((s) => s.perspectiva === 'financeira')?.score ?? 0
+        const c = comp.scoresPerspectivas.find((s) => s.perspectiva === 'clientes')?.score ?? 0
+        const p =
+          comp.scoresPerspectivas.find((s) => s.perspectiva === 'processos_internos')?.score ?? 0
+        const a =
+          comp.scoresPerspectivas.find((s) => s.perspectiva === 'aprendizado_crescimento')?.score ??
+          0
+        csv += `"${comp.empresaNome}";"${comp.scoreGlobal}%";"${f}%";"${c}%";"${p}%";"${a}%";"${comp.totalKpis}"\n`
       })
     }
 
@@ -546,12 +578,111 @@ export function ModalPdfBscA4({
               </div>
             </section>
 
-            {/* SEÇÃO 3: PLANOS DE AÇÃO E INICIATIVAS VINCULADAS */}
+            {/* SEÇÃO 3: COMPARATIVO ENTRE EMPRESAS DO GRUPO (SE GRUPO ATIVO) */}
+            {grupoAtivo && comparativoGrupo.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-indigo-900 text-white flex items-center justify-center text-[10px] font-bold">
+                    3
+                  </span>
+                  Comparativo BSC entre Empresas do Grupo ({grupoAtivo.nome})
+                </h2>
+
+                <div className="bg-indigo-50/50 border border-indigo-200 rounded-xl p-3.5 space-y-3">
+                  <p className="text-[11px] text-slate-600">
+                    Avaliação comparativa de scores ponderados e liderança por perspectiva
+                    estratégica entre as empresas integrantes do <strong>{grupoAtivo.nome}</strong>{' '}
+                    no exercício de {selectedAno}.
+                  </p>
+
+                  <div className="overflow-x-auto bg-white border border-indigo-100 rounded-lg">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-indigo-100/70 text-indigo-950 font-bold uppercase text-[10px] border-b border-indigo-200">
+                          <th className="py-2.5 px-3">Empresa Integrante</th>
+                          <th className="py-2.5 px-2 text-center">Score Global</th>
+                          <th className="py-2.5 px-2 text-center">Financeira</th>
+                          <th className="py-2.5 px-2 text-center">Clientes</th>
+                          <th className="py-2.5 px-2 text-center">Processos</th>
+                          <th className="py-2.5 px-2 text-center">Pessoas</th>
+                          <th className="py-2.5 px-2 text-center">Liderança Geral</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-[11px]">
+                        {(() => {
+                          const maxGlobal = Math.max(
+                            ...comparativoGrupo.map((c) => c.scoreGlobal),
+                            0,
+                          )
+                          return comparativoGrupo.map((comp) => {
+                            const isLiderGeral = comp.scoreGlobal === maxGlobal && maxGlobal > 0
+                            const sFin =
+                              comp.scoresPerspectivas.find((s) => s.perspectiva === 'financeira')
+                                ?.score ?? 0
+                            const sCli =
+                              comp.scoresPerspectivas.find((s) => s.perspectiva === 'clientes')
+                                ?.score ?? 0
+                            const sProc =
+                              comp.scoresPerspectivas.find(
+                                (s) => s.perspectiva === 'processos_internos',
+                              )?.score ?? 0
+                            const sPes =
+                              comp.scoresPerspectivas.find(
+                                (s) => s.perspectiva === 'aprendizado_crescimento',
+                              )?.score ?? 0
+
+                            return (
+                              <tr key={comp.empresaId} className="hover:bg-slate-50/70">
+                                <td className="py-2 px-3 font-semibold text-slate-900">
+                                  <div className="flex items-center gap-1.5">
+                                    <Building2 className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                                    <span>{comp.empresaNome}</span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      ({comp.totalKpis} KPIs)
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono font-bold text-indigo-800 text-xs">
+                                  {comp.scoreGlobal}%
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono text-slate-700">
+                                  {sFin}%
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono text-slate-700">
+                                  {sCli}%
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono text-slate-700">
+                                  {sProc}%
+                                </td>
+                                <td className="py-2 px-2 text-center font-mono text-slate-700">
+                                  {sPes}%
+                                </td>
+                                <td className="py-2 px-2 text-center">
+                                  {isLiderGeral ? (
+                                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] font-bold">
+                                      🏆 Líder do Grupo
+                                    </Badge>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* SEÇÃO 4: PLANOS DE AÇÃO E INICIATIVAS VINCULADAS */}
             {iniciativas.length > 0 && (
               <section className="space-y-3">
                 <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                   <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                    3
+                    {grupoAtivo && comparativoGrupo.length > 0 ? '4' : '3'}
                   </span>
                   Planos de Ação e Iniciativas Estratégicas Pactuadas
                 </h2>
@@ -620,7 +751,7 @@ export function ModalPdfBscA4({
               </section>
             )}
 
-            {/* SEÇÃO 4: NOTAS METODOLÓGICAS E ASSINATURA DO CONSULTOR */}
+            {/* SEÇÃO FINAL: NOTAS METODOLÓGICAS E ASSINATURA DO CONSULTOR */}
             <section className="space-y-4 pt-2">
               <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-[11px] text-slate-600 leading-relaxed space-y-1">
                 <strong className="text-slate-800 font-bold block">

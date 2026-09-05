@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
@@ -209,9 +210,29 @@ export default function BalancedScorecard() {
   const { user, isAuthenticated } = useAuth()
   const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
   const { toast } = useToast()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  // Aba ativa: 'scorecard' ou 'planos_acao'
-  const [abaAtiva, setAbaAtiva] = useState<string>('scorecard')
+  // Aba ativa: 'scorecard' ou 'planos_acao' (respeita query param ?aba=planos_acao)
+  const abaUrl = searchParams.get('aba')
+  const [abaAtiva, setAbaAtiva] = useState<string>(() => {
+    return abaUrl === 'planos_acao' ? 'planos_acao' : 'scorecard'
+  })
+
+  // Sincronizar caso o query param mude (ex: navegação vinda do dashboard)
+  useEffect(() => {
+    if (abaUrl === 'planos_acao' && abaAtiva !== 'planos_acao') {
+      setAbaAtiva('planos_acao')
+    } else if (abaUrl === 'scorecard' && abaAtiva !== 'scorecard') {
+      setAbaAtiva('scorecard')
+    }
+  }, [abaUrl, abaAtiva])
+
+  const handleMudarAba = (novaAba: string) => {
+    setAbaAtiva(novaAba)
+    const newParams = new URLSearchParams(searchParams)
+    newParams.set('aba', novaAba)
+    setSearchParams(newParams, { replace: true })
+  }
 
   const [kpis, setKpis] = useState<BscKpiRecord[]>([])
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
@@ -263,6 +284,142 @@ export default function BalancedScorecard() {
   const [formFormula, setFormFormula] = useState<string>('')
   const [formPeso, setFormPeso] = useState<string>('15')
   const [formSentido, setFormSentido] = useState<BscSentido>('maior_melhor')
+
+  // Comparativo de todas as empresas do grupo para o laudo PDF e visão consolidada
+  const [comparativoGrupoData, setComparativoGrupoData] = useState<
+    {
+      empresaId: string
+      empresaNome: string
+      scoreGlobal: number
+      scoresPerspectivas: {
+        perspectiva: BscPerspectiva
+        perspectivaNome: string
+        score: number
+      }[]
+      totalKpis: number
+    }[]
+  >([])
+
+  // Carregar dados de todas as empresas do grupo quando um grupo estiver ativo
+  useEffect(() => {
+    async function carregarComparativoTodasEmpresasGrupo() {
+      if (!isGrupoSelecionado || !grupoAtivo || empresasDoGrupo.length === 0) {
+        setComparativoGrupoData([])
+        return
+      }
+
+      try {
+        const resultados = await Promise.all(
+          empresasDoGrupo.map(async (emp) => {
+            const [kpisEmp, bList, dList] = await Promise.all([
+              bscService.getByEmpresaEAno(emp.id, selectedAno),
+              balancosService.getByEmpresa(emp.id),
+              dreService.getByEmpresa(emp.id),
+            ])
+
+            const bAtual = consolidarBalancoAnual(bList, selectedAno)
+            const dAtual = consolidarDreAnual(dList, selectedAno)
+            const dAnt = consolidarDreAnual(dList, selectedAno - 1)
+
+            const calcInd = calcularIndicadores(bAtual, dAtual)
+            const calcD = calcularDre(dAtual)
+            const calcGiro = calcularCapitalGiro(bAtual, dAtual)
+
+            let crescimentoReceita: number | null = null
+            const recAtual = calcD.receitaLiquida
+            const dreAntCalc = dAnt ? calcularDre(dAnt) : null
+            const recAnt = dreAntCalc?.receitaLiquida || 0
+            if (recAtual > 0 && recAnt > 0) {
+              crescimentoReceita = ((recAtual - recAnt) / recAnt) * 100
+            }
+
+            const formulasEmp: Record<string, number | null> = {
+              liquidez_corrente: calcInd.liquidezCorrente,
+              liquidez_seca: calcInd.liquidezSeca,
+              liquidez_imediata: calcInd.liquidezImediata,
+              liquidez_geral: calcInd.liquidezGeral,
+              endividamento_geral: calcInd.endividamentoGeral,
+              composicao_endividamento: calcInd.composicaoEndividamento,
+              margem_bruta: calcInd.margemBruta,
+              margem_operacional: calcInd.margemOperacional,
+              margem_liquida: calcInd.margemLiquida,
+              roe: calcInd.roe,
+              roa: calcInd.roa,
+              ebitda: calcD.ebitda,
+              crescimento_receita: crescimentoReceita,
+              pmr: calcGiro.pmr,
+              pmp: calcGiro.pmp,
+              pme: calcGiro.pme,
+              ciclo_operacional: calcGiro.cicloOperacional,
+              ciclo_financeiro: calcGiro.cicloFinanceiro,
+            }
+
+            let somaGlobal = 0
+            let somaPesosGlobal = 0
+
+            const scoresPersp = PERSPECTIVAS.map((persp) => {
+              const kpisPersp = kpisEmp.filter((k) => k.perspectiva === persp.id)
+              let somaP = 0
+              let pesoP = 0
+
+              kpisPersp.forEach((k) => {
+                let real: number | null = null
+                if (k.tipo === 'auto' && k.formula) {
+                  real = formulasEmp[k.formula] ?? null
+                } else {
+                  real = k.valor_atual ?? 0
+                }
+
+                if (real !== null && real !== undefined) {
+                  const meta = k.meta
+                  let pct = 0
+                  if (meta === 0) pct = 100
+                  else if (k.sentido === 'maior_melhor') pct = (real / meta) * 100
+                  else {
+                    if (real <= 0) pct = 120
+                    else pct = (meta / real) * 100
+                  }
+                  const pctClamped = Math.max(0, Math.min(150, pct))
+                  const pPeso = k.peso && k.peso > 0 ? k.peso : 10
+                  somaP += pctClamped * pPeso
+                  pesoP += pPeso
+                }
+              })
+
+              const sc = pesoP > 0 ? Math.round(somaP / pesoP) : 0
+              if (pesoP > 0) {
+                somaGlobal += sc * 25
+                somaPesosGlobal += 25
+              }
+
+              return {
+                perspectiva: persp.id,
+                perspectivaNome: persp.nome,
+                score: sc,
+              }
+            })
+
+            const finalGlobal = somaPesosGlobal > 0 ? Math.round(somaGlobal / somaPesosGlobal) : 0
+
+            return {
+              empresaId: emp.id,
+              empresaNome: emp.nome_fantasia || emp.nome,
+              scoreGlobal: finalGlobal,
+              scoresPerspectivas: scoresPersp,
+              totalKpis: kpisEmp.length,
+            }
+          }),
+        )
+
+        setComparativoGrupoData(resultados)
+      } catch (err) {
+        console.error('Erro ao compilar comparativo do grupo para BSC:', err)
+        setComparativoGrupoData([])
+      }
+    }
+
+    carregarComparativoTodasEmpresasGrupo()
+  }, [isGrupoSelecionado, grupoAtivo, empresasDoGrupo, selectedAno])
 
   // Carregar Balanços e DREs da empresa/ano
   const carregarDemonstracoes = useCallback(async () => {
@@ -1092,7 +1249,7 @@ export default function BalancedScorecard() {
       </div>
 
       {/* NAVEGAÇÃO DE ABAS: SCORECARD ESTRATÉGICO VS. PAINEL DE PLANOS DE AÇÃO */}
-      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full">
+      <Tabs value={abaAtiva} onValueChange={handleMudarAba} className="w-full">
         <TabsList className="bg-slate-100 p-1 rounded-xl h-auto flex flex-wrap gap-1 border border-slate-200">
           <TabsTrigger
             value="scorecard"
@@ -2285,6 +2442,10 @@ export default function BalancedScorecard() {
         resumosPerspectivas={dadosModalPdf}
         totalKpisCount={totalKpisCount}
         iniciativas={iniciativas}
+        grupoAtivo={
+          isGrupoSelecionado && grupoAtivo ? { id: grupoAtivo.id, nome: grupoAtivo.nome } : null
+        }
+        comparativoGrupo={comparativoGrupoData}
       />
 
       {/* 7. MODAL DE PLANOS DE AÇÃO / INICIATIVAS VINCULADAS */}

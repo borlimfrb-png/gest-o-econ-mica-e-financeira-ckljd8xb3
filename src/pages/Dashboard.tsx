@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
+import { bscService } from '@/services/bscService'
+import { perfilTemAcesso } from '@/lib/permissoesPerfis'
 import {
   balancosService,
   centrosService,
@@ -31,6 +34,7 @@ import type {
   NotaFiscalRecord,
   GrupoEmpresarialRecord,
   EmpresaRecord,
+  BscIniciativaRecord,
 } from '@/types/finance'
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import { ModalRelatorioConsolidadoGrupoA4 } from '@/components/ModalRelatorioConsolidadoGrupoA4'
@@ -98,6 +102,9 @@ import {
   Printer,
   Crown,
   Layers,
+  Flame,
+  Clock,
+  ListTodo,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -115,7 +122,13 @@ export default function Dashboard() {
     grupoAtivo,
     isLoadingEmpresas,
   } = useFilter()
+  const { user } = useAuth()
   const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
+
+  // Permissão do módulo de Planejamento (Apenas Admin e Empresa têm acesso)
+  const temAcessoPlanejamento = useMemo(() => {
+    return perfilTemAcesso(user?.role, 'planejamento')
+  }, [user?.role])
 
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
@@ -131,6 +144,7 @@ export default function Dashboard() {
   const [contratos, setContratos] = useState<ContratoRecord[]>([])
   const [recebiveis, setRecebiveis] = useState<RecebivelRecord[]>([])
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscalRecord[]>([])
+  const [bscIniciativas, setBscIniciativas] = useState<BscIniciativaRecord[]>([])
   const [modalMetasOpen, setModalMetasOpen] = useState(false)
   const [modalRelatorioGrupoOpen, setModalRelatorioGrupoOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
@@ -151,6 +165,7 @@ export default function Dashboard() {
         allContratos,
         allRecebiveis,
         allNotas,
+        allIniciativasBsc,
       ] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
@@ -164,6 +179,7 @@ export default function Dashboard() {
         contratosService.listar().catch(() => [] as ContratoRecord[]),
         recebiveisService.listarPorPeriodo().catch(() => [] as RecebivelRecord[]),
         notasFiscaisService.listar().catch(() => [] as NotaFiscalRecord[]),
+        bscService.getAllIniciativas().catch(() => [] as BscIniciativaRecord[]),
       ])
       setAllBalancos(allB)
       setAllDres(allD)
@@ -177,6 +193,7 @@ export default function Dashboard() {
       setContratos(allContratos)
       setRecebiveis(allRecebiveis)
       setNotasFiscais(allNotas)
+      setBscIniciativas(allIniciativasBsc || [])
 
       if (selectedEmpresaId) {
         if (selectedEmpresaId.startsWith('grupo-')) {
@@ -276,6 +293,9 @@ export default function Dashboard() {
     loadData()
   })
   useRealtime<NotaFiscalRecord>('notas_fiscais', () => {
+    loadData()
+  })
+  useRealtime<BscIniciativaRecord>('bsc_iniciativas', () => {
     loadData()
   })
 
@@ -1256,6 +1276,113 @@ export default function Dashboard() {
     anoAbertoNum?: number
   }
 
+  // EVOLUÇÃO 2: Planos de Ação BSC Vencidos e Vencendo em 7 dias (Módulo Planejamento)
+  // Exibido apenas se usuário tiver perfil com acesso a 'planejamento' (Admin e Empresa)
+  const alertasPlanosBsc = useMemo<AlertaMetaRiscoItem[]>(() => {
+    if (!temAcessoPlanejamento) return []
+
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const hojeStr = hoje.toISOString().slice(0, 10)
+
+    const daqui7Dias = new Date(hoje)
+    daqui7Dias.setDate(daqui7Dias.getDate() + 7)
+    const daqui7DiasStr = daqui7Dias.toISOString().slice(0, 10)
+
+    const lista: AlertaMetaRiscoItem[] = []
+
+    // Filtrar pela empresa selecionada (ou todas se nenhuma ou grupo)
+    const iniciativasFiltradas = bscIniciativas.filter((ini) => {
+      if (ini.status === 'concluida' || !ini.prazo) return false
+      if (selectedEmpresaId) {
+        if (selectedEmpresaId.startsWith('grupo-')) {
+          if (!grupoAtivo?.empresas?.includes(ini.empresa)) return false
+        } else if (ini.empresa !== selectedEmpresaId) {
+          return false
+        }
+      }
+      return true
+    })
+
+    for (const ini of iniciativasFiltradas) {
+      const prazoStr = ini.prazo.slice(0, 10)
+      const emp = empresas.find((e) => e.id === ini.empresa)
+      const empNome = emp?.nome || 'Empresa'
+
+      const [anoP, mesP, diaP] = prazoStr.split('-').map(Number)
+      const dataPrazo = new Date(anoP, mesP - 1, diaP)
+      dataPrazo.setHours(0, 0, 0, 0)
+
+      const diffTime = dataPrazo.getTime() - hoje.getTime()
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+
+      const prazoFormatado = `${String(diaP).padStart(2, '0')}/${String(mesP).padStart(2, '0')}/${anoP}`
+
+      // Prazo vencido (< hoje) -> Severidade VERMELHA / destaque visual crítico
+      if (prazoStr < hojeStr) {
+        const diasAtraso = Math.abs(diffDays)
+        lista.push({
+          id: `bsc-vencido-${ini.id}`,
+          titulo: `Plano Vencido: ${ini.titulo} (${empNome})`,
+          descricao: `A iniciativa estratégica do BSC expirou há ${diasAtraso} dia(s) (prazo: ${prazoFormatado}). Responsável: ${ini.responsavel || 'Não atribuído'}. Progresso atual: ${ini.progresso ?? 0}%.`,
+          severidade: 'red',
+          diasRestantes: diffDays,
+          tipoAlerta: 'meta',
+          empresaId: ini.empresa,
+        })
+      } else if (prazoStr <= daqui7DiasStr) {
+        // Vencendo nos próximos 7 dias -> Severidade Laranja / Atenção imediata
+        const diasRestantes = diffDays === 0 ? 'Vence hoje' : `${diffDays} dia(s) restante(s)`
+        lista.push({
+          id: `bsc-vencendo-${ini.id}`,
+          titulo: `Plano Vence em Breve: ${ini.titulo} (${empNome})`,
+          descricao: `A iniciativa estratégica do BSC vence em ${diasRestantes} (${prazoFormatado}). Responsável: ${ini.responsavel || 'Não atribuído'}. Progresso atual: ${ini.progresso ?? 0}%.`,
+          severidade: 'amber',
+          diasRestantes: diffDays,
+          tipoAlerta: 'meta',
+          empresaId: ini.empresa,
+        })
+      }
+    }
+
+    return lista
+  }, [temAcessoPlanejamento, bscIniciativas, selectedEmpresaId, grupoAtivo, empresas])
+
+  // Estatísticas específicas de planos BSC para card de destaque visual
+  const estatisticasPlanosBscDashboard = useMemo(() => {
+    if (!temAcessoPlanejamento) return null
+    const hojeStr = new Date().toISOString().slice(0, 10)
+    const daqui7Dias = new Date()
+    daqui7Dias.setDate(daqui7Dias.getDate() + 7)
+    const daqui7DiasStr = daqui7Dias.toISOString().slice(0, 10)
+
+    const daEmpresa = bscIniciativas.filter((i) => {
+      if (i.status === 'concluida') return false
+      if (selectedEmpresaId) {
+        if (selectedEmpresaId.startsWith('grupo-')) {
+          if (!grupoAtivo?.empresas?.includes(i.empresa)) return false
+        } else if (i.empresa !== selectedEmpresaId) {
+          return false
+        }
+      }
+      return true
+    })
+
+    const vencidos = daEmpresa.filter((i) => i.prazo && i.prazo.slice(0, 10) < hojeStr)
+    const vencendo7Dias = daEmpresa.filter((i) => {
+      if (!i.prazo) return false
+      const p = i.prazo.slice(0, 10)
+      return p >= hojeStr && p <= daqui7DiasStr
+    })
+
+    return {
+      totalPendentes: daEmpresa.length,
+      vencidos,
+      vencendo7Dias,
+      totalAlerta: vencidos.length + vencendo7Dias.length,
+    }
+  }, [temAcessoPlanejamento, bscIniciativas, selectedEmpresaId, grupoAtivo])
+
   // Alertas de Renovação de Contratos (vencendo em 30 dias ou menos)
   const alertasContratosRenovacao = useMemo<AlertaMetaRiscoItem[]>(() => {
     const lista: AlertaMetaRiscoItem[] = []
@@ -1594,12 +1721,14 @@ export default function Dashboard() {
     }
 
     return [
+      ...alertasPlanosBsc,
       ...alertasIndicadores,
       ...alertasMesesEmAberto,
       ...alertasContratosRenovacao,
       ...alertasMetasEmRisco,
     ]
   }, [
+    alertasPlanosBsc,
     empresas,
     selectedEmpresaId,
     allBalancos,
@@ -1672,6 +1801,55 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* ========================================================================= */}
+      {/* DESTAQUE VISUAL: PLANOS DE AÇÃO BSC VENCIDOS / A VENCER (PLANEJAMENTO)   */}
+      {/* ========================================================================= */}
+      {temAcessoPlanejamento &&
+        estatisticasPlanosBscDashboard &&
+        estatisticasPlanosBscDashboard.vencidos.length > 0 && (
+          <div className="bg-gradient-to-r from-red-600 via-rose-700 to-red-800 text-white rounded-2xl p-4 sm:p-5 shadow-md border border-red-500/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-pulse-subtle">
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-white/20 border border-white/30 text-white flex items-center justify-center shrink-0 shadow-inner">
+                <Flame className="w-6 h-6 text-red-100" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-extrabold text-base sm:text-lg tracking-tight">
+                    {estatisticasPlanosBscDashboard.vencidos.length === 1
+                      ? '1 Plano de Ação Estratégico com Prazo Vencido'
+                      : `${estatisticasPlanosBscDashboard.vencidos.length} Planos de Ação Estratégicos com Prazo Vencido`}
+                  </span>
+                  <Badge className="bg-red-950/80 text-red-200 border-red-400/40 text-[10px] font-bold uppercase tracking-wider">
+                    Balanced Scorecard
+                  </Badge>
+                  {estatisticasPlanosBscDashboard.vencendo7Dias.length > 0 && (
+                    <Badge className="bg-amber-400 text-slate-950 font-bold text-[10px]">
+                      +{estatisticasPlanosBscDashboard.vencendo7Dias.length} vencendo em 7 dias
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-red-100/90 mt-1 max-w-2xl leading-relaxed">
+                  Existem iniciativas vinculadas a metas corporativas da{' '}
+                  <strong>{selectedEmpresa?.nome || 'empresa ativa'}</strong> que ultrapassaram a
+                  data limite acordada. Acesse o painel do BSC para atualizar o status, redistribuir
+                  responsáveis ou repactuar prazos.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full md:w-auto shrink-0">
+              <Button
+                onClick={() => navigate('/planejamento/bsc?aba=planos_acao')}
+                className="bg-white hover:bg-red-50 text-red-700 font-bold text-xs h-9 px-4 rounded-xl shadow-sm gap-2 w-full md:w-auto"
+              >
+                <ListTodo className="w-4 h-4 text-red-600" />
+                <span>Ver Planos de Ação no BSC</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-0.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
       {/* Banner Destaque: Agente de Diagnóstico IA */}
       <div className="bg-gradient-to-r from-[#0B1F3A] via-[#132E54] to-blue-900 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-blue-800/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
@@ -2217,6 +2395,67 @@ export default function Dashboard() {
               const iconBoxBg = isRed ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
               const titleColor = isRed ? 'text-red-950' : 'text-amber-950'
               const descColor = isRed ? 'text-red-800' : 'text-amber-800'
+
+              if (alerta.id.startsWith('bsc-')) {
+                const isVencido = alerta.id.startsWith('bsc-vencido-')
+                return (
+                  <div
+                    key={alerta.id}
+                    className={`text-left p-3.5 rounded-xl border shadow-2xs hover:shadow-md transition-all flex flex-col justify-between gap-2.5 ${cardBg}`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${iconBoxBg}`}
+                      >
+                        <Flame className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Badge
+                            className={`text-[9px] font-bold px-1.5 py-0 ${
+                              isVencido
+                                ? 'bg-red-200/80 text-red-950 border-red-300'
+                                : 'bg-amber-200/80 text-amber-950 border-amber-300'
+                            }`}
+                          >
+                            {isVencido ? 'Plano BSC Vencido' : 'Plano BSC a Vencer (7d)'}
+                          </Badge>
+                        </div>
+                        <p className={`text-xs font-bold leading-snug line-clamp-2 ${titleColor}`}>
+                          {alerta.titulo}
+                        </p>
+                        <p className={`text-[11px] mt-1 line-clamp-2 ${descColor}`}>
+                          {alerta.descricao}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-black/5 text-[10px] font-semibold">
+                      <span
+                        className={
+                          isVencido ? 'text-red-700 font-bold' : 'text-amber-800 font-bold'
+                        }
+                      >
+                        {isVencido ? 'Prazo Expirado' : 'Ação Necessária'}
+                      </span>
+                      <Button
+                        asChild
+                        size="sm"
+                        className={`h-7 text-xs font-bold px-2.5 shadow-xs gap-1 ${
+                          isVencido
+                            ? 'bg-red-600 hover:bg-red-700 text-white'
+                            : 'bg-amber-600 hover:bg-amber-700 text-white'
+                        }`}
+                      >
+                        <Link to="/planejamento/bsc?aba=planos_acao">
+                          <ListTodo className="w-3.5 h-3.5" />
+                          Planos de Ação <ArrowRight className="w-3 h-3 ml-0.5" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
 
               if (alerta.id.startsWith('proativo-')) {
                 return (

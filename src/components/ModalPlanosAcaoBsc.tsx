@@ -45,7 +45,16 @@ import {
   AlertCircle,
   XCircle,
   Flame,
+  Sparkles,
+  BookOpen,
 } from 'lucide-react'
+import {
+  CATALOGO_MODELOS_PLANOS,
+  CATEGORIAS_PROBLEMAS,
+  sugerirModelosPorKpi,
+  type ModeloPlanoAcao,
+  type CategoriaProblemaPlano,
+} from '@/lib/catalogoModelosPlanosAcao'
 
 export interface ModalPlanosAcaoBscProps {
   open: boolean
@@ -88,6 +97,10 @@ export function ModalPlanosAcaoBsc({
   const [formPrazo, setFormPrazo] = useState('')
   const [formStatus, setFormStatus] = useState<BscIniciativaStatus>('planejada')
   const [formProgresso, setFormProgresso] = useState<string>('0')
+
+  // Catálogo de modelos prontos
+  const [filtroCategoriaModelo, setFiltroCategoriaModelo] = useState<string>('todos')
+  const [mostrarCatalogoModelos, setMostrarCatalogoModelos] = useState<boolean>(false)
 
   const kpiAtivo = useMemo(() => {
     if (kpi) return kpi
@@ -144,7 +157,33 @@ export function ModalPlanosAcaoBsc({
     setFormPrazo(d.toISOString().split('T')[0])
     setFormStatus('planejada')
     setFormProgresso('0')
+    setMostrarCatalogoModelos(false)
     setModalFormOpen(true)
+  }
+
+  // Modelos recomendados para o KPI atual
+  const modelosRecomendados = useMemo(() => {
+    if (!kpiAtivo) return CATALOGO_MODELOS_PLANOS.slice(0, 4)
+    return sugerirModelosPorKpi(kpiAtivo.nome, kpiAtivo.formula)
+  }, [kpiAtivo])
+
+  // Aplicar modelo pronto selecionado
+  const handleAplicarModeloPronto = (modelo: ModeloPlanoAcao) => {
+    setFormTitulo(modelo.titulo)
+    const textoEtapas = modelo.etapasSugeridas.join('\n')
+    const textoDescricaoCompleta = `${modelo.descricao}\n\nEtapas Sugeridas:\n${textoEtapas}`
+    setFormDescricao(textoDescricaoCompleta)
+
+    // Ajustar prazo conforme sugestão do modelo
+    const d = new Date()
+    d.setDate(d.getDate() + modelo.prazoSugeridoDias)
+    setFormPrazo(d.toISOString().split('T')[0])
+
+    setMostrarCatalogoModelos(false)
+    toast({
+      title: 'Modelo aplicado com sucesso!',
+      description: `O plano foi pré-preenchido com o modelo "${modelo.titulo}". Ajuste o responsável e prazo se desejar.`,
+    })
   }
 
   const handleEditarIniciativa = (ini: BscIniciativaRecord) => {
@@ -495,17 +534,142 @@ export function ModalPlanosAcaoBsc({
 
       {/* DIÁLOGO CRUD (NOVA / EDITAR INICIATIVA) */}
       <Dialog open={modalFormOpen} onOpenChange={setModalFormOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[92vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold text-[#0B1F3A]">
-              {iniciativaEmEdicao ? 'Editar Plano de Ação' : 'Novo Plano de Ação'}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-500">
-              Vincule ações, prazos e responsáveis para recuperar o indicador {kpi?.nome}.
-            </DialogDescription>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <DialogTitle className="text-base font-bold text-[#0B1F3A]">
+                  {iniciativaEmEdicao ? 'Editar Plano de Ação' : 'Novo Plano de Ação'}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500">
+                  Vincule ações, prazos e responsáveis para recuperar o indicador{' '}
+                  {kpiAtivo?.nome || 'do BSC'}.
+                </DialogDescription>
+              </div>
+              {!iniciativaEmEdicao && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMostrarCatalogoModelos(!mostrarCatalogoModelos)}
+                  className={`h-8 text-xs font-semibold gap-1.5 shrink-0 ${
+                    mostrarCatalogoModelos
+                      ? 'bg-blue-50 text-blue-700 border-blue-300'
+                      : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  {mostrarCatalogoModelos ? 'Ocultar Modelos' : 'Modelos Prontos'}
+                </Button>
+              )}
+            </div>
           </DialogHeader>
 
           <form onSubmit={handleSalvarIniciativa} className="space-y-3.5 py-2">
+            {/* Bloco de Catálogo de Modelos Prontos */}
+            {!iniciativaEmEdicao && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-slate-700 flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                    Modelos Prontos por Tipo de Problema:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarCatalogoModelos(!mostrarCatalogoModelos)}
+                    className="text-[11px] text-blue-600 hover:underline font-medium"
+                  >
+                    {mostrarCatalogoModelos ? 'Fechar catálogo' : 'Explorar modelos...'}
+                  </button>
+                </div>
+
+                {/* Sugestões rápidas recomendadas para o KPI */}
+                {!mostrarCatalogoModelos && (
+                  <div className="bg-blue-50/60 border border-blue-200 rounded-xl p-2.5 space-y-1.5">
+                    <span className="text-[10px] font-bold uppercase text-blue-900 tracking-wider block">
+                      💡 Sugestões automáticas para este KPI:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {modelosRecomendados.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleAplicarModeloPronto(m)}
+                          className="text-[11px] bg-white border border-blue-200 hover:border-blue-400 hover:bg-blue-50 text-slate-800 rounded-lg px-2 py-1 text-left transition-colors flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                          <span className="font-medium truncate max-w-[240px]">{m.titulo}</span>
+                          <span className="text-[9px] text-blue-600 font-bold shrink-0">Usar</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Painel Completo de Modelos Prontos Classificados por Problema */}
+                {mostrarCatalogoModelos && (
+                  <div className="border border-blue-200 bg-slate-50/80 rounded-xl p-3 space-y-3 animate-fadeIn">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-slate-800">
+                        Escolha um modelo de plano estruturado:
+                      </span>
+                      <Select
+                        value={filtroCategoriaModelo}
+                        onValueChange={(val) => setFiltroCategoriaModelo(val)}
+                      >
+                        <SelectTrigger className="h-7 text-[11px] w-[180px] bg-white">
+                          <SelectValue placeholder="Categoria de Problema" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todos" className="text-xs">
+                            Todas as Categorias
+                          </SelectItem>
+                          {CATEGORIAS_PROBLEMAS.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id} className="text-xs">
+                              {cat.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="max-h-56 overflow-y-auto space-y-2 pr-1">
+                      {CATALOGO_MODELOS_PLANOS.filter(
+                        (m) =>
+                          filtroCategoriaModelo === 'todos' ||
+                          m.categoria === filtroCategoriaModelo,
+                      ).map((m) => (
+                        <div
+                          key={m.id}
+                          className="bg-white border border-slate-200 hover:border-blue-300 rounded-lg p-2.5 transition-all text-xs space-y-1.5 shadow-2xs"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <span className="font-bold text-slate-900 block">{m.titulo}</span>
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] font-semibold text-blue-700 bg-blue-50 border-blue-200 mt-0.5"
+                              >
+                                {m.categoriaNome} · Prazo sugerido: {m.prazoSugeridoDias} dias
+                              </Badge>
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={() => handleAplicarModeloPronto(m)}
+                              className="h-7 text-[11px] bg-blue-600 hover:bg-blue-700 text-white font-semibold shrink-0"
+                            >
+                              Aplicar Modelo
+                            </Button>
+                          </div>
+                          <p className="text-[11px] text-slate-600 leading-snug">{m.descricao}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Seletor de KPI se houver lista disponível ou se nenhum kpi foi fixado */}
             {(!kpi || listaKpisDisponiveis.length > 1) && (
               <div className="space-y-1">
