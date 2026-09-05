@@ -80,6 +80,11 @@ import {
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ModalRelatorioNotasPeriodo } from '@/components/ModalRelatorioNotasPeriodo'
+import { ModalEmitirNfseNacional } from '@/components/ModalEmitirNfseNacional'
+import { ModalCadastroTomador } from '@/components/ModalCadastroTomador'
+import { ModalGerenciarTomadores } from '@/components/ModalGerenciarTomadores'
+import { ModalConfiguracaoNfseNacional } from '@/components/ModalConfiguracaoNfseNacional'
+import { Settings, Users, FileSpreadsheet } from 'lucide-react'
 
 interface NfseFormData {
   empresa_id: string
@@ -176,6 +181,12 @@ export default function NotasFiscais() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [notaParaExcluir, setNotaParaExcluir] = useState<NotaFiscalRecord | null>(null)
   const [excluindo, setExcluindo] = useState(false)
+
+  // Modais do Novo Padrão Nacional NFS-e / DPS
+  const [modalNacionalOpen, setModalNacionalOpen] = useState(false)
+  const [modalTomadoresOpen, setModalTomadoresOpen] = useState(false)
+  const [modalConfigNacionalOpen, setModalConfigNacionalOpen] = useState(false)
+  const [serieConfig, setSerieConfig] = useState('1')
 
   const loadData = async () => {
     try {
@@ -482,7 +493,7 @@ export default function NotasFiscais() {
   }
 
   // Prepara dados do DANFSE para visualização/PDF
-  const prepararDadosDanfse = (nota: NotaFiscalRecord): DadosDanfse => {
+  const prepararDadosDanfseLegado = (nota: NotaFiscalRecord): DadosDanfse => {
     const empresaCliente = empresas.find((e) => e.id === nota.empresa) || nota.expand?.empresa
 
     return {
@@ -531,11 +542,11 @@ export default function NotasFiscais() {
   }
 
   const handleDownloadXmlDirect = (nota: NotaFiscalRecord) => {
-    const dados = prepararDadosDanfse(nota)
-    const xml = gerarXmlNfse(dados)
+    const dados = prepararDadosDanfseLegado(nota)
+    const xml = nota.xml_conteudo || gerarXmlNfse(dados)
     downloadArquivo(
+      `NFSe_Nacional_${nota.numero}_${(dados.prestador.cnpj || 'prestador').replace(/\D/g, '')}.xml`,
       xml,
-      `NFSe_${nota.numero}_${(dados.prestador.cnpj || 'prestador').replace(/\D/g, '')}.xml`,
       'application/xml',
     )
     toast({
@@ -746,6 +757,89 @@ export default function NotasFiscais() {
   const totalEnviadasEmail = notas.filter((n) => n.status === 'Enviada').length
   const totalCanceladas = notas.filter((n) => n.status === 'Cancelada').length
 
+  // Exportar dados filtrados no formato CSV Nacional DPS
+  const exportarCsvNacional = () => {
+    if (filteredNotas.length === 0) {
+      toast({
+        title: 'Nenhuma nota',
+        description: 'Não há notas no filtro atual para exportar.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const cabecalho = [
+      'Numero_NFSe',
+      'Serie_DPS',
+      'Numero_DPS',
+      'Chave_Acesso_Nacional',
+      'Status',
+      'Ambiente',
+      'Data_Emissao',
+      'Competencia',
+      'Prestador_Razao_Social',
+      'Prestador_CNPJ',
+      'Tomador_Razao_Social',
+      'Tomador_CPF_CNPJ',
+      'Valor_Servicos',
+      'Aliquota_ISS',
+      'Valor_ISS',
+      'ISS_Retido',
+      'Valor_PIS',
+      'Valor_COFINS',
+      'Valor_INSS',
+      'Valor_IR',
+      'Valor_CSLL',
+      'Outras_Retencoes',
+      'Valor_Liquido',
+      'Codigo_Tributacao_Nacional',
+      'Protocolo_Autorizacao',
+      'Discriminacao',
+    ].join(';')
+
+    const linhas = filteredNotas.map((n) =>
+      [
+        n.numero,
+        `"${n.dps_serie || n.serie || '1'}"`,
+        n.dps_numero || n.numero,
+        `"${n.chave_acesso || ''}"`,
+        n.status,
+        `"${n.tipo_ambiente || n.modo_emissao || 'Homologação'}"`,
+        n.data_emissao ? n.data_emissao.slice(0, 10) : '',
+        n.competencia ? n.competencia.slice(0, 10) : '',
+        `"${n.prestador_razao_social || 'Borlim Consultoria'}"`,
+        `"${n.prestador_cnpj || ''}"`,
+        `"${n.tomador_razao_social || n.expand?.empresa?.nome || ''}"`,
+        `"${n.tomador_cnpj || ''}"`,
+        n.valor_servicos?.toFixed(2) || '0.00',
+        n.aliquota_iss?.toFixed(2) || '0.00',
+        n.valor_iss?.toFixed(2) || '0.00',
+        n.iss_retido ? 'SIM' : 'NAO',
+        n.valor_pis?.toFixed(2) || '0.00',
+        n.valor_cofins?.toFixed(2) || '0.00',
+        n.valor_inss?.toFixed(2) || '0.00',
+        n.valor_ir?.toFixed(2) || '0.00',
+        n.valor_csll?.toFixed(2) || '0.00',
+        n.outras_retencoes?.toFixed(2) || '0.00',
+        n.valor_liquido?.toFixed(2) || '0.00',
+        `"${n.codigo_tributacao_nacional || '010701'}"`,
+        `"${n.protocolo_autorizacao || ''}"`,
+        `"${(n.discriminacao || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+      ].join(';'),
+    )
+
+    const conteudoCsv = [cabecalho, ...linhas].join('\n')
+    downloadArquivo(
+      `nfse_nacional_dps_${new Date().toISOString().slice(0, 10)}.csv`,
+      conteudoCsv,
+      'text/csv;charset=utf-8;',
+    )
+    toast({
+      title: 'Exportação concluída',
+      description: `${filteredNotas.length} notas exportadas para CSV no layout oficial DPS Nacional.`,
+    })
+  }
+
   const getStatusBadge = (status: StatusNotaFiscal) => {
     switch (status) {
       case 'Emitida':
@@ -799,6 +893,40 @@ export default function NotasFiscais() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Gestão de Tomadores */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalTomadoresOpen(true)}
+            className="text-xs font-semibold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
+          >
+            <Users className="w-4 h-4 text-primary" />
+            Tomadores de Serviços
+          </Button>
+
+          {/* Botão de Configurações do Padrão Nacional / DPS */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setModalConfigNacionalOpen(true)}
+            className="text-xs font-semibold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
+            title="Configurações de Série, Numeração e Certificado Digital"
+          >
+            <Settings className="w-4 h-4 text-slate-600" />
+            Série & DPS
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportarCsvNacional}
+            className="text-xs font-semibold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
+            title="Exportar dados das notas filtradas para planilha CSV no padrão nacional"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            Exportar CSV
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -806,41 +934,7 @@ export default function NotasFiscais() {
             className="text-xs font-bold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
           >
             <Printer className="w-4 h-4 text-blue-600" />
-            Relatório de Notas (CSV/PDF)
-          </Button>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              try {
-                setProcessandoAgendados(true)
-                const res = await notasFiscaisService.processarAgendados()
-                if (res.success) {
-                  toast({
-                    title: 'Agendamentos Processados',
-                    description: res.message || `${res.processados} nota(s) emitida(s).`,
-                  })
-                  await loadData()
-                }
-              } catch (err: any) {
-                toast({
-                  title: 'Erro no processamento',
-                  description: err?.message || 'Falha ao processar agendamentos de NFSe.',
-                  variant: 'destructive',
-                })
-              } finally {
-                setProcessandoAgendados(false)
-              }
-            }}
-            disabled={processandoAgendados}
-            title="Executar emissão imediata para parcelas agendadas com vencimento chegado"
-            className="text-xs font-semibold text-slate-700 bg-white border-slate-200 hover:border-emerald-300 hover:text-emerald-700 shadow-2xs gap-1.5 h-9"
-          >
-            <CalendarClock
-              className={`w-4 h-4 text-emerald-600 ${processandoAgendados ? 'animate-spin' : ''}`}
-            />
-            Processar Agendamentos
+            Relatório A4
           </Button>
 
           <Button
@@ -854,35 +948,53 @@ export default function NotasFiscais() {
             Atualizar
           </Button>
 
+          {/* Botão de Emissão Principal: Novo Padrão Nacional DPS */}
           <Button
-            onClick={openNewEmissaoModal}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-sm"
+            onClick={() => setModalNacionalOpen(true)}
+            className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs h-9 shadow-sm gap-1.5"
           >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Emitir Nova NFS-e
+            <Plus className="w-4 h-4" />
+            Emitir NFS-e Nacional (DPS)
           </Button>
         </div>
       </div>
 
-      {/* Alerta caso nenhum cliente tenha 'emitir_nota_fiscal = true' */}
-      {clientesHabilitados.length === 0 && !loading && (
-        <Alert className="bg-amber-50 border-amber-200 text-amber-900">
-          <Info className="h-4 w-4 text-amber-600" />
-          <AlertTitle className="text-xs font-bold">
-            Nenhum cliente habilitado para emissão
-          </AlertTitle>
-          <AlertDescription className="text-xs text-amber-800">
-            Para emitir notas fiscais, marque a opção <strong>"Emitir Nota Fiscal: SIM"</strong> no{' '}
-            <Link
-              to="/empresas"
-              className="underline font-semibold text-amber-950 hover:text-blue-700"
-            >
-              Cadastro de Empresas/Clientes
-            </Link>
-            .
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Banner de Status do Novo Padrão Nacional NFS-e / DPS */}
+      <div className="border border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900 rounded-lg p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-md bg-primary text-white flex items-center justify-center font-bold text-xs shrink-0">
+            DPS
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[#0B1F3A] dark:text-blue-200">
+                Novo Padrão Nacional NFS-e (Decreto Federal / Layout DPS v1.01)
+              </span>
+              <Badge
+                variant="outline"
+                className="text-[10px] border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950/40"
+              >
+                Homologação Nacional Ativa
+              </Badge>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              Unificação das declarações municipais em Declaração de Prestação de Serviços (DPS) com
+              chave de acesso de 50 dígitos.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setModalConfigNacionalOpen(true)}
+            className="h-7 text-xs text-primary hover:text-primary/80 font-medium"
+          >
+            Configurar Série & Ambiente →
+          </Button>
+        </div>
+      </div>
 
       {/* Cards de Métricas */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1649,16 +1761,12 @@ export default function NotasFiscais() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Visualizar DANFSE (PDF / A4) */}
+      {/* Modal Visualizar DANFSE (PDF / A4 Nacional) */}
       {notaVisualizando && (
         <ModalVisualizarDanfse
+          nota={notaVisualizando}
           open={modalDanfseOpen}
           onOpenChange={setModalDanfseOpen}
-          dados={prepararDadosDanfse(notaVisualizando)}
-          onEnviarEmail={(nota) => {
-            setModalDanfseOpen(false)
-            abrirModalEmail(nota)
-          }}
         />
       )}
 
@@ -1669,6 +1777,40 @@ export default function NotasFiscais() {
         notas={notas}
         empresas={empresas}
         minhaEmpresa={minhaEmpresa}
+      />
+
+      {/* NOVO PADRÃO NACIONAL: Modal de Emissão Completa com Itens e DPS */}
+      <ModalEmitirNfseNacional
+        open={modalNacionalOpen}
+        onOpenChange={setModalNacionalOpen}
+        empresaAtiva={empresas.find((e) => e.id === formData.empresa_id) || empresas[0] || null}
+        empresasLista={empresas}
+        seriePadrao={serieConfig}
+        proximoNumeroPadrao={proximoNumeroSugerido}
+        onEmitida={() => {
+          loadData()
+        }}
+      />
+
+      {/* NOVO PADRÃO NACIONAL: Gestão de Tomadores de Serviço */}
+      <ModalGerenciarTomadores
+        open={modalTomadoresOpen}
+        onOpenChange={setModalTomadoresOpen}
+        empresaId={formData.empresa_id || empresas[0]?.id || ''}
+      />
+
+      {/* NOVO PADRÃO NACIONAL: Configurações de Série, Numeração e Conexão */}
+      <ModalConfiguracaoNfseNacional
+        open={modalConfigNacionalOpen}
+        onOpenChange={setModalConfigNacionalOpen}
+        empresaId={formData.empresa_id || empresas[0]?.id || ''}
+        serieAtual={serieConfig}
+        proximoNumeroAtual={proximoNumeroSugerido}
+        onSalvarSerieNumero={(serie, proxNum) => {
+          setSerieConfig(serie)
+          setProximoNumeroSugerido(proxNum)
+          setFormData((prev) => ({ ...prev, serie, numero: proxNum }))
+        }}
       />
 
       {/* Diálogo de Confirmação de Exclusão */}

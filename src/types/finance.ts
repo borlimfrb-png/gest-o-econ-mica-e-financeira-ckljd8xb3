@@ -233,7 +233,12 @@ export interface AuditoriaLancamentoRecord extends RecordModel {
   }
 }
 
-export type EntidadeAuditoriaCadastro = 'empresas' | 'plano_contas' | 'users'
+export type EntidadeAuditoriaCadastro =
+  | 'empresas'
+  | 'plano_contas'
+  | 'users'
+  | 'nfse'
+  | 'nfse_tomadores'
 export type AcaoAuditoriaCadastro = 'criacao' | 'edicao' | 'exclusao'
 
 export interface AuditoriaCadastroRecord extends RecordModel {
@@ -440,6 +445,46 @@ export type StatusNotaFiscal = 'Rascunho' | 'Emitida' | 'Enviada' | 'Cancelada' 
 export type ModoEmissaoNFSe = 'Homologação / Simulação' | 'Produção SEFAZ / Gateway'
 export type TipoDocumentoFiscal = 'NFSe' | 'Debito' | 'Credito'
 
+export interface ItemServicoNfse {
+  id?: string
+  item: number
+  descricao: string
+  quantidade: number
+  valor_unitario: number
+  valor_total: number
+  codigo_tributacao_nacional?: string // LC 116 / CNAE Nacional (ex: 01.07.01 ou 010701)
+  desconto?: number
+  aliquota_iss?: number
+}
+
+export type TipoPessoaTomador = 'PJ' | 'PF' | 'Exterior'
+
+export interface NfseTomadorRecord extends RecordModel {
+  user?: string
+  empresa?: string
+  tipo_pessoa: TipoPessoaTomador
+  cpf_cnpj: string
+  razao_social: string
+  nome_fantasia?: string
+  inscricao_municipal?: string
+  inscricao_estadual?: string
+  email?: string
+  telefone?: string
+  cep?: string
+  logradouro?: string
+  numero?: string
+  complemento?: string
+  bairro?: string
+  codigo_municipio?: string
+  cidade?: string
+  estado?: string
+  observacoes?: string
+  ativo?: boolean
+  expand?: {
+    empresa?: EmpresaRecord
+  }
+}
+
 export interface NotaFiscalRecord extends RecordModel {
   user: string
   empresa: string
@@ -501,11 +546,24 @@ export interface NotaFiscalRecord extends RecordModel {
   conciliada_em?: string | null
   agendamento_automatico?: boolean
 
+  // NOVO PADRÃO NACIONAL NFS-e / DPS
+  padrao_nacional?: boolean
+  dps_serie?: string
+  dps_numero?: number
+  dps_id?: string
+  dps_payload?: any
+  servicos_itens?: ItemServicoNfse[]
+  codigo_tributacao_nacional?: string
+  codigo_municipio_prestacao?: string
+  tipo_ambiente?: '1 - Producao' | '2 - Homologacao'
+  tomador_ref?: string
+
   expand?: {
     empresa?: EmpresaRecord
     contrato?: ContratoRecord
     nota_referencia?: NotaFiscalRecord
     recebivel?: RecebivelRecord
+    tomador_ref?: NfseTomadorRecord
   }
 }
 

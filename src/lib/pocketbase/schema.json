@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T22:10:14.606Z",
+  "generatedAt": "2026-09-05T22:42:38.735Z",
   "collections": [
     {
       "name": "users",
@@ -2158,6 +2158,68 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "padrao_nacional",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dps_serie",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dps_numero",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dps_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dps_payload",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "servicos_itens",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo_tributacao_nacional",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo_municipio_prestacao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "tipo_ambiente",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["1 - Producao", "2 - Homologacao"]
+        },
+        {
+          "name": "tomador_ref",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "nfse_tomadores"
         }
       ],
       "indexes": []
@@ -3517,7 +3579,7 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["empresas", "plano_contas", "users"]
+          "selectValues": ["empresas", "plano_contas", "users", "nfse", "nfse_tomadores"]
         },
         {
           "name": "registro_id",
@@ -3969,6 +4031,161 @@
         "CREATE INDEX idx_sim_cenarios_usuario ON simulador_cenarios (usuario)",
         "CREATE INDEX idx_sim_cenarios_nome ON simulador_cenarios (nome)",
         "CREATE INDEX idx_sim_cenarios_created ON simulador_cenarios (created)"
+      ]
+    },
+    {
+      "name": "nfse_tomadores",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "tipo_pessoa",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["PJ", "PF", "Exterior"]
+        },
+        {
+          "name": "cpf_cnpj",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "razao_social",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "nome_fantasia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inscricao_municipal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "inscricao_estadual",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "email",
+          "type": "email",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "telefone",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cep",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "logradouro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "complemento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bairro",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo_municipio",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cidade",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "estado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ativo",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_tomadores_empresa ON nfse_tomadores (empresa)",
+        "CREATE INDEX idx_tomadores_cpf_cnpj ON nfse_tomadores (cpf_cnpj)",
+        "CREATE INDEX idx_tomadores_user ON nfse_tomadores (user)"
       ]
     }
   ]

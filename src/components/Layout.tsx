@@ -205,7 +205,7 @@ export default function Layout() {
     { name: 'Financeiro', path: '/financeiro', icon: Calendar, hideComercial: true },
     { name: 'Baixa dos Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
     { name: 'Contratos', path: '/contratos', icon: FileText },
-    { name: 'Nota Fiscal', path: '/notas-fiscais', icon: FileCheck2 },
+    { name: 'Emissor NFS-e Nacional', path: '/notas-fiscais', icon: FileCheck2 },
   ]
   const financeiroSubItems = rawFinanceiroSubItems.filter((item) => {
     if (isUserComercial && item.hideComercial) return false
