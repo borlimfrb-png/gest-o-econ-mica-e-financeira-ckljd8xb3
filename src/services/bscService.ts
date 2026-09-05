@@ -3,6 +3,8 @@ import type {
   BscKpiRecord,
   BscIniciativaRecord,
   BscIniciativaStatus,
+  BscIniciativaHistoricoRecord,
+  BscHistoricoAcao,
   BscPerspectiva,
   BscSentido,
 } from '@/types/finance'
@@ -315,10 +317,19 @@ export const bscService = {
     const filter = `empresa = '${empresaId}' && ano = ${ano}`
     return await pb.collection('bsc_kpis').getFullList<BscKpiRecord>({
       filter,
-      sort: 'perspectiva,ordem,created',
+      sort: 'perspectiva,created',
     })
   },
 
+  async getByEmpresa(empresaId: string): Promise<BscKpiRecord[]> {
+    if (!empresaId) return []
+
+    const filter = `empresa = '${empresaId}'`
+    return await pb.collection('bsc_kpis').getFullList<BscKpiRecord>({
+      filter,
+      sort: 'perspectiva,created',
+    })
+  },
   async create(data: SalvarBscKpiInput): Promise<BscKpiRecord> {
     const userId = pb.authStore.record?.id
     return await pb.collection('bsc_kpis').create<BscKpiRecord>({
@@ -419,11 +430,36 @@ export const bscService = {
     status: BscIniciativaStatus
     progresso?: number
   }): Promise<BscIniciativaRecord> {
-    const userId = pb.authStore.record?.id
-    return await pb.collection('bsc_iniciativas').create<BscIniciativaRecord>({
+    const userRec = pb.authStore.record
+    const userId = userRec?.id
+    const record = await pb.collection('bsc_iniciativas').create<BscIniciativaRecord>({
       ...data,
       usuario: userId || undefined,
     } as any)
+
+    // Registrar no histórico
+    try {
+      await pb.collection('bsc_iniciativas_historico').create({
+        iniciativa: record.id,
+        empresa: data.empresa || undefined,
+        usuario: userId || undefined,
+        usuario_nome: userRec?.name || userRec?.email || 'Usuário',
+        usuario_email: userRec?.email || '',
+        acao: 'criada',
+        descricao: `Plano de ação "${data.titulo}" criado com status "${data.status}".`,
+        dados_novos: {
+          titulo: data.titulo,
+          status: data.status,
+          progresso: data.progresso ?? 0,
+          prazo: data.prazo || null,
+          responsavel: data.responsavel || null,
+        },
+      })
+    } catch (errHist) {
+      console.warn('Erro ao registrar histórico de criação de iniciativa:', errHist)
+    }
+
+    return record
   },
 
   async updateIniciativa(
@@ -436,12 +472,136 @@ export const bscService = {
       status: BscIniciativaStatus
       progresso?: number
     }>,
+    iniciativaAnterior?: BscIniciativaRecord | null,
   ): Promise<BscIniciativaRecord> {
-    return await pb.collection('bsc_iniciativas').update<BscIniciativaRecord>(id, data as any)
+    const userRec = pb.authStore.record
+    const userId = userRec?.id
+
+    // Buscar estado anterior se não fornecido
+    let anterior = iniciativaAnterior
+    if (!anterior) {
+      try {
+        anterior = await pb.collection('bsc_iniciativas').getOne<BscIniciativaRecord>(id)
+      } catch {
+        /* intentionally ignored */
+      }
+    }
+
+    const record = await pb
+      .collection('bsc_iniciativas')
+      .update<BscIniciativaRecord>(id, data as any)
+
+    // Determinar tipo de ação para histórico
+    let acao: BscHistoricoAcao = 'edicao'
+    let descHistorico = 'Plano de ação atualizado'
+
+    if (data.status && anterior?.status && data.status !== anterior.status) {
+      if (data.status === 'concluida') {
+        acao = 'concluida'
+        descHistorico = `Plano marcado como CONCLUÍDO (100%).`
+      } else {
+        acao = 'status'
+        descHistorico = `Status alterado de "${anterior.status}" para "${data.status}".`
+      }
+    } else if (
+      data.progresso !== undefined &&
+      anterior?.progresso !== undefined &&
+      data.progresso !== anterior.progresso
+    ) {
+      acao = data.progresso === 100 ? 'concluida' : 'progresso'
+      descHistorico = `Progresso atualizado de ${anterior.progresso}% para ${data.progresso}%.`
+    } else if (data.prazo !== undefined && anterior?.prazo !== data.prazo) {
+      descHistorico = `Prazo alterado de "${anterior?.prazo || 'sem prazo'}" para "${data.prazo || 'sem prazo'}".`
+    } else if (data.responsavel !== undefined && anterior?.responsavel !== data.responsavel) {
+      descHistorico = `Responsável alterado de "${anterior?.responsavel || 'não atribuído'}" para "${data.responsavel || 'não atribuído'}".`
+    }
+
+    try {
+      const dadosAnt: Record<string, any> = {}
+      const dadosNov: Record<string, any> = {}
+
+      if (anterior) {
+        if (data.status !== undefined) {
+          dadosAnt.status = anterior.status
+          dadosNov.status = data.status
+        }
+        if (data.progresso !== undefined) {
+          dadosAnt.progresso = anterior.progresso
+          dadosNov.progresso = data.progresso
+        }
+        if (data.prazo !== undefined) {
+          dadosAnt.prazo = anterior.prazo
+          dadosNov.prazo = data.prazo
+        }
+        if (data.responsavel !== undefined) {
+          dadosAnt.responsavel = anterior.responsavel
+          dadosNov.responsavel = data.responsavel
+        }
+        if (data.titulo !== undefined) {
+          dadosAnt.titulo = anterior.titulo
+          dadosNov.titulo = data.titulo
+        }
+      }
+
+      await pb.collection('bsc_iniciativas_historico').create({
+        iniciativa: id,
+        empresa: record.empresa || anterior?.empresa || undefined,
+        usuario: userId || undefined,
+        usuario_nome: userRec?.name || userRec?.email || 'Usuário',
+        usuario_email: userRec?.email || '',
+        acao,
+        descricao: descHistorico,
+        dados_anteriores: Object.keys(dadosAnt).length > 0 ? dadosAnt : undefined,
+        dados_novos: Object.keys(dadosNov).length > 0 ? dadosNov : undefined,
+      })
+    } catch (errHist) {
+      console.warn('Erro ao registrar histórico de atualização de iniciativa:', errHist)
+    }
+
+    return record
   },
 
   async deleteIniciativa(id: string): Promise<boolean> {
     return await pb.collection('bsc_iniciativas').delete(id)
+  },
+
+  // ----------------------------------------------------
+  // Histórico de Alterações de Iniciativas (bsc_iniciativas_historico)
+  // ----------------------------------------------------
+  async getHistoricoIniciativa(iniciativaId: string): Promise<BscIniciativaHistoricoRecord[]> {
+    if (!iniciativaId) return []
+    return await pb
+      .collection('bsc_iniciativas_historico')
+      .getFullList<BscIniciativaHistoricoRecord>({
+        filter: `iniciativa = '${iniciativaId}'`,
+        sort: '-created',
+        expand: 'usuario,empresa',
+      })
+  },
+
+  // ----------------------------------------------------
+  // Envio de Laudo BSC por E-mail (Endpoint backend)
+  // ----------------------------------------------------
+  async enviarLaudoEmail(payload: {
+    destinatario_email: string
+    assunto?: string
+    mensagem_opcional?: string
+    empresa_id?: string
+    empresa_nome?: string
+    ano?: number
+    score_global?: number
+    html_conteudo?: string
+  }): Promise<{ success: boolean; message: string; destinatario?: string; codigo?: string }> {
+    const res = await pb.send<{
+      success: boolean
+      message: string
+      destinatario?: string
+      codigo?: string
+    }>('/api/bsc/enviar-laudo-email', {
+      method: 'POST',
+      body: payload,
+    })
+    return res
   },
 
   /**

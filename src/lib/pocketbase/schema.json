@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-05T12:47:32.253Z",
+  "generatedAt": "2026-09-05T13:17:45.229Z",
   "collections": [
     {
       "name": "users",
@@ -3795,6 +3795,97 @@
         "CREATE INDEX idx_bsc_iniciativas_empresa ON bsc_iniciativas (empresa)",
         "CREATE INDEX idx_bsc_iniciativas_ano ON bsc_iniciativas (ano)",
         "CREATE INDEX idx_bsc_iniciativas_status ON bsc_iniciativas (status)"
+      ]
+    },
+    {
+      "name": "bsc_iniciativas_historico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "iniciativa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "bsc_iniciativas"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "usuario_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "usuario_email",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "acao",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["criada", "edicao", "status", "progresso", "concluida"]
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_anteriores",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dados_novos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bsc_hist_iniciativa ON bsc_iniciativas_historico (iniciativa)",
+        "CREATE INDEX idx_bsc_hist_empresa ON bsc_iniciativas_historico (empresa)",
+        "CREATE INDEX idx_bsc_hist_created ON bsc_iniciativas_historico (created)",
+        "CREATE INDEX idx_bsc_hist_acao ON bsc_iniciativas_historico (acao)"
       ]
     }
   ]

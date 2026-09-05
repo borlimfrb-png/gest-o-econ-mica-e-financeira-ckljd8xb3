@@ -902,3 +902,27 @@ export interface BscIniciativaRecord {
     usuario?: UserRecord
   }
 }
+
+export type BscHistoricoAcao = 'criada' | 'edicao' | 'status' | 'progresso' | 'concluida'
+
+export interface BscIniciativaHistoricoRecord {
+  id: string
+  collectionId: string
+  collectionName: string
+  iniciativa: string
+  empresa?: string
+  usuario?: string
+  usuario_nome?: string
+  usuario_email?: string
+  acao: BscHistoricoAcao
+  descricao?: string
+  dados_anteriores?: Record<string, any>
+  dados_novos?: Record<string, any>
+  created: string
+  updated: string
+  expand?: {
+    iniciativa?: BscIniciativaRecord
+    empresa?: EmpresaRecord
+    usuario?: UserRecord
+  }
+}

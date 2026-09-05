@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Printer,
   Download,
+  Mail,
   AlertTriangle,
   ExternalLink,
   Target,
@@ -83,6 +84,7 @@ export interface ModalPdfBscA4Props {
   // Evolução 1: Comparativo entre empresas do grupo empresarial (se grupo ativo)
   grupoAtivo?: { id: string; nome: string } | null
   comparativoGrupo?: ComparativoGrupoItemPdf[]
+  onEnviarEmail?: () => void
 }
 
 export function ModalPdfBscA4({
@@ -99,6 +101,7 @@ export function ModalPdfBscA4({
   iniciativas = [],
   grupoAtivo = null,
   comparativoGrupo = [],
+  onEnviarEmail,
 }: ModalPdfBscA4Props) {
   const { toast } = useToast()
 
@@ -230,6 +233,18 @@ export function ModalPdfBscA4({
           </div>
 
           <div className="flex items-center gap-2">
+            {onEnviarEmail && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEnviarEmail}
+                className="h-8 text-xs font-semibold gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
+                title="Disparar laudo executivo por e-mail ao cliente"
+              >
+                <Mail className="w-3.5 h-3.5 text-blue-600" />
+                Enviar por E-mail
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"

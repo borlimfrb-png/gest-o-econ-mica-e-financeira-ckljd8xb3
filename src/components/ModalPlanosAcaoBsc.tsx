@@ -47,7 +47,9 @@ import {
   Flame,
   Sparkles,
   BookOpen,
+  History,
 } from 'lucide-react'
+import { ModalHistoricoIniciativa } from '@/components/ModalHistoricoIniciativa'
 import {
   CATALOGO_MODELOS_PLANOS,
   CATEGORIAS_PROBLEMAS,
@@ -287,16 +289,29 @@ export function ModalPlanosAcaoBsc({
     }
   }
 
+  // Modal de Histórico de Alterações
+  const [modalHistoricoOpen, setModalHistoricoOpen] = useState(false)
+  const [iniciativaHistorico, setIniciativaHistorico] = useState<BscIniciativaRecord | null>(null)
+
+  const handleAbrirHistorico = (ini: BscIniciativaRecord) => {
+    setIniciativaHistorico(ini)
+    setModalHistoricoOpen(true)
+  }
+
   // Rápida alteração de status / conclusão
   const handleAlternarConclusao = async (ini: BscIniciativaRecord) => {
     try {
       const novoStatus: BscIniciativaStatus =
         ini.status === 'concluida' ? 'em_andamento' : 'concluida'
       const novoProgresso = novoStatus === 'concluida' ? 100 : 50
-      await bscService.updateIniciativa(ini.id, {
-        status: novoStatus,
-        progresso: novoProgresso,
-      })
+      await bscService.updateIniciativa(
+        ini.id,
+        {
+          status: novoStatus,
+          progresso: novoProgresso,
+        },
+        ini,
+      )
       await carregarIniciativas()
       onIniciativasChange?.()
     } catch (err) {
@@ -489,9 +504,17 @@ export function ModalPlanosAcaoBsc({
                           </div>
                         </div>
                       </div>
-
                       {/* Ações da Iniciativa */}
                       <div className="flex items-center gap-1 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleAbrirHistorico(ini)}
+                          className="w-7 h-7 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50"
+                          title="Ver histórico de alterações deste plano"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -510,7 +533,7 @@ export function ModalPlanosAcaoBsc({
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
-                      </div>
+                      </div>{' '}
                     </div>
                   </div>
                 )
@@ -531,6 +554,13 @@ export function ModalPlanosAcaoBsc({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* MODAL DE HISTÓRICO / AUDITORIA */}
+      <ModalHistoricoIniciativa
+        open={modalHistoricoOpen}
+        onOpenChange={setModalHistoricoOpen}
+        iniciativa={iniciativaHistorico}
+      />
 
       {/* DIÁLOGO CRUD (NOVA / EDITAR INICIATIVA) */}
       <Dialog open={modalFormOpen} onOpenChange={setModalFormOpen}>

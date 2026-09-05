@@ -30,6 +30,7 @@ import { ModalPdfBscA4, type ResumoPerspectivaPdf } from '@/components/ModalPdfB
 import { ModalPlanosAcaoBsc } from '@/components/ModalPlanosAcaoBsc'
 import { PainelPlanosAcaoEmpresa } from '@/components/PainelPlanosAcaoEmpresa'
 import { ModalCompararBscGrupo } from '@/components/ModalCompararBscGrupo'
+import { ModalEnviarLaudoBscEmail } from '@/components/ModalEnviarLaudoBscEmail'
 import { gruposEmpresariaisService, empresasService } from '@/services/financeService'
 import type { GrupoEmpresarialRecord, EmpresaRecord } from '@/types/finance'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
@@ -77,6 +78,7 @@ import {
   Cpu,
   GraduationCap,
   Pencil,
+  Mail,
   Trash2,
   CheckCircle2,
   AlertTriangle,
@@ -251,6 +253,9 @@ export default function BalancedScorecard() {
   // Modal PDF A4
   const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
 
+  // Modal Enviar Laudo BSC por E-mail
+  const [modalEmailOpen, setModalEmailOpen] = useState<boolean>(false)
+
   // Modal Planos de Ação / Iniciativas para KPIs <70%
   const [modalPlanosOpen, setModalPlanosOpen] = useState<boolean>(false)
   const [kpiSelecionadoPlano, setKpiSelecionadoPlano] = useState<BscKpiRecord | null>(null)
@@ -299,6 +304,10 @@ export default function BalancedScorecard() {
       totalKpis: number
     }[]
   >([])
+
+  // Todas as iniciativas e KPIs de todas as empresas do grupo para visão consolidada
+  const [iniciativasDoGrupo, setIniciativasDoGrupo] = useState<BscIniciativaRecord[]>([])
+  const [kpisDoGrupo, setKpisDoGrupo] = useState<BscKpiRecord[]>([])
 
   // Carregar dados de todas as empresas do grupo quando um grupo estiver ativo
   useEffect(() => {
@@ -418,7 +427,30 @@ export default function BalancedScorecard() {
       }
     }
 
+    // Carregar todas as iniciativas de todas as empresas do grupo para a visão consolidada
+    async function carregarIniciativasETodosKpisGrupo() {
+      if (!isGrupoSelecionado || !grupoAtivo || empresasDoGrupo.length === 0) {
+        setIniciativasDoGrupo([])
+        setKpisDoGrupo([])
+        return
+      }
+
+      try {
+        const [todasInis, todosKps] = await Promise.all([
+          Promise.all(empresasDoGrupo.map((e) => bscService.getIniciativasByEmpresa(e.id))),
+          Promise.all(empresasDoGrupo.map((e) => bscService.getByEmpresa(e.id))),
+        ])
+        setIniciativasDoGrupo(todasInis.flat())
+        setKpisDoGrupo(todosKps.flat())
+      } catch (err) {
+        console.error('Erro ao carregar iniciativas e KPIs de todas as empresas do grupo:', err)
+        setIniciativasDoGrupo([])
+        setKpisDoGrupo([])
+      }
+    }
+
     carregarComparativoTodasEmpresasGrupo()
+    carregarIniciativasETodosKpisGrupo()
   }, [isGrupoSelecionado, grupoAtivo, empresasDoGrupo, selectedAno])
 
   // Carregar Balanços e DREs da empresa/ano
@@ -524,8 +556,32 @@ export default function BalancedScorecard() {
   // Realtime para refletir balanços, DRE, KPIs e Iniciativas do BSC
   useRealtime<BalancoRecord>('balancos', () => carregarDemonstracoes(), isAuthenticated)
   useRealtime<DreRecord>('dre', () => carregarDemonstracoes(), isAuthenticated)
-  useRealtime<BscKpiRecord>('bsc_kpis', () => carregarKpis(), isAuthenticated)
-  useRealtime<BscIniciativaRecord>('bsc_iniciativas', () => carregarKpis(), isAuthenticated)
+  useRealtime<BscKpiRecord>(
+    'bsc_kpis',
+    () => {
+      carregarKpis()
+      if (isGrupoSelecionado && empresasDoGrupo.length > 0) {
+        Promise.all(empresasDoGrupo.map((e) => bscService.getByEmpresa(e.id))).then((res) => {
+          setKpisDoGrupo(res.flat())
+        })
+      }
+    },
+    isAuthenticated,
+  )
+  useRealtime<BscIniciativaRecord>(
+    'bsc_iniciativas',
+    () => {
+      carregarKpis()
+      if (isGrupoSelecionado && empresasDoGrupo.length > 0) {
+        Promise.all(empresasDoGrupo.map((e) => bscService.getIniciativasByEmpresa(e.id))).then(
+          (res) => {
+            setIniciativasDoGrupo(res.flat())
+          },
+        )
+      }
+    },
+    isAuthenticated,
+  )
 
   // Balanço e DRE consolidados do ano ativo e anterior
   const balancoAtual = useMemo(
@@ -1212,6 +1268,19 @@ export default function BalancedScorecard() {
             <GitCompare className="w-4 h-4 text-indigo-500" />
             {modoComparativo ? 'Fechar Comparativo' : 'Comparar Anos'}
           </Button>
+
+          {/* Botão Enviar por E-mail (Visível para Admin e Perfil Empresa) */}
+          {(isAdmin || user?.role === 'empresa') && (
+            <Button
+              variant="outline"
+              onClick={() => setModalEmailOpen(true)}
+              className="border-blue-200 text-blue-700 hover:bg-blue-50 text-xs font-semibold h-9 gap-1.5 shadow-2xs"
+              title="Disparar laudo executivo por e-mail diretamente ao cliente"
+            >
+              <Mail className="w-4 h-4 text-blue-600" />
+              Enviar por E-mail
+            </Button>
+          )}
 
           {/* Botão Exportar PDF (Melhoria 1) */}
           <Button
@@ -2146,7 +2215,7 @@ export default function BalancedScorecard() {
           </div>
         </TabsContent>
 
-        {/* ABA 2: PAINEL DE PLANOS DE AÇÃO CONSOLIDADOS POR EMPRESA */}
+        {/* ABA 2: PAINEL DE PLANOS DE AÇÃO CONSOLIDADOS POR EMPRESA OU GRUPO */}
         <TabsContent value="planos_acao" className="space-y-6 mt-4">
           <PainelPlanosAcaoEmpresa
             empresa={selectedEmpresa}
@@ -2156,10 +2225,28 @@ export default function BalancedScorecard() {
             kpis={kpis}
             iniciativas={todasIniciativasEmpresa}
             isLoading={isLoading}
-            onRecarregar={carregarKpis}
+            onRecarregar={async () => {
+              await carregarKpis()
+              if (isGrupoSelecionado && empresasDoGrupo.length > 0) {
+                const [todasInis, todosKps] = await Promise.all([
+                  Promise.all(empresasDoGrupo.map((e) => bscService.getIniciativasByEmpresa(e.id))),
+                  Promise.all(empresasDoGrupo.map((e) => bscService.getByEmpresa(e.id))),
+                ])
+                setIniciativasDoGrupo(todasInis.flat())
+                setKpisDoGrupo(todosKps.flat())
+              }
+            }}
             onEditarPlano={handleEditarPlanoDireto}
             onNovoPlano={handleNovoPlanoDireto}
             calcularAtingimentoKpi={calcularAtingimentoKpi}
+            isGrupoSelecionado={isGrupoSelecionado}
+            isAdmin={isAdmin}
+            grupoAtivo={
+              isGrupoSelecionado && grupoAtivo ? { id: grupoAtivo.id, nome: grupoAtivo.nome } : null
+            }
+            empresasDoGrupo={empresasDoGrupo}
+            iniciativasDoGrupo={iniciativasDoGrupo}
+            kpisDoGrupo={kpisDoGrupo}
           />
         </TabsContent>
       </Tabs>
@@ -2446,6 +2533,22 @@ export default function BalancedScorecard() {
           isGrupoSelecionado && grupoAtivo ? { id: grupoAtivo.id, nome: grupoAtivo.nome } : null
         }
         comparativoGrupo={comparativoGrupoData}
+        onEnviarEmail={() => {
+          setModalPdfOpen(false)
+          setModalEmailOpen(true)
+        }}
+      />
+
+      {/* 6.1. MODAL ENVIAR LAUDO BSC POR E-MAIL */}
+      <ModalEnviarLaudoBscEmail
+        open={modalEmailOpen}
+        onOpenChange={setModalEmailOpen}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        scoreGlobal={scoreGlobalBsc}
+        resumosPerspectivas={dadosModalPdf}
+        iniciativas={iniciativas}
       />
 
       {/* 7. MODAL DE PLANOS DE AÇÃO / INICIATIVAS VINCULADAS */}

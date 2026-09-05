@@ -37,7 +37,10 @@ import {
   Building2,
   Sparkles,
   BookOpen,
+  History,
+  Layers,
 } from 'lucide-react'
+import { ModalHistoricoIniciativa } from '@/components/ModalHistoricoIniciativa'
 import {
   CATALOGO_MODELOS_PLANOS,
   CATEGORIAS_PROBLEMAS,
@@ -59,6 +62,13 @@ export interface PainelPlanosAcaoEmpresaProps {
     pct: number
     status: 'atingido' | 'proximo' | 'abaixo' | 'indefinido'
   }
+  // Evolução 2: Visão do grupo consolidada
+  isGrupoSelecionado?: boolean
+  isAdmin?: boolean
+  grupoAtivo?: { id: string; nome: string } | null
+  empresasDoGrupo?: EmpresaRecord[]
+  iniciativasDoGrupo?: BscIniciativaRecord[]
+  kpisDoGrupo?: BscKpiRecord[]
 }
 
 export function PainelPlanosAcaoEmpresa({
@@ -73,10 +83,29 @@ export function PainelPlanosAcaoEmpresa({
   onEditarPlano,
   onNovoPlano,
   calcularAtingimentoKpi,
+  isGrupoSelecionado = false,
+  isAdmin = false,
+  grupoAtivo = null,
+  empresasDoGrupo = [],
+  iniciativasDoGrupo = [],
+  kpisDoGrupo = [],
 }: PainelPlanosAcaoEmpresaProps) {
   const { toast } = useToast()
 
+  // Modal de Histórico
+  const [modalHistoricoOpen, setModalHistoricoOpen] = useState(false)
+  const [iniciativaHistorico, setIniciativaHistorico] = useState<BscIniciativaRecord | null>(null)
+
+  const handleAbrirHistorico = (ini: BscIniciativaRecord) => {
+    setIniciativaHistorico(ini)
+    setModalHistoricoOpen(true)
+  }
+
+  // Se estamos na visão de grupo para Admin
+  const modoVisaoGrupo = Boolean(isGrupoSelecionado && isAdmin && grupoAtivo)
+
   // Filtros locais
+  const [filtroEmpresaMembro, setFiltroEmpresaMembro] = useState<string>('todas') // para filtrar membro na visão grupo
   const [filtroAno, setFiltroAno] = useState<string>('todos') // 'todos' ou ano específico como string
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [buscaTexto, setBuscaTexto] = useState<string>('')
@@ -85,20 +114,36 @@ export function PainelPlanosAcaoEmpresa({
   const [catalogoAberto, setCatalogoAberto] = useState<boolean>(false)
   const [filtroCategoriaCatalogo, setFiltroCategoriaCatalogo] = useState<string>('todos')
 
+  // Mapa de Empresas do grupo por ID
+  const mapaEmpresasGrupo = useMemo(() => {
+    const map = new Map<string, EmpresaRecord>()
+    empresasDoGrupo.forEach((e) => map.set(e.id, e))
+    return map
+  }, [empresasDoGrupo])
+
+  // Lista base de iniciativas e KPIs conforme o modo (Grupo vs. Empresa individual)
+  const listaBaseIniciativas = useMemo(() => {
+    return modoVisaoGrupo ? iniciativasDoGrupo : iniciativas
+  }, [modoVisaoGrupo, iniciativasDoGrupo, iniciativas])
+
+  const listaBaseKpis = useMemo(() => {
+    return modoVisaoGrupo ? kpisDoGrupo : kpis
+  }, [modoVisaoGrupo, kpisDoGrupo, kpis])
+
   // Mapa de KPI por ID para acesso rápido
   const mapaKpis = useMemo(() => {
     const map = new Map<string, BscKpiRecord>()
-    kpis.forEach((k) => map.set(k.id, k))
+    listaBaseKpis.forEach((k) => map.set(k.id, k))
     return map
-  }, [kpis])
+  }, [listaBaseKpis])
 
   // KPIs Críticos (atingimento < 70%)
   const kpisCriticos = useMemo(() => {
-    return kpis.filter((k) => {
+    return listaBaseKpis.filter((k) => {
       const at = calcularAtingimentoKpi(k)
       return at.status === 'abaixo' // < 70%
     })
-  }, [kpis, calcularAtingimentoKpi])
+  }, [listaBaseKpis, calcularAtingimentoKpi])
 
   // Mapa de cálculo de atingimento por KPI
   const mapaAtingimento = useMemo(() => {
@@ -106,11 +151,11 @@ export function PainelPlanosAcaoEmpresa({
       string,
       { pct: number; status: 'atingido' | 'proximo' | 'abaixo' | 'indefinido' }
     >()
-    kpis.forEach((k) => {
+    listaBaseKpis.forEach((k) => {
       map.set(k.id, calcularAtingimentoKpi(k))
     })
     return map
-  }, [kpis, calcularAtingimentoKpi])
+  }, [listaBaseKpis, calcularAtingimentoKpi])
 
   // Identificação de prazos e datas
   const hojeStr = useMemo(() => new Date().toISOString().split('T')[0], [])
@@ -122,7 +167,12 @@ export function PainelPlanosAcaoEmpresa({
 
   // Filtragem da lista de iniciativas
   const iniciativasFiltradas = useMemo(() => {
-    return iniciativas.filter((ini) => {
+    return listaBaseIniciativas.filter((ini) => {
+      // Filtro por empresa membro no modo grupo
+      if (modoVisaoGrupo && filtroEmpresaMembro !== 'todas') {
+        if (ini.empresa !== filtroEmpresaMembro) return false
+      }
+
       // Filtro por ano
       if (filtroAno !== 'todos' && String(ini.ano) !== filtroAno) {
         return false
@@ -150,15 +200,21 @@ export function PainelPlanosAcaoEmpresa({
         if (at?.status !== 'abaixo') return false
       }
 
-      // Busca por título, responsável ou nome do KPI
+      // Busca por título, responsável ou nome do KPI ou empresa
       if (buscaTexto.trim()) {
         const q = buscaTexto.toLowerCase().trim()
         const kpi = mapaKpis.get(ini.kpi) || ini.expand?.kpi
+        const empNome =
+          mapaEmpresasGrupo.get(ini.empresa || '')?.nome_fantasia ||
+          mapaEmpresasGrupo.get(ini.empresa || '')?.nome ||
+          ini.expand?.empresa?.nome ||
+          ''
         const matchTitulo = ini.titulo.toLowerCase().includes(q)
         const matchResp = (ini.responsavel || '').toLowerCase().includes(q)
         const matchDesc = (ini.descricao || '').toLowerCase().includes(q)
         const matchKpi = (kpi?.nome || '').toLowerCase().includes(q)
-        if (!matchTitulo && !matchResp && !matchDesc && !matchKpi) {
+        const matchEmp = empNome.toLowerCase().includes(q)
+        if (!matchTitulo && !matchResp && !matchDesc && !matchKpi && !matchEmp) {
           return false
         }
       }
@@ -166,7 +222,9 @@ export function PainelPlanosAcaoEmpresa({
       return true
     })
   }, [
-    iniciativas,
+    listaBaseIniciativas,
+    modoVisaoGrupo,
+    filtroEmpresaMembro,
     filtroAno,
     filtroStatus,
     filtroCritico,
@@ -174,13 +232,20 @@ export function PainelPlanosAcaoEmpresa({
     hojeStr,
     daqui30Str,
     mapaKpis,
+    mapaEmpresasGrupo,
     mapaAtingimento,
   ])
 
-  // Estatísticas e contadores gerais da empresa selecionada (considerando o filtro de ano selecionado ou todos)
+  // Estatísticas e contadores gerais (da empresa selecionada ou do grupo inteiro)
   const resumoEstatisticas = useMemo(() => {
-    const baseIniciativas =
-      filtroAno === 'todos' ? iniciativas : iniciativas.filter((i) => String(i.ano) === filtroAno)
+    let baseIniciativas =
+      filtroAno === 'todos'
+        ? listaBaseIniciativas
+        : listaBaseIniciativas.filter((i) => String(i.ano) === filtroAno)
+
+    if (modoVisaoGrupo && filtroEmpresaMembro !== 'todas') {
+      baseIniciativas = baseIniciativas.filter((i) => i.empresa === filtroEmpresaMembro)
+    }
 
     const total = baseIniciativas.length
     const concluidas = baseIniciativas.filter((i) => i.status === 'concluida').length
@@ -209,7 +274,7 @@ export function PainelPlanosAcaoEmpresa({
       atrasadas,
       taxaConclusao,
     }
-  }, [iniciativas, filtroAno, hojeStr, daqui30Str])
+  }, [listaBaseIniciativas, modoVisaoGrupo, filtroEmpresaMembro, filtroAno, hojeStr, daqui30Str])
 
   // Atualização rápida inline de status ou conclusão
   const handleAlternarConclusaoInline = async (ini: BscIniciativaRecord) => {
@@ -219,10 +284,14 @@ export function PainelPlanosAcaoEmpresa({
         ini.status === 'concluida' ? 'em_andamento' : 'concluida'
       const novoProgresso = novoStatus === 'concluida' ? 100 : 50
 
-      await bscService.updateIniciativa(ini.id, {
-        status: novoStatus,
-        progresso: novoProgresso,
-      })
+      await bscService.updateIniciativa(
+        ini.id,
+        {
+          status: novoStatus,
+          progresso: novoProgresso,
+        },
+        ini,
+      )
 
       toast({
         title: novoStatus === 'concluida' ? 'Plano concluído! 🎉' : 'Plano reaberto',
@@ -249,10 +318,14 @@ export function PainelPlanosAcaoEmpresa({
       const novoStatus: BscIniciativaStatus =
         val === 100 ? 'concluida' : val > 0 ? 'em_andamento' : ini.status
 
-      await bscService.updateIniciativa(ini.id, {
-        progresso: val,
-        status: novoStatus,
-      })
+      await bscService.updateIniciativa(
+        ini.id,
+        {
+          progresso: val,
+          status: novoStatus,
+        },
+        ini,
+      )
       await onRecarregar()
     } catch (err) {
       console.error('Erro ao alterar progresso inline:', err)
@@ -275,10 +348,14 @@ export function PainelPlanosAcaoEmpresa({
       const novoProgresso =
         novoStatus === 'concluida' ? 100 : ini.progresso === 100 ? 75 : (ini.progresso ?? 0)
 
-      await bscService.updateIniciativa(ini.id, {
-        status: novoStatus,
-        progresso: novoProgresso,
-      })
+      await bscService.updateIniciativa(
+        ini.id,
+        {
+          status: novoStatus,
+          progresso: novoProgresso,
+        },
+        ini,
+      )
       toast({
         title: 'Status atualizado',
         description: `Iniciativa alterada para ${
@@ -317,12 +394,21 @@ export function PainelPlanosAcaoEmpresa({
             </h2>
             <Badge className="bg-slate-100 text-slate-800 border-slate-200 text-xs font-semibold flex items-center gap-1">
               <Building2 className="w-3.5 h-3.5 text-slate-500" />
-              {empresa?.nome_fantasia || empresa?.nome || 'Empresa Ativa'}
+              {modoVisaoGrupo
+                ? `Grupo: ${grupoAtivo?.nome} (${empresasDoGrupo.length} empresas)`
+                : empresa?.nome_fantasia || empresa?.nome || 'Empresa Ativa'}
             </Badge>
+            {modoVisaoGrupo && (
+              <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-xs font-bold flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                Visão Consolidada do Grupo
+              </Badge>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-slate-600">
-            Visão consolidada de todas as iniciativas corretivas e projetos vinculados aos KPIs do
-            Balanced Scorecard, com foco prioritário em metas críticas (&lt; 70%).
+            {modoVisaoGrupo
+              ? `Visão consolidada das iniciativas de TODAS as empresas-membro do Grupo ${grupoAtivo?.nome}. Permite filtrar por empresa e editar diretamente.`
+              : 'Visão consolidada de todas as iniciativas corretivas e projetos vinculados aos KPIs do Balanced Scorecard, com foco prioritário em metas críticas (< 70%).'}
           </p>
         </div>
 
@@ -647,6 +733,31 @@ export function PainelPlanosAcaoEmpresa({
             />
           </div>
 
+          {/* Filtro por Empresa Membro no Modo Grupo */}
+          {modoVisaoGrupo && (
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-xs text-slate-500 font-medium hidden sm:inline">Empresa:</span>
+              <Select
+                value={filtroEmpresaMembro}
+                onValueChange={(val) => setFiltroEmpresaMembro(val)}
+              >
+                <SelectTrigger className="h-9 text-xs w-[160px] bg-indigo-50/50 border-indigo-200 text-indigo-900 font-semibold">
+                  <SelectValue placeholder="Empresa Membro" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas" className="text-xs font-bold">
+                    🏢 Todas as Empresas ({empresasDoGrupo.length})
+                  </SelectItem>
+                  {empresasDoGrupo.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                      {emp.nome_fantasia || emp.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Filtro por Ano */}
           <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-xs text-slate-500 font-medium hidden sm:inline">Ano:</span>
@@ -704,15 +815,20 @@ export function PainelPlanosAcaoEmpresa({
         <div className="flex items-center gap-2 justify-between sm:justify-end text-xs text-slate-500">
           <span>
             Mostrando <strong>{iniciativasFiltradas.length}</strong> de{' '}
-            <strong>{iniciativas.length}</strong> iniciativas
+            <strong>{listaBaseIniciativas.length}</strong> iniciativas
           </span>
-          {(buscaTexto || filtroAno !== 'todos' || filtroStatus !== 'todos' || filtroCritico) && (
+          {(buscaTexto ||
+            filtroAno !== 'todos' ||
+            filtroStatus !== 'todos' ||
+            filtroCritico ||
+            filtroEmpresaMembro !== 'todas') && (
             <Button
               onClick={() => {
                 setBuscaTexto('')
                 setFiltroAno('todos')
                 setFiltroStatus('todos')
                 setFiltroCritico(false)
+                setFiltroEmpresaMembro('todas')
               }}
               variant="ghost"
               size="sm"
@@ -770,6 +886,7 @@ export function PainelPlanosAcaoEmpresa({
                 <thead>
                   <tr className="bg-slate-50/90 text-slate-600 font-bold uppercase tracking-wider text-[10px] border-b border-slate-200">
                     <th className="py-3 px-4 w-12 text-center">Status</th>
+                    {modoVisaoGrupo && <th className="py-3 px-3 min-w-[140px]">Empresa</th>}
                     <th className="py-3 px-3">Plano de Ação / Escopo</th>
                     <th className="py-3 px-3 min-w-[200px]">KPI de Origem &amp; Semáforo</th>
                     <th className="py-3 px-3">Responsável</th>
@@ -832,6 +949,22 @@ export function PainelPlanosAcaoEmpresa({
                             )}
                           </button>
                         </td>
+
+                        {/* Empresa Membro (Modo Grupo) */}
+                        {modoVisaoGrupo && (
+                          <td className="py-3.5 px-3">
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-semibold bg-indigo-50 text-indigo-900 border-indigo-200"
+                            >
+                              <Building2 className="w-3 h-3 mr-1 text-indigo-600" />
+                              {mapaEmpresasGrupo.get(ini.empresa || '')?.nome_fantasia ||
+                                mapaEmpresasGrupo.get(ini.empresa || '')?.nome ||
+                                ini.expand?.empresa?.nome ||
+                                'Empresa'}
+                            </Badge>
+                          </td>
+                        )}
 
                         {/* Título, Descrição e Exercício */}
                         <td className="py-3.5 px-3">
@@ -1011,16 +1144,28 @@ export function PainelPlanosAcaoEmpresa({
 
                         {/* Ações */}
                         <td className="py-3.5 px-3 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onEditarPlano(ini, kpiVinculado)}
-                            className="h-8 text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-blue-50 gap-1"
-                            title="Editar escopo, responsáveis e datas deste plano"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Editar</span>
-                          </Button>
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleAbrirHistorico(ini)}
+                              className="h-8 text-xs font-semibold text-slate-600 hover:text-indigo-700 hover:bg-indigo-50 gap-1"
+                              title="Ver histórico de auditoria deste plano"
+                            >
+                              <History className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Histórico</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onEditarPlano(ini, kpiVinculado)}
+                              className="h-8 text-xs font-semibold text-slate-600 hover:text-blue-700 hover:bg-blue-50 gap-1"
+                              title="Editar escopo, responsáveis e datas deste plano"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span className="hidden sm:inline">Editar</span>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -1031,6 +1176,13 @@ export function PainelPlanosAcaoEmpresa({
           )}
         </CardContent>
       </Card>
+
+      {/* MODAL HISTÓRICO DE AUDITORIA DO PLANO */}
+      <ModalHistoricoIniciativa
+        open={modalHistoricoOpen}
+        onOpenChange={setModalHistoricoOpen}
+        iniciativa={iniciativaHistorico}
+      />
     </div>
   )
 }
