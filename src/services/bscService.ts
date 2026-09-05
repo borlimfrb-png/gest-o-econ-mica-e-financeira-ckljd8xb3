@@ -1,5 +1,11 @@
 import pb from '@/lib/pocketbase/client'
-import type { BscKpiRecord, BscPerspectiva, BscSentido } from '@/types/finance'
+import type {
+  BscKpiRecord,
+  BscIniciativaRecord,
+  BscIniciativaStatus,
+  BscPerspectiva,
+  BscSentido,
+} from '@/types/finance'
 
 export interface SalvarBscKpiInput {
   empresa?: string
@@ -357,5 +363,71 @@ export const bscService = {
     }
 
     return criados
+  },
+
+  // ----------------------------------------------------
+  // Gestão de Iniciativas / Planos de Ação (bsc_iniciativas)
+  // ----------------------------------------------------
+  /**
+   * Busca todas as iniciativas de uma empresa e ano
+   */
+  async getIniciativasByEmpresaEAno(
+    empresaId: string,
+    ano: number,
+  ): Promise<BscIniciativaRecord[]> {
+    if (!empresaId) return []
+    const filter = `empresa = '${empresaId}' && ano = ${ano}`
+    return await pb.collection('bsc_iniciativas').getFullList<BscIniciativaRecord>({
+      filter,
+      sort: 'status,prazo,created',
+      expand: 'kpi',
+    })
+  },
+
+  /**
+   * Busca as iniciativas vinculadas a um KPI específico
+   */
+  async getIniciativasByKpi(kpiId: string): Promise<BscIniciativaRecord[]> {
+    if (!kpiId) return []
+    return await pb.collection('bsc_iniciativas').getFullList<BscIniciativaRecord>({
+      filter: `kpi = '${kpiId}'`,
+      sort: 'status,prazo,created',
+    })
+  },
+
+  async createIniciativa(data: {
+    kpi: string
+    empresa?: string
+    ano: number
+    titulo: string
+    descricao?: string
+    responsavel?: string
+    prazo?: string
+    status: BscIniciativaStatus
+    progresso?: number
+  }): Promise<BscIniciativaRecord> {
+    const userId = pb.authStore.record?.id
+    return await pb.collection('bsc_iniciativas').create<BscIniciativaRecord>({
+      ...data,
+      usuario: userId || undefined,
+    } as any)
+  },
+
+  async updateIniciativa(
+    id: string,
+    data: Partial<{
+      titulo: string
+      descricao?: string
+      responsavel?: string
+      prazo?: string
+      status: BscIniciativaStatus
+      progresso?: number
+    }>,
+  ): Promise<BscIniciativaRecord> {
+    return await pb.collection('bsc_iniciativas').update<BscIniciativaRecord>(id, data as any)
+  },
+
+  async deleteIniciativa(id: string): Promise<boolean> {
+    return await pb.collection('bsc_iniciativas').delete(id)
   },
 }

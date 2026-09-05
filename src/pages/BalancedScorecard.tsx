@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { balancosService, dreService } from '@/services/financeService'
 import { bscService } from '@/services/bscService'
@@ -19,10 +20,13 @@ import type {
   BalancoRecord,
   DreRecord,
   BscKpiRecord,
+  BscIniciativaRecord,
   BscPerspectiva,
   BscSentido,
   BscKpiTipo,
 } from '@/types/finance'
+import { ModalPdfBscA4, type ResumoPerspectivaPdf } from '@/components/ModalPdfBscA4'
+import { ModalPlanosAcaoBsc } from '@/components/ModalPlanosAcaoBsc'
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -80,6 +84,12 @@ import {
   ArrowDownRight,
   ShieldCheck,
   Zap,
+  Printer,
+  ListTodo,
+  GitCompare,
+  TrendingDown,
+  Layers,
+  Flame,
 } from 'lucide-react'
 
 import {
@@ -89,6 +99,12 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Legend,
   Tooltip as RechartsTooltip,
 } from 'recharts'
 
@@ -184,11 +200,13 @@ export default function BalancedScorecard() {
   const { selectedEmpresaId, selectedAno, selectedEmpresa, anosDisponiveis, setSelectedAno } =
     useFilter()
   const { isAuthenticated } = useAuth()
+  const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
   const { toast } = useToast()
 
   const [kpis, setKpis] = useState<BscKpiRecord[]>([])
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
+  const [iniciativas, setIniciativas] = useState<BscIniciativaRecord[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isSaving, setIsSaving] = useState<boolean>(false)
   const [isCarregandoModelo, setIsCarregandoModelo] = useState<boolean>(false)
@@ -197,6 +215,22 @@ export default function BalancedScorecard() {
   const [modalKpiOpen, setModalKpiOpen] = useState(false)
   const [kpiEmEdicao, setKpiEmEdicao] = useState<BscKpiRecord | null>(null)
   const [kpiToDelete, setKpiToDelete] = useState<BscKpiRecord | null>(null)
+
+  // Modal PDF A4
+  const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
+
+  // Modal Planos de Ação / Iniciativas para KPIs <70%
+  const [modalPlanosOpen, setModalPlanosOpen] = useState<boolean>(false)
+  const [kpiSelecionadoPlano, setKpiSelecionadoPlano] = useState<BscKpiRecord | null>(null)
+  const [kpiAtingimentoPlano, setKpiAtingimentoPlano] = useState<number>(0)
+
+  // Modo Comparativo de Anos
+  const [modoComparativo, setModoComparativo] = useState<boolean>(false)
+  const [anoComparado, setAnoComparado] = useState<number>(() => {
+    return anosDisponiveis.find((a) => a !== selectedAno) || selectedAno - 1
+  })
+  const [kpisAnoComparado, setKpisAnoComparado] = useState<BscKpiRecord[]>([])
+  const [isLoadingComparado, setIsLoadingComparado] = useState<boolean>(false)
 
   // Formulário do KPI
   const [formPerspectiva, setFormPerspectiva] = useState<BscPerspectiva>('financeira')
@@ -225,17 +259,22 @@ export default function BalancedScorecard() {
     }
   }, [selectedEmpresaId])
 
-  // Carregar KPIs do BSC
+  // Carregar KPIs do BSC e Iniciativas
   const carregarKpis = useCallback(async () => {
     if (!selectedEmpresaId) {
       setKpis([])
+      setIniciativas([])
       setIsLoading(false)
       return
     }
     try {
       setIsLoading(true)
-      const list = await bscService.getByEmpresaEAno(selectedEmpresaId, selectedAno)
-      setKpis(list)
+      const [listKpis, listIniciativas] = await Promise.all([
+        bscService.getByEmpresaEAno(selectedEmpresaId, selectedAno),
+        bscService.getIniciativasByEmpresaEAno(selectedEmpresaId, selectedAno),
+      ])
+      setKpis(listKpis)
+      setIniciativas(listIniciativas)
     } catch (err) {
       console.error('Erro ao carregar KPIs do BSC:', err)
       toast({
@@ -248,15 +287,39 @@ export default function BalancedScorecard() {
     }
   }, [selectedEmpresaId, selectedAno, toast])
 
+  // Carregar KPIs do ano comparado (se ativo)
+  const carregarKpisComparado = useCallback(async () => {
+    if (!selectedEmpresaId || !modoComparativo || anoComparado === selectedAno) {
+      setKpisAnoComparado([])
+      return
+    }
+    try {
+      setIsLoadingComparado(true)
+      const list = await bscService.getByEmpresaEAno(selectedEmpresaId, anoComparado)
+      setKpisAnoComparado(list)
+    } catch (err) {
+      console.error('Erro ao carregar KPIs do ano comparado:', err)
+    } finally {
+      setIsLoadingComparado(false)
+    }
+  }, [selectedEmpresaId, modoComparativo, anoComparado, selectedAno])
+
   useEffect(() => {
     carregarDemonstracoes()
     carregarKpis()
   }, [carregarDemonstracoes, carregarKpis])
 
-  // Realtime para refletir balanços, DRE e os próprios KPIs do BSC
+  useEffect(() => {
+    if (modoComparativo) {
+      carregarKpisComparado()
+    }
+  }, [modoComparativo, carregarKpisComparado])
+
+  // Realtime para refletir balanços, DRE, KPIs e Iniciativas do BSC
   useRealtime<BalancoRecord>('balancos', () => carregarDemonstracoes(), isAuthenticated)
   useRealtime<DreRecord>('dre', () => carregarDemonstracoes(), isAuthenticated)
   useRealtime<BscKpiRecord>('bsc_kpis', () => carregarKpis(), isAuthenticated)
+  useRealtime<BscIniciativaRecord>('bsc_iniciativas', () => carregarKpis(), isAuthenticated)
 
   // Balanço e DRE consolidados do ano ativo e anterior
   const balancoAtual = useMemo(
@@ -314,9 +377,13 @@ export default function BalancedScorecard() {
 
   // Obter valor real apurado de um KPI (seja auto ou manual)
   const getValorApurado = useCallback(
-    (kpi: BscKpiRecord): { valor: number | null; formatado: string; disponivel: boolean } => {
+    (
+      kpi: BscKpiRecord,
+      customFormulas?: Record<string, number | null>,
+    ): { valor: number | null; formatado: string; disponivel: boolean } => {
+      const activeFormulas = customFormulas || formulasCalculadas
       if (kpi.tipo === 'auto' && kpi.formula) {
-        const val = formulasCalculadas[kpi.formula] ?? null
+        const val = activeFormulas[kpi.formula] ?? null
         if (val === null || val === undefined) {
           return { valor: null, formatado: 'Pendente (sem Balanço/DRE)', disponivel: false }
         }
@@ -354,8 +421,9 @@ export default function BalancedScorecard() {
   const calcularAtingimentoKpi = useCallback(
     (
       kpi: BscKpiRecord,
+      customFormulas?: Record<string, number | null>,
     ): { pct: number; status: 'atingido' | 'proximo' | 'abaixo' | 'indefinido' } => {
-      const apurado = getValorApurado(kpi)
+      const apurado = getValorApurado(kpi, customFormulas)
       if (!apurado.disponivel || apurado.valor === null) {
         return { pct: 0, status: 'indefinido' }
       }
@@ -467,6 +535,220 @@ export default function BalancedScorecard() {
       }
     })
   }, [resumoPerspectivas])
+
+  // ----------------------------------------------------
+  // CÁLCULOS DO ANO COMPARADO (SE MODO COMPARATIVO ATIVO)
+  // ----------------------------------------------------
+  const balancoComparado = useMemo(
+    () => (modoComparativo ? consolidarBalancoAnual(balancos, anoComparado) : null),
+    [balancos, anoComparado, modoComparativo],
+  )
+  const dreComparado = useMemo(
+    () => (modoComparativo ? consolidarDreAnual(dres, anoComparado) : null),
+    [dres, anoComparado, modoComparativo],
+  )
+  const dreComparadoAnterior = useMemo(
+    () => (modoComparativo ? consolidarDreAnual(dres, anoComparado - 1) : null),
+    [dres, anoComparado, modoComparativo],
+  )
+
+  const formulasCalculadasComparado = useMemo<Record<string, number | null>>(() => {
+    if (!modoComparativo) return {}
+    const calcBComp = calcularBalanco(balancoComparado)
+    const calcDComp = calcularDre(dreComparado)
+    const calcIndComp = calcularIndicadores(balancoComparado, dreComparado)
+    const calcGiroComp = calcularCapitalGiro(balancoComparado, dreComparado)
+
+    let crescimentoReceitaComp: number | null = null
+    const recAtualComp = calcDComp.receitaLiquida
+    const dreAntCalcComp = dreComparadoAnterior ? calcularDre(dreComparadoAnterior) : null
+    const recAntComp = dreAntCalcComp?.receitaLiquida || 0
+    if (recAtualComp > 0 && recAntComp > 0) {
+      crescimentoReceitaComp = ((recAtualComp - recAntComp) / recAntComp) * 100
+    }
+
+    return {
+      liquidez_corrente: calcIndComp.liquidezCorrente,
+      liquidez_seca: calcIndComp.liquidezSeca,
+      liquidez_imediata: calcIndComp.liquidezImediata,
+      liquidez_geral: calcIndComp.liquidezGeral,
+      endividamento_geral: calcIndComp.endividamentoGeral,
+      composicao_endividamento: calcIndComp.composicaoEndividamento,
+      margem_bruta: calcIndComp.margemBruta,
+      margem_operacional: calcIndComp.margemOperacional,
+      margem_liquida: calcIndComp.margemLiquida,
+      roe: calcIndComp.roe,
+      roa: calcIndComp.roa,
+      ebitda: calcDComp.ebitda,
+      crescimento_receita: crescimentoReceitaComp,
+      pmr: calcGiroComp.pmr,
+      pmp: calcGiroComp.pmp,
+      pme: calcGiroComp.pme,
+      ciclo_operacional: calcGiroComp.cicloOperacional,
+      ciclo_financeiro: calcGiroComp.cicloFinanceiro,
+    }
+  }, [balancoComparado, dreComparado, dreComparadoAnterior, modoComparativo])
+
+  // Resumo de scores do ano comparado
+  const comparativoData = useMemo(() => {
+    if (!modoComparativo) {
+      return {
+        scoreGlobalComparado: 0,
+        resumoPerspectivasComparado: [],
+        dadosGraficoBarras: [],
+        variacaoGlobal: 0,
+      }
+    }
+
+    let somaPonderadaGlobal = 0
+    let somaPesosGlobal = 0
+
+    const resumo = PERSPECTIVAS.map((p) => {
+      const kpisPersp = kpisAnoComparado.filter((k) => k.perspectiva === p.id)
+      let somaPonderada = 0
+      let somaPesos = 0
+
+      kpisPersp.forEach((k) => {
+        const peso = k.peso && k.peso > 0 ? k.peso : 10
+        const { pct, status } = calcularAtingimentoKpi(k, formulasCalculadasComparado)
+        if (status !== 'indefinido') {
+          somaPonderada += pct * peso
+          somaPesos += peso
+        }
+      })
+
+      const scorePerspectiva = somaPesos > 0 ? Math.round(somaPonderada / somaPesos) : 0
+
+      if (somaPesos > 0) {
+        somaPonderadaGlobal += scorePerspectiva * 25
+        somaPesosGlobal += 25
+      }
+
+      return {
+        perspectiva: p.id,
+        nome: p.nome,
+        score: scorePerspectiva,
+        total: kpisPersp.length,
+      }
+    })
+
+    const scoreGlobal = somaPesosGlobal > 0 ? Math.round(somaPonderadaGlobal / somaPesosGlobal) : 0
+    const variacaoGlobal = scoreGlobalBsc - scoreGlobal
+
+    // Formatar dados para gráfico de barras do Recharts
+    const dadosGraficoBarras = PERSPECTIVAS.map((p) => {
+      const atual = resumoPerspectivas.find((r) => r.perspectiva === p.id)?.score ?? 0
+      const comp = resumo.find((r) => r.perspectiva === p.id)?.score ?? 0
+      const diff = atual - comp
+      return {
+        perspectiva: p.nome,
+        anoAtivo: atual,
+        anoComparado: comp,
+        diferenca: diff,
+      }
+    })
+
+    return {
+      scoreGlobalComparado: scoreGlobal,
+      resumoPerspectivasComparado: resumo,
+      dadosGraficoBarras,
+      variacaoGlobal,
+    }
+  }, [
+    modoComparativo,
+    kpisAnoComparado,
+    formulasCalculadasComparado,
+    calcularAtingimentoKpi,
+    resumoPerspectivas,
+    scoreGlobalBsc,
+  ])
+
+  // Preparar dados para o Modal PDF A4
+  const dadosModalPdf = useMemo<ResumoPerspectivaPdf[]>(() => {
+    return resumoPerspectivas.map((p) => {
+      const kpisFormatados = p.kpis.map((kpi) => {
+        const apurado = getValorApurado(kpi)
+        const atingimento = calcularAtingimentoKpi(kpi)
+
+        let metaFormatada = ''
+        if (kpi.unidade === 'R$') {
+          metaFormatada = formatCurrency(kpi.meta)
+        } else if (kpi.unidade === '%') {
+          metaFormatada = formatPercent(kpi.meta, 1)
+        } else if (kpi.unidade === 'dias' || kpi.unidade === 'un' || kpi.unidade === 'horas') {
+          metaFormatada = `${formatNumber(kpi.meta, 0)} ${kpi.unidade}`
+        } else {
+          metaFormatada = `${formatNumber(kpi.meta, 2)} ${kpi.unidade || ''}`.trim()
+        }
+
+        return {
+          kpi,
+          apuradoStr: apurado.disponivel ? apurado.formatado : 'Pendente DRE/Balanço',
+          metaStr: metaFormatada,
+          pct: atingimento.pct,
+          status: atingimento.status,
+        }
+      })
+
+      return {
+        perspectiva: p.perspectiva,
+        nome: p.nome,
+        subtitulo: p.subtitulo,
+        score: p.score,
+        total: p.total,
+        atingidos: p.atingidos,
+        proximos: p.proximos,
+        abaixo: p.abaixo,
+        kpis: kpisFormatados,
+      }
+    })
+  }, [resumoPerspectivas, getValorApurado, calcularAtingimentoKpi])
+
+  // Contagem de iniciativas abertas e críticas
+  const estatisticasIniciativas = useMemo(() => {
+    const total = iniciativas.length
+    const concluidas = iniciativas.filter((i) => i.status === 'concluida').length
+    const abertas = total - concluidas
+    const hoje = new Date()
+    const daqui30Dias = new Date()
+    daqui30Dias.setDate(daqui30Dias.getDate() + 30)
+    const hojeStr = hoje.toISOString().split('T')[0]
+    const daqui30Str = daqui30Dias.toISOString().split('T')[0]
+
+    const vencendoEm30Dias = iniciativas.filter((i) => {
+      if (i.status === 'concluida' || !i.prazo) return false
+      const p = i.prazo.split('T')[0]
+      return p >= hojeStr && p <= daqui30Str
+    }).length
+
+    const atrasadas = iniciativas.filter((i) => {
+      if (i.status === 'concluida' || !i.prazo) return false
+      return i.prazo.split('T')[0] < hojeStr
+    }).length
+
+    // Mapeamento kpiId -> iniciativas[]
+    const mapPorKpi = new Map<string, BscIniciativaRecord[]>()
+    iniciativas.forEach((ini) => {
+      const arr = mapPorKpi.get(ini.kpi) || []
+      arr.push(ini)
+      mapPorKpi.set(ini.kpi, arr)
+    })
+
+    return {
+      total,
+      concluidas,
+      abertas,
+      vencendoEm30Dias,
+      atrasadas,
+      mapPorKpi,
+    }
+  }, [iniciativas])
+
+  const handleAbrirPlanosAcao = (kpi: BscKpiRecord, atingimentoPct: number) => {
+    setKpiSelecionadoPlano(kpi)
+    setKpiAtingimentoPlano(atingimentoPct)
+    setModalPlanosOpen(true)
+  }
 
   // Abrir Modal para Criar Novo KPI
   const handleNovoKpi = (perspectivaSugerida?: BscPerspectiva) => {
@@ -673,6 +955,32 @@ export default function BalancedScorecard() {
             </Select>
           </div>
 
+          {/* Botão Comparar Anos (Melhoria 2) */}
+          <Button
+            variant={modoComparativo ? 'default' : 'outline'}
+            onClick={() => setModoComparativo(!modoComparativo)}
+            className={`text-xs font-semibold h-9 gap-1.5 ${
+              modoComparativo
+                ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                : 'border-slate-300 text-slate-700 hover:bg-slate-50'
+            }`}
+            title="Comparar BSC entre dois anos e ver evolução por perspectiva"
+          >
+            <GitCompare className="w-4 h-4 text-indigo-500" />
+            {modoComparativo ? 'Fechar Comparativo' : 'Comparar Anos'}
+          </Button>
+
+          {/* Botão Exportar PDF (Melhoria 1) */}
+          <Button
+            onClick={() => setModalPdfOpen(true)}
+            variant="outline"
+            className="border-slate-300 text-slate-800 hover:bg-slate-50 text-xs font-semibold h-9 gap-1.5 shadow-2xs"
+            title="Gerar laudo executivo A4 do Scorecard para apresentar ao cliente"
+          >
+            <Printer className="w-4 h-4 text-blue-600" />
+            Exportar PDF / Laudo
+          </Button>
+
           {/* Botão Novo KPI */}
           <Button
             onClick={() => handleNovoKpi()}
@@ -696,6 +1004,288 @@ export default function BalancedScorecard() {
           )}
         </div>
       </div>
+
+      {/* 1.5. BARRA DE RESUMO DE PLANOS DE AÇÃO (MELHORIA 3) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-red-100 text-red-700 flex items-center justify-center shrink-0">
+            <Flame className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-sm font-bold text-[#0B1F3A]">
+                Iniciativas &amp; Planos de Ação Estratégicos
+              </h2>
+              <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-[10px]">
+                {estatisticasIniciativas.total} cadastradas em {selectedAno}
+              </Badge>
+            </div>
+            <p className="text-xs text-slate-500">
+              Vincule planos de ação imediatos com responsáveis e prazos aos KPIs abaixo da meta (🔴
+              &lt; 70%).
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap text-xs">
+          <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 flex items-center gap-2">
+            <span className="text-slate-500">Abertas:</span>
+            <strong className="font-mono text-slate-900 font-bold">
+              {estatisticasIniciativas.abertas}
+            </strong>
+          </div>
+          <div className="bg-amber-50/70 px-3 py-1.5 rounded-lg border border-amber-200 flex items-center gap-2">
+            <span className="text-amber-800">Vencendo em 30d:</span>
+            <strong className="font-mono text-amber-900 font-bold">
+              {estatisticasIniciativas.vencendoEm30Dias}
+            </strong>
+          </div>
+          {estatisticasIniciativas.atrasadas > 0 && (
+            <div className="bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 flex items-center gap-2">
+              <span className="text-red-700">Atrasadas:</span>
+              <strong className="font-mono text-red-700 font-bold">
+                {estatisticasIniciativas.atrasadas}
+              </strong>
+            </div>
+          )}
+          <div className="bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200 flex items-center gap-2">
+            <span className="text-emerald-700">Concluídas:</span>
+            <strong className="font-mono text-emerald-800 font-bold">
+              {estatisticasIniciativas.concluidas}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      {/* 1.6. SEÇÃO COMPARATIVA ENTRE DOIS ANOS (MELHORIA 2) */}
+      {modoComparativo && (
+        <Card className="bg-white border-indigo-200 shadow-sm overflow-hidden animate-fadeIn">
+          <CardHeader className="bg-indigo-50/60 border-b border-indigo-100 p-4 sm:p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-2xs">
+                  <GitCompare className="w-4 h-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                    Comparativo Histórico do BSC: {selectedAno} vs. {anoComparado}
+                  </CardTitle>
+                  <CardDescription className="text-xs text-slate-500">
+                    Evolução do scorecard global e comparativo detalhado por perspectiva
+                  </CardDescription>
+                </div>
+              </div>
+
+              {/* Seletor do Segundo Ano */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-600">Comparar com o ano:</span>
+                <Select
+                  value={String(anoComparado)}
+                  onValueChange={(val) => setAnoComparado(Number(val))}
+                >
+                  <SelectTrigger className="h-8 text-xs font-bold w-24 bg-white border-indigo-200">
+                    <SelectValue placeholder="Ano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {anosDisponiveis.map((a) => (
+                      <SelectItem key={a} value={String(a)} className="text-xs">
+                        {a} {a === selectedAno ? '(Ativo)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5 space-y-6">
+            {anoComparado === selectedAno ? (
+              <div className="py-6 text-center text-xs text-amber-700 bg-amber-50 rounded-xl border border-amber-200">
+                Selecione um ano diferente de <strong>{selectedAno}</strong> no seletor acima para
+                visualizar a evolução comparativa.
+              </div>
+            ) : isLoadingComparado ? (
+              <div className="py-8 text-center text-xs text-slate-500">
+                Calculando indicadores e demonstrações contábeis do exercício de {anoComparado}...
+              </div>
+            ) : (
+              <>
+                {/* Resumo da Variação Global */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                      Exercício {selectedAno} (Ativo)
+                    </span>
+                    <div className="text-2xl font-mono font-extrabold text-[#0B1F3A] mt-1">
+                      {scoreGlobalBsc}%
+                    </div>
+                    <span className="text-[11px] text-slate-500">Score global ponderado</span>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                      Exercício {anoComparado}
+                    </span>
+                    <div className="text-2xl font-mono font-extrabold text-slate-700 mt-1">
+                      {comparativoData.scoreGlobalComparado}%
+                    </div>
+                    <span className="text-[11px] text-slate-500">
+                      {kpisAnoComparado.length === 0
+                        ? 'Sem KPIs em ' + anoComparado
+                        : `${kpisAnoComparado.length} KPIs analisados`}
+                    </span>
+                  </div>
+
+                  <div
+                    className={`p-4 rounded-xl border ${
+                      comparativoData.variacaoGlobal >= 0
+                        ? 'bg-emerald-50/70 border-emerald-200'
+                        : 'bg-red-50/70 border-red-200'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                      Evolução do Score Global
+                    </span>
+                    <div
+                      className={`text-2xl font-mono font-extrabold mt-1 flex items-center gap-1 ${
+                        comparativoData.variacaoGlobal >= 0 ? 'text-emerald-700' : 'text-red-700'
+                      }`}
+                    >
+                      {comparativoData.variacaoGlobal >= 0 ? (
+                        <ArrowUpRight className="w-5 h-5 text-emerald-600" />
+                      ) : (
+                        <TrendingDown className="w-5 h-5 text-red-600" />
+                      )}
+                      {comparativoData.variacaoGlobal > 0 ? '+' : ''}
+                      {comparativoData.variacaoGlobal} p.p.
+                    </div>
+                    <span className="text-[11px] text-slate-600">
+                      {comparativoData.variacaoGlobal >= 0
+                        ? 'Crescimento na execução estratégica'
+                        : 'Recuo de performance geral'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Gráfico de Barras Comparativo por Perspectiva (Recharts) */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    Desempenho por Perspectiva ({selectedAno} vs. {anoComparado})
+                  </h3>
+                  <div className="h-64 sm:h-72 w-full pt-2">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={comparativoData.dadosGraficoBarras}
+                        margin={{ top: 10, right: 20, left: -10, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                        <XAxis
+                          dataKey="perspectiva"
+                          tick={{ fill: '#334155', fontSize: 11, fontWeight: 600 }}
+                        />
+                        <YAxis
+                          domain={[0, 100]}
+                          tick={{ fill: '#64748B', fontSize: 10 }}
+                          unit="%"
+                        />
+                        <RechartsTooltip
+                          formatter={(value: any, name: any) => [`${value}%`, name]}
+                          contentStyle={{
+                            backgroundColor: '#0B1F3A',
+                            borderColor: '#1E293B',
+                            borderRadius: '8px',
+                            color: '#fff',
+                            fontSize: '12px',
+                          }}
+                        />
+                        <Legend
+                          verticalAlign="top"
+                          align="right"
+                          iconType="circle"
+                          wrapperStyle={{ fontSize: '11px', paddingBottom: '10px' }}
+                        />
+                        <Bar
+                          dataKey="anoAtivo"
+                          name={`Exercício ${selectedAno} (Ativo)`}
+                          fill="#2563EB"
+                          radius={[4, 4, 0, 0]}
+                        />
+                        <Bar
+                          dataKey="anoComparado"
+                          name={`Exercício ${anoComparado}`}
+                          fill="#94A3B8"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Tabela Resumo Lado a Lado */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] border-b border-slate-200">
+                        <th className="py-2.5 px-3">Perspectiva</th>
+                        <th className="py-2.5 px-3 text-center">Score {selectedAno}</th>
+                        <th className="py-2.5 px-3 text-center">Score {anoComparado}</th>
+                        <th className="py-2.5 px-3 text-center">Variação (p.p.)</th>
+                        <th className="py-2.5 px-3 text-center">Evolução</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-[11px]">
+                      {comparativoData.dadosGraficoBarras.map((item) => {
+                        const isPos = item.diferenca >= 0
+                        return (
+                          <tr key={item.perspectiva} className="hover:bg-slate-50/60">
+                            <td className="py-2.5 px-3 font-semibold text-slate-900">
+                              {item.perspectiva}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-mono font-bold text-blue-700">
+                              {item.anoAtivo}%
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-mono font-semibold text-slate-600">
+                              {item.anoComparado}%
+                            </td>
+                            <td
+                              className={`py-2.5 px-3 text-center font-mono font-bold ${
+                                isPos ? 'text-emerald-700' : 'text-red-700'
+                              }`}
+                            >
+                              {item.diferenca > 0 ? '+' : ''}
+                              {item.diferenca} p.p.
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <Badge
+                                className={`text-[9px] px-2 py-0.5 font-bold ${
+                                  isPos
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-red-50 text-red-800 border-red-200'
+                                }`}
+                              >
+                                {isPos ? '▲ Evolução Positiva' : '▼ Recuo'}
+                              </Badge>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {(!balancoComparado || !dreComparado) && (
+                  <p className="text-[11px] text-slate-500 italic bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    ℹ️ <strong>Nota:</strong> Para o exercício de {anoComparado}, dados contábeis
+                    (Balanço/DRE) podem estar ausentes ou parciais. Indicadores automáticos que não
+                    dispõem de base no ano anterior são desconsiderados do cálculo sem quebrar o
+                    scorecard.
+                  </p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* 2. SCORECARD RESUMO NO TOPO + RADAR DAS 4 PERSPECTIVAS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1087,7 +1677,6 @@ export default function BalancedScorecard() {
                                   )}
                                 </div>
                               </td>
-
                               {/* Tipo */}
                               <td className="py-3.5 px-3 text-center">
                                 {kpi.tipo === 'auto' ? (
@@ -1100,12 +1689,10 @@ export default function BalancedScorecard() {
                                   </Badge>
                                 )}
                               </td>
-
                               {/* Meta */}
                               <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-800">
                                 {metaFormatada}
                               </td>
-
                               {/* Real Apurado */}
                               <td className="py-3.5 px-3 text-right font-mono font-bold">
                                 {apurado.disponivel ? (
@@ -1116,7 +1703,6 @@ export default function BalancedScorecard() {
                                   </span>
                                 )}
                               </td>
-
                               {/* Sentido */}
                               <td className="py-3.5 px-3 text-center">
                                 {kpi.sentido === 'maior_melhor' ? (
@@ -1135,7 +1721,6 @@ export default function BalancedScorecard() {
                                   </span>
                                 )}
                               </td>
-
                               {/* Barra de Progresso e % de Atingimento */}
                               <td className="py-3.5 px-4">
                                 <div className="space-y-1">
@@ -1186,15 +1771,55 @@ export default function BalancedScorecard() {
                                   />
                                 </div>
                               </td>
-
                               {/* Peso */}
                               <td className="py-3.5 px-3 text-center font-mono text-slate-600 font-semibold">
                                 {kpi.peso || 10}%
                               </td>
-
-                              {/* Ações */}
+                              {/* Ações e Planos de Ação */}
                               <td className="py-3.5 px-3 text-center">
                                 <div className="flex items-center justify-center gap-1">
+                                  {/* Botão de Plano de Ação (destaque especial se atingimento < 70% ou se já tiver planos vinculados) */}
+                                  {(() => {
+                                    const planosDoKpi =
+                                      estatisticasIniciativas.mapPorKpi.get(kpi.id) || []
+                                    const isCritico = atingimento.status === 'abaixo'
+                                    const temPlanos = planosDoKpi.length > 0
+
+                                    return (
+                                      <Button
+                                        variant={isCritico ? 'default' : 'ghost'}
+                                        size="sm"
+                                        onClick={() => handleAbrirPlanosAcao(kpi, atingimento.pct)}
+                                        className={`h-7 px-2 text-xs font-semibold gap-1 ${
+                                          isCritico
+                                            ? 'bg-red-600 hover:bg-red-700 text-white shadow-2xs animate-pulse hover:animate-none'
+                                            : temPlanos
+                                              ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                                              : 'text-slate-500 hover:text-blue-600 hover:bg-blue-50'
+                                        }`}
+                                        title={
+                                          isCritico
+                                            ? 'KPI crítico (<70%)! Clique para gerenciar planos de ação imediatos'
+                                            : 'Gerenciar planos de ação desta iniciativa'
+                                        }
+                                      >
+                                        <ListTodo className="w-3.5 h-3.5" />
+                                        <span className="hidden sm:inline">
+                                          {temPlanos
+                                            ? `Planos (${planosDoKpi.length})`
+                                            : isCritico
+                                              ? 'Criar Plano'
+                                              : 'Planos'}
+                                        </span>
+                                        {temPlanos && !isCritico && (
+                                          <span className="sm:hidden font-mono text-[10px]">
+                                            ({planosDoKpi.length})
+                                          </span>
+                                        )}
+                                      </Button>
+                                    )
+                                  })()}
+
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -1214,7 +1839,7 @@ export default function BalancedScorecard() {
                                     <Trash2 className="w-3.5 h-3.5" />
                                   </Button>
                                 </div>
-                              </td>
+                              </td>{' '}
                             </tr>
                           )
                         })}
@@ -1492,6 +2117,32 @@ export default function BalancedScorecard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 6. MODAL LAUDO EXECUTIVO BSC EM PDF (PADRÃO A4) */}
+      <ModalPdfBscA4
+        open={modalPdfOpen}
+        onOpenChange={setModalPdfOpen}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        logoUrl={logoUrl}
+        scoreGlobal={scoreGlobalBsc}
+        statusSemaforoGlobal={statusSemaforoGlobal}
+        resumosPerspectivas={dadosModalPdf}
+        totalKpisCount={totalKpisCount}
+        iniciativas={iniciativas}
+      />
+
+      {/* 7. MODAL DE PLANOS DE AÇÃO / INICIATIVAS VINCULADAS */}
+      <ModalPlanosAcaoBsc
+        open={modalPlanosOpen}
+        onOpenChange={setModalPlanosOpen}
+        kpi={kpiSelecionadoPlano}
+        empresaId={selectedEmpresaId}
+        ano={selectedAno}
+        atingimentoPct={kpiAtingimentoPlano}
+        onIniciativasChange={carregarKpis}
+      />
     </div>
   )
 }

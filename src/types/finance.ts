@@ -877,3 +877,28 @@ export interface BscKpiRecord {
     usuario?: UserRecord
   }
 }
+
+export type BscIniciativaStatus = 'planejada' | 'em_andamento' | 'concluida' | 'cancelada'
+
+export interface BscIniciativaRecord {
+  id: string
+  collectionId: string
+  collectionName: string
+  kpi: string
+  empresa?: string
+  usuario?: string
+  ano: number
+  titulo: string
+  descricao?: string
+  responsavel?: string
+  prazo?: string
+  status: BscIniciativaStatus
+  progresso?: number
+  created: string
+  updated: string
+  expand?: {
+    kpi?: BscKpiRecord
+    empresa?: EmpresaRecord
+    usuario?: UserRecord
+  }
+}
