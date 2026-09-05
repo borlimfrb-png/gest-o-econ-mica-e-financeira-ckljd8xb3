@@ -330,6 +330,12 @@ export const bscService = {
       sort: 'perspectiva,created',
     })
   },
+
+  async getAll(): Promise<BscKpiRecord[]> {
+    return await pb.collection('bsc_kpis').getFullList<BscKpiRecord>({
+      sort: 'empresa,ano,perspectiva,created',
+    })
+  },
   async create(data: SalvarBscKpiInput): Promise<BscKpiRecord> {
     const userId = pb.authStore.record?.id
     return await pb.collection('bsc_kpis').create<BscKpiRecord>({

@@ -35,9 +35,12 @@ import type {
   GrupoEmpresarialRecord,
   EmpresaRecord,
   BscIniciativaRecord,
+  BscKpiRecord,
 } from '@/types/finance'
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import { ModalRelatorioConsolidadoGrupoA4 } from '@/components/ModalRelatorioConsolidadoGrupoA4'
+import { GraficoEvolucaoScoreBsc } from '@/components/GraficoEvolucaoScoreBsc'
+import { calcularEvolucaoMensalScoreBsc } from '@/lib/bscMonthlyCalculations'
 import {
   calcularBalanco,
   calcularDre,
@@ -145,9 +148,76 @@ export default function Dashboard() {
   const [recebiveis, setRecebiveis] = useState<RecebivelRecord[]>([])
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscalRecord[]>([])
   const [bscIniciativas, setBscIniciativas] = useState<BscIniciativaRecord[]>([])
+  const [bscKpis, setBscKpis] = useState<BscKpiRecord[]>([])
   const [modalMetasOpen, setModalMetasOpen] = useState(false)
   const [modalRelatorioGrupoOpen, setModalRelatorioGrupoOpen] = useState(false)
   const [loadingData, setLoadingData] = useState<boolean>(true)
+
+  // Cálculo da evolução mensal do Score BSC (para o Dashboard)
+  const dadosEvolucaoBsc = useMemo(() => {
+    if (!temAcessoPlanejamento) return null
+
+    // Filtrar KPIs do ano e empresa/grupo
+    let kpisFiltrados: BscKpiRecord[] = []
+    let balancosFiltrados: BalancoRecord[] = []
+    let dresFiltrados: DreRecord[] = []
+    let empresasDoGrupoList: Array<{ id: string; nome: string }> | undefined = undefined
+    let kpisPorEmpresaMap: Map<string, BscKpiRecord[]> | undefined = undefined
+
+    if (selectedEmpresaId && selectedEmpresaId.startsWith('grupo-')) {
+      // Grupo empresarial
+      const idsEmpresasDoGrupo = grupoAtivo?.empresas || []
+      kpisFiltrados = bscKpis.filter(
+        (k) => k.ano === selectedAno && idsEmpresasDoGrupo.includes(k.empresa),
+      )
+      balancosFiltrados = allBalancos.filter((b) => idsEmpresasDoGrupo.includes(b.empresa))
+      dresFiltrados = allDres.filter((d) => idsEmpresasDoGrupo.includes(d.empresa))
+
+      empresasDoGrupoList = empresas
+        .filter((e) => idsEmpresasDoGrupo.includes(e.id))
+        .map((e) => ({ id: e.id, nome: e.nome }))
+
+      kpisPorEmpresaMap = new Map<string, BscKpiRecord[]>()
+      idsEmpresasDoGrupo.forEach((empId) => {
+        kpisPorEmpresaMap!.set(
+          empId,
+          bscKpis.filter((k) => k.ano === selectedAno && k.empresa === empId),
+        )
+      })
+    } else if (selectedEmpresaId) {
+      // Empresa individual
+      kpisFiltrados = bscKpis.filter(
+        (k) => k.ano === selectedAno && k.empresa === selectedEmpresaId,
+      )
+      balancosFiltrados = allBalancos.filter((b) => b.empresa === selectedEmpresaId)
+      dresFiltrados = allDres.filter((d) => d.empresa === selectedEmpresaId)
+    } else {
+      // Sem empresa específica (todas)
+      kpisFiltrados = bscKpis.filter((k) => k.ano === selectedAno)
+      balancosFiltrados = allBalancos
+      dresFiltrados = allDres
+    }
+
+    return calcularEvolucaoMensalScoreBsc({
+      ano: selectedAno,
+      kpis: kpisFiltrados,
+      balancos: balancosFiltrados,
+      dres: dresFiltrados,
+      isGrupo: isGrupoAtivo,
+      empresasDoGrupo: empresasDoGrupoList,
+      kpisPorEmpresa: kpisPorEmpresaMap,
+    })
+  }, [
+    temAcessoPlanejamento,
+    bscKpis,
+    allBalancos,
+    allDres,
+    selectedAno,
+    selectedEmpresaId,
+    isGrupoAtivo,
+    grupoAtivo,
+    empresas,
+  ])
 
   const loadData = async () => {
     try {
@@ -166,6 +236,7 @@ export default function Dashboard() {
         allRecebiveis,
         allNotas,
         allIniciativasBsc,
+        allKpisBsc,
       ] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
@@ -180,6 +251,7 @@ export default function Dashboard() {
         recebiveisService.listarPorPeriodo().catch(() => [] as RecebivelRecord[]),
         notasFiscaisService.listar().catch(() => [] as NotaFiscalRecord[]),
         bscService.getAllIniciativas().catch(() => [] as BscIniciativaRecord[]),
+        bscService.getAll().catch(() => [] as BscKpiRecord[]),
       ])
       setAllBalancos(allB)
       setAllDres(allD)
@@ -194,6 +266,7 @@ export default function Dashboard() {
       setRecebiveis(allRecebiveis)
       setNotasFiscais(allNotas)
       setBscIniciativas(allIniciativasBsc || [])
+      setBscKpis(allKpisBsc || [])
 
       if (selectedEmpresaId) {
         if (selectedEmpresaId.startsWith('grupo-')) {
@@ -296,6 +369,9 @@ export default function Dashboard() {
     loadData()
   })
   useRealtime<BscIniciativaRecord>('bsc_iniciativas', () => {
+    loadData()
+  })
+  useRealtime<BscKpiRecord>('bsc_kpis', () => {
     loadData()
   })
 
@@ -2651,6 +2727,25 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* ========================================================================= */}
+      {/* BLOCO BALANCED SCORECARD — EVOLUÇÃO DO SCORE BSC (ADMIN E EMPRESA)       */}
+      {/* ========================================================================= */}
+      {temAcessoPlanejamento && dadosEvolucaoBsc && (
+        <div id="secao-score-bsc-dashboard" className="scroll-mt-6">
+          <GraficoEvolucaoScoreBsc
+            dadosEvolucao={dadosEvolucaoBsc}
+            empresaNome={
+              isGrupoAtivo
+                ? `${grupoAtivo?.nome || 'Grupo Empresarial'} (Consolidado)`
+                : selectedEmpresa?.nome || 'Empresa Ativa'
+            }
+            isGrupo={isGrupoAtivo}
+            ano={selectedAno}
+            loading={loadingData}
+          />
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* SEÇÃO METAS DE LANÇAMENTOS (ABAIXO DOS KPIS E ALERTAS, ANTES DOS GRÁFICOS) */}
