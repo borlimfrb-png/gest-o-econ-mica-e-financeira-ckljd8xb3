@@ -104,30 +104,24 @@ function getUserId(): string {
 // -------------------------------------------------------------
 export const historicoPrecosService = {
   async getByProduto(produtoId: string): Promise<HistoricoPrecoProdutoRecord[]> {
-    const userId = getUserId()
     return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
-      filter: `user = "${userId}" && produto = "${produtoId}"`,
+      filter: `produto = "${produtoId}"`,
       sort: '-created',
       expand: 'produto.empresa',
     })
   },
 
   async getByEmpresa(empresaId: string): Promise<HistoricoPrecoProdutoRecord[]> {
-    const userId = getUserId()
     if (!empresaId) return this.getAll()
     return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
-      filter: `user = "${userId}" && produto.empresa = "${empresaId}"`,
+      filter: `produto.empresa = "${empresaId}"`,
       sort: '-created',
       expand: 'produto.empresa',
     })
   },
 
   async getAll(empresaId?: string): Promise<HistoricoPrecoProdutoRecord[]> {
-    const userId = getUserId()
-    let filter = `user = "${userId}"`
-    if (empresaId) {
-      filter += ` && produto.empresa = "${empresaId}"`
-    }
+    const filter = empresaId ? `produto.empresa = "${empresaId}"` : undefined
     return pb.collection('historico_precos_produtos').getFullList<HistoricoPrecoProdutoRecord>({
       filter,
       sort: '-created',

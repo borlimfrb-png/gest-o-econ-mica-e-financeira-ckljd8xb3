@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-06T14:40:04.354Z",
+  "generatedAt": "2026-09-06T14:56:24.942Z",
   "collections": [
     {
       "name": "users",
@@ -8,7 +8,7 @@
         "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || id = @request.auth.id)",
         "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || id = @request.auth.id)",
         "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
-        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || id = @request.auth.id)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (id = @request.auth.id && @request.body.role:isset = false && @request.body.empresa:isset = false && @request.body.ativo:isset = false))",
         "delete": "@request.auth.id != '' && @request.auth.role = 'admin' && id != @request.auth.id"
       },
       "fields": [
@@ -581,11 +581,11 @@
       "name": "centros",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && user = @request.auth.id",
-        "view": "@request.auth.id != \"\" && user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "@request.auth.id != \"\" && user = @request.auth.id",
-        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
       },
       "fields": [
         {
@@ -645,22 +645,30 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_centros_user ON centros (user)",
-        "CREATE INDEX idx_centros_tipo ON centros (tipo)"
+        "CREATE INDEX idx_centros_tipo ON centros (tipo)",
+        "CREATE INDEX `idx_centros_empresa` ON `centros` (empresa)"
       ]
     },
     {
       "name": "lancamentos_centro",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && user = @request.auth.id",
-        "view": "@request.auth.id != \"\" && user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "@request.auth.id != \"\" && user = @request.auth.id",
-        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
       },
       "fields": [
         {
@@ -728,24 +736,32 @@
           "required": false,
           "system": false,
           "collectionRef": "contas"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_lancamentos_centro_centro ON lancamentos_centro (centro)",
         "CREATE INDEX idx_lancamentos_centro_data ON lancamentos_centro (data)",
         "CREATE INDEX idx_lancamentos_centro_user ON lancamentos_centro (user)",
-        "CREATE INDEX `idx_lancamentos_centro_conta` ON `lancamentos_centro` (conta)"
+        "CREATE INDEX `idx_lancamentos_centro_conta` ON `lancamentos_centro` (conta)",
+        "CREATE INDEX `idx_lancamentos_centro_empresa` ON `lancamentos_centro` (empresa)"
       ]
     },
     {
       "name": "tipos_despesa",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && user = @request.auth.id",
-        "view": "@request.auth.id != \"\" && user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "@request.auth.id != \"\" && user = @request.auth.id",
-        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
       },
       "fields": [
         {
@@ -786,19 +802,29 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
-      "indexes": ["CREATE INDEX idx_tipos_despesa_user ON tipos_despesa (user)"]
+      "indexes": [
+        "CREATE INDEX idx_tipos_despesa_user ON tipos_despesa (user)",
+        "CREATE INDEX `idx_tipos_despesa_empresa` ON `tipos_despesa` (empresa)"
+      ]
     },
     {
       "name": "contas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && user = @request.auth.id",
-        "view": "@request.auth.id != \"\" && user = @request.auth.id",
-        "create": "@request.auth.id != \"\"",
-        "update": "@request.auth.id != \"\" && user = @request.auth.id",
-        "delete": "@request.auth.id != \"\" && user = @request.auth.id"
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
       },
       "fields": [
         {
@@ -852,9 +878,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
-      "indexes": ["CREATE INDEX idx_contas_user ON contas (user)"]
+      "indexes": [
+        "CREATE INDEX idx_contas_user ON contas (user)",
+        "CREATE INDEX `idx_contas_empresa` ON `contas` (empresa)"
+      ]
     },
     {
       "name": "plano_contas",
@@ -1211,11 +1247,11 @@
       "name": "alertas_enviados",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != '' && user = @request.auth.id",
-        "view": "@request.auth.id != '' && user = @request.auth.id",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != '' && user = @request.auth.id",
-        "delete": "@request.auth.id != '' && user = @request.auth.id"
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
       },
       "fields": [
         {
@@ -1269,11 +1305,19 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
         }
       ],
       "indexes": [
         "CREATE INDEX idx_alertas_meta_data ON alertas_enviados (meta, data_envio)",
-        "CREATE INDEX idx_alertas_user ON alertas_enviados (user)"
+        "CREATE INDEX idx_alertas_user ON alertas_enviados (user)",
+        "CREATE INDEX `idx_alertas_enviados_empresa` ON `alertas_enviados` (empresa)"
       ]
     },
     {
@@ -2640,7 +2684,7 @@
       "apiRules": {
         "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || produto.empresa = @request.auth.empresa)",
         "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || produto.empresa = @request.auth.empresa)",
-        "create": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.produto.empresa = @request.auth.empresa)",
         "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || produto.empresa = @request.auth.empresa)",
         "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || produto.empresa = @request.auth.empresa)"
       },

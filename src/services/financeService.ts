@@ -745,10 +745,14 @@ function currentUserId(): string {
 }
 
 export const centrosService = {
-  async getAll(): Promise<CentroRecord[]> {
-    return await pb.collection('centros').getFullList<CentroRecord>({
+  async getAll(options?: { empresaId?: string }): Promise<CentroRecord[]> {
+    const params: Record<string, unknown> = {
       sort: 'nome',
-    })
+    }
+    if (options?.empresaId) {
+      params.filter = `empresa = '${options.empresaId}'`
+    }
+    return await pb.collection('centros').getFullList<CentroRecord>(params)
   },
 
   async create(data: {
@@ -757,6 +761,7 @@ export const centrosService = {
     descricao?: string
     meta_mensal?: number
     meta_anual?: number
+    empresa?: string
   }): Promise<CentroRecord> {
     const metaMensal =
       data.meta_mensal !== undefined && !isNaN(Number(data.meta_mensal))
@@ -772,13 +777,16 @@ export const centrosService = {
       descricao: data.descricao?.trim() || undefined,
       meta_mensal: metaMensal,
       meta_anual: metaAnual,
+      empresa: data.empresa || undefined,
       user: currentUserId(),
     } as any)
   },
 
   async update(
     id: string,
-    data: Partial<Pick<CentroRecord, 'nome' | 'tipo' | 'descricao' | 'meta_mensal' | 'meta_anual'>>,
+    data: Partial<
+      Pick<CentroRecord, 'nome' | 'tipo' | 'descricao' | 'meta_mensal' | 'meta_anual' | 'empresa'>
+    >,
   ): Promise<CentroRecord> {
     return await pb.collection('centros').update<CentroRecord>(id, data)
   },
@@ -789,17 +797,28 @@ export const centrosService = {
 }
 
 export const lancamentosCentroService = {
-  async getByCentro(centroId: string): Promise<LancamentoCentroRecord[]> {
+  async getByCentro(
+    centroId: string,
+    options?: { empresaId?: string },
+  ): Promise<LancamentoCentroRecord[]> {
+    const filters = [`centro = '${centroId}'`]
+    if (options?.empresaId) {
+      filters.push(`empresa = '${options.empresaId}'`)
+    }
     return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>({
-      filter: `centro = '${centroId}'`,
+      filter: filters.join(' && '),
       sort: '-data',
     })
   },
 
-  async getAll(): Promise<LancamentoCentroRecord[]> {
-    return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>({
+  async getAll(options?: { empresaId?: string }): Promise<LancamentoCentroRecord[]> {
+    const params: Record<string, unknown> = {
       sort: '-data',
-    })
+    }
+    if (options?.empresaId) {
+      params.filter = `empresa = '${options.empresaId}'`
+    }
+    return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>(params)
   },
 
   async create(data: {
@@ -810,6 +829,7 @@ export const lancamentosCentroService = {
     tipo_despesa?: string
     conta?: string
     concluido?: boolean
+    empresa?: string
   }): Promise<LancamentoCentroRecord> {
     return await pb.collection('lancamentos_centro').create<LancamentoCentroRecord>({
       centro: data.centro,
@@ -819,6 +839,7 @@ export const lancamentosCentroService = {
       tipo_despesa: data.tipo_despesa || undefined,
       conta: data.conta || null,
       concluido: data.concluido ?? false,
+      empresa: data.empresa || undefined,
       user: currentUserId(),
     } as any)
   },
@@ -828,7 +849,7 @@ export const lancamentosCentroService = {
     data: Partial<
       Pick<
         LancamentoCentroRecord,
-        'data' | 'valor' | 'descricao' | 'tipo_despesa' | 'conta' | 'concluido'
+        'data' | 'valor' | 'descricao' | 'tipo_despesa' | 'conta' | 'concluido' | 'empresa'
       >
     >,
   ): Promise<LancamentoCentroRecord> {
@@ -844,10 +865,14 @@ export const lancamentosCentroService = {
 }
 
 export const tiposDespesaService = {
-  async getAll(): Promise<TipoDespesaRecord[]> {
-    return await pb.collection('tipos_despesa').getFullList<TipoDespesaRecord>({
+  async getAll(options?: { empresaId?: string }): Promise<TipoDespesaRecord[]> {
+    const params: Record<string, unknown> = {
       sort: 'nome',
-    })
+    }
+    if (options?.empresaId) {
+      params.filter = `empresa = '${options.empresaId}'`
+    }
+    return await pb.collection('tipos_despesa').getFullList<TipoDespesaRecord>(params)
   },
 
   // Calcula o próximo código (TD-NNN) com base nos códigos já existentes do usuário.
@@ -862,17 +887,22 @@ export const tiposDespesaService = {
     return 'TD-' + String(maxN + 1).padStart(3, '0')
   },
 
-  async create(data: { nome: string; descricao?: string }): Promise<TipoDespesaRecord> {
+  async create(data: {
+    nome: string
+    descricao?: string
+    empresa?: string
+  }): Promise<TipoDespesaRecord> {
     return await pb.collection('tipos_despesa').create<TipoDespesaRecord>({
       nome: data.nome.trim(),
       descricao: data.descricao?.trim() || undefined,
+      empresa: data.empresa || undefined,
       user: currentUserId(),
     } as any)
   },
 
   async update(
     id: string,
-    data: Partial<Pick<TipoDespesaRecord, 'nome' | 'descricao'>>,
+    data: Partial<Pick<TipoDespesaRecord, 'nome' | 'descricao' | 'empresa'>>,
   ): Promise<TipoDespesaRecord> {
     return await pb.collection('tipos_despesa').update<TipoDespesaRecord>(id, data)
   },
@@ -883,10 +913,14 @@ export const tiposDespesaService = {
 }
 
 export const contasService = {
-  async getAll(): Promise<ContaRecord[]> {
-    return await pb.collection('contas').getFullList<ContaRecord>({
+  async getAll(options?: { empresaId?: string }): Promise<ContaRecord[]> {
+    const params: Record<string, unknown> = {
       sort: 'codigo',
-    })
+    }
+    if (options?.empresaId) {
+      params.filter = `empresa = '${options.empresaId}'`
+    }
+    return await pb.collection('contas').getFullList<ContaRecord>(params)
   },
 
   // Calcula o próximo código (CO-NNN) com base nos códigos já existentes do usuário.
@@ -906,19 +940,21 @@ export const contasService = {
     tipo: ContaRecord['tipo']
     descricao?: string
     grupo?: string
+    empresa?: string
   }): Promise<ContaRecord> {
     return await pb.collection('contas').create<ContaRecord>({
       nome: data.nome.trim(),
       tipo: data.tipo,
       descricao: data.descricao?.trim() || undefined,
       grupo: data.grupo?.trim() || undefined,
+      empresa: data.empresa || undefined,
       user: currentUserId(),
     } as any)
   },
 
   async update(
     id: string,
-    data: Partial<Pick<ContaRecord, 'nome' | 'tipo' | 'descricao' | 'grupo'>>,
+    data: Partial<Pick<ContaRecord, 'nome' | 'tipo' | 'descricao' | 'grupo' | 'empresa'>>,
   ): Promise<ContaRecord> {
     const payload: Record<string, unknown> = { ...data }
     if (data.nome !== undefined) payload.nome = data.nome.trim()

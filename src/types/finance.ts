@@ -160,6 +160,10 @@ export interface CentroRecord extends RecordModel {
   meta_mensal?: number
   meta_anual?: number
   user: string
+  empresa?: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
 }
 
 export interface LancamentoCentroRecord extends RecordModel {
@@ -171,6 +175,13 @@ export interface LancamentoCentroRecord extends RecordModel {
   conta?: string
   concluido?: boolean
   user: string
+  empresa?: string
+  expand?: {
+    centro?: CentroRecord
+    tipo_despesa?: TipoDespesaRecord
+    conta?: ContaRecord
+    empresa?: EmpresaRecord
+  }
 }
 
 export interface TipoDespesaRecord extends RecordModel {
@@ -178,6 +189,10 @@ export interface TipoDespesaRecord extends RecordModel {
   nome: string
   descricao?: string
   user: string
+  empresa?: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
 }
 
 export type TipoConta = 'Ativo' | 'Passivo' | 'Patrimônio Líquido' | 'Receita' | 'Despesa'
@@ -189,6 +204,10 @@ export interface ContaRecord extends RecordModel {
   tipo: TipoConta
   grupo?: string
   user: string
+  empresa?: string
+  expand?: {
+    empresa?: EmpresaRecord
+  }
 }
 
 // Relaciona uma conta do plano de contas a um centro de custo (e opcionalmente

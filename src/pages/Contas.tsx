@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { contasService, lancamentosCentroService } from '@/services/financeService'
 import type { ContaRecord, TipoConta, LancamentoCentroRecord } from '@/types/finance'
+import { useFilter } from '@/contexts/FilterContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -96,6 +98,9 @@ const TIPO_BADGE: Record<TipoConta, string> = {
 
 export default function Contas() {
   const { toast } = useToast()
+  const { selectedEmpresaId } = useFilter()
+  const { user } = useAuth()
+  const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
 
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoCentroRecord[]>([])
@@ -128,9 +133,10 @@ export default function Contas() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
       const [list, lancList] = await Promise.all([
-        contasService.getAll(),
-        lancamentosCentroService.getAll(),
+        contasService.getAll(opts),
+        lancamentosCentroService.getAll(opts),
       ])
       setContas(list)
       setLancamentos(lancList)
@@ -150,7 +156,7 @@ export default function Contas() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [effectiveEmpresaId])
 
   useRealtime<ContaRecord>('contas', () => loadData())
   useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => loadData())
@@ -272,6 +278,7 @@ export default function Contas() {
         tipo: form.tipo,
         grupo: form.grupo,
         descricao: form.descricao,
+        empresa: effectiveEmpresaId || undefined,
       })
       toast({
         title: 'Conta cadastrada',

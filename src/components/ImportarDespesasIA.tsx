@@ -568,6 +568,7 @@ export function ImportarDespesasIA({
         tipo: 'Despesa',
         descricao: `Criada via Agente IA a partir de ${cadastroItem.descricao}`,
         grupo: 'Despesas Operacionais',
+        empresa: selectedEmpresaId || undefined,
       })
 
       // 2. Vincula no Plano de Contas para a empresa selecionada
@@ -699,6 +700,7 @@ export function ImportarDespesasIA({
             tipo: 'Despesa',
             descricao: 'Criada em lote via Agente IA de Importação',
             grupo: 'Despesas Operacionais',
+            empresa: selectedEmpresaId || undefined,
           })
 
           const novoPlano = await planoContasService.create({

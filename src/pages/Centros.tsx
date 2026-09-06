@@ -12,6 +12,8 @@ import type {
   TipoCentro,
   TipoDespesaRecord,
 } from '@/types/finance'
+import { useFilter } from '@/contexts/FilterContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { Tag, CheckCircle2, Circle, BookOpen } from 'lucide-react'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
@@ -134,6 +136,9 @@ function parseMeta(value: string): number | undefined {
 
 export default function Centros() {
   const { toast } = useToast()
+  const { selectedEmpresaId } = useFilter()
+  const { user } = useAuth()
+  const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
 
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoCentroRecord[]>([])
@@ -179,11 +184,12 @@ export default function Centros() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
       const [cList, lList, tdList, contasList] = await Promise.all([
-        centrosService.getAll(),
-        lancamentosCentroService.getAll(),
-        tiposDespesaService.getAll(),
-        contasService.getAll(),
+        centrosService.getAll(opts),
+        lancamentosCentroService.getAll(opts),
+        tiposDespesaService.getAll(opts),
+        contasService.getAll(opts),
       ])
       setCentros(cList)
       setLancamentos(lList)
@@ -202,7 +208,7 @@ export default function Centros() {
   }
   useEffect(() => {
     loadData()
-  }, [])
+  }, [effectiveEmpresaId])
 
   useRealtime<CentroRecord>('centros', () => loadData())
   useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => loadData())
@@ -409,6 +415,7 @@ export default function Centros() {
         descricao: centroForm.descricao,
         meta_mensal: parseMeta(centroForm.meta_mensal),
         meta_anual: parseMeta(centroForm.meta_anual),
+        empresa: effectiveEmpresaId || undefined,
       })
       toast({
         title: 'Centro de custo criado',
@@ -517,6 +524,7 @@ export default function Centros() {
         tipo_despesa: lancForm.tipo_despesa || undefined,
         conta: lancForm.conta || undefined,
         concluido: lancForm.concluido,
+        empresa: effectiveEmpresaId || undefined,
       })
       toast({ title: 'Lançamento adicionado', description: 'O lançamento foi registrado.' })
       setLancForm(EMPTY_LANC)

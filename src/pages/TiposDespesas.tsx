@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { tiposDespesaService, lancamentosCentroService } from '@/services/financeService'
 import type { TipoDespesaRecord } from '@/types/finance'
+import { useFilter } from '@/contexts/FilterContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -39,6 +41,9 @@ type FormErrors = Partial<Record<keyof TipoDespesaFormData | 'general', string>>
 
 export default function TiposDespesas() {
   const { toast } = useToast()
+  const { selectedEmpresaId } = useFilter()
+  const { user } = useAuth()
+  const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
 
   const [tipos, setTipos] = useState<TipoDespesaRecord[]>([])
   const [contagemLancamentos, setContagemLancamentos] = useState<Record<string, number>>({})
@@ -61,9 +66,10 @@ export default function TiposDespesas() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
       const [tList, lList] = await Promise.all([
-        tiposDespesaService.getAll(),
-        lancamentosCentroService.getAll(),
+        tiposDespesaService.getAll(opts),
+        lancamentosCentroService.getAll(opts),
       ])
       setTipos(tList)
       const counts: Record<string, number> = {}
@@ -87,7 +93,7 @@ export default function TiposDespesas() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [effectiveEmpresaId])
 
   useRealtime<TipoDespesaRecord>('tipos_despesa', () => loadData())
   useRealtime('lancamentos_centro', () => loadData())
@@ -114,6 +120,7 @@ export default function TiposDespesas() {
       const novo = await tiposDespesaService.create({
         nome: form.nome,
         descricao: form.descricao,
+        empresa: effectiveEmpresaId || undefined,
       })
       toast({
         title: 'Tipo de despesa criado',

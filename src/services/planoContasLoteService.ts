@@ -70,11 +70,18 @@ class CatalogoDependenciasCache {
   private centros: CentroRecord[] = []
   private tipos: TipoDespesaRecord[] = []
 
+  private empresaId?: string
+
+  constructor(empresaId?: string) {
+    this.empresaId = empresaId
+  }
+
   async carregar() {
+    const opts = this.empresaId ? { empresaId: this.empresaId } : undefined
     const [cList, ceList, tList] = await Promise.all([
-      contasService.getAll(),
-      centrosService.getAll(),
-      tiposDespesaService.getAll(),
+      contasService.getAll(opts),
+      centrosService.getAll(opts),
+      tiposDespesaService.getAll(opts),
     ])
     this.contas = cList
     this.centros = ceList
@@ -109,6 +116,7 @@ class CatalogoDependenciasCache {
       tipo: tipoDefault,
       grupo: grupoDefault || undefined,
       descricao: codigoSugerido ? `Código sugerido: ${codigoSugerido}` : undefined,
+      empresa: this.empresaId || undefined,
     })
     this.contas.push(nova)
     return nova
@@ -125,6 +133,7 @@ class CatalogoDependenciasCache {
     const novo = await centrosService.create({
       nome: nome.trim(),
       tipo: tipoDefault,
+      empresa: this.empresaId || undefined,
     })
     this.centros.push(novo)
     return novo
@@ -138,6 +147,7 @@ class CatalogoDependenciasCache {
 
     const novo = await tiposDespesaService.create({
       nome: nome.trim(),
+      empresa: this.empresaId || undefined,
     })
     this.tipos.push(novo)
     return novo
@@ -157,7 +167,7 @@ export const planoContasLoteService = {
       throw new Error('Empresa obrigatória para aplicar o plano de contas padrão.')
     }
 
-    const catalogo = new CatalogoDependenciasCache()
+    const catalogo = new CatalogoDependenciasCache(empresaId)
     await catalogo.carregar()
 
     // Carrega itens atuais do plano para esta empresa para detectar duplicidade
@@ -242,7 +252,7 @@ export const planoContasLoteService = {
       throw new Error('Empresa obrigatória para aplicar contas sugeridas.')
     }
 
-    const catalogo = new CatalogoDependenciasCache()
+    const catalogo = new CatalogoDependenciasCache(empresaId)
     await catalogo.carregar()
 
     const itensAtuais = await planoContasService.getAll({ empresaId })
@@ -324,7 +334,7 @@ export const planoContasLoteService = {
       throw new Error('Empresa obrigatória para importar o plano de contas.')
     }
 
-    const catalogo = new CatalogoDependenciasCache()
+    const catalogo = new CatalogoDependenciasCache(empresaId)
     await catalogo.carregar()
 
     // Carrega itens atuais do plano para esta empresa
