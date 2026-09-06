@@ -11,6 +11,7 @@ import type {
   EmpresaRecord,
   ContratoRecord,
   StatusNotaFiscal,
+  NfseTomadorRecord,
 } from '@/types/finance'
 import { formatCnpj, cleanCnpj } from '@/lib/financeCalculations'
 import {
@@ -81,11 +82,14 @@ import {
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ModalRelatorioNotasPeriodo } from '@/components/ModalRelatorioNotasPeriodo'
+import { ModalRelatorioNotasPorTomador } from '@/components/ModalRelatorioNotasPorTomador'
 import { ModalEmitirNfseNacional } from '@/components/ModalEmitirNfseNacional'
 import { ModalCadastroTomador } from '@/components/ModalCadastroTomador'
 import { ModalGerenciarTomadores } from '@/components/ModalGerenciarTomadores'
 import { ModalConfiguracaoNfseNacional } from '@/components/ModalConfiguracaoNfseNacional'
-import { Settings, Users, FileSpreadsheet } from 'lucide-react'
+import { tomadoresService } from '@/services/tomadoresService'
+import { useFilter } from '@/contexts/FilterContext'
+import { Settings, Users, FileSpreadsheet, UserCheck } from 'lucide-react'
 
 interface NfseFormData {
   empresa_id: string
@@ -117,11 +121,13 @@ export default function NotasFiscais() {
   const { toast } = useToast()
   const { user, isAdmin } = useAuth()
   const { minhaEmpresa } = useMinhaEmpresa()
+  const { selectedEmpresaId, selectedAno } = useFilter()
 
   const podeEmitir = isAdmin || user?.role === 'empresa' || user?.role === 'admin' || !user?.role
 
   const [notas, setNotas] = useState<NotaFiscalRecord[]>([])
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
+  const [tomadoresCadastrados, setTomadoresCadastrados] = useState<NfseTomadorRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [searchFilter, setSearchFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('todos')
@@ -130,6 +136,7 @@ export default function NotasFiscais() {
   const [modalEmissaoOpen, setModalEmissaoOpen] = useState(false)
   const [emitindo, setEmitindo] = useState(false)
   const [modalRelatorioOpen, setModalRelatorioOpen] = useState(false)
+  const [modalRelatorioTomadorOpen, setModalRelatorioTomadorOpen] = useState(false)
   const [processandoAgendados, setProcessandoAgendados] = useState(false)
   const [proximoNumeroSugerido, setProximoNumeroSugerido] = useState<number>(1)
   const [contratoSelecionado, setContratoSelecionado] = useState<ContratoRecord | null>(null)
@@ -197,14 +204,16 @@ export default function NotasFiscais() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [notasList, empList, proxNum] = await Promise.all([
+      const [notasList, empList, proxNum, tomList] = await Promise.all([
         notasFiscaisService.listar(),
         empresasService.getAll(),
         notasFiscaisService.getProximoNumero(),
+        tomadoresService.listar(undefined, false).catch(() => [] as NfseTomadorRecord[]),
       ])
       setNotas(notasList)
       setEmpresas(empList)
       setProximoNumeroSugerido(proxNum)
+      setTomadoresCadastrados(tomList)
     } catch (err) {
       console.error('Erro ao carregar notas fiscais:', err)
     } finally {
@@ -217,6 +226,10 @@ export default function NotasFiscais() {
   }, [])
 
   useRealtime<NotaFiscalRecord>('notas_fiscais', () => {
+    loadData()
+  })
+
+  useRealtime<NfseTomadorRecord>('nfse_tomadores', () => {
     loadData()
   })
 
@@ -955,8 +968,20 @@ export default function NotasFiscais() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setModalRelatorioTomadorOpen(true)}
+            className="text-xs font-bold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
+            title="Relatório de notas por tomador (faturamento por cliente no período, ranking e parecer)"
+          >
+            <UserCheck className="w-4 h-4 text-indigo-600" />
+            Relatório por Tomador
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setModalRelatorioOpen(true)}
             className="text-xs font-bold text-slate-700 bg-white border-slate-200 hover:border-blue-300 hover:text-blue-700 shadow-2xs gap-1.5 h-9"
+            title="Relatório geral de notas fiscais emitidas no período"
           >
             <Printer className="w-4 h-4 text-blue-600" />
             Relatório A4
@@ -1855,6 +1880,19 @@ export default function NotasFiscais() {
         notas={notas}
         empresas={empresas}
         minhaEmpresa={minhaEmpresa}
+      />
+
+      {/* Modal Relatório de Notas por Tomador (Faturamento por Cliente no Período) */}
+      <ModalRelatorioNotasPorTomador
+        open={modalRelatorioTomadorOpen}
+        onOpenChange={setModalRelatorioTomadorOpen}
+        notas={notas}
+        empresas={empresas}
+        minhaEmpresa={minhaEmpresa}
+        tomadoresCadastrados={tomadoresCadastrados}
+        empresaAtivaId={selectedEmpresaId}
+        anoAtivo={selectedAno}
+        isUserAdminOuFinanceiro={isAdmin || user?.role === 'financeiro' || user?.role === 'empresa'}
       />
 
       {/* NOVO PADRÃO NACIONAL: Modal de Emissão Completa com Itens e DPS */}
