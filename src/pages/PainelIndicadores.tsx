@@ -166,7 +166,7 @@ export default function PainelIndicadores() {
   const loadBenchmarks = async () => {
     try {
       const [records, empRecords] = await Promise.all([
-        benchmarksService.getAll(),
+        benchmarksService.getAll(empresaAtivaId || undefined),
         benchmarksService.getAllEmpresas(),
       ])
       const merged = benchmarksService.mergeBenchmarksMap(records)

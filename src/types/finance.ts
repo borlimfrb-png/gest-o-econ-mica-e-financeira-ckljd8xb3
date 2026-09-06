@@ -818,6 +818,7 @@ export interface ConfiguracaoTributariaRecord extends RecordModel {
 
 export interface BenchmarkSetorialRecord extends RecordModel {
   user: string
+  empresa?: string
   setor: SegmentoEmpresa
   descricao?: string
   liquidezCorrente: number

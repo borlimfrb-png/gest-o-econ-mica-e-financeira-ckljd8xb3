@@ -83,15 +83,19 @@ export const benchmarksService = {
   // ==========================================
 
   /**
-   * Busca todos os benchmarks setoriais personalizados do usuário
+   * Busca todos os benchmarks setoriais personalizados do usuário (filtrado opcionalmente por empresa)
    */
-  async getAll(): Promise<BenchmarkSetorialRecord[]> {
+  async getAll(empresaId?: string): Promise<BenchmarkSetorialRecord[]> {
     try {
+      const options: Record<string, any> = {
+        sort: 'setor',
+      }
+      if (empresaId) {
+        options.filter = `empresa = "${empresaId}"`
+      }
       const records = await pb
         .collection<BenchmarkSetorialRecord>('benchmarks_setoriais')
-        .getFullList({
-          sort: 'setor',
-        })
+        .getFullList(options)
       return records
     } catch (err) {
       console.error('Erro ao buscar benchmarks setoriais:', err)
@@ -100,13 +104,17 @@ export const benchmarksService = {
   },
 
   /**
-   * Busca o benchmark setorial de um setor específico para o usuário atual
+   * Busca o benchmark setorial de um setor específico (filtrado opcionalmente por empresa)
    */
-  async getBySetor(setor: string): Promise<BenchmarkSetorialRecord | null> {
+  async getBySetor(setor: string, empresaId?: string): Promise<BenchmarkSetorialRecord | null> {
     try {
+      let filter = `setor = "${setor}"`
+      if (empresaId) {
+        filter += ` && empresa = "${empresaId}"`
+      }
       const record = await pb
         .collection<BenchmarkSetorialRecord>('benchmarks_setoriais')
-        .getFirstListItem(`setor = "${setor}"`)
+        .getFirstListItem(filter)
       return record
     } catch {
       return null
@@ -114,28 +122,36 @@ export const benchmarksService = {
   },
 
   /**
-   * Salva ou atualiza o benchmark de um determinado setor
+   * Salva ou atualiza o benchmark de um determinado setor vinculado à empresa
    */
   async saveSetor(
     setor: string,
     valores: Partial<BenchmarkSetorValores>,
+    empresaId?: string,
   ): Promise<BenchmarkSetorialRecord> {
     const userId = pb.authStore.record?.id
     if (!userId) {
       throw new Error('Usuário não autenticado.')
     }
 
+    const resolvedEmpresaId = empresaId || (pb.authStore.record?.empresa as string | undefined)
+
     let existing: BenchmarkSetorialRecord | null = null
     try {
+      let filter = `setor = "${setor}"`
+      if (resolvedEmpresaId) {
+        filter += ` && empresa = "${resolvedEmpresaId}"`
+      }
       existing = await pb
         .collection<BenchmarkSetorialRecord>('benchmarks_setoriais')
-        .getFirstListItem(`setor = "${setor}"`)
+        .getFirstListItem(filter)
     } catch {
       existing = null
     }
 
     const payload: Partial<BenchmarkSetorialRecord> = {
       user: userId,
+      ...(resolvedEmpresaId ? { empresa: resolvedEmpresaId } : {}),
       setor: setor as SegmentoEmpresa,
       descricao: valores.descricao || `Benchmark personalizado para ${setor}`,
       liquidezCorrente: valores.liquidezCorrente,
@@ -182,12 +198,12 @@ export const benchmarksService = {
   },
 
   /**
-   * Restaura os valores padrão para um setor
+   * Restaura os valores padrão para um setor vinculado à empresa
    */
-  async restorePadrao(setor: string): Promise<BenchmarkSetorialRecord | null> {
+  async restorePadrao(setor: string, empresaId?: string): Promise<BenchmarkSetorialRecord | null> {
     const padrao = BENCHMARKS_SETORIAIS[setor] || BENCHMARKS_SETORIAIS['Outros']
     if (!padrao) return null
-    return await this.saveSetor(setor, padrao)
+    return await this.saveSetor(setor, padrao, empresaId)
   },
 
   /**
@@ -756,13 +772,16 @@ export const benchmarksService = {
   },
 
   /**
-   * Salva múltiplos setores importados do CSV no backend
+   * Salva múltiplos setores importados do CSV no backend vinculados à empresa
    */
-  async saveImportedCsvData(dataMap: Record<string, BenchmarkSetorValores>): Promise<number> {
+  async saveImportedCsvData(
+    dataMap: Record<string, BenchmarkSetorValores>,
+    empresaId?: string,
+  ): Promise<number> {
     let savedCount = 0
     for (const [setor, valores] of Object.entries(dataMap)) {
       try {
-        await this.saveSetor(setor, valores)
+        await this.saveSetor(setor, valores, empresaId)
         savedCount++
       } catch (err) {
         console.error(`Erro ao persistir benchmark do setor ${setor}:`, err)

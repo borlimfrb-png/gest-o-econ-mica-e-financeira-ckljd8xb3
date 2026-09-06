@@ -230,7 +230,7 @@ export function ModalEditarBenchmarks({
     setFormData({ ...padrao })
     try {
       setSaving(true)
-      await benchmarksService.restorePadrao(selectedSetor)
+      await benchmarksService.restorePadrao(selectedSetor, selectedEmpresaId)
       if (onSavedSetor) onSavedSetor(selectedSetor, padrao)
       toast({
         title: 'Valores Padrão Restaurados',
@@ -295,9 +295,10 @@ export function ModalEditarBenchmarks({
           ...formData,
           setor: selectedSetor,
           spread: spreadCalc,
+          empresaId: selectedEmpresaId || undefined,
         }
 
-        await benchmarksService.saveSetor(selectedSetor, dadosParaSalvar)
+        await benchmarksService.saveSetor(selectedSetor, dadosParaSalvar, selectedEmpresaId)
         if (onSavedSetor) onSavedSetor(selectedSetor, dadosParaSalvar)
 
         toast({
@@ -480,7 +481,10 @@ export function ModalEditarBenchmarks({
       }
 
       // Persistir dados importados no PocketBase
-      const totalSalvos = await benchmarksService.saveImportedCsvData(parseResult.data)
+      const totalSalvos = await benchmarksService.saveImportedCsvData(
+        parseResult.data,
+        selectedEmpresaId,
+      )
 
       if (onImportCsvSuccess) {
         onImportCsvSuccess(parseResult.data)

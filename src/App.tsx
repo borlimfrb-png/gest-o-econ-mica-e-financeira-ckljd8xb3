@@ -55,6 +55,7 @@ const GruposEmpresariais = lazy(() => import('./pages/GruposEmpresariais'))
 const DashboardEmpresa = lazy(() => import('./pages/DashboardEmpresa'))
 const MinhaEmpresa = lazy(() => import('./pages/MinhaEmpresa'))
 const AdminUsuarios = lazy(() => import('./pages/AdminUsuarios'))
+const AdminAuditoria = lazy(() => import('./pages/AdminAuditoria'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Componente para rotas exclusivas de administrador
@@ -365,6 +366,14 @@ const App = () => (
                     element={
                       <AdminRoute>
                         <AdminUsuarios />
+                      </AdminRoute>
+                    }
+                  />
+                  <Route
+                    path="/admin/auditoria"
+                    element={
+                      <AdminRoute>
+                        <AdminAuditoria />
                       </AdminRoute>
                     }
                   />

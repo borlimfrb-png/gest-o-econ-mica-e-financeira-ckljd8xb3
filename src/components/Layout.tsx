@@ -150,6 +150,13 @@ export default function Layout() {
       adminOnly: true,
       hideFinanceiro: true,
     },
+    {
+      name: 'Auditoria de Segurança',
+      path: '/admin/auditoria',
+      icon: Shield,
+      adminOnly: true,
+      hideFinanceiro: true,
+    },
   ]
   const cadastroSubItems = rawCadastroSubItems.filter((item) => {
     if (item.adminOnly && !isAdmin) return false
@@ -189,7 +196,8 @@ export default function Layout() {
     location.pathname.startsWith('/contas') ||
     location.pathname.startsWith('/plano-contas') ||
     location.pathname === '/minha-empresa' ||
-    location.pathname.startsWith('/admin/usuarios')
+    location.pathname.startsWith('/admin/usuarios') ||
+    location.pathname.startsWith('/admin/auditoria')
 
   // Atalho Balanço e DRE destino
   const balancoDreUrl = selectedEmpresaId
