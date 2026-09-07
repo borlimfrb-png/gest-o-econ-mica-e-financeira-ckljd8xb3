@@ -30,6 +30,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   HelpCircle,
+  BookmarkCheck,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -65,6 +66,8 @@ import { produtosService } from '@/services/formacaoPrecoService'
 import { recebiveisService } from '@/services/recebiveisService'
 import { notasFiscaisService } from '@/services/notasFiscaisService'
 import { bscService } from '@/services/bscService'
+import { biApresentacoesService } from '@/services/biApresentacoesService'
+import { ModalApresentacoesBi } from '@/components/ModalApresentacoesBi'
 
 import {
   calcularBalanco,
@@ -91,6 +94,7 @@ import type {
   NotaFiscalRecord,
   BscKpiRecord,
   BscIniciativaRecord,
+  BiApresentacaoRecord,
 } from '@/types/finance'
 
 import { Button } from '@/components/ui/button'
@@ -224,9 +228,23 @@ export default function DashboardBi() {
   const [kpisBsc, setKpisBsc] = useState<BscKpiRecord[]>([])
   const [iniciativasBsc, setIniciativasBsc] = useState<BscIniciativaRecord[]>([])
 
+  // Apresentações Salvas de BI
+  const [apresentacoes, setApresentacoes] = useState<BiApresentacaoRecord[]>([])
+  const [modalApresentacoesAberto, setModalApresentacoesAberto] = useState(false)
+  const [apresentacaoAtiva, setApresentacaoAtiva] = useState<BiApresentacaoRecord | null>(null)
+
   // Assinaturas Realtime nas coleções relevantes
   const reloadData = useCallback(() => {
     setRefreshTrigger((prev) => prev + 1)
+  }, [])
+
+  const reloadApresentacoes = useCallback(async () => {
+    try {
+      const res = await biApresentacoesService.listar()
+      setApresentacoes(res)
+    } catch (e) {
+      console.error('Erro ao recarregar apresentações:', e)
+    }
   }, [])
 
   useRealtime('empresas', reloadData)
@@ -237,6 +255,7 @@ export default function DashboardBi() {
   useRealtime('notas_fiscais', reloadData)
   useRealtime('bsc_kpis', reloadData)
   useRealtime('bsc_iniciativas', reloadData)
+  useRealtime('bi_apresentacoes', reloadApresentacoes)
 
   // Carga inicial e sob filtros
   useEffect(() => {
@@ -258,7 +277,7 @@ export default function DashboardBi() {
         }
 
         // Buscar demonstrações e operacionais
-        const [balRes, dreRes, prodRes, recRes, nfRes, kpiRes, iniRes] = await Promise.all([
+        const [balRes, dreRes, prodRes, recRes, nfRes, kpiRes, iniRes, aprRes] = await Promise.all([
           balancosService.getAll(),
           dreService.getAll(),
           produtosService.getAll(),
@@ -266,6 +285,7 @@ export default function DashboardBi() {
           notasFiscaisService.listar().catch(() => [] as NotaFiscalRecord[]),
           bscService.getAll().catch(() => [] as BscKpiRecord[]),
           bscService.getAllIniciativas().catch(() => [] as BscIniciativaRecord[]),
+          biApresentacoesService.listar().catch(() => [] as BiApresentacaoRecord[]),
         ])
 
         if (cancelado) return
@@ -276,6 +296,7 @@ export default function DashboardBi() {
         setNotasFiscais(nfRes)
         setKpisBsc(kpiRes)
         setIniciativasBsc(iniRes)
+        setApresentacoes(aprRes)
       } catch (err) {
         console.error('Erro ao carregar dados do Dashboard BI:', err)
         toast({
@@ -798,6 +819,61 @@ export default function DashboardBi() {
     }
   }
 
+  // Lista de chaves de widgets atualmente ocultos
+  const widgetsOcultosAtuais = useMemo(() => {
+    const chaves: string[] = []
+    if (!widgets.kpis) chaves.push('kpis')
+    if (!widgets.composicaoPatrimonio) chaves.push('composicaoPatrimonio')
+    if (!widgets.receitaLucro) chaves.push('receitaLucro')
+    if (!widgets.evolucaoMensal) chaves.push('evolucaoMensal')
+    if (!widgets.comparativoAnos) chaves.push('comparativoAnos')
+    if (!widgets.notasTomadores) chaves.push('notasTomadores')
+    if (!widgets.recebiveis) chaves.push('recebiveis')
+    if (!widgets.produtosCapacidade) chaves.push('produtosCapacidade')
+    if (!widgets.painelBsc) chaves.push('painelBsc')
+    return chaves
+  }, [widgets])
+
+  // Aplicar uma apresentação salva
+  const handleAplicarApresentacao = useCallback(
+    (ap: BiApresentacaoRecord) => {
+      setApresentacaoAtiva(ap)
+
+      // 1. Aplicar escopo (grupo ou empresa)
+      if (ap.modo_consolidado && ap.grupo) {
+        setSelectedEmpresaId(`grupo-${ap.grupo}`)
+      } else if (ap.empresa) {
+        setSelectedEmpresaId(ap.empresa)
+      }
+
+      // 2. Aplicar ano base e ano comparativo
+      if (ap.ano_base) {
+        setSelectedAno(ap.ano_base)
+      }
+      if (ap.ano_comparativo) {
+        setAnoComparativo(ap.ano_comparativo)
+      }
+
+      // 3. Aplicar visibilidade dos widgets
+      const ocultos = new Set(Array.isArray(ap.widgets_ocultos) ? ap.widgets_ocultos : [])
+      setWidgets({
+        kpis: !ocultos.has('kpis'),
+        composicaoPatrimonio: !ocultos.has('composicaoPatrimonio'),
+        receitaLucro: !ocultos.has('receitaLucro'),
+        evolucaoMensal: !ocultos.has('evolucaoMensal'),
+        comparativoAnos: !ocultos.has('comparativoAnos'),
+        notasTomadores: !ocultos.has('notasTomadores'),
+        recebiveis: !ocultos.has('recebiveis'),
+        produtosCapacidade: !ocultos.has('produtosCapacidade'),
+        painelBsc: !ocultos.has('painelBsc'),
+      })
+
+      // 4. Aplicar modo apresentação
+      setModoApresentacao(Boolean(ap.modo_apresentacao))
+    },
+    [setSelectedEmpresaId, setSelectedAno],
+  )
+
   // Exportação para Impressão / PDF do Dashboard
   const handleImprimir = () => {
     window.print()
@@ -1132,6 +1208,23 @@ export default function DashboardBi() {
               <span>Imprimir</span>
             </Button>
 
+            {/* Apresentações Salvas (Modal) */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModalApresentacoesAberto(true)}
+              className="gap-1.5 text-xs font-semibold rounded-xl border-blue-200 text-blue-700 hover:bg-blue-50 bg-blue-50/40 relative shadow-2xs"
+              title="Gerenciar e carregar conjuntos de filtros salvos para reuniões com clientes"
+            >
+              <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Apresentações</span>
+              {apresentacoes.length > 0 && (
+                <span className="ml-0.5 px-1.5 py-0.2 bg-blue-600 text-white rounded-full text-[10px] font-bold">
+                  {apresentacoes.length}
+                </span>
+              )}
+            </Button>
+
             {/* Modo Apresentação / Tela Cheia */}
             <Button
               variant={modoApresentacao ? 'secondary' : 'default'}
@@ -1153,6 +1246,77 @@ export default function DashboardBi() {
             </Button>
           </div>
         </div>
+
+        {/* Barra de Apresentações Salvas Rápidas (Carrossel / Chips) */}
+        {apresentacoes.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 text-xs print:hidden no-scrollbar">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1.5">
+              <BookmarkCheck className="w-3.5 h-3.5 text-blue-600" />
+              Salvas:
+            </span>
+            {apresentacoes.map((ap) => {
+              const estaAtiva = apresentacaoAtiva?.id === ap.id
+              const qtdOcultos = Array.isArray(ap.widgets_ocultos) ? ap.widgets_ocultos.length : 0
+              return (
+                <div
+                  key={ap.id}
+                  onClick={() => handleAplicarApresentacao(ap)}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border cursor-pointer transition-all shrink-0 select-none shadow-2xs ${
+                    estaAtiva
+                      ? 'bg-blue-600 text-white border-blue-700 shadow-xs'
+                      : 'bg-white hover:bg-blue-50/70 border-slate-200 text-slate-700 hover:border-blue-300'
+                  }`}
+                  title={`Carregar "${ap.nome}" (${ap.ano_base} vs ${ap.ano_comparativo})`}
+                >
+                  <span className="font-semibold text-xs truncate max-w-[180px]">{ap.nome}</span>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className={`text-[10px] font-mono px-1.5 py-0.2 rounded-md ${
+                        estaAtiva ? 'bg-blue-700/80 text-white' : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {ap.ano_base}
+                    </span>
+                    {ap.modo_consolidado ? (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded-md font-medium ${
+                          estaAtiva
+                            ? 'bg-purple-900/60 text-purple-100'
+                            : 'bg-purple-100 text-purple-800'
+                        }`}
+                      >
+                        Consolidado
+                      </span>
+                    ) : (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded-md font-medium ${
+                          estaAtiva
+                            ? 'bg-emerald-900/60 text-emerald-100'
+                            : 'bg-emerald-100 text-emerald-800'
+                        }`}
+                      >
+                        Individual
+                      </span>
+                    )}
+                    {qtdOcultos > 0 && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5 ${
+                          estaAtiva
+                            ? 'bg-amber-900/60 text-amber-100'
+                            : 'bg-amber-100 text-amber-800'
+                        }`}
+                        title={`${qtdOcultos} widget(s) oculto(s)`}
+                      >
+                        <EyeOff className="w-2.5 h-2.5" />
+                        {qtdOcultos}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {/* Barra de Filtro Drill-down Ativo (se houver) */}
         {filtroDrilldown.tipo && (
@@ -2219,6 +2383,25 @@ export default function DashboardBi() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* MODAL DE GERENCIAMENTO DE APRESENTAÇÕES SALVAS */}
+      <ModalApresentacoesBi
+        open={modalApresentacoesAberto}
+        onOpenChange={setModalApresentacoesAberto}
+        configAtual={{
+          empresaId: isGrupoAtivo ? undefined : selectedEmpresaId || undefined,
+          grupoId: isGrupoAtivo && grupoAtivo ? grupoAtivo.id : undefined,
+          nomeEntidade: nomeEntidadeExibida,
+          anoBase: selectedAno || new Date().getFullYear(),
+          anoComparativo: anoComparativo,
+          modoConsolidado: Boolean(isGrupoAtivo),
+          widgetsOcultos: widgetsOcultosAtuais,
+          modoApresentacao: modoApresentacao,
+        }}
+        apresentacoes={apresentacoes}
+        onCarregarApresentacao={handleAplicarApresentacao}
+        onApresentacoesChanged={reloadApresentacoes}
+      />
     </div>
   )
 }

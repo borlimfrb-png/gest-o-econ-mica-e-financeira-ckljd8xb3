@@ -1057,3 +1057,22 @@ export interface SimuladorCenarioRecord extends RecordModel {
     usuario?: UserRecord
   }
 }
+
+export interface BiApresentacaoRecord extends RecordModel {
+  user: string
+  empresa?: string
+  grupo?: string
+  nome: string
+  ano_base: number
+  ano_comparativo: number
+  modo_consolidado: boolean
+  widgets_ocultos: string[]
+  modo_apresentacao: boolean
+  created: string
+  updated: string
+  expand?: {
+    user?: UserRecord
+    empresa?: EmpresaRecord
+    grupo?: GrupoEmpresarialRecord
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-07T20:09:10.381Z",
+  "generatedAt": "2026-09-07T21:03:34.926Z",
   "collections": [
     {
       "name": "users",
@@ -4364,6 +4364,97 @@
         "CREATE INDEX idx_audit_seg_data ON auditoria_seguranca (data_verificacao)",
         "CREATE INDEX idx_audit_seg_status ON auditoria_seguranca (status_geral)",
         "CREATE INDEX idx_audit_seg_created ON auditoria_seguranca (created)"
+      ]
+    },
+    {
+      "name": "bi_apresentacoes",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && (user = @request.auth.id || empresa = @request.auth.empresa)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && (user = @request.auth.id || empresa = @request.auth.empresa)))",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && @request.body.user = @request.auth.id))",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && (user = @request.auth.id || empresa = @request.auth.empresa)))",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && (user = @request.auth.id || empresa = @request.auth.empresa)))"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "grupo",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "grupos_empresariais"
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ano_base",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ano_comparativo",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "modo_consolidado",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "widgets_ocultos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "modo_apresentacao",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_bi_apresentacoes_user ON bi_apresentacoes (user)",
+        "CREATE INDEX idx_bi_apresentacoes_empresa ON bi_apresentacoes (empresa)",
+        "CREATE INDEX idx_bi_apresentacoes_grupo ON bi_apresentacoes (grupo)",
+        "CREATE INDEX idx_bi_apresentacoes_nome ON bi_apresentacoes (nome)",
+        "CREATE INDEX idx_bi_apresentacoes_created ON bi_apresentacoes (created)"
       ]
     }
   ]
