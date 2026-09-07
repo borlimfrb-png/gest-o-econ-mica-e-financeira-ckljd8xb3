@@ -2,6 +2,7 @@ import type { UserRole } from '@/types/finance'
 
 export type ModuloSistema =
   | 'dashboard'
+  | 'dashboard_bi'
   | 'empresas'
   | 'grupos_empresariais'
   | 'centros'
@@ -47,6 +48,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     badgeCor: 'bg-purple-100 text-purple-800 border-purple-200',
     modulosPermitidos: [
       'dashboard',
+      'dashboard_bi',
       'empresas',
       'grupos_empresariais',
       'centros',
@@ -79,6 +81,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     badgeCor: 'bg-emerald-100 text-emerald-800 border-emerald-200',
     modulosPermitidos: [
       'dashboard',
+      'dashboard_bi',
       'empresas',
       'grupos_empresariais',
       'centros',

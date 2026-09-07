@@ -14,6 +14,7 @@ import Index from './pages/Index'
 import Layout from './components/Layout'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
+const DashboardBi = lazy(() => import('./pages/DashboardBi'))
 const Empresas = lazy(() => import('./pages/Empresas'))
 const Centros = lazy(() => import('./pages/Centros'))
 const AnaliseEmpresa = lazy(() => import('./pages/AnaliseEmpresa'))
@@ -152,6 +153,15 @@ const App = () => (
                   }
                 >
                   <Route path="/dashboard" element={<Dashboard />} />
+                  <Route
+                    path="/dashboard-bi"
+                    element={
+                      <ModuloRoute modulo="dashboard_bi">
+                        <DashboardBi />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route path="/bi" element={<Navigate to="/dashboard-bi" replace />} />
                   <Route path="/dashboard/empresa/:id" element={<DashboardEmpresa />} />
                   <Route path="/empresas" element={<Empresas />} />
                   <Route path="/cadastro/grupos-empresariais" element={<GruposEmpresariais />} />

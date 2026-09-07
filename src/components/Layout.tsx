@@ -7,6 +7,7 @@ import { ModalPerfil } from '@/components/ModalPerfil'
 import {
   Scale,
   LayoutDashboard,
+  BarChart3,
   Building2,
   PieChart,
   Tags,
@@ -225,6 +226,35 @@ export default function Layout() {
     return true
   })
 
+  const isDashboardActive =
+    location.pathname === '/dashboard' ||
+    location.pathname === '/dashboard-bi' ||
+    location.pathname === '/bi'
+
+  // Subitens de Dashboard (Dashboard Geral e Dashboard BI interativo para apresentação)
+  const rawDashboardSubItems = [
+    {
+      name: 'Dashboard Geral',
+      path: '/dashboard',
+      icon: LayoutDashboard,
+      descricao: 'Visão executiva geral e evolução patrimonial',
+    },
+    {
+      name: 'Dashboard BI (Apresentação)',
+      path: '/dashboard-bi',
+      icon: BarChart3,
+      descricao: 'BI interativo de indicadores, gráficos e drill-down',
+      destaque: true,
+    },
+  ]
+  const dashboardSubItems = rawDashboardSubItems.filter(() => {
+    // Apenas Admin e Empresa têm acesso ao BI (Financeiro e Comercial bloqueados)
+    if (isUserFinanceiro || isUserComercial) {
+      return false
+    }
+    return true
+  })
+
   const isFinanceiroActive =
     location.pathname === '/financeiro' ||
     location.pathname === '/baixa-recebiveis' ||
@@ -318,12 +348,17 @@ export default function Layout() {
   const isPlanejamentoActive = location.pathname.startsWith('/planejamento')
 
   // Grupos móveis (drawer) expansível/colapsável
+  const [dashboardOpen, setDashboardOpen] = useState(isDashboardActive)
   const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
   const [lancamentosOpen, setLancamentosOpen] = useState<boolean>(isLancamentosActive || true)
   const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroActive)
   const [formacaoPrecoOpen, setFormacaoPrecoOpen] = useState<boolean>(isFormacaoPrecoActive || true)
   const [indicadoresOpen, setIndicadoresOpen] = useState<boolean>(isIndicadoresActive || true)
   const [planejamentoOpen, setPlanejamentoOpen] = useState<boolean>(isPlanejamentoActive || true)
+
+  React.useEffect(() => {
+    if (isDashboardActive) setDashboardOpen(true)
+  }, [isDashboardActive])
 
   React.useEffect(() => {
     if (isCadastroActive) setCadastrosOpen(true)
@@ -373,6 +408,8 @@ export default function Layout() {
 
   const showHeaderFilters =
     location.pathname === '/dashboard' ||
+    location.pathname === '/dashboard-bi' ||
+    location.pathname === '/bi' ||
     location.pathname === '/relatorios' ||
     location.pathname === '/relatorio-anual' ||
     location.pathname === '/agente-ia' ||
@@ -444,19 +481,82 @@ export default function Layout() {
 
             {/* CENTRO: NAVEGAÇÃO HORIZONTAL PRINCIPAL (>= 768px) COM DROPDOWNS */}
             <nav className="hidden md:flex items-center gap-1 xl:gap-1.5 flex-1 justify-start overflow-x-auto no-scrollbar py-1">
-              {/* 1. Dashboard */}
+              {/* 1. Dashboard (Dropdown com Dashboard Geral e Dashboard BI interativo) */}
               {!isUserComercial && (
-                <NavLink
-                  to="/dashboard"
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all ${
-                    location.pathname === '/dashboard'
-                      ? 'bg-white/20 text-white font-semibold shadow-xs'
-                      : 'text-slate-200 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <LayoutDashboard className="w-3.5 h-3.5 text-blue-300" />
-                  <span>Dashboard</span>
-                </NavLink>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
+                        isDashboardActive
+                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
+                          : 'text-slate-200 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <LayoutDashboard
+                        className={`w-3.5 h-3.5 ${isDashboardActive ? 'text-blue-200' : 'text-blue-300'}`}
+                      />
+                      <span>Dashboard</span>
+                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    sideOffset={8}
+                    className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
+                  >
+                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
+                      Painéis & BI
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator className="bg-white/10 my-1" />
+                    <DropdownMenuItem
+                      asChild
+                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                        location.pathname === '/dashboard'
+                          ? 'bg-blue-600 text-white font-semibold'
+                          : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                      }`}
+                    >
+                      <NavLink to="/dashboard">
+                        <LayoutDashboard className="w-4 h-4 shrink-0 text-blue-300" />
+                        <div className="flex flex-col min-w-0">
+                          <span className="truncate font-semibold">Dashboard Geral</span>
+                          <span className="text-[10px] text-blue-200/70 truncate">
+                            Visão executiva patrimonial
+                          </span>
+                        </div>
+                      </NavLink>
+                    </DropdownMenuItem>
+                    {!isUserFinanceiro && !isUserComercial && (
+                      <DropdownMenuItem
+                        asChild
+                        className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                          location.pathname === '/dashboard-bi' || location.pathname === '/bi'
+                            ? 'bg-blue-600 text-white font-semibold'
+                            : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                        }`}
+                      >
+                        <NavLink
+                          to="/dashboard-bi"
+                          className="flex items-center justify-between w-full"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <BarChart3 className="w-4 h-4 shrink-0 text-amber-400" />
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate font-semibold">Dashboard BI</span>
+                              <span className="text-[10px] text-amber-200/70 truncate">
+                                Apresentação às Empresas
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded font-bold border border-amber-400/30">
+                            BI
+                          </span>
+                        </NavLink>
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
 
               {/* 2. Cadastros (Dropdown) */}
@@ -1076,20 +1176,77 @@ export default function Layout() {
 
               {/* Lista de navegação mobile */}
               <nav className="mt-5 space-y-1 overflow-y-auto max-h-[calc(100vh-210px)] pr-1">
-                {/* 1. Dashboard */}
+                {/* 1. Dashboard (Expansível no Mobile) */}
                 {!isUserComercial && (
-                  <NavLink
-                    to="/dashboard"
-                    onClick={() => setMobileDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/dashboard'
-                        ? 'bg-white/15 text-white font-semibold shadow-inner'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <LayoutDashboard className="w-4 h-4 text-blue-400" />
-                    <span>Dashboard</span>
-                  </NavLink>
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setDashboardOpen((prev) => !prev)}
+                      style={
+                        isDashboardActive
+                          ? {
+                              backgroundColor: `${corSecundaria}33`,
+                              borderColor: `${corSecundaria}66`,
+                            }
+                          : undefined
+                      }
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                        isDashboardActive
+                          ? 'text-white font-semibold border'
+                          : 'text-slate-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <LayoutDashboard
+                          className={`w-4 h-4 ${isDashboardActive ? 'text-blue-300' : 'text-blue-400'}`}
+                        />
+                        <span>Dashboard</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                          dashboardOpen ? 'rotate-0' : '-rotate-90'
+                        }`}
+                      />
+                    </button>
+
+                    <div
+                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
+                        dashboardOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                      }`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
+                          <NavLink
+                            to="/dashboard"
+                            onClick={() => setMobileDrawerOpen(false)}
+                            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                              location.pathname === '/dashboard'
+                                ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                : 'text-slate-300 hover:text-white hover:bg-white/5'
+                            }`}
+                          >
+                            <LayoutDashboard className="w-3.5 h-3.5 text-blue-300" />
+                            <span className="truncate">Dashboard Geral</span>
+                          </NavLink>
+
+                          {!isUserFinanceiro && !isUserComercial && (
+                            <NavLink
+                              to="/dashboard-bi"
+                              onClick={() => setMobileDrawerOpen(false)}
+                              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                location.pathname === '/dashboard-bi' || location.pathname === '/bi'
+                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
+                              }`}
+                            >
+                              <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
+                              <span className="truncate">Dashboard BI (Apresentação)</span>
+                            </NavLink>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {/* 2. Cadastros (Expansível) */}
@@ -1677,6 +1834,8 @@ export default function Layout() {
             <div>
               <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
                 {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
+                {(location.pathname === '/dashboard-bi' || location.pathname === '/bi') &&
+                  'Dashboard de BI Interativo · Apresentação Executiva'}
                 {location.pathname === '/agente-ia' && 'Agente de Diagnóstico & Estratégia de IA'}
                 {location.pathname === '/relatorios' && 'Relatórios e Pareceres'}
                 {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
@@ -1697,6 +1856,8 @@ export default function Layout() {
               <p className="text-xs text-[#5B6B7F]">
                 {location.pathname === '/dashboard' &&
                   'Visão consolidada de indicadores e evolução patrimonial'}
+                {(location.pathname === '/dashboard-bi' || location.pathname === '/bi') &&
+                  'Painel analítico completo com cross-filter, indicadores financeiros, operacionais, comerciais e BSC para apresentação'}
                 {location.pathname === '/relatorios' &&
                   'Gere relatórios executivos para impressão ou exportação'}
                 {location.pathname === '/relatorio-anual' &&
