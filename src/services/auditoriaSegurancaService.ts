@@ -1,3 +1,4 @@
+import type { RecordModel } from 'pocketbase'
 import pb from '@/lib/pocketbase/client'
 
 export interface DetalheAuditoriaColecao {
@@ -14,7 +15,7 @@ export interface DetalheAuditoriaColecao {
   }
 }
 
-export interface AuditoriaSegurancaRecord {
+export interface AuditoriaSegurancaRecord extends RecordModel {
   id: string
   data_verificacao: string
   status_geral: 'ok' | 'divergencia'

@@ -40,6 +40,7 @@ import type {
 import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import { ModalRelatorioConsolidadoGrupoA4 } from '@/components/ModalRelatorioConsolidadoGrupoA4'
 import { GraficoEvolucaoScoreBsc } from '@/components/GraficoEvolucaoScoreBsc'
+import { WidgetAuditoriaSeguranca } from '@/components/WidgetAuditoriaSeguranca'
 import { calcularEvolucaoMensalScoreBsc } from '@/lib/bscMonthlyCalculations'
 import {
   calcularBalanco,
@@ -125,7 +126,7 @@ export default function Dashboard() {
     grupoAtivo,
     isLoadingEmpresas,
   } = useFilter()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
 
   // Permissão do módulo de Planejamento (Apenas Admin e Empresa têm acesso)
@@ -1877,6 +1878,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* ========================================================================= */}
+      {/* WIDGET / RESUMO MENSAL DE AUDITORIA DE SEGURANÇA (EXCLUSIVO ADMIN)        */}
+      {/* ========================================================================= */}
+      {isAdmin && <WidgetAuditoriaSeguranca isAdmin={isAdmin} />}
+
       {/* ========================================================================= */}
       {/* DESTAQUE VISUAL: PLANOS DE AÇÃO BSC VENCIDOS / A VENCER (PLANEJAMENTO)   */}
       {/* ========================================================================= */}
