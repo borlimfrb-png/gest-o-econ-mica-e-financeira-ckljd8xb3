@@ -55,11 +55,6 @@ export default function AdminAuditoria() {
     null,
   )
 
-  // Apenas role admin pode acessar
-  if (user && user.role !== 'admin') {
-    return <Navigate to="/dashboard" replace />
-  }
-
   const carregarDados = async () => {
     try {
       setLoading(true)
@@ -83,8 +78,15 @@ export default function AdminAuditoria() {
   }
 
   useEffect(() => {
-    carregarDados()
-  }, [])
+    if (user && user.role === 'admin') {
+      carregarDados()
+    }
+  }, [user])
+
+  // Apenas role admin pode acessar
+  if (user && user.role !== 'admin') {
+    return <Navigate to="/dashboard" replace />
+  }
 
   const handleDispararVerificacao = async () => {
     try {
