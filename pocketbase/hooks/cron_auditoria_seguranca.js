@@ -1,6 +1,6 @@
 // Hook de Auditoria de Segurança: Cron Mensal (0 6 1 * *) e Rota POST /api/admin/auditoria-seguranca/verificar
 // Verifica e compara as regras RLS das coleções do sistema com o baseline de segurança,
-// gravando o histórico em 'auditoria_seguranca'.
+// gravando o histórico em 'auditoria_seguranca' e alertando administradores por e-mail em caso de divergência.
 
 cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
   const agora = new Date()
@@ -385,6 +385,175 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
     )
   } catch (saveErr) {
     console.log('[cron:auditoria_seguranca] Erro ao persistir relatório:', saveErr)
+  }
+
+  // Se houver divergências, alerta administradores por e-mail (execução inline)
+  if (totalDivergencias > 0) {
+    try {
+      const smtpHost = $os.getenv('SMTP_HOST')
+      const smtpUser = $os.getenv('SMTP_USER')
+      const smtpPass = $os.getenv('SMTP_PASS')
+      const smtpFrom = $os.getenv('SMTP_FROM') || 'seguranca@gestao.app'
+
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        console.log(
+          '[cron:auditoria_seguranca:email] Alerta de segurança não pôde ser enviado por falta de configuração SMTP (SMTP_HOST/SMTP_USER/SMTP_PASS ausentes).',
+        )
+      } else {
+        const adminUsers = $app.findRecordsByFilter(
+          '_pb_users_auth_',
+          "role = 'admin' && (ativo = true || ativo = null)",
+          '-created',
+          50,
+          0,
+        )
+
+        const emailsDestino = []
+        for (let u = 0; u < adminUsers.length; u++) {
+          const email = adminUsers[u].getString('email')
+          if (email && email.indexOf('@') !== -1) {
+            emailsDestino.push({
+              address: email,
+              name: adminUsers[u].getString('name') || 'Administrador do Sistema',
+            })
+          }
+        }
+
+        if (emailsDestino.length > 0) {
+          const divergentes = []
+          for (let d = 0; d < detalhes.length; d++) {
+            if (!detalhes[d].conforme) {
+              divergentes.push(detalhes[d])
+            }
+          }
+
+          let linhasHtml = ''
+          for (let k = 0; k < divergentes.length; k++) {
+            const item = divergentes[k]
+            const esperado = item.categoria || 'Isolamento por perfil e regras restritas'
+            let encontrado = 'Regras RLS não atendem ao padrão esperado'
+            if (item.erro) {
+              encontrado = item.erro
+            } else if (item.regrasAtuais) {
+              const regrasIncompletas = []
+              if (item.categoria.indexOf('Bloqueada') !== -1) {
+                regrasIncompletas.push('Permissão indevida ou falta vínculo de empresa')
+              } else if (item.categoria.indexOf('Financeiro') !== -1) {
+                regrasIncompletas.push('Falta regra para financeiro ou falta vínculo de empresa')
+              } else if (item.categoria.indexOf('Comercial') !== -1) {
+                regrasIncompletas.push('Falta regra para comercial ou falta vínculo de empresa')
+              } else {
+                regrasIncompletas.push('Falta regra restrita ou isolamento multi-tenant')
+              }
+              encontrado = regrasIncompletas.join('; ')
+            }
+
+            linhasHtml += `
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px 12px; font-family: monospace; font-size: 13px; font-weight: bold; color: #0f172a;">${item.colecao}</td>
+                <td style="padding: 10px 12px; font-size: 12px; color: #475569;">${item.categoria}</td>
+                <td style="padding: 10px 12px; font-size: 12px; color: #0369a1; background-color: #f0f9ff;">${esperado}</td>
+                <td style="padding: 10px 12px; font-size: 12px; color: #b91c1c; background-color: #fef2f2; font-weight: 600;">${encontrado}</td>
+              </tr>
+            `
+          }
+
+          const dataFormatadaPtBr = dataHojeStr.split('-').reverse().join('/')
+          const assunto = `⚠️ Auditoria de Segurança — divergências detectadas em ${dataFormatadaPtBr}`
+          const htmlCorpo = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; padding: 24px 12px; margin: 0;">
+              <div style="max-width: 680px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);">
+                <div style="background: linear-gradient(135deg, #0B1F3A 0%, #1e3a8a 100%); padding: 26px 28px; color: #ffffff;">
+                  <span style="display: inline-block; background-color: #ef4444; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 10px; border-radius: 9999px; margin-bottom: 8px;">Atenção de Segurança</span>
+                  <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #ffffff;">Auditoria de Segurança — Divergências Detectadas</h1>
+                  <p style="margin: 0; font-size: 13px; color: #bfdbfe;">Disparo por Cron Mensal em ${dataFormatadaPtBr}</p>
+                </div>
+                <div style="padding: 26px 28px;">
+                  <div style="background-color: #fff1f2; border: 1px solid #fecdd3; border-left: 4px solid #e11d48; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px;">
+                    <div style="font-weight: 700; color: #9f1239; font-size: 14px; margin: 0 0 4px 0;">⚠️ Regras de API (RLS) fora de conformidade</div>
+                    <div style="font-size: 13px; color: #be123c; margin: 0; line-height: 1.5;">
+                      Durante a inspeção das regras de acesso das coleções do sistema, foram identificadas <strong>${totalDivergencias} divergência(s)</strong> em relação ao baseline de segurança esperado.
+                    </div>
+                  </div>
+                  <table style="width: 100%; border: none; margin-bottom: 20px;">
+                    <tr>
+                      <td style="width: 33%; text-align: center; padding: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: #64748b;">Total Inspecionado</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #0f172a;">${totalColecoes}</div>
+                      </td>
+                      <td style="width: 4%;"></td>
+                      <td style="width: 30%; text-align: center; padding: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: #166534;">Conformes</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #15803d;">${totalConformes}</div>
+                      </td>
+                      <td style="width: 4%;"></td>
+                      <td style="width: 30%; text-align: center; padding: 12px; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: #991b1b;">Divergências</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #b91c1c;">${totalDivergencias}</div>
+                      </td>
+                    </tr>
+                  </table>
+                  <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 24px 0 10px 0;">Coleções que requerem verificação:</h3>
+                  <table style="width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 24px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                    <thead>
+                      <tr style="background-color: #f1f5f9;">
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Coleção</th>
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Categoria</th>
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Esperado</th>
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Situação Atual</th>
+                      </tr>
+                    </thead>
+                    <tbody>${linhasHtml}</tbody>
+                  </table>
+                  <div style="text-align: center; margin: 28px 0 16px 0;">
+                    <p style="font-size: 13px; color: #475569; margin-bottom: 12px;">Recomendamos abrir a tela de gerenciamento de segurança:</p>
+                    <div style="background-color: #f1f5f9; padding: 12px 18px; border-radius: 8px; display: inline-block; font-size: 13px; font-weight: 600; color: #1e293b;">
+                      Menu Lateral → Cadastros → <strong>Auditoria de Segurança</strong> (<code>/admin/auditoria</code>)
+                    </div>
+                  </div>
+                </div>
+                <div style="background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.5; text-align: center;">
+                  Este alerta foi gerado automaticamente pelo módulo de Auditoria de Segurança do sistema de <strong>Gestão Econômica e Financeira</strong>.<br>
+                  Você está recebendo esta mensagem por possuir perfil de Administrador (<code>role = 'admin'</code>).
+                </div>
+              </div>
+            </body>
+            </html>
+          `
+
+          const mailClient = $app.newMailClient()
+          for (let m = 0; m < emailsDestino.length; m++) {
+            try {
+              mailClient.send({
+                from: { address: smtpFrom, name: 'Auditoria de Segurança — Gestão Econômica' },
+                to: [emailsDestino[m]],
+                subject: assunto,
+                html: htmlCorpo,
+              })
+              console.log(
+                '[cron:auditoria_seguranca:email] Alerta enviado para:',
+                emailsDestino[m].address,
+              )
+            } catch (sendErr) {
+              console.log(
+                '[cron:auditoria_seguranca:email] Erro ao enviar para ' +
+                  emailsDestino[m].address +
+                  ':',
+                sendErr,
+              )
+            }
+          }
+        }
+      }
+    } catch (mailGeralErr) {
+      console.log(
+        '[cron:auditoria_seguranca:email] Falha ao processar envio de alerta:',
+        mailGeralErr,
+      )
+    }
   }
 })
 
@@ -774,6 +943,182 @@ routerAdd('POST', '/api/admin/auditoria-seguranca/verificar', (e) => {
     return e.json(500, { error: 'Falha ao salvar auditoria de segurança: ' + String(saveErr) })
   }
 
+  // Se houver divergências, alerta administradores por e-mail (execução inline)
+  let emailAlertaStatus = { enviado: false }
+  if (totalDivergencias > 0) {
+    try {
+      const smtpHost = $os.getenv('SMTP_HOST')
+      const smtpUser = $os.getenv('SMTP_USER')
+      const smtpPass = $os.getenv('SMTP_PASS')
+      const smtpFrom = $os.getenv('SMTP_FROM') || 'seguranca@gestao.app'
+
+      if (!smtpHost || !smtpUser || !smtpPass) {
+        console.log(
+          '[router:auditoria_seguranca:email] Alerta de segurança não pôde ser enviado por falta de configuração SMTP (SMTP_HOST/SMTP_USER/SMTP_PASS ausentes).',
+        )
+        emailAlertaStatus = { enviado: false, motivo: 'SMTP_NAO_CONFIGURADO' }
+      } else {
+        const adminUsers = $app.findRecordsByFilter(
+          '_pb_users_auth_',
+          "role = 'admin' && (ativo = true || ativo = null)",
+          '-created',
+          50,
+          0,
+        )
+
+        const emailsDestino = []
+        for (let u = 0; u < adminUsers.length; u++) {
+          const email = adminUsers[u].getString('email')
+          if (email && email.indexOf('@') !== -1) {
+            emailsDestino.push({
+              address: email,
+              name: adminUsers[u].getString('name') || 'Administrador do Sistema',
+            })
+          }
+        }
+
+        if (emailsDestino.length > 0) {
+          const divergentes = []
+          for (let d = 0; d < detalhes.length; d++) {
+            if (!detalhes[d].conforme) {
+              divergentes.push(detalhes[d])
+            }
+          }
+
+          let linhasHtml = ''
+          for (let k = 0; k < divergentes.length; k++) {
+            const item = divergentes[k]
+            const esperado = item.categoria || 'Isolamento por perfil e regras restritas'
+            let encontrado = 'Regras RLS não atendem ao padrão esperado'
+            if (item.erro) {
+              encontrado = item.erro
+            } else if (item.regrasAtuais) {
+              const regrasIncompletas = []
+              if (item.categoria.indexOf('Bloqueada') !== -1) {
+                regrasIncompletas.push('Permissão indevida ou falta vínculo de empresa')
+              } else if (item.categoria.indexOf('Financeiro') !== -1) {
+                regrasIncompletas.push('Falta regra para financeiro ou falta vínculo de empresa')
+              } else if (item.categoria.indexOf('Comercial') !== -1) {
+                regrasIncompletas.push('Falta regra para comercial ou falta vínculo de empresa')
+              } else {
+                regrasIncompletas.push('Falta regra restrita ou isolamento multi-tenant')
+              }
+              encontrado = regrasIncompletas.join('; ')
+            }
+
+            linhasHtml += `
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 10px 12px; font-family: monospace; font-size: 13px; font-weight: bold; color: #0f172a;">${item.colecao}</td>
+                <td style="padding: 10px 12px; font-size: 12px; color: #475569;">${item.categoria}</td>
+                <td style="padding: 10px 12px; font-size: 12px; color: #0369a1; background-color: #f0f9ff;">${esperado}</td>
+                <td style="padding: 10px 12px; font-size: 12px; color: #b91c1c; background-color: #fef2f2; font-weight: 600;">${encontrado}</td>
+              </tr>
+            `
+          }
+
+          const dataFormatadaPtBr = dataHojeStr.split('-').reverse().join('/')
+          const quemDisparou = authRecord.getString('name') || authRecord.getString('email')
+          const assunto = `⚠️ Auditoria de Segurança — divergências detectadas em ${dataFormatadaPtBr}`
+          const htmlCorpo = `
+            <!DOCTYPE html>
+            <html lang="pt-BR">
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; padding: 24px 12px; margin: 0;">
+              <div style="max-width: 680px; margin: 0 auto; background: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.06);">
+                <div style="background: linear-gradient(135deg, #0B1F3A 0%, #1e3a8a 100%); padding: 26px 28px; color: #ffffff;">
+                  <span style="display: inline-block; background-color: #ef4444; color: #ffffff; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 10px; border-radius: 9999px; margin-bottom: 8px;">Atenção de Segurança</span>
+                  <h1 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #ffffff;">Auditoria de Segurança — Divergências Detectadas</h1>
+                  <p style="margin: 0; font-size: 13px; color: #bfdbfe;">Disparo por Verificação Manual (${quemDisparou}) em ${dataFormatadaPtBr}</p>
+                </div>
+                <div style="padding: 26px 28px;">
+                  <div style="background-color: #fff1f2; border: 1px solid #fecdd3; border-left: 4px solid #e11d48; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px;">
+                    <div style="font-weight: 700; color: #9f1239; font-size: 14px; margin: 0 0 4px 0;">⚠️ Regras de API (RLS) fora de conformidade</div>
+                    <div style="font-size: 13px; color: #be123c; margin: 0; line-height: 1.5;">
+                      Durante a inspeção das regras de acesso das coleções do sistema, foram identificadas <strong>${totalDivergencias} divergência(s)</strong> em relação ao baseline de segurança esperado.
+                    </div>
+                  </div>
+                  <table style="width: 100%; border: none; margin-bottom: 20px;">
+                    <tr>
+                      <td style="width: 33%; text-align: center; padding: 12px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: #64748b;">Total Inspecionado</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #0f172a;">${totalColecoes}</div>
+                      </td>
+                      <td style="width: 4%;"></td>
+                      <td style="width: 30%; text-align: center; padding: 12px; background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: #166534;">Conformes</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #15803d;">${totalConformes}</div>
+                      </td>
+                      <td style="width: 4%;"></td>
+                      <td style="width: 30%; text-align: center; padding: 12px; background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                        <div style="font-size: 11px; text-transform: uppercase; font-weight: 600; color: #991b1b;">Divergências</div>
+                        <div style="font-size: 22px; font-weight: 800; color: #b91c1c;">${totalDivergencias}</div>
+                      </td>
+                    </tr>
+                  </table>
+                  <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 24px 0 10px 0;">Coleções que requerem verificação:</h3>
+                  <table style="width: 100%; border-collapse: collapse; margin-top: 12px; margin-bottom: 24px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+                    <thead>
+                      <tr style="background-color: #f1f5f9;">
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Coleção</th>
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Categoria</th>
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Esperado</th>
+                        <th style="padding: 10px 12px; font-size: 11px; text-transform: uppercase; font-weight: 700; color: #475569; text-align: left;">Situação Atual</th>
+                      </tr>
+                    </thead>
+                    <tbody>${linhasHtml}</tbody>
+                  </table>
+                  <div style="text-align: center; margin: 28px 0 16px 0;">
+                    <p style="font-size: 13px; color: #475569; margin-bottom: 12px;">Recomendamos abrir a tela de gerenciamento de segurança:</p>
+                    <div style="background-color: #f1f5f9; padding: 12px 18px; border-radius: 8px; display: inline-block; font-size: 13px; font-weight: 600; color: #1e293b;">
+                      Menu Lateral → Cadastros → <strong>Auditoria de Segurança</strong> (<code>/admin/auditoria</code>)
+                    </div>
+                  </div>
+                </div>
+                <div style="background-color: #f8fafc; padding: 18px 28px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #64748b; line-height: 1.5; text-align: center;">
+                  Este alerta foi gerado automaticamente pelo módulo de Auditoria de Segurança do sistema de <strong>Gestão Econômica e Financeira</strong>.<br>
+                  Você está recebendo esta mensagem por possuir perfil de Administrador (<code>role = 'admin'</code>).
+                </div>
+              </div>
+            </body>
+            </html>
+          `
+
+          const mailClient = $app.newMailClient()
+          let countEnviados = 0
+          for (let m = 0; m < emailsDestino.length; m++) {
+            try {
+              mailClient.send({
+                from: { address: smtpFrom, name: 'Auditoria de Segurança — Gestão Econômica' },
+                to: [emailsDestino[m]],
+                subject: assunto,
+                html: htmlCorpo,
+              })
+              countEnviados++
+              console.log(
+                '[router:auditoria_seguranca:email] Alerta enviado para:',
+                emailsDestino[m].address,
+              )
+            } catch (sendErr) {
+              console.log(
+                '[router:auditoria_seguranca:email] Erro ao enviar para ' +
+                  emailsDestino[m].address +
+                  ':',
+                sendErr,
+              )
+            }
+          }
+          emailAlertaStatus = { enviado: true, total: countEnviados }
+        }
+      }
+    } catch (mailGeralErr) {
+      console.log(
+        '[router:auditoria_seguranca:email] Falha ao processar envio de alerta:',
+        mailGeralErr,
+      )
+      emailAlertaStatus = { enviado: false, erro: String(mailGeralErr) }
+    }
+  }
+
   return e.json(200, {
     success: true,
     relatorio: {
@@ -785,5 +1130,6 @@ routerAdd('POST', '/api/admin/auditoria-seguranca/verificar', (e) => {
       total_divergencias: totalDivergencias,
       detalhes: detalhes,
     },
+    alerta_email: emailAlertaStatus,
   })
 })
