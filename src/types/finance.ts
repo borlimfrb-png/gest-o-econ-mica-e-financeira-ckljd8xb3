@@ -229,6 +229,24 @@ export interface PlanoContaRecord extends RecordModel {
   }
 }
 
+export interface PlanoContaMapeamentoRecord extends RecordModel {
+  empresa: string
+  codigo_empresa: string
+  plano_conta: string
+  user: string
+  expand?: {
+    empresa?: EmpresaRecord
+    plano_conta?: PlanoContaRecord & {
+      expand?: {
+        conta?: ContaRecord
+        centro?: CentroRecord
+        tipo_despesa?: TipoDespesaRecord
+      }
+    }
+    user?: UserRecord
+  }
+}
+
 export type AcaoAuditoriaLancamento = 'criacao' | 'edicao' | 'exclusao'
 
 export interface AuditoriaLancamentoRecord extends RecordModel {

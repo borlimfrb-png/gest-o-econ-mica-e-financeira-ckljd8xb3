@@ -74,6 +74,7 @@ import {
   formatPlanoContaDisplay,
   type MatchedItem,
 } from '@/lib/pdfMatching'
+import { planoContasMapeamentosService } from '@/services/planoContasMapeamentosService'
 import {
   convertPdfPagesToExcelRows,
   generateExcelWorkbookFromPdf,
@@ -105,6 +106,9 @@ export default function Importacao() {
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [tiposDespesas, setTiposDespesas] = useState<TipoDespesaRecord[]>([])
   const [loadingData, setLoadingData] = useState(true)
+  const [mapeamentosAprendidos, setMapeamentosAprendidos] = useState<
+    Array<{ codigo_empresa: string; plano_conta: string }>
+  >([])
 
   // ----------------------------------------------------
   // Aba Excel (Estados)
@@ -556,16 +560,22 @@ export default function Importacao() {
   const loadInitialCatalogs = async () => {
     setLoadingData(true)
     try {
-      const [empRes, pcRes, ccRes, tdRes] = await Promise.all([
-        financeService.getEmpresas(),
+      const empRes = await financeService.getEmpresas()
+      const empIdInicial = targetEmpresaId || (empRes.length > 0 ? empRes[0].id : '')
+
+      const [pcRes, ccRes, tdRes, mapRes] = await Promise.all([
         financeService.getPlanoContas(),
         financeService.getCentros(),
         financeService.getTiposDespesas(),
+        empIdInicial ? planoContasMapeamentosService.getAll(empIdInicial) : Promise.resolve([]),
       ])
       setEmpresas(empRes)
       setPlanoContas(pcRes)
       setCentros(ccRes)
       setTiposDespesas(tdRes)
+      setMapeamentosAprendidos(
+        mapRes.map((m) => ({ codigo_empresa: m.codigo_empresa, plano_conta: m.plano_conta })),
+      )
 
       if (empRes.length > 0) {
         if (!excelEmpresaId) setExcelEmpresaId(empRes[0].id)
@@ -632,8 +642,23 @@ export default function Importacao() {
       setPdfResult(res)
       setPdfErrorDetail(null)
 
-      // Executa matching inicial
-      const matched = matchPdfCandidatesWithPlanoContas(res.candidates, planoContas)
+      // Busca mapeamentos aprendidos atualizados para a empresa de destino
+      let mapsToUse = mapeamentosAprendidos
+      if (targetEmpresaId) {
+        try {
+          const freshMaps = await planoContasMapeamentosService.getAll(targetEmpresaId)
+          mapsToUse = freshMaps.map((m) => ({
+            codigo_empresa: m.codigo_empresa,
+            plano_conta: m.plano_conta,
+          }))
+          setMapeamentosAprendidos(mapsToUse)
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+
+      // Executa matching inicial priorizando mapeamentos aprendidos
+      const matched = matchPdfCandidatesWithPlanoContas(res.candidates, planoContas, mapsToUse)
       setMatchedItems(matched)
       setPdfActiveStep(2)
 
@@ -688,13 +713,33 @@ export default function Importacao() {
     )
   }
 
-  // Associação manual do Plano de Contas
+  // Associação manual do Plano de Contas (com aprendizagem automática se houver código da empresa)
   const handleItemPlanoChange = (id: string, planoId: string) => {
     const plano = planoContas.find((p) => p.id === planoId)
     setMatchedItems((prev) =>
       prev.map((item) => {
         if (item.id === id) {
           if (plano) {
+            // Se o item tinha código da empresa ou se o plano tem código da empresa, gravar o aprendizado
+            const codEmpresa = item.matchedCodigoEmpresa || plano.codigo_empresa
+            if (codEmpresa && targetEmpresaId) {
+              planoContasMapeamentosService
+                .salvarOuAtualizar({
+                  empresa: targetEmpresaId,
+                  codigo_empresa: codEmpresa,
+                  plano_conta: plano.id,
+                })
+                .then((novo) => {
+                  if (novo) {
+                    setMapeamentosAprendidos((mPrev) => [
+                      ...mPrev.filter((m) => m.codigo_empresa !== codEmpresa),
+                      { codigo_empresa: codEmpresa, plano_conta: plano.id },
+                    ])
+                  }
+                })
+                .catch(() => {})
+            }
+
             return {
               ...item,
               planoConta: plano,
@@ -808,6 +853,19 @@ export default function Importacao() {
             historico: `Importado do PDF - ${pdfFile?.name || 'Documento'} (Pág. ${item.pageNumber}: ${item.rawAccountName})`,
           })
           createdCount++
+
+          // 1. APRENDIZAGEM AUTOMÁTICA DE MAPEAMENTO:
+          // Grava vínculo confirmado codigo_empresa -> plano_conta
+          const codEmp = item.matchedCodigoEmpresa || item.planoConta?.codigo_empresa
+          if (codEmp && item.planoContaId) {
+            planoContasMapeamentosService
+              .salvarOuAtualizar({
+                empresa: targetEmpresaId,
+                codigo_empresa: codEmp,
+                plano_conta: item.planoContaId,
+              })
+              .catch(() => {})
+          }
         } catch (err: unknown) {
           const error = err as Error
           errors.push(
@@ -2503,6 +2561,16 @@ export default function Importacao() {
                                 <span className="font-medium text-slate-900">
                                   {item.rawAccountName}
                                 </span>
+                                {item.matchedBy === 'aprendido' && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] px-1.5 py-0 font-medium gap-1"
+                                    title="Vínculo confirmado em importações anteriores desta empresa"
+                                  >
+                                    <Sparkles className="w-3 h-3 text-purple-500" />
+                                    mapeamento aprendido
+                                  </Badge>
+                                )}
                                 {item.matchedBy === 'codigo_empresa' && (
                                   <Badge
                                     variant="outline"

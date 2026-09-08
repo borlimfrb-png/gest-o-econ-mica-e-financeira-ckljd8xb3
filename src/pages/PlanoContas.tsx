@@ -67,6 +67,9 @@ import { ModalCopiarModeloPadrao } from '@/components/ModalCopiarModeloPadrao'
 import { ModalImportarPlanoContas } from '@/components/ModalImportarPlanoContas'
 import { ModalCompararPlanos } from '@/components/ModalCompararPlanos'
 import { ModalAssistenteSegmento } from '@/components/ModalAssistenteSegmento'
+import { ModalRelatorioContasSemCodigoA4 } from '@/components/ModalRelatorioContasSemCodigoA4'
+import { ModalEdicaoLoteCodigos } from '@/components/ModalEdicaoLoteCodigos'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { exportarPlanoContasExcel, exportarPlanoContasCsv } from '@/lib/exportacaoPlanoContas'
 import {
   DropdownMenu,
@@ -75,7 +78,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { FileSpreadsheet, GitCompare, Wand2, ChevronDown } from 'lucide-react'
+import { FileSpreadsheet, GitCompare, Wand2, ChevronDown, FileText, Layers } from 'lucide-react'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -116,7 +119,9 @@ const TIPO_CENTRO_BADGE: Record<TipoCentro, string> = {
 
 export default function PlanoContas() {
   const { toast } = useToast()
-  const { selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, empresas } = useFilter()
+  const { selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, empresas, selectedAno } =
+    useFilter()
+  const { minhaEmpresa } = useMinhaEmpresa()
 
   const [itens, setItens] = useState<PlanoContaRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
@@ -149,6 +154,8 @@ export default function PlanoContas() {
   const [importarPlanilhaOpen, setImportarPlanilhaOpen] = useState(false)
   const [compararPlanosOpen, setCompararPlanosOpen] = useState(false)
   const [assistenteSegmentoOpen, setAssistenteSegmentoOpen] = useState(false)
+  const [relatorioSemCodigoOpen, setRelatorioSemCodigoOpen] = useState(false)
+  const [edicaoLoteCodigosOpen, setEdicaoLoteCodigosOpen] = useState(false)
 
   // Filtros
   const [busca, setBusca] = useState('')
@@ -548,6 +555,34 @@ export default function PlanoContas() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão: Edição em Lote de Códigos */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setEdicaoLoteCodigosOpen(true)}
+            disabled={!selectedEmpresaId || itens.length === 0}
+            className="h-9 text-xs font-semibold border-blue-300 text-blue-700 hover:bg-blue-50 hover:text-blue-800 shadow-2xs gap-1.5"
+            title="Editar ou informar o Código da Empresa de várias contas em uma única tela"
+          >
+            <Layers className="w-4 h-4 text-blue-600" />
+            Edição em Lote de Códigos
+          </Button>
+
+          {/* Botão: Relatório — Contas sem Código */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setRelatorioSemCodigoOpen(true)}
+            disabled={!selectedEmpresaId || itens.length === 0}
+            className="h-9 text-xs font-semibold border-amber-300 text-amber-800 hover:bg-amber-50 hover:text-amber-900 shadow-2xs gap-1.5"
+            title="Gerar laudo A4 e conferência de contas sem código da empresa para impressão ou exportação"
+          >
+            <FileText className="w-4 h-4 text-amber-600" />
+            Relatório — Contas sem Código
+          </Button>
+
           {/* 1) Exportar Plano (Excel/CSV) da empresa ativa */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1421,6 +1456,28 @@ export default function PlanoContas() {
         selectedEmpresa={selectedEmpresa}
         planoAtualEmpresa={itens}
         catalogoContas={contas}
+        onSuccess={loadData}
+      />
+
+      <ModalRelatorioContasSemCodigoA4
+        open={relatorioSemCodigoOpen}
+        onOpenChange={setRelatorioSemCodigoOpen}
+        planoContas={itens}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        minhaEmpresa={minhaEmpresa}
+        contaMap={contaMap}
+        centroMap={centroMap}
+        tipoMap={tipoMap}
+      />
+
+      <ModalEdicaoLoteCodigos
+        open={edicaoLoteCodigosOpen}
+        onOpenChange={setEdicaoLoteCodigosOpen}
+        planoContas={itens}
+        selectedEmpresa={selectedEmpresa}
+        contaMap={contaMap}
+        centroMap={centroMap}
         onSuccess={loadData}
       />
     </div>

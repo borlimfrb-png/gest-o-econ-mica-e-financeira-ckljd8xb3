@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-08T16:56:43.701Z",
+  "generatedAt": "2026-09-08T17:54:53.217Z",
   "collections": [
     {
       "name": "users",
@@ -4461,6 +4461,66 @@
         "CREATE INDEX idx_bi_apresentacoes_grupo ON bi_apresentacoes (grupo)",
         "CREATE INDEX idx_bi_apresentacoes_nome ON bi_apresentacoes (nome)",
         "CREATE INDEX idx_bi_apresentacoes_created ON bi_apresentacoes (created)"
+      ]
+    },
+    {
+      "name": "plano_contas_mapeamentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && @request.body.empresa = @request.auth.empresa))",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "codigo_empresa",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "plano_conta",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "plano_contas"
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_pc_map_empresa ON plano_contas_mapeamentos (empresa)",
+        "CREATE INDEX idx_pc_map_codigo_empresa ON plano_contas_mapeamentos (codigo_empresa)",
+        "CREATE INDEX idx_pc_map_plano_conta ON plano_contas_mapeamentos (plano_conta)",
+        "CREATE UNIQUE INDEX idx_pc_map_emp_cod ON plano_contas_mapeamentos (empresa, codigo_empresa)"
       ]
     }
   ]

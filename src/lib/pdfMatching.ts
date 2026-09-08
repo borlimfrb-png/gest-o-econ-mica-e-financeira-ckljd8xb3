@@ -17,8 +17,9 @@ export interface MatchedItem {
   conta?: ContaRecord
   centro?: CentroRecord
   tipoDespesa?: TipoDespesaRecord
-  matchedBy?: 'codigo_empresa' | 'code' | 'exact' | 'contains' | 'manual'
+  matchedBy?: 'aprendido' | 'codigo_empresa' | 'code' | 'exact' | 'contains' | 'manual'
   isMatched: boolean
+  matchedCodigoEmpresa?: string // Código da empresa que originou o match (para aprendizagem)
 }
 
 /**
@@ -61,11 +62,28 @@ function normalizeCode(code: string): string {
  * 2. Match exato de nome da conta ou centro
  * 3. Match por inclusão (contains case-insensitive & sem acentos)
  */
+export interface LearnedMappingRef {
+  codigo_empresa: string
+  plano_conta: string
+}
+
+/**
+ * Busca por similaridade nos planos de contas existentes.
+ * -1. PRIORIDADE MÁXIMA ABSOLUTA: Mapeamento aprendido (vínculo confirmado previamente gravado)
+ * 0. PRIORIDADE: Código da Conta da Empresa (codigo_empresa)
+ * 1. Match exato de nome da conta ou centro
+ * 2. Match por código interno (CO-xxx, PC-xxx) ou por inclusão/similaridade
+ */
 export function findBestPlanoContaMatch(
   rawName: string,
   planoList: PlanoContaRecord[],
   originalLine?: string,
-): { match?: PlanoContaRecord; type?: 'codigo_empresa' | 'code' | 'exact' | 'contains' } {
+  aprendidos?: LearnedMappingRef[],
+): {
+  match?: PlanoContaRecord
+  type?: 'aprendido' | 'codigo_empresa' | 'code' | 'exact' | 'contains'
+  matchedCodigoEmpresa?: string
+} {
   const normRaw = normalizeText(rawName)
   const normLine = normalizeText(originalLine || '')
   const combinedText = `${normRaw} ${normLine}`.trim()
@@ -73,9 +91,36 @@ export function findBestPlanoContaMatch(
 
   if (!normRaw || normRaw.length < 2) return {}
 
-  // 0. PRIORIDADE ABSOLUTA: Código da Conta da Empresa (codigo_empresa)
-  // Ao ler uma linha do arquivo com um código de conta da empresa,
-  // compara com o codigo_empresa cadastrado no plano de contas.
+  // -1. PRIORIDADE MÁXIMA: Mapeamentos Aprendidos previamente confirmados pelo usuário
+  if (aprendidos && aprendidos.length > 0) {
+    for (const apr of aprendidos) {
+      const codApr = apr.codigo_empresa?.trim()
+      if (!codApr || codApr.length < 2) continue
+
+      const normCodApr = normalizeText(codApr)
+      const cleanCodApr = normalizeCode(codApr)
+      const escaped = normCodApr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regexBoundary = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i')
+
+      if (
+        regexBoundary.test(normRaw) ||
+        (originalLine && regexBoundary.test(normLine)) ||
+        (cleanCodApr.length >= 3 && cleanCombined.includes(cleanCodApr))
+      ) {
+        // Encontrar no planoList (garante que conta não foi excluída/inativa)
+        const pcTarget = planoList.find((p) => p.id === apr.plano_conta)
+        if (pcTarget) {
+          return {
+            match: pcTarget,
+            type: 'aprendido',
+            matchedCodigoEmpresa: codApr,
+          }
+        }
+      }
+    }
+  }
+
+  // 0. PRIORIDADE: Código da Conta da Empresa (codigo_empresa)
   for (const pc of planoList) {
     const codEmp = pc.codigo_empresa?.trim()
     if (!codEmp || codEmp.length < 2) continue
@@ -83,8 +128,6 @@ export function findBestPlanoContaMatch(
     const normCodEmp = normalizeText(codEmp)
     const cleanCodEmp = normalizeCode(codEmp)
 
-    // Match se o código da empresa está contido de forma exata na linha/nome
-    // usando regex de fronteira ou delimitadores típicos (espaço, traço, início/fim)
     const escaped = normCodEmp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const regexBoundary = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i')
 
@@ -93,7 +136,7 @@ export function findBestPlanoContaMatch(
       (originalLine && regexBoundary.test(normLine)) ||
       (cleanCodEmp.length >= 3 && cleanCombined.includes(cleanCodEmp))
     ) {
-      return { match: pc, type: 'codigo_empresa' }
+      return { match: pc, type: 'codigo_empresa', matchedCodigoEmpresa: codEmp }
     }
   }
 
@@ -158,12 +201,14 @@ export function findBestPlanoContaMatch(
 export function matchPdfCandidatesWithPlanoContas(
   candidates: ExtractedAccountValueCandidate[],
   planoList: PlanoContaRecord[],
+  aprendidos?: LearnedMappingRef[],
 ): MatchedItem[] {
   return candidates.map((cand) => {
-    const { match, type } = findBestPlanoContaMatch(
+    const { match, type, matchedCodigoEmpresa } = findBestPlanoContaMatch(
       cand.rawAccountName,
       planoList,
       cand.originalLine,
+      aprendidos,
     )
 
     if (match) {
@@ -179,6 +224,7 @@ export function matchPdfCandidatesWithPlanoContas(
         centro: match.expand?.centro,
         tipoDespesa: match.expand?.tipo_despesa,
         matchedBy: type,
+        matchedCodigoEmpresa,
         isMatched: true,
       }
     }
