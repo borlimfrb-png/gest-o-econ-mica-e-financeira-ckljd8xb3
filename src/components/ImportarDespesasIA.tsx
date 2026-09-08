@@ -1709,7 +1709,17 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
 
                             {/* Origem da Sugestão / Memória */}
                             <td className="py-3 px-3">
-                              {item.matchConfidence === 'memoria' ? (
+                              {item.matchConfidence === 'codigo_empresa' ? (
+                                <div className="space-y-0.5">
+                                  <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-100 text-[9px] font-bold gap-1">
+                                    <Check className="w-2.5 h-2.5 text-emerald-700" />
+                                    Código da Empresa
+                                  </Badge>
+                                  <p className="text-[10px] text-emerald-700 leading-tight">
+                                    {item.origemSugestao || 'casado por código da empresa'}
+                                  </p>
+                                </div>
+                              ) : item.matchConfidence === 'memoria' ? (
                                 <div className="space-y-0.5">
                                   <Badge className="bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-100 text-[9px] font-bold gap-1">
                                     <History className="w-2.5 h-2.5 text-purple-700" />

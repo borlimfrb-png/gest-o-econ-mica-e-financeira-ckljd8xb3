@@ -48,14 +48,15 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
   const [nome, setNome] = useState('')
   const [tipo, setTipo] = useState<TipoConta>('Despesa')
   const [grupo, setGrupo] = useState<GrupoConta>('Despesas Operacionais')
-  const [centroId, setCentroId] = useState<string>('')
-  const [tipoDespesaId, setTipoDespesaId] = useState<string>('')
+  const [centroId, setCentroId] = useState('')
+  const [tipoDespesaId, setTipoDespesaId] = useState('')
+  const [codigoEmpresa, setCodigoEmpresa] = useState('')
   const [loading, setLoading] = useState(false)
-
   // Atualiza quando o modal abre ou initialName muda
   useEffect(() => {
     if (open) {
       setNome(initialName || '')
+      setCodigoEmpresa('')
       // Sugere tipo baseado em palavras-chave no nome
       const low = (initialName || '').toLowerCase()
       if (
@@ -143,8 +144,8 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
         centro: centroId,
         tipo_despesa: tipoDespesaId || undefined,
         descricao: `${novaConta.nome} - Importado`,
+        codigo_empresa: codigoEmpresa.trim() || undefined,
       })
-
       toast({
         title: 'Conta e Plano cadastrados!',
         description: `${novaConta.codigo} (${novaConta.nome}) vinculada a ${novoPlano.codigo}.`,
@@ -194,6 +195,20 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
               required
               disabled={loading}
               autoFocus
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="quick-codigo-empresa" className="text-xs font-semibold text-slate-700">
+              Código da Conta da Empresa (Opcional)
+            </Label>
+            <Input
+              id="quick-codigo-empresa"
+              value={codigoEmpresa}
+              onChange={(e) => setCodigoEmpresa(e.target.value)}
+              placeholder="Código usado pela empresa, ex: 1.1.2.001"
+              disabled={loading}
+              className="text-xs font-mono"
             />
           </div>
 

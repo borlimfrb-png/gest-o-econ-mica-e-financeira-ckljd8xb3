@@ -214,6 +214,7 @@ export interface ContaRecord extends RecordModel {
 // a um tipo de despesa). Código sequencial automático (PC-001, ...) por usuário.
 export interface PlanoContaRecord extends RecordModel {
   codigo?: string
+  codigo_empresa?: string
   empresa?: string
   conta: string
   centro: string

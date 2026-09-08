@@ -187,6 +187,7 @@ export const ModalImportarPlanoContas: React.FC<ModalImportarPlanoContasProps> =
 
         // Procura campos com flexibilidade de sinônimos em PT-BR
         let codigo = ''
+        let codigoEmpresa = ''
         let contaNome = ''
         let contaTipo = ''
         let contaGrupo = ''
@@ -199,8 +200,19 @@ export const ModalImportarPlanoContas: React.FC<ModalImportarPlanoContasProps> =
           const valStr = String(valorRaw ?? '').trim()
           if (!valStr) continue
 
-          // Código
+          // Código da Empresa
           if (
+            colNorm === 'codigo da conta da empresa' ||
+            colNorm === 'codigo da empresa' ||
+            colNorm === 'codigo empresa' ||
+            colNorm === 'cod empresa' ||
+            colNorm === 'cod. empresa' ||
+            colNorm === 'conta da empresa'
+          ) {
+            codigoEmpresa = valStr
+          }
+          // Código
+          else if (
             colNorm === 'codigo' ||
             colNorm === 'cod' ||
             colNorm === 'cod.' ||
@@ -281,6 +293,7 @@ export const ModalImportarPlanoContas: React.FC<ModalImportarPlanoContasProps> =
         itensProcessados.push({
           linhaOrigem: linhaNum,
           codigo: codigo || undefined,
+          codigoEmpresa: codigoEmpresa || undefined,
           contaNome: contaNome.trim(),
           contaTipo: tipoInferido,
           contaGrupo: contaGrupo || undefined,

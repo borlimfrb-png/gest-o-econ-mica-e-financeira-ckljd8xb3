@@ -86,6 +86,7 @@ interface PlanoFormData {
   centro: string
   tipo_despesa: string
   descricao: string
+  codigo_empresa: string
 }
 
 const EMPTY_FORM: PlanoFormData = {
@@ -94,6 +95,7 @@ const EMPTY_FORM: PlanoFormData = {
   centro: '',
   tipo_despesa: '',
   descricao: '',
+  codigo_empresa: '',
 }
 
 type FormErrors = Partial<Record<keyof PlanoFormData | 'general', string>>
@@ -252,6 +254,7 @@ export default function PlanoContas() {
       if (!q) return true
 
       const codigo = (i.codigo || '').toLowerCase()
+      const codigoEmpresa = (i.codigo_empresa || '').toLowerCase()
       const conta = contaMap.get(i.conta)
       const centro = centroMap.get(i.centro)
       const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
@@ -265,6 +268,7 @@ export default function PlanoContas() {
 
       return (
         codigo.includes(q) ||
+        codigoEmpresa.includes(q) ||
         nomeConta.includes(q) ||
         codConta.includes(q) ||
         nomeCentro.includes(q) ||
@@ -383,6 +387,7 @@ export default function PlanoContas() {
         centro: form.centro,
         tipo_despesa: form.tipo_despesa || undefined,
         descricao: form.descricao,
+        codigo_empresa: form.codigo_empresa || undefined,
       })
       toast({
         title: 'Item do plano criado',
@@ -412,6 +417,7 @@ export default function PlanoContas() {
       centro: i.centro,
       tipo_despesa: i.tipo_despesa || '',
       descricao: i.descricao || '',
+      codigo_empresa: i.codigo_empresa || '',
     })
     setErrors({})
     setEditOpen(true)
@@ -428,6 +434,7 @@ export default function PlanoContas() {
         centro: form.centro,
         tipo_despesa: form.tipo_despesa,
         descricao: form.descricao,
+        codigo_empresa: form.codigo_empresa,
       })
       toast({ title: 'Item atualizado', description: 'As alterações foram salvas.' })
       setEditOpen(false)
@@ -761,6 +768,23 @@ export default function PlanoContas() {
               </div>
 
               <div className="space-y-1.5">
+                <Label htmlFor="pc-codigo-empresa" className="text-xs font-semibold text-slate-700">
+                  Código da Conta da Empresa
+                </Label>
+                <Input
+                  id="pc-codigo-empresa"
+                  placeholder="Código usado pela empresa, ex: 1.1.2.001"
+                  value={form.codigo_empresa}
+                  onChange={(e) => setField('codigo_empresa', e.target.value)}
+                  className="h-9 text-xs font-mono"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Código contábil utilizado pela própria empresa cliente. Usado como chave
+                  prioritária na importação de arquivos (PDF/Excel).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="pc-conta" className="text-xs font-semibold text-slate-700">
                   Conta *
                 </Label>
@@ -1024,6 +1048,7 @@ export default function PlanoContas() {
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
                       <th className="py-3 px-4">Código</th>
+                      <th className="py-3 px-4">Cód. Empresa</th>
                       <th className="py-3 px-4">Conta</th>
                       <th className="py-3 px-4">Centro</th>
                       <th className="py-3 px-4">Tipo de Despesa</th>
@@ -1042,6 +1067,15 @@ export default function PlanoContas() {
                             <span className="font-mono font-semibold text-blue-700 text-[11px]">
                               {i.codigo || '—'}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {i.codigo_empresa ? (
+                              <span className="font-mono font-semibold text-slate-800 text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                {i.codigo_empresa}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-mono">—</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             {conta ? (
@@ -1187,6 +1221,26 @@ export default function PlanoContas() {
                   value={editing?.codigo || ''}
                   className="h-9 text-xs font-mono font-semibold text-slate-600 bg-slate-50 border-slate-200 cursor-not-allowed"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-pc-codigo-empresa"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Código da Conta da Empresa
+                </Label>
+                <Input
+                  id="edit-pc-codigo-empresa"
+                  placeholder="Código usado pela empresa, ex: 1.1.2.001"
+                  value={form.codigo_empresa}
+                  onChange={(e) => setField('codigo_empresa', e.target.value)}
+                  className="h-9 text-xs font-mono"
+                />
+                <p className="text-[11px] text-slate-400">
+                  Código contábil próprio da empresa para conciliação automática com arquivos PDF e
+                  planilhas.
+                </p>
               </div>
 
               <div className="space-y-1.5">

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-07T21:03:34.926Z",
+  "generatedAt": "2026-09-08T16:56:43.701Z",
   "collections": [
     {
       "name": "users",
@@ -963,6 +963,12 @@
           "required": false,
           "system": false,
           "collectionRef": "empresas"
+        },
+        {
+          "name": "codigo_empresa",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

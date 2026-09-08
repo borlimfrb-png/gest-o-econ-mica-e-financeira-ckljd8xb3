@@ -22,7 +22,7 @@ export interface DespesaExtraidaItem {
   planoContaId?: string
   planoContaCodigo?: string
   planoContaNome?: string
-  matchConfidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'manual' | 'memoria'
+  matchConfidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'manual' | 'memoria' | 'codigo_empresa'
   matchScore: number // 0 a 100
   origemSugestao?: string // ex: "baseado em importações anteriores", "similaridade semântica", "vínculo manual"
 
@@ -304,13 +304,15 @@ export function matchDespesaComPlanoContas(
   categoriaSugerida: string,
   planoContas: PlanoContaRecord[],
   memoriasFornecedores?: MemoriaFornecedorRecord[],
+  codigoLinha?: string,
 ): {
   isCadastrada: boolean
   planoConta?: PlanoContaRecord
-  confidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'memoria'
+  confidence: 'alta' | 'media' | 'baixa' | 'nenhuma' | 'memoria' | 'codigo_empresa'
   score: number
   origemSugestao?: string
   categoriaSugerida?: string
+  matchedBy?: 'codigo_empresa' | 'memoria' | 'exact' | 'code' | 'contains'
 } {
   if (!planoContas || planoContas.length === 0) {
     return { isCadastrada: false, confidence: 'nenhuma', score: 0 }
@@ -318,9 +320,36 @@ export function matchDespesaComPlanoContas(
 
   const descNorm = cleanForComparison(descricao)
   const catNorm = cleanForComparison(categoriaSugerida)
+  const codLinhaNorm = cleanForComparison(codigoLinha || '')
   const descWords = descNorm.split(' ').filter((w) => w.length > 2)
 
-  // 0. PRIORIDADE 1: VERIFICAÇÃO NA MEMÓRIA DE FORNECEDORES RECORRENTES
+  // 0. PRIORIDADE MÁXIMA: MATCH POR "CÓDIGO DA CONTA DA EMPRESA" (codigo_empresa)
+  for (const pc of planoContas) {
+    const codEmp = pc.codigo_empresa?.trim()
+    if (!codEmp || codEmp.length < 2) continue
+
+    const codEmpNorm = cleanForComparison(codEmp)
+    const escaped = codEmpNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const regexBoundary = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i')
+
+    if (
+      (codLinhaNorm && (codLinhaNorm === codEmpNorm || codLinhaNorm.includes(codEmpNorm))) ||
+      regexBoundary.test(descNorm) ||
+      (codEmpNorm.length >= 3 && descNorm.includes(codEmpNorm))
+    ) {
+      return {
+        isCadastrada: true,
+        planoConta: pc,
+        confidence: 'codigo_empresa',
+        score: 100,
+        origemSugestao: `casado por código da empresa (${codEmp})`,
+        categoriaSugerida: pc.expand?.tipo_despesa?.nome || categoriaSugerida,
+        matchedBy: 'codigo_empresa',
+      }
+    }
+  }
+
+  // 0.1 PRIORIDADE 2: VERIFICAÇÃO NA MEMÓRIA DE FORNECEDORES RECORRENTES
   if (memoriasFornecedores && memoriasFornecedores.length > 0) {
     for (const mem of memoriasFornecedores) {
       const termoNorm = cleanForComparison(mem.termo_busca || mem.fornecedor_padrao || '')
@@ -343,6 +372,7 @@ export function matchDespesaComPlanoContas(
             score: 99,
             origemSugestao: 'baseado em importações anteriores',
             categoriaSugerida: mem.categoria_sugerida || categoriaSugerida,
+            matchedBy: 'memoria',
           }
         }
       }
@@ -611,7 +641,6 @@ export async function parseExcelDespesas(
         planoContas,
         memoriasFornecedores,
       )
-
       result.push({
         id: `excel_${idx}_${Math.random().toString(36).slice(2, 7)}`,
         sourceFile: file.name,

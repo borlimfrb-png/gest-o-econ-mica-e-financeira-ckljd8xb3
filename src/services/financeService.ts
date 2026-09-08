@@ -998,6 +998,7 @@ export const planoContasService = {
     centro: string
     tipo_despesa?: string
     descricao?: string
+    codigo_empresa?: string
   }): Promise<PlanoContaRecord> {
     const record = await pb.collection('plano_contas').create<PlanoContaRecord>(
       {
@@ -1006,6 +1007,7 @@ export const planoContasService = {
         centro: data.centro,
         tipo_despesa: data.tipo_despesa || undefined,
         descricao: data.descricao?.trim() || undefined,
+        codigo_empresa: data.codigo_empresa?.trim() || undefined,
         user: currentUserId(),
       } as any,
       {
@@ -1031,7 +1033,10 @@ export const planoContasService = {
   async update(
     id: string,
     data: Partial<
-      Pick<PlanoContaRecord, 'empresa' | 'conta' | 'centro' | 'tipo_despesa' | 'descricao'>
+      Pick<
+        PlanoContaRecord,
+        'empresa' | 'conta' | 'centro' | 'tipo_despesa' | 'descricao' | 'codigo_empresa'
+      >
     >,
   ): Promise<PlanoContaRecord> {
     let anterior: PlanoContaRecord | null = null
@@ -1046,6 +1051,9 @@ export const planoContasService = {
     const payload: Record<string, unknown> = { ...data }
     if (data.tipo_despesa === '') payload.tipo_despesa = null
     if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
+    if (data.codigo_empresa !== undefined) {
+      payload.codigo_empresa = data.codigo_empresa.trim() || ''
+    }
     const record = await pb.collection('plano_contas').update<PlanoContaRecord>(id, payload, {
       expand: 'empresa,conta,centro,tipo_despesa',
     })

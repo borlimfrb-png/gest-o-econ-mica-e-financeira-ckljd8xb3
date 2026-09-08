@@ -28,6 +28,7 @@ import { MODELO_PLANO_CONTAS_PADRAO, type ItemModeloPadrao } from '@/lib/planoCo
 
 export interface ItemImportacaoPlano {
   codigo?: string // Código contábil ou código informado
+  codigoEmpresa?: string // Código da Conta da Empresa
   contaNome: string // Nome da conta
   contaTipo?: TipoConta // Ativo, Passivo, Patrimônio Líquido, Receita, Despesa
   contaGrupo?: string // Grupo da conta
@@ -402,6 +403,7 @@ export const planoContasLoteService = {
           centro: centro.id,
           tipo_despesa: tipoDespesa?.id,
           descricao: descricaoParts.join(' ').trim() || undefined,
+          codigo_empresa: item.codigoEmpresa?.trim() || item.codigo?.trim() || undefined,
         })
 
         chavesExistentes.add(chaveVinculo)

@@ -912,13 +912,19 @@ export default function Importacao() {
             numValor = parseFloat(rawValor.replace(/[R$\s.]/g, '').replace(',', '.')) || 0
           }
 
+          // Prioridade 1: Código da Conta da Empresa
+          // Prioridade 2: Código interno PC-xxx
+          // Prioridade 3: Nome da Conta
+          const rawContaNome = String(row['Conta'] || '')
+            .trim()
+            .toLowerCase()
           const pcEncontrado = planoContas.find(
             (p) =>
-              p.codigo?.toLowerCase() === codPC.toLowerCase() ||
-              p.expand?.conta?.nome?.toLowerCase() ===
-                String(row['Conta'] || '')
-                  .trim()
-                  .toLowerCase(),
+              (p.codigo_empresa &&
+                (p.codigo_empresa.toLowerCase() === codPC.toLowerCase() ||
+                  p.codigo_empresa.toLowerCase() === rawContaNome)) ||
+              (p.codigo && p.codigo.toLowerCase() === codPC.toLowerCase()) ||
+              (p.expand?.conta?.nome && p.expand.conta.nome.trim().toLowerCase() === rawContaNome),
           )
 
           let status: 'valido' | 'erro' = 'valido'
@@ -2493,8 +2499,26 @@ export default function Importacao() {
                               p.{item.pageNumber}
                             </td>
                             <td className="py-3 px-4">
-                              <div className="font-medium text-slate-900">
-                                {item.rawAccountName}
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-slate-900">
+                                  {item.rawAccountName}
+                                </span>
+                                {item.matchedBy === 'codigo_empresa' && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 font-medium"
+                                  >
+                                    casado por código da empresa
+                                  </Badge>
+                                )}
+                                {item.matchedBy === 'code' && (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] px-1.5 py-0 font-medium"
+                                  >
+                                    casado por código
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-[11px] text-slate-400 font-mono truncate max-w-xs">
                                 {item.originalLine}

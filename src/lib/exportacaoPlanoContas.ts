@@ -9,6 +9,7 @@ import type {
 
 export interface DadosItemPlanoExport {
   codigo: string
+  codigoEmpresa?: string
   contaNome: string
   contaCodigo?: string
   tipoConta: string
@@ -49,6 +50,7 @@ export function prepararDadosExportacaoPlano(
 
     return {
       codigo: item.codigo || '',
+      codigoEmpresa: item.codigo_empresa || '',
       contaNome: conta?.nome || '',
       contaCodigo: conta?.codigo || '',
       tipoConta: conta?.tipo || '',
@@ -81,6 +83,7 @@ export function exportarPlanoContasExcel(
 
   const rows = dados.map((d) => ({
     Código: d.codigo,
+    'Código da Conta da Empresa': d.codigoEmpresa || '—',
     'Conta/Nome': d.contaCodigo ? `${d.contaCodigo} - ${d.contaNome}` : d.contaNome,
     'Tipo/Natureza': d.tipoConta,
     'Grupo/Categoria': d.grupoConta || '—',
@@ -95,6 +98,7 @@ export function exportarPlanoContasExcel(
   // Ajusta larguras das colunas
   ws['!cols'] = [
     { wch: 12 }, // Código
+    { wch: 28 }, // Código da Conta da Empresa
     { wch: 36 }, // Conta/Nome
     { wch: 20 }, // Tipo/Natureza
     { wch: 28 }, // Grupo/Categoria
@@ -132,6 +136,7 @@ export function exportarPlanoContasCsv(
 
   const colunas = [
     'Código',
+    'Código da Conta da Empresa',
     'Conta/Nome',
     'Tipo/Natureza',
     'Grupo/Categoria',
@@ -149,6 +154,7 @@ export function exportarPlanoContasCsv(
     linhas.push(
       [
         d.codigo,
+        d.codigoEmpresa || '',
         contaStr,
         d.tipoConta,
         d.grupoConta || '',
