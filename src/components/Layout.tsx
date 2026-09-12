@@ -45,6 +45,8 @@ import {
   Compass,
   User,
   Bell,
+  Presentation,
+  Sparkles,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import pb from '@/lib/pocketbase/client'
@@ -263,6 +265,13 @@ export default function Layout() {
 
   // Itens do submenu Indicadores (Financeiro não vê Valuation)
   const rawIndicadoresSubItems = [
+    {
+      name: 'Apresentação dos Indicadores',
+      path: '/indicadores/apresentacao',
+      icon: Presentation,
+      hideFinanceiro: true,
+      destaque: true,
+    },
     { name: 'Painel & Benchmarks', path: '/indicadores/painel', icon: Gauge, hideFinanceiro: true },
     {
       name: 'Indicadores de Liquidez',
@@ -416,6 +425,7 @@ export default function Layout() {
     location.pathname === '/analise-tributaria' ||
     location.pathname === '/planejamento/bsc' ||
     location.pathname === '/notas-fiscais' ||
+    location.pathname === '/indicadores/apresentacao' ||
     location.pathname.startsWith('/empresas/') ||
     location.pathname.startsWith('/formacao-preco')
 
@@ -821,6 +831,7 @@ export default function Layout() {
                     {indicadoresSubItems.map((sub) => {
                       const SubIcon = sub.icon
                       const isSubActive = location.pathname === sub.path
+                      const isDestaque = (sub as any).destaque
 
                       return (
                         <DropdownMenuItem
@@ -828,17 +839,33 @@ export default function Layout() {
                           asChild
                           className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                             isSubActive
-                              ? 'bg-blue-600 text-white font-semibold'
-                              : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                              ? 'bg-emerald-600 text-white font-semibold'
+                              : isDestaque
+                                ? 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-white font-semibold border border-emerald-500/30 mb-1'
+                                : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
                           }`}
                         >
-                          <NavLink to={sub.path}>
-                            <SubIcon
-                              className={`w-3.5 h-3.5 shrink-0 ${
-                                isSubActive ? 'text-white' : 'text-blue-300'
-                              }`}
-                            />
-                            <span className="truncate">{sub.name}</span>
+                          <NavLink
+                            to={sub.path}
+                            className="flex items-center justify-between w-full"
+                          >
+                            <div className="flex items-center gap-2.5 truncate">
+                              <SubIcon
+                                className={`w-3.5 h-3.5 shrink-0 ${
+                                  isSubActive
+                                    ? 'text-white'
+                                    : isDestaque
+                                      ? 'text-emerald-300'
+                                      : 'text-blue-300'
+                                }`}
+                              />
+                              <span className="truncate">{sub.name}</span>
+                            </div>
+                            {isDestaque && (
+                              <span className="text-[9px] bg-emerald-400/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold border border-emerald-400/30 uppercase">
+                                Novo
+                              </span>
+                            )}
                           </NavLink>
                         </DropdownMenuItem>
                       )
@@ -1591,24 +1618,38 @@ export default function Layout() {
                           {indicadoresSubItems.map((sub) => {
                             const SubIcon = sub.icon
                             const isSubActive = location.pathname === sub.path
+                            const isDestaque = (sub as any).destaque
 
                             return (
                               <NavLink
                                 key={sub.path}
                                 to={sub.path}
                                 onClick={() => setMobileDrawerOpen(false)}
-                                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                   isSubActive
-                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                                    ? 'bg-emerald-600 text-white font-semibold shadow-xs'
+                                    : isDestaque
+                                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30'
+                                      : 'text-slate-300 hover:text-white hover:bg-white/5'
                                 }`}
                               >
-                                <SubIcon
-                                  className={`w-3.5 h-3.5 ${
-                                    isSubActive ? 'text-blue-300' : 'text-slate-400'
-                                  }`}
-                                />
-                                <span className="truncate">{sub.name}</span>
+                                <div className="flex items-center gap-2.5 truncate">
+                                  <SubIcon
+                                    className={`w-3.5 h-3.5 ${
+                                      isSubActive
+                                        ? 'text-white'
+                                        : isDestaque
+                                          ? 'text-emerald-300'
+                                          : 'text-blue-300'
+                                    }`}
+                                  />
+                                  <span className="truncate">{sub.name}</span>
+                                </div>
+                                {isDestaque && (
+                                  <span className="text-[9px] bg-emerald-400/20 text-emerald-300 px-1 py-0.2 rounded font-bold">
+                                    Novo
+                                  </span>
+                                )}
                               </NavLink>
                             )
                           })}
@@ -1833,6 +1874,8 @@ export default function Layout() {
           <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-14 md:top-16 z-20 shadow-xs">
             <div>
               <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+                {location.pathname === '/indicadores/apresentacao' &&
+                  'Apresentação Geral de Indicadores'}
                 {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
                 {(location.pathname === '/dashboard-bi' || location.pathname === '/bi') &&
                   'Dashboard de BI Interativo · Apresentação Executiva'}
@@ -1854,6 +1897,8 @@ export default function Layout() {
                 {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
               </h1>
               <p className="text-xs text-[#5B6B7F]">
+                {location.pathname === '/indicadores/apresentacao' &&
+                  'Catálogo educativo com todos os indicadores do sistema, fórmulas passo a passo, faixas e apuração em tempo real'}
                 {location.pathname === '/dashboard' &&
                   'Visão consolidada de indicadores e evolução patrimonial'}
                 {(location.pathname === '/dashboard-bi' || location.pathname === '/bi') &&

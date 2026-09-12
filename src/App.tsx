@@ -33,6 +33,7 @@ const CadastroFichaTecnica = lazy(() => import('./pages/CadastroFichaTecnica'))
 const Impostos = lazy(() => import('./pages/Impostos'))
 const SimuladorPrecos = lazy(() => import('./pages/SimuladorPrecos'))
 const RelatorioAnual = lazy(() => import('./pages/RelatorioAnual'))
+const IndicadoresApresentacao = lazy(() => import('./pages/IndicadoresApresentacao'))
 const IndicadoresLiquidez = lazy(() => import('./pages/IndicadoresLiquidez'))
 const IndicadoresCapitalGiro = lazy(() => import('./pages/IndicadoresCapitalGiro'))
 const IndicadoresEndividamento = lazy(() => import('./pages/IndicadoresEndividamento'))
@@ -215,6 +216,14 @@ const App = () => (
                     element={
                       <ModuloRoute modulo="formacao_preco">
                         <SimuladorPrecos />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/indicadores/apresentacao"
+                    element={
+                      <ModuloRoute modulo="indicadores">
+                        <IndicadoresApresentacao />
                       </ModuloRoute>
                     }
                   />
