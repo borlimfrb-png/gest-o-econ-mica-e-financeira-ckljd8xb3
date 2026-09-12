@@ -14,8 +14,10 @@ import type {
 } from '@/types/finance'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { Tag, CheckCircle2, Circle, BookOpen, SearchCheck } from 'lucide-react'
+import { Tag, CheckCircle2, Circle, BookOpen, SearchCheck, FileText } from 'lucide-react'
 import { ModalConsultarContas } from '@/components/ModalConsultarContas'
+import { ModalRelatorioContasCentrosA4 } from '@/components/ModalRelatorioContasCentrosA4'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -137,9 +139,14 @@ function parseMeta(value: string): number | undefined {
 
 export default function Centros() {
   const { toast } = useToast()
-  const { selectedEmpresaId } = useFilter()
-  const { user } = useAuth()
+  const { selectedEmpresaId, selectedEmpresa, selectedAno } = useFilter()
+  const { user, isAdmin } = useAuth()
+  const { minhaEmpresa } = useMinhaEmpresa()
   const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
+
+  // Perfil permitido para o Relatório A4: Admin e Empresa (ou qualquer perfil com acesso ao módulo)
+  const userRole = user?.role || 'empresa'
+  const podeVerRelatorioA4 = isAdmin || userRole === 'admin' || userRole === 'empresa'
 
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoCentroRecord[]>([])
@@ -184,6 +191,9 @@ export default function Centros() {
 
   // Modal de Consulta de Contas Cadastradas
   const [consultarContasOpen, setConsultarContasOpen] = useState(false)
+
+  // Modal de Relatório A4 Contas x Centros
+  const [relatorioA4Open, setRelatorioA4Open] = useState(false)
 
   const loadData = async () => {
     try {
@@ -812,7 +822,21 @@ export default function Centros() {
             Cadastre centros de receita e despesa e registre lançamentos para cada centro.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão Relatório A4 — Contas × Centros (Admin e Perfil Empresa) */}
+          {podeVerRelatorioA4 && (
+            <Button
+              type="button"
+              onClick={() => setRelatorioA4Open(true)}
+              variant="outline"
+              className="h-9 text-xs font-semibold border-slate-300 hover:bg-slate-50 text-[#0B1F3A] shadow-xs gap-1.5"
+              title="Gerar Relatório A4 de conferência de contas × centros de custo para pasta do cliente"
+            >
+              <FileText className="w-4 h-4 text-blue-700" />
+              <span>Relatório A4 — Contas × Centros</span>
+            </Button>
+          )}
+
           <Button
             type="button"
             onClick={() => setConsultarContasOpen(true)}
@@ -2122,6 +2146,18 @@ export default function Centros() {
             description: 'A conta foi preenchida no formulário de novo lançamento.',
           })
         }}
+      />
+
+      {/* ============ MODAL RELATÓRIO A4 CONTAS × CENTROS DE CUSTO ============ */}
+      <ModalRelatorioContasCentrosA4
+        open={relatorioA4Open}
+        onOpenChange={setRelatorioA4Open}
+        contas={contas}
+        centros={centros}
+        lancamentos={lancamentos}
+        selectedEmpresa={selectedEmpresa}
+        selectedAno={selectedAno}
+        minhaEmpresa={minhaEmpresa}
       />
     </div>
   )
