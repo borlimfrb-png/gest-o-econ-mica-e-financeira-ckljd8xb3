@@ -11,6 +11,8 @@ import {
   type ContextoCalculoIndicadores,
 } from '@/lib/catalogoApresentacaoIndicadores'
 import { ModalPdfApresentacaoIndicadores } from '@/components/ModalPdfApresentacaoIndicadores'
+import { GraficoRadarCategorias } from '@/components/GraficoRadarCategorias'
+import { calcularDiagnosticoRadar } from '@/lib/diagnosticoRadarApresentacao'
 import type { BalancoRecord, DreRecord, BscKpiRecord, EmpresaRecord } from '@/types/finance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -70,7 +72,7 @@ export function IndicadoresApresentacao() {
   const [carregando, setCarregando] = useState(false)
 
   // Estados de UI e navegação
-  const [modoVisualizacao, setModoVisualizacao] = useState<'grade' | 'slides'>('grade')
+  const [modoVisualizacao, setModoVisualizacao] = useState<'grade' | 'slides' | 'radar'>('grade')
   const [categoriaAtiva, setCategoriaAtiva] = useState<string>('todas')
   const [termoBusca, setTermoBusca] = useState<string>('')
   const [slideIndex, setSlideIndex] = useState<number>(0)
@@ -154,6 +156,11 @@ export function IndicadoresApresentacao() {
     }
   }, [balancoAtual, dreAtual, balancoAnterior, dreAnterior, bscKpis, selectedAno])
 
+  // Diagnóstico e pontuação por categoria para o gráfico de Radar
+  const diagnosticoRadar = useMemo(() => {
+    return calcularDiagnosticoRadar(contextoCalculo)
+  }, [contextoCalculo])
+
   // Filtragem de indicadores
   const indicadoresFiltrados = useMemo(() => {
     return CATALOGO_INDICADORES.filter((ind) => {
@@ -208,8 +215,26 @@ export function IndicadoresApresentacao() {
     }
   }
 
-  // Exportação CSV do catálogo completo com os valores calculados
+  // Exportação CSV do catálogo completo com os valores calculados e o resumo do Radar
   const exportarCsv = () => {
+    // 1. Seção de Pontuação das 8 Categorias (Radar)
+    const cabecalhoRadar = [
+      'Resumo Diagnóstico por Categoria (Radar)',
+      `Score (${selectedAno}) 0-100`,
+      `Score Anterior (${selectedAno - 1})`,
+      'Classificação de Saúde',
+      'Diagnóstico Consultivo',
+    ]
+
+    const linhasRadar = diagnosticoRadar.itens.map((item) => [
+      `"${item.categoriaNome}"`,
+      `"${item.scoreAtual !== null ? item.scoreAtual : 'Sem dados'}"`,
+      `"${item.scoreAnterior !== null ? item.scoreAnterior : 'Sem dados'}"`,
+      `"${item.statusSaude === 'forte' ? 'Força (Verde)' : item.statusSaude === 'moderado' ? 'Atenção (Âmbar)' : item.statusSaude === 'fragil' ? 'Fragilidade (Vermelho)' : 'Sem Apuração'}"`,
+      `"${item.destaqueTexto.replace(/"/g, '""')}"`,
+    ])
+
+    // 2. Seção Detalhada dos 24 Indicadores
     const cabecalho = [
       'Categoria',
       'Sigla',
@@ -246,7 +271,17 @@ export function IndicadoresApresentacao() {
       ].join(';')
     })
 
-    const conteudoCsv = '\uFEFF' + [cabecalho.join(';'), ...linhas].join('\r\n')
+    const secoes = [
+      cabecalhoRadar.join(';'),
+      ...linhasRadar.map((r) => r.join(';')),
+      '',
+      `"Score Geral da Empresa: ${diagnosticoRadar.scoreGeralAtual !== null ? `${diagnosticoRadar.scoreGeralAtual} pts` : 'Sem apuração'}"`,
+      '',
+      cabecalho.join(';'),
+      ...linhas,
+    ]
+
+    const conteudoCsv = '\uFEFF' + secoes.join('\r\n')
     const blob = new Blob([conteudoCsv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -312,7 +347,7 @@ export function IndicadoresApresentacao() {
 
         {/* Ações superiores */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Seletor de Modo Grade / Slides */}
+          {/* Seletor de Modo: Grade / Radar / Slides */}
           <div className="flex items-center rounded-lg border bg-muted/50 p-1">
             <Button
               variant={modoVisualizacao === 'grade' ? 'default' : 'ghost'}
@@ -322,6 +357,15 @@ export function IndicadoresApresentacao() {
             >
               <LayoutGrid className="h-3.5 w-3.5" />
               Grade
+            </Button>
+            <Button
+              variant={modoVisualizacao === 'radar' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setModoVisualizacao('radar')}
+              className="gap-1.5 h-8 text-xs"
+            >
+              <Target className="h-3.5 w-3.5" />
+              Radar 360°
             </Button>
             <Button
               variant={modoVisualizacao === 'slides' ? 'default' : 'ghost'}
@@ -429,8 +473,30 @@ export function IndicadoresApresentacao() {
         </Card>
       </div>
 
+      {/* SEÇÃO DESTACADA: GRÁFICO DE RADAR POR CATEGORIA */}
+      {modoVisualizacao !== 'slides' && (
+        <section aria-label="Visão Geral por Categoria (Radar)">
+          <GraficoRadarCategorias
+            diagnostico={diagnosticoRadar}
+            anoAtual={selectedAno}
+            anoAnterior={selectedAno - 1}
+            empresaNome={empresaAtiva?.razao_social || 'Empresa Ativa'}
+            onSelecionarCategoria={(catId) => {
+              setCategoriaAtiva(catId)
+              setModoVisualizacao('grade')
+              // Rola suavemente até os cards
+              const elem = document.getElementById('grade-indicadores')
+              if (elem) elem.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+        </section>
+      )}
+
       {/* FILTROS E BUSCA */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+      <div
+        id="grade-indicadores"
+        className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3"
+      >
         {/* Barra de Categorias */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
           <Button
@@ -480,8 +546,71 @@ export function IndicadoresApresentacao() {
         </div>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL: MODO SLIDES OU MODO GRADE */}
-      {indicadoresFiltrados.length === 0 ? (
+      {/* CONTEÚDO PRINCIPAL: MODO RADAR EXCLUSIVO, MODO SLIDES OU MODO GRADE */}
+      {modoVisualizacao === 'radar' ? (
+        /* ==================================================== */
+        /* MODO RADAR FOCADO: DETALHAMENTO DAS 8 CATEGORIAS */
+        /* ==================================================== */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between bg-muted/40 p-3 rounded-lg border">
+            <div>
+              <span className="text-xs font-bold text-foreground">
+                Detalhamento dos Indicadores por Categoria
+              </span>
+              <p className="text-[11px] text-muted-foreground">
+                Abaixo estão reunidos os indicadores apurados para cada eixo do radar com seus
+                respectivos atingimentos.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setModoVisualizacao('grade')}
+              className="text-xs h-7"
+            >
+              Ver Grade Completa
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            {diagnosticoRadar.itens.map((cat) => (
+              <Card
+                key={cat.categoriaId}
+                className="p-3.5 border hover:border-primary/50 transition-all cursor-pointer"
+                onClick={() => {
+                  setCategoriaAtiva(cat.categoriaId)
+                  setModoVisualizacao('grade')
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="font-bold text-xs text-foreground line-clamp-1">
+                    {cat.categoriaNomeCurto}
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={`text-[10px] px-1.5 py-0 font-mono font-bold shrink-0 ${cat.badgeBg}`}
+                  >
+                    {cat.scoreAtual !== null ? `${cat.scoreAtual} pts` : '—'}
+                  </Badge>
+                </div>
+
+                <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
+                  {cat.destaqueTexto}
+                </p>
+
+                <div className="mt-2.5 pt-2 border-t flex items-center justify-between text-[10px] text-muted-foreground">
+                  <span>
+                    {cat.indicadoresIdeais} verdes • {cat.indicadoresCriticos} críticos
+                  </span>
+                  <span className="text-primary font-semibold flex items-center gap-0.5">
+                    Ver métricas &rarr;
+                  </span>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      ) : indicadoresFiltrados.length === 0 ? (
         <Card className="p-12 text-center">
           <HelpCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
           <h3 className="font-semibold text-foreground">Nenhum indicador encontrado</h3>

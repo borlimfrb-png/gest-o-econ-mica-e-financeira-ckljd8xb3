@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Printer, X, Building, Calendar, Info } from 'lucide-react'
@@ -8,6 +8,7 @@ import {
   CATEGORIAS_INDICADORES,
   type ContextoCalculoIndicadores,
 } from '@/lib/catalogoApresentacaoIndicadores'
+import { calcularDiagnosticoRadar } from '@/lib/diagnosticoRadarApresentacao'
 
 export interface ModalPdfApresentacaoIndicadoresProps {
   open: boolean
@@ -34,6 +35,10 @@ export function ModalPdfApresentacaoIndicadores({
       setImprimindo(false)
     }, 250)
   }
+
+  const diagnosticoRadar = useMemo(() => {
+    return calcularDiagnosticoRadar(contexto)
+  }, [contexto])
 
   // Agrupa os indicadores por categoria
   const categoriasComIndicadores = CATEGORIAS_INDICADORES.map((cat) => {
@@ -136,6 +141,74 @@ export function ModalPdfApresentacaoIndicadores({
               faixas de normalidade de mercado e os valores apurados com base no fechamento contábil
               e operacional.
             </p>
+          </div>
+
+          {/* DIAGNÓSTICO DO RADAR: TABELA DE SAÚDE POR CATEGORIA (A4) */}
+          <div className="mb-6 rounded-lg border border-slate-300 p-4 bg-white break-inside-avoid">
+            <div className="flex items-center justify-between border-b pb-2 mb-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">
+                  Diagnóstico 360° por Categoria (Radar de Desempenho)
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Pontuação consolidada (0 a 100) derivada do grau de atingimento das faixas ideais
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                  Score Global
+                </span>
+                <span className="text-base font-black text-emerald-700">
+                  {diagnosticoRadar.scoreGeralAtual !== null
+                    ? `${diagnosticoRadar.scoreGeralAtual} pts`
+                    : 'Sem apuração'}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              {diagnosticoRadar.itens.map((item) => {
+                const corBadge =
+                  item.statusSaude === 'forte'
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+                    : item.statusSaude === 'moderado'
+                      ? 'border-amber-300 bg-amber-50 text-amber-800'
+                      : item.statusSaude === 'fragil'
+                        ? 'border-rose-300 bg-rose-50 text-rose-800'
+                        : 'border-slate-200 bg-slate-50 text-slate-600'
+
+                const labelSaude =
+                  item.statusSaude === 'forte'
+                    ? 'Força'
+                    : item.statusSaude === 'moderado'
+                      ? 'Atenção'
+                      : item.statusSaude === 'fragil'
+                        ? 'Fragilidade'
+                        : 'Sem dados'
+
+                return (
+                  <div
+                    key={item.categoriaId}
+                    className={`rounded border p-2 text-xs flex flex-col justify-between ${corBadge}`}
+                  >
+                    <div>
+                      <div className="font-bold text-slate-900 line-clamp-1">
+                        {item.categoriaNomeCurto}
+                      </div>
+                      <div className="text-[10px] opacity-75">{labelSaude}</div>
+                    </div>
+                    <div className="mt-1 flex items-baseline justify-between pt-1 border-t border-black/10">
+                      <span className="text-[10px] font-mono opacity-80">
+                        {item.indicadoresIdeais}/{item.totalIndicadores} ideais
+                      </span>
+                      <strong className="font-mono text-sm">
+                        {item.scoreAtual !== null ? `${item.scoreAtual} pts` : '—'}
+                      </strong>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           {/* Seções por Categoria */}
