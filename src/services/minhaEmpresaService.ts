@@ -19,6 +19,40 @@ export const minhaEmpresaService = {
     }
   },
 
+  /**
+   * Obtém os dados públicos/institucionais da empresa/consultoria (para login e telas de entrada),
+   * buscando o registro da consultoria (ex: Flavio/Admin ou primeiro registro cadastrado).
+   */
+  async getPublico(): Promise<MinhaEmpresaRecord | null> {
+    try {
+      // 1. Tenta buscar primeiro da consultoria flavio@borlim.com.br
+      try {
+        const adminUser = await pb
+          .collection('users')
+          .getFirstListItem(`email = "flavio@borlim.com.br"`, { requestKey: null })
+        if (adminUser?.id) {
+          const recAdmin = await pb
+            .collection('minha_empresa')
+            .getFirstListItem<MinhaEmpresaRecord>(`user = "${adminUser.id}"`, { requestKey: null })
+          if (recAdmin) return recAdmin
+        }
+      } catch (_) {
+        // Ignora e tenta fallback geral
+      }
+
+      // 2. Fallback: pega o primeiro registro existente na coleção minha_empresa
+      const rec = await pb
+        .collection('minha_empresa')
+        .getFirstListItem<MinhaEmpresaRecord>('', { sort: '-created', requestKey: null })
+      return rec
+    } catch (err: any) {
+      if (err?.status === 404) {
+        return null
+      }
+      return null
+    }
+  },
+
   async save(
     data: FormData | Partial<MinhaEmpresaRecord>,
     id?: string,

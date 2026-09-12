@@ -26,9 +26,13 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { minhaEmpresaService } from '@/services/minhaEmpresaService'
+import type { MinhaEmpresaRecord } from '@/types/finance'
+import pb from '@/lib/pocketbase/client'
 
 export default function Index() {
   const { login, signup, isAuthenticated, isLoading, requestPasswordReset } = useAuth()
+  const [empresaPublica, setEmpresaPublica] = useState<MinhaEmpresaRecord | null>(null)
   const [resetModalOpen, setResetModalOpen] = useState(false)
   const [resetEmail, setResetEmail] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
@@ -55,6 +59,28 @@ export default function Index() {
 
   const [submitting, setSubmitting] = useState(false)
   const [generalError, setGeneralError] = useState<string | null>(null)
+
+  useEffect(() => {
+    document.title = 'GESTÃO FINANCEIRA E ECONÔMICA'
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+    const carregarEmpresaPublica = async () => {
+      try {
+        const dados = await minhaEmpresaService.getPublico()
+        if (isMounted && dados) {
+          setEmpresaPublica(dados)
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados públicos da consultoria na tela de login:', err)
+      }
+    }
+    carregarEmpresaPublica()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
@@ -151,21 +177,41 @@ export default function Index() {
 
         <div className="relative z-10">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30">
+            <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 shrink-0">
               <Scale className="w-6 h-6" />
             </div>
-            <div>
-              <span className="text-xl font-bold tracking-tight text-white block">
-                Analise de Balanço
+            <div className="space-y-0.5">
+              <span className="text-xl font-bold tracking-tight text-white block leading-snug">
+                GESTÃO FINANCEIRA E ECONÔMICA
               </span>
-              <span className="text-xs uppercase tracking-wider text-blue-300 font-medium">
-                Consultoria Financeira
-              </span>
+              {/* Logo ou Nome da Empresa do Usuário logo abaixo do título */}
+              {empresaPublica?.logo ? (
+                <div className="pt-2 flex items-center gap-2">
+                  <img
+                    src={pb.files.getURL(empresaPublica, empresaPublica.logo)}
+                    alt={empresaPublica.nome_fantasia || empresaPublica.razao_social || 'Logo'}
+                    className="h-9 max-w-[170px] object-contain rounded bg-white/95 p-1 shadow-sm"
+                  />
+                  {(empresaPublica.nome_fantasia || empresaPublica.razao_social) && (
+                    <span className="text-xs font-semibold text-blue-200 tracking-wide uppercase">
+                      {empresaPublica.nome_fantasia || empresaPublica.razao_social}
+                    </span>
+                  )}
+                </div>
+              ) : empresaPublica?.nome_fantasia || empresaPublica?.razao_social ? (
+                <span className="text-xs font-semibold tracking-wider text-blue-300 block uppercase">
+                  {empresaPublica.nome_fantasia || empresaPublica.razao_social}
+                </span>
+              ) : (
+                <span className="text-xs uppercase tracking-wider text-blue-300 font-medium block">
+                  Consultoria Financeira
+                </span>
+              )}
             </div>
           </div>
 
-          <div className="mt-20 max-w-lg">
-            <h1 className="text-4xl font-extrabold text-white leading-tight tracking-tight">
+          <div className="mt-16 max-w-lg">
+            <h1 className="text-3xl lg:text-4xl font-extrabold text-white leading-tight tracking-tight">
               Análise financeira de precisão para tomada de decisões estratégicas.
             </h1>
             <p className="mt-4 text-blue-100/80 text-base leading-relaxed">
@@ -206,7 +252,12 @@ export default function Index() {
         </div>
 
         <div className="relative z-10 pt-6 text-xs text-blue-300/60 flex items-center justify-between border-t border-white/10">
-          <span>© {new Date().getFullYear()} Analise de Balanço</span>
+          <span>
+            © {new Date().getFullYear()}{' '}
+            {empresaPublica?.nome_fantasia ||
+              empresaPublica?.razao_social ||
+              'GESTÃO FINANCEIRA E ECONÔMICA'}
+          </span>
           <span className="flex items-center gap-1">
             <ShieldCheck className="w-4 h-4 text-emerald-400" /> Ambiente Corporativo Seguro
           </span>
@@ -216,19 +267,36 @@ export default function Index() {
       {/* Coluna Direita - Formulário de Login / Cadastro */}
       <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-10 bg-[#F5F7FA] text-slate-900 min-h-screen">
         <div className="w-full max-w-[440px]">
-          {/* Logo mobile */}
-          <div className="flex lg:hidden items-center justify-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md">
-              <Scale className="w-5 h-5" />
-            </div>
-            <div className="text-left">
-              <span className="text-lg font-bold text-slate-900 block leading-tight">
-                Analise de Balanço
-              </span>
-              <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold">
-                Consultoria Financeira
+          {/* Identificação Mobile */}
+          <div className="flex lg:hidden flex-col items-center justify-center gap-2 mb-6 text-center">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
+                <Scale className="w-5 h-5" />
+              </div>
+              <span className="text-base font-bold text-slate-900 tracking-tight leading-snug">
+                GESTÃO FINANCEIRA E ECONÔMICA
               </span>
             </div>
+
+            {/* Logo ou Nome da Empresa do Usuário logo abaixo do título */}
+            {empresaPublica?.logo ? (
+              <div className="pt-1 flex flex-col items-center gap-1">
+                <img
+                  src={pb.files.getURL(empresaPublica, empresaPublica.logo)}
+                  alt={empresaPublica.nome_fantasia || empresaPublica.razao_social || 'Logo'}
+                  className="h-9 max-w-[160px] object-contain rounded bg-white p-1 border border-slate-200 shadow-xs"
+                />
+                {(empresaPublica.nome_fantasia || empresaPublica.razao_social) && (
+                  <span className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold">
+                    {empresaPublica.nome_fantasia || empresaPublica.razao_social}
+                  </span>
+                )}
+              </div>
+            ) : empresaPublica?.nome_fantasia || empresaPublica?.razao_social ? (
+              <span className="text-xs uppercase tracking-wider text-slate-600 font-semibold">
+                {empresaPublica.nome_fantasia || empresaPublica.razao_social}
+              </span>
+            ) : null}
           </div>
 
           {/* Card Principal */}
@@ -465,7 +533,10 @@ export default function Index() {
           </div>
 
           <p className="text-center text-xs text-slate-500 mt-6">
-            Analise de Balanço · Consultoria Financeira &copy; {new Date().getFullYear()}
+            GESTÃO FINANCEIRA E ECONÔMICA &copy; {new Date().getFullYear()}
+            {empresaPublica?.nome_fantasia || empresaPublica?.razao_social
+              ? ` · ${empresaPublica.nome_fantasia || empresaPublica.razao_social}`
+              : ''}
           </p>
         </div>
       </div>
