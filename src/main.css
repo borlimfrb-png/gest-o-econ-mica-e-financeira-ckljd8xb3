@@ -294,3 +294,175 @@
     animation: spotlight 2s ease forwards;
   }
 }
+
+/* =========================================================================
+   REGRAS GLOBAIS DE IMPRESSÃO / GERAÇÃO DE PDF COMPLETO (A4)
+   Garante que relatórios exibidos em tela ou em modais Radix/Dialog saiam
+   completos, sem cortes de overflow/viewport e sem elementos de navegação.
+   ========================================================================= */
+
+@page {
+  size: A4 portrait;
+  margin: 10mm 12mm 12mm 12mm;
+}
+
+@media print {
+  /* 1. Ajuste geral de página e tipografia */
+  html,
+  body {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-size: 11pt;
+  }
+
+  /* 2. Forçar preservação de cores, fundos gráficos (Recharts / Badges) e remover sombras pesadas */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* 3. Ocultar elementos da casca da aplicação que não fazem parte do documento */
+  #root > div > header,
+  #root > div > footer,
+  nav,
+  aside,
+  button,
+  .no-print,
+  .print\:hidden,
+  [data-radix-dialog-overlay],
+  [data-radix-portal] > div[style*='position: fixed']:not([role='dialog']),
+  [data-sonner-toaster],
+  [data-sonner-toast],
+  section[aria-label='Notifications alt+T'],
+  div[role='region'][aria-label*='Notifications'] {
+    display: none !important;
+  }
+
+  /* 4. Quando houver diálogo aberto, ocultar o #root inteiro para imprimir APENAS o modal */
+  body:has([role='dialog'][data-state='open']) #root,
+  body:has([data-radix-dialog-content]) #root {
+    display: none !important;
+  }
+
+  /* 5. Desarmar a caixa do Dialog Radix/shadcn (que por padrão é fixed na viewport com overflow interno) */
+  [role='dialog'],
+  [data-radix-dialog-content],
+  [data-state='open'] > [role='dialog'],
+  div[role='dialog'] {
+    position: static !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Desarmar containers pais que envolvem o documento A4 dentro do modal */
+  [role='dialog'] > div,
+  [data-radix-dialog-content] > div {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* 6. Documentos de Relatório A4 fluindo por múltiplas páginas */
+  [id$='-document'],
+  [id$='-a4'],
+  #relatorio-a4-apresentacao,
+  #relatorio-contas-centros-a4,
+  #relatorio-sem-codigo-a4,
+  #relatorio-consolidado-grupo-document,
+  #dashboard-executivo-document,
+  #laudo-bsc-document,
+  #relatorio-benchmarks-document,
+  #capacidade-producao-document,
+  #diagnostico-a4-document,
+  #ficha-tecnica-document,
+  #relatorio-tributario-document,
+  #relatorio-materia-prima-document,
+  #relatorio-conferencia-despesas-document,
+  #relatorio-notas-periodo-document,
+  #relatorio-notas-por-tomador-document,
+  #laudo-valuation-document,
+  #parecer-executivo-document,
+  [ref='printContainerRef'],
+  .a4-document-container {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+
+  /* 7. Paginação e quebra de páginas harmoniosa */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  tfoot {
+    display: table-footer-group !important;
+  }
+
+  tr,
+  th,
+  td {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  section,
+  article,
+  figure,
+  .break-inside-avoid,
+  .print-break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Garantir que blocos de parecer técnico e assinaturas não sejam divididos entre páginas */
+  .border-t.border-slate-400,
+  .border-t.border-slate-700,
+  [class*='assinatura'],
+  footer:not(body > footer) {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Ocultar scrollbars na impressão */
+  ::-webkit-scrollbar {
+    display: none !important;
+  }
+}
