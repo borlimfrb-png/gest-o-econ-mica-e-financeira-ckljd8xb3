@@ -57,6 +57,7 @@ import {
   PieChart as PieChartIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { GraficoContribuicaoProdutos } from '@/components/GraficoContribuicaoProdutos'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -3003,11 +3004,17 @@ export default function SimuladorPrecos() {
               {/* NOTA DE RODAPÉ DO LAUDO */}
               <div className="pt-4 border-t text-[10px] text-slate-500 flex justify-between items-center">
                 <span>
-                  Relatório gerado automaticamente pelo Sistema de Formação de Preço & Gestão
+                  Relatório gerado automaticamente pelo Sistema de Formação de Preço &amp; Gestão
                   Econômica.
                 </span>
-                <span>Página 1 de 1</span>
+                <span className="font-semibold text-slate-700">Documento Formal A4</span>
               </div>
+
+              {/* Rodapé fixo formal na impressão */}
+              <DocumentPrintFooter
+                documentTitle="Laudo de Simulação de Formação de Preço & Mark-Up"
+                empresaNome={selectedEmpresa?.nome}
+              />
             </div>
 
             <DialogFooter className="pt-3 border-t">

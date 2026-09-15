@@ -47,6 +47,7 @@ import {
   formatCurrency,
   formatPercent,
 } from '@/lib/financeCalculations'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import {
   BENCHMARKS_SETORIAIS,
   type BenchmarkSetorValores,
@@ -991,6 +992,13 @@ export function ModalPdfBenchmarksA4({
                 Documento gerado em {dataEmissao} via Módulo de Benchmarks &amp; Metas Setoriais
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Laudo de Benchmarks & Metas Setoriais"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

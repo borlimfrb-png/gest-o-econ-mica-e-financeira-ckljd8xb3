@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Printer, X, Building, Calendar, Info } from 'lucide-react'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import {
   CATALOGO_INDICADORES,
@@ -322,6 +323,13 @@ export function ModalPdfApresentacaoIndicadores({
             </div>
             <div>Página Oficial de Apresentação de Indicadores</div>
           </div>
+
+          {/* Rodapé fixo formal na impressão */}
+          <DocumentPrintFooter
+            documentTitle="Guia Metodológico & Apresentação de Indicadores Financeiros"
+            empresaNome={empresaNome}
+            exercicioAno={ano}
+          />
         </div>
       </DialogContent>
     </Dialog>

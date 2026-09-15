@@ -28,6 +28,7 @@ import {
   Calendar,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import type { EmpresaRecord } from '@/types/finance'
 import type {
@@ -766,6 +767,13 @@ export function ModalPdfImpostos({
                 </div>
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle={tituloDocumento}
+              empresaNome={empresa?.razao_social || empresa?.nome}
+              exercicioAno={anoBase}
+            />
           </div>
         </div>
       </DialogContent>

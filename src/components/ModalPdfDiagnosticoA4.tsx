@@ -30,6 +30,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type { EmpresaRecord, MinhaEmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import {
   formatCurrency,
@@ -491,6 +492,13 @@ export function ModalPdfDiagnosticoA4({
                 </p>
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle={tituloDiagnostico || 'Diagnóstico 360° & Parecer de Controladoria'}
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

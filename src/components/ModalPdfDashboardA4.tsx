@@ -36,6 +36,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type { EmpresaRecord, MinhaEmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import type { GrupoRadarItem, BenchmarkSetorValores } from '@/lib/benchmarks'
 import {
@@ -1298,6 +1299,13 @@ export function ModalPdfDashboardA4({
                 </p>
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Dashboard Executivo de Indicadores Econômico-Financeiros"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

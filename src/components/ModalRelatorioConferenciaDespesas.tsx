@@ -25,6 +25,7 @@ import {
   History,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import type { EmpresaRecord } from '@/types/finance'
 import type { DespesaExtraidaItem, DespesaGrupoResumo } from '@/lib/despesasParser'
@@ -615,6 +616,12 @@ export function ModalRelatorioConferenciaDespesas({
                 ECONÔMICA E FINANCEIRA
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório de Conferência da Importação de Despesas (IA)"
+              empresaNome={empresa?.razao_social || empresa?.nome}
+            />
           </div>
         </div>
       </DialogContent>

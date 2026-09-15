@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCnpj } from '@/lib/financeCalculations'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type {
   EmpresaRecord,
   MinhaEmpresaRecord,
@@ -1058,6 +1059,13 @@ export function ModalRelatorioContasCentrosA4({
                 </div>
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório de Conferência de Contas × Centros de Custo"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

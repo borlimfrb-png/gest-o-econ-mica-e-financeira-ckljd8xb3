@@ -18,6 +18,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
@@ -528,7 +529,7 @@ export default function RelatorioAnual() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div id="relatorio-anual-document" className="space-y-6">
           {/* Banner de Identificação */}
           <div className="bg-white border border-slate-200/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
@@ -1086,6 +1087,12 @@ export default function RelatorioAnual() {
               </div>
             </CardContent>
           </Card>{' '}
+          {/* Rodapé fixo formal na impressão */}
+          <DocumentPrintFooter
+            documentTitle="Relatório Consolidado Anual de Lançamentos"
+            empresaNome={selectedEmpresa?.nome}
+            exercicioAno={selectedAno}
+          />
         </div>
       )}
     </div>

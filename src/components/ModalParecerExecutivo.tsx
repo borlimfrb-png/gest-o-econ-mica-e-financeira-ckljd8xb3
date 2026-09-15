@@ -27,6 +27,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type { EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
 import type { AnaliseTributariaResultado } from '@/lib/taxCalculations'
 import { formatCurrency, formatPercent, formatCnpj } from '@/lib/financeCalculations'
@@ -702,6 +703,13 @@ export function ModalParecerExecutivo({
                 Planejamento Tributário
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Parecer Executivo de Planejamento Tributário"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

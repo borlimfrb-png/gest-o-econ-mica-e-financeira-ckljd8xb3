@@ -20,6 +20,7 @@ import {
   CheckCircle,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { ProdutoRecord } from '@/types/finance'
@@ -776,6 +777,13 @@ export function ModalPdfCapacidadeA4({ open, onOpenChange, produtos }: ModalPdfC
                 </div>
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório de Utilização da Capacidade de Produção & Eficiência Fabril"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

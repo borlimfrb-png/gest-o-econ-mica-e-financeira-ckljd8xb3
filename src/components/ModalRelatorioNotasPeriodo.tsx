@@ -39,6 +39,7 @@ import {
 import type { NotaFiscalRecord, EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
 import { formatCnpj, cleanCnpj } from '@/lib/financeCalculations'
 import { formatBrlMoeda } from '@/lib/nfseXmlGenerator'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 
 export interface ModalRelatorioNotasPeriodoProps {
   open: boolean
@@ -862,6 +863,16 @@ export function ModalRelatorioNotasPeriodo({
                 Documento auxiliar para conferência de faturamento e controle de retenções de NFS-e.
               </p>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório Analítico de Notas Fiscais de Serviço (NFS-e)"
+              empresaNome={
+                filtroEmpresa !== 'todas'
+                  ? empresaMap.get(filtroEmpresa)?.nome
+                  : 'Todas as Empresas'
+              }
+            />
           </div>
         </div>
       </DialogContent>

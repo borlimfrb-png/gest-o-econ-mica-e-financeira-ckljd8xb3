@@ -42,6 +42,7 @@ import type {
 } from '@/types/finance'
 import { formatCnpj, cleanCnpj } from '@/lib/financeCalculations'
 import { formatBrlMoeda } from '@/lib/nfseXmlGenerator'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 
 export interface ModalRelatorioNotasPorTomadorProps {
   open: boolean
@@ -1255,6 +1256,17 @@ export function ModalRelatorioNotasPorTomador({
                 </div>
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório de Notas Fiscais por Tomador & Curva de Concentração"
+              empresaNome={
+                filtroEmpresa !== 'todas'
+                  ? empresaMap.get(filtroEmpresa)?.nome
+                  : 'Todas as Empresas'
+              }
+              exercicioAno={anoBase}
+            />
           </div>
         </div>
       </DialogContent>

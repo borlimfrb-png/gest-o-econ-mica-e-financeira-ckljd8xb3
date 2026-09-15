@@ -22,6 +22,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type {
   MateriaPrimaRecord,
   MinhaEmpresaRecord,
@@ -887,6 +888,12 @@ export function ModalPdfMateriaPrima({
                 </div>
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório de Custos por Matéria-Prima & Valorização de Estoque"
+              empresaNome={selectedEmpresa?.nome}
+            />
           </div>
         </div>
       </DialogContent>

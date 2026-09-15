@@ -24,6 +24,7 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type { EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
 import { formatCurrency, formatPercent, formatCnpj, formatNumber } from '@/lib/financeCalculations'
 
@@ -739,6 +740,13 @@ export function ModalLaudoValuation({
                 Corporativas
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Laudo Técnico de Valuation (FCD & Goodwill)"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

@@ -22,6 +22,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useFilter } from '@/contexts/FilterContext'
 import type { FichaTecnicaRecord, ProdutoRecord, MateriaPrimaRecord } from '@/types/finance'
@@ -1122,6 +1123,13 @@ export function ModalPdfFichaTecnica({
                 </div>
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle={`Ficha Técnica & Composição de Preço: ${produto?.nome || 'Produto'}`}
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

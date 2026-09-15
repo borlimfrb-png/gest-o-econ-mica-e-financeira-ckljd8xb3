@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { formatCnpj } from '@/lib/financeCalculations'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type {
   PlanoContaRecord,
   EmpresaRecord,
@@ -561,6 +562,13 @@ export function ModalRelatorioContasSemCodigoA4({
                 </div>
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Relatório de Contas Sem Código da Empresa"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

@@ -34,6 +34,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { useToast } from '@/hooks/use-toast'
 import type {
   GrupoEmpresarialRecord,
@@ -1423,6 +1424,13 @@ export function ModalRelatorioConsolidadoGrupoA4({
                 Documento gerado em {dataEmissao} via Sistema de Gestão Econômica e Financeira
               </div>
             </footer>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle={`Relatório Consolidado do Grupo: ${grupo?.nome || 'Grupo Empresarial'}`}
+              empresaNome={grupo?.nome || 'Grupo Econômico'}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>

@@ -38,6 +38,7 @@ import type {
   BscIniciativaRecord,
 } from '@/types/finance'
 import { formatCnpj } from '@/lib/financeCalculations'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 
 export interface ResumoPerspectivaPdf {
   perspectiva: BscPerspectiva
@@ -804,6 +805,13 @@ export function ModalPdfBscA4({
                 </p>
               </div>
             </section>
+
+            {/* Rodapé fixo formal na impressão */}
+            <DocumentPrintFooter
+              documentTitle="Laudo de Balanced Scorecard (BSC)"
+              empresaNome={selectedEmpresa?.nome}
+              exercicioAno={selectedAno}
+            />
           </div>
         </div>
       </DialogContent>
