@@ -58,6 +58,7 @@ import {
   PlusCircle,
   ArrowRight,
   Mail,
+  CreditCard,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
@@ -77,7 +78,7 @@ export const CLAUSULAS_PADRAO: ClausulasContrato = {
   prazo:
     'O presente contrato vigorará pelo prazo total de {MESES} ({MESES} meses), com início em {DATA_INICIO} e término previsto para {DATA_FINAL}.\n\nFica estipulado um prazo inicial de carência/implantação de {PRAZO_INICIAL} {PRAZO_INICIAL_LABEL} para estruturação e parametrização dos relatórios contábeis e financeiros.',
   valor:
-    'Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA a quantia mensal de {VALOR_PARCELA}, totalizando o valor global de {VALOR_TOTAL} ao longo da vigência contratual de {MESES} parcelas.\n\nAs parcelas vencerão impreterivelmente no dia {DIA_VENCIMENTO} de cada mês subsequente, mediante emissão de boleto bancário, transferência ou chave PIX informada pela CONTRATADA.',
+    'Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor mensal de {VALOR_PARCELA}, totalizando o valor global de {VALOR_TOTAL} ao longo da vigência contratual de {MESES} meses.\n\n{CONDICOES_PAGAMENTO_DETALHADAS}\n\nOs pagamentos serão efetuados mediante as formas acordadas (Pix, Boleto Bancário, Transferência ou Cartão) conforme dados bancários informados pela CONTRATADA.',
   reajuste:
     'O valor estipulado na Cláusula Terceira será reajustado anualmente a cada 12 (doze) meses de vigência, aplicando-se a variação positiva acumulada do IGP-M/FGV (Índice Geral de Preços do Mercado) ou, na sua ausência ou extinção, pelo IPCA/IBGE acumulado no período.',
   obrigacoes:
@@ -243,6 +244,17 @@ export default function Contratos() {
   const [enviarLembretesContrato, setEnviarLembretesContrato] = useState<boolean>(true)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
+  // DUAS FORMAS DE PAGAMENTO COM VALORES E VENCIMENTOS
+  const [formaPagamento1, setFormaPagamento1] = useState<string>('Pix')
+  const [valor1Input, setValor1Input] = useState<string>('')
+  const [vencimento1, setVencimento1] = useState<string>('')
+
+  const [habilitarForma2, setHabilitarForma2] = useState<boolean>(false)
+  const [formaPagamento2, setFormaPagamento2] = useState<string>('Boleto Bancário')
+  const [valor2Input, setValor2Input] = useState<string>('')
+  const [vencimento2, setVencimento2] = useState<string>('')
+  const [observacoesPagamento, setObservacoesPagamento] = useState<string>('')
+
   // Cláusulas personalizadas (em memória da sessão)
   const [clausulas, setClausulas] = useState<ClausulasContrato>({ ...CLAUSULAS_PADRAO })
   const [modalClausulasOpen, setModalClausulasOpen] = useState(false)
@@ -279,6 +291,14 @@ export default function Contratos() {
     valor_parcela: number
     dia_vencimento: number
     data_final: string
+    // Condições de pagamento detalhadas
+    forma_pagamento_1: string
+    valor_1: number
+    vencimento_1?: string
+    forma_pagamento_2?: string
+    valor_2?: number
+    vencimento_2?: string
+    observacoes_pagamento?: string
     clausulasPersonalizadas?: ClausulasContrato
     parcelas: ParcelaPreview[]
   } | null>(null)
@@ -453,6 +473,37 @@ export default function Contratos() {
     }
   }
 
+  const handleValor1Change = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const parsed = parseValorMonetario(raw)
+    setValor1Input(parsed > 0 ? formatarInputMoeda(parsed) : '')
+  }
+
+  const handleValor2Change = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value
+    const parsed = parseValorMonetario(raw)
+    setValor2Input(parsed > 0 ? formatarInputMoeda(parsed) : '')
+  }
+
+  // Cálculos de comparação de valores das formas de pagamento
+  const valorTotalMensal = useMemo(() => parseValorMonetario(valorInput), [valorInput])
+  const valorTotalGlobal = useMemo(
+    () => valorTotalMensal * (Number(quantidadeMeses) || 1),
+    [valorTotalMensal, quantidadeMeses],
+  )
+  const val1Num = useMemo(() => parseValorMonetario(valor1Input), [valor1Input])
+  const val2Num = useMemo(
+    () => (habilitarForma2 ? parseValorMonetario(valor2Input) : 0),
+    [habilitarForma2, valor2Input],
+  )
+  const somaFormasPagamento = useMemo(() => val1Num + val2Num, [val1Num, val2Num])
+
+  // Diferença entre soma das formas de pagamento e valor total
+  const diferencaFormasVsTotal = useMemo(() => {
+    if (somaFormasPagamento <= 0) return 0
+    return Math.abs(somaFormasPagamento - valorTotalGlobal)
+  }, [somaFormasPagamento, valorTotalGlobal])
+
   // Validação do formulário
   const validateForm = (): boolean => {
     const errs: Record<string, string> = {}
@@ -522,6 +573,14 @@ export default function Contratos() {
         lembrete_agendado: enviarLembretesContrato,
       }))
 
+    const finalVal1 = val1Num > 0 ? val1Num : valorNumerico
+    const finalVenc1 = vencimento1 || dataInicio
+    const finalForma1 = formaPagamento1 || 'Pix'
+
+    const finalForma2 = habilitarForma2 && val2Num > 0 ? formaPagamento2 : ''
+    const finalVal2 = habilitarForma2 && val2Num > 0 ? val2Num : 0
+    const finalVenc2 = habilitarForma2 && val2Num > 0 ? vencimento2 || dataFimCalculada : ''
+
     setContratoGerado({
       contratada: {
         razao_social: minhaEmpresa.razao_social,
@@ -548,6 +607,13 @@ export default function Contratos() {
       valor_parcela: valorNumerico,
       dia_vencimento: Number(diaVencimento),
       data_final: dataFimCalculada,
+      forma_pagamento_1: finalForma1,
+      valor_1: finalVal1,
+      vencimento_1: finalVenc1,
+      forma_pagamento_2: finalForma2,
+      valor_2: finalVal2,
+      vencimento_2: finalVenc2,
+      observacoes_pagamento: observacoesPagamento,
       clausulasPersonalizadas: { ...clausulas },
       parcelas: parcelasPreview,
     })
@@ -587,6 +653,13 @@ export default function Contratos() {
         dia_vencimento: contratoGerado.dia_vencimento,
         data_final: contratoGerado.data_final,
         parcelas: contratoGerado.parcelas.length,
+        forma_pagamento_1: contratoGerado.forma_pagamento_1,
+        valor_1: contratoGerado.valor_1,
+        vencimento_1: contratoGerado.vencimento_1,
+        forma_pagamento_2: contratoGerado.forma_pagamento_2,
+        valor_2: contratoGerado.valor_2,
+        vencimento_2: contratoGerado.vencimento_2,
+        observacoes_pagamento: contratoGerado.observacoes_pagamento,
       })
 
       setContratoSalvoId(record.id)
@@ -594,7 +667,7 @@ export default function Contratos() {
 
       toast({
         title: 'Contrato salvo com sucesso!',
-        description: `O contrato com ${contratoGerado.contratante.razao_social} foi registrado no histórico.`,
+        description: `O contrato com ${contratoGerado.contratante.razao_social} foi registrado com as condições de pagamento.`,
       })
     } catch (err: any) {
       console.error('Erro ao salvar contrato:', err)
@@ -707,6 +780,18 @@ export default function Contratos() {
     setValorInput(formatarInputMoeda(valorNum))
     setDiaVencimento(c.dia_vencimento)
 
+    // Formas de pagamento salvas
+    setFormaPagamento1(c.forma_pagamento_1 || 'Pix')
+    setValor1Input(c.valor_1 ? formatarInputMoeda(c.valor_1) : formatarInputMoeda(valorNum))
+    setVencimento1(c.vencimento_1 ? c.vencimento_1.slice(0, 10) : dataInicioStr)
+
+    const temForma2 = Boolean(c.forma_pagamento_2 || (c.valor_2 && c.valor_2 > 0))
+    setHabilitarForma2(temForma2)
+    setFormaPagamento2(c.forma_pagamento_2 || 'Boleto Bancário')
+    setValor2Input(c.valor_2 ? formatarInputMoeda(c.valor_2) : '')
+    setVencimento2(c.vencimento_2 ? c.vencimento_2.slice(0, 10) : '')
+    setObservacoesPagamento(c.observacoes_pagamento || '')
+
     setContratoGerado({
       contratada: {
         razao_social: c.contratada_razao_social,
@@ -733,6 +818,13 @@ export default function Contratos() {
       valor_parcela: valorNum,
       dia_vencimento: c.dia_vencimento,
       data_final: dataFimCalculada,
+      forma_pagamento_1: c.forma_pagamento_1 || 'Pix',
+      valor_1: c.valor_1 || valorNum,
+      vencimento_1: c.vencimento_1 ? c.vencimento_1.slice(0, 10) : dataInicioStr,
+      forma_pagamento_2: c.forma_pagamento_2 || '',
+      valor_2: c.valor_2 || 0,
+      vencimento_2: c.vencimento_2 ? c.vencimento_2.slice(0, 10) : '',
+      observacoes_pagamento: c.observacoes_pagamento || '',
       clausulasPersonalizadas: { ...clausulas },
       parcelas: parcelasPreview,
     })
@@ -743,7 +835,7 @@ export default function Contratos() {
 
     toast({
       title: 'Contrato carregado',
-      description: `Contrato de ${contratanteObj?.nome || 'Empresa'} carregado na pré-visualização.`,
+      description: `Contrato de ${contratanteObj?.nome || 'Empresa'} carregado com as formas de pagamento.`,
     })
   }
 
@@ -812,6 +904,15 @@ export default function Contratos() {
         ? `${dados.contratada.cidade || dados.contratante.cidade || 'São Paulo'}/${dados.contratada.estado || dados.contratante.estado || 'SP'}`
         : 'São Paulo/SP'
 
+    // Monta texto detalhado das condições de pagamento
+    let condicoesTexto = `Condição de Pagamento 1: ${dados.forma_pagamento_1 || 'Pix'}, no valor de ${formatarMoeda(dados.valor_1)} com vencimento em ${formatarDataBr(dados.vencimento_1 || dados.data_inicio)}.`
+    if (dados.forma_pagamento_2 && dados.valor_2 && dados.valor_2 > 0) {
+      condicoesTexto += `\nCondição de Pagamento 2: ${dados.forma_pagamento_2}, no valor de ${formatarMoeda(dados.valor_2)} com vencimento em ${formatarDataBr(dados.vencimento_2 || dados.data_final)}.`
+    }
+    if (dados.observacoes_pagamento) {
+      condicoesTexto += `\nObservações: ${dados.observacoes_pagamento}`
+    }
+
     return template
       .replace(/{MESES}/g, String(dados.quantidade_meses))
       .replace(/{DATA_INICIO}/g, formatarDataBr(dados.data_inicio))
@@ -821,6 +922,7 @@ export default function Contratos() {
       .replace(/{VALOR_PARCELA}/g, formatarMoeda(dados.valor_parcela))
       .replace(/{VALOR_TOTAL}/g, formatarMoeda(totalGeralCalculado))
       .replace(/{DIA_VENCIMENTO}/g, String(dados.dia_vencimento))
+      .replace(/{CONDICOES_PAGAMENTO_DETALHADAS}/g, condicoesTexto)
       .replace(/{CIDADE_ESTADO}/g, cidadeEstado)
   }
 
@@ -1253,14 +1355,14 @@ export default function Contratos() {
 
                     {/* 5. Valor da Parcela (R$) e Dia de Vencimento */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Valor da Parcela */}
+                      {/* Valor da Parcela Mensal */}
                       <div className="space-y-1.5">
                         <Label
                           htmlFor="contrato-valor"
                           className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
                         >
                           <DollarSign className="w-3.5 h-3.5 text-blue-600" />
-                          Valor da Parcela (R$) *
+                          Valor Mensal / Base (R$) *
                         </Label>
                         <div className="relative">
                           <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -1285,7 +1387,7 @@ export default function Contratos() {
                           className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
                         >
                           <Clock className="w-3.5 h-3.5 text-blue-600" />
-                          Dia de Vencimento *
+                          Dia de Vencimento Mensal *
                         </Label>
                         <Select
                           value={String(diaVencimento)}
@@ -1315,6 +1417,235 @@ export default function Contratos() {
                             {formErrors.diaVencimento}
                           </p>
                         )}
+                      </div>
+                    </div>
+
+                    {/* SEÇÃO DUAS FORMAS DE PAGAMENTO COM VALORES E VENCIMENTOS */}
+                    <div className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-4 h-4 text-blue-600" />
+                          <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide">
+                            Condições e Formas de Pagamento
+                          </span>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] font-semibold text-blue-700 bg-blue-50 border-blue-200"
+                        >
+                          Até 2 formas
+                        </Badge>
+                      </div>
+
+                      {/* FORMA DE PAGAMENTO 1 (Obrigatória/Principal) */}
+                      <div className="space-y-2 p-2.5 bg-white rounded-lg border border-slate-200/80 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">
+                              1
+                            </span>
+                            Forma de Pagamento 1 (Entrada / Parcela 1)
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          {/* Tipo / Meio */}
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-semibold text-slate-600">
+                              Forma / Meio
+                            </Label>
+                            <Select value={formaPagamento1} onValueChange={setFormaPagamento1}>
+                              <SelectTrigger className="h-8 text-xs bg-white">
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Pix" className="text-xs">
+                                  Pix
+                                </SelectItem>
+                                <SelectItem value="Boleto Bancário" className="text-xs">
+                                  Boleto Bancário
+                                </SelectItem>
+                                <SelectItem value="Transferência Bancária" className="text-xs">
+                                  Transferência (TED/DOC)
+                                </SelectItem>
+                                <SelectItem value="Cartão de Crédito" className="text-xs">
+                                  Cartão de Crédito
+                                </SelectItem>
+                                <SelectItem value="Dinheiro / Cheque" className="text-xs">
+                                  Dinheiro / Cheque
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          {/* Valor da Forma 1 */}
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-semibold text-slate-600">
+                              Valor (R$)
+                            </Label>
+                            <Input
+                              type="text"
+                              placeholder="R$ 0,00"
+                              value={valor1Input}
+                              onChange={handleValor1Change}
+                              className="h-8 text-xs font-mono font-bold"
+                            />
+                          </div>
+
+                          {/* Vencimento da Forma 1 */}
+                          <div className="space-y-1">
+                            <Label className="text-[10px] font-semibold text-slate-600">
+                              Vencimento
+                            </Label>
+                            <Input
+                              type="date"
+                              value={vencimento1}
+                              onChange={(e) => setVencimento1(e.target.value)}
+                              className="h-8 text-xs bg-white"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* TOGGLE / ADICIONAR SEGUNDA FORMA DE PAGAMENTO */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label
+                            htmlFor="habilitar-forma-2"
+                            className="text-xs font-semibold text-slate-700 flex items-center gap-2 cursor-pointer"
+                          >
+                            <input
+                              id="habilitar-forma-2"
+                              type="checkbox"
+                              checked={habilitarForma2}
+                              onChange={(e) => {
+                                const checked = e.target.checked
+                                setHabilitarForma2(checked)
+                                if (checked && !formaPagamento2) {
+                                  setFormaPagamento2('Boleto Bancário')
+                                }
+                              }}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                            />
+                            <span>
+                              Habilitar 2ª forma de pagamento (ex.: Entrada + Restante ou 2
+                              parcelas)
+                            </span>
+                          </label>
+                        </div>
+
+                        {habilitarForma2 && (
+                          <div className="space-y-2 p-2.5 bg-white rounded-lg border border-blue-200 shadow-2xs animate-in fade-in duration-150">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                                <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">
+                                  2
+                                </span>
+                                Forma de Pagamento 2 (Saldo / Parcela 2)
+                              </span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setHabilitarForma2(false)}
+                                className="h-6 text-[10px] text-slate-400 hover:text-red-600 px-1.5"
+                              >
+                                Remover 2ª forma
+                              </Button>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                              {/* Tipo / Meio */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-semibold text-slate-600">
+                                  Forma / Meio
+                                </Label>
+                                <Select value={formaPagamento2} onValueChange={setFormaPagamento2}>
+                                  <SelectTrigger className="h-8 text-xs bg-white">
+                                    <SelectValue placeholder="Selecione" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Pix" className="text-xs">
+                                      Pix
+                                    </SelectItem>
+                                    <SelectItem value="Boleto Bancário" className="text-xs">
+                                      Boleto Bancário
+                                    </SelectItem>
+                                    <SelectItem value="Transferência Bancária" className="text-xs">
+                                      Transferência (TED/DOC)
+                                    </SelectItem>
+                                    <SelectItem value="Cartão de Crédito" className="text-xs">
+                                      Cartão de Crédito
+                                    </SelectItem>
+                                    <SelectItem value="Dinheiro / Cheque" className="text-xs">
+                                      Dinheiro / Cheque
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              {/* Valor da Forma 2 */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-semibold text-slate-600">
+                                  Valor (R$)
+                                </Label>
+                                <Input
+                                  type="text"
+                                  placeholder="R$ 0,00"
+                                  value={valor2Input}
+                                  onChange={handleValor2Change}
+                                  className="h-8 text-xs font-mono font-bold"
+                                />
+                              </div>
+
+                              {/* Vencimento da Forma 2 */}
+                              <div className="space-y-1">
+                                <Label className="text-[10px] font-semibold text-slate-600">
+                                  Vencimento
+                                </Label>
+                                <Input
+                                  type="date"
+                                  value={vencimento2}
+                                  onChange={(e) => setVencimento2(e.target.value)}
+                                  className="h-8 text-xs bg-white"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* AVISO SUAVE SE A SOMA DAS FORMAS NÃO BATER COM O VALOR TOTAL */}
+                      {somaFormasPagamento > 0 && diferencaFormasVsTotal > 0.05 && (
+                        <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-semibold leading-tight">
+                              Aviso sobre valores: soma das formas (
+                              {formatarMoeda(somaFormasPagamento)}) difere do total global (
+                              {formatarMoeda(valorTotalGlobal)}).
+                            </p>
+                            <p className="text-[10px] text-amber-700 mt-0.5">
+                              Diferença de {formatarMoeda(diferencaFormasVsTotal)}. Verifique se as
+                              formas correspondem a parcelas mensais, sinal/entrada ou ao montante
+                              total.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Observações adicionais de pagamento */}
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-semibold text-slate-600">
+                          Instruções / Observações de Pagamento (opcional)
+                        </Label>
+                        <Input
+                          type="text"
+                          placeholder="Ex.: Entrada de 50% via Pix no ato e restante em boleto em 30 dias..."
+                          value={observacoesPagamento}
+                          onChange={(e) => setObservacoesPagamento(e.target.value)}
+                          className="h-8 text-xs bg-white"
+                        />
                       </div>
                     </div>
 
@@ -1652,8 +1983,77 @@ export default function Contratos() {
                     </div>
                   </div>
 
+                  {/* Resumo das Condições de Pagamento Pactuadas */}
+                  <div className="pt-6 border-t border-slate-200 font-sans space-y-3">
+                    <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-blue-600" />
+                      Condições e Meios de Pagamento Pactuados
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">
+                              1
+                            </span>
+                            Forma 1: {contratoGerado.forma_pagamento_1 || 'Pix'}
+                          </span>
+                          <span className="font-mono font-bold text-blue-800 text-xs">
+                            {formatarMoeda(contratoGerado.valor_1)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600">
+                          Vencimento:{' '}
+                          <strong className="text-slate-800">
+                            {formatarDataBr(
+                              contratoGerado.vencimento_1 || contratoGerado.data_inicio,
+                            )}
+                          </strong>
+                        </p>
+                      </div>
+
+                      {contratoGerado.forma_pagamento_2 &&
+                      contratoGerado.valor_2 &&
+                      contratoGerado.valor_2 > 0 ? (
+                        <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-900 flex items-center gap-1.5">
+                              <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">
+                                2
+                              </span>
+                              Forma 2: {contratoGerado.forma_pagamento_2}
+                            </span>
+                            <span className="font-mono font-bold text-emerald-800 text-xs">
+                              {formatarMoeda(contratoGerado.valor_2)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">
+                            Vencimento:{' '}
+                            <strong className="text-slate-800">
+                              {formatarDataBr(
+                                contratoGerado.vencimento_2 || contratoGerado.data_final,
+                              )}
+                            </strong>
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="p-3 bg-slate-50/50 rounded-lg border border-dashed border-slate-200 flex items-center text-slate-400 text-xs">
+                          Pagamento em condição única regular.
+                        </div>
+                      )}
+                    </div>
+
+                    {contratoGerado.observacoes_pagamento && (
+                      <div className="p-2.5 bg-blue-50/50 rounded-lg border border-blue-100 text-xs text-slate-700">
+                        <strong>Observações de Pagamento:</strong>{' '}
+                        {contratoGerado.observacoes_pagamento}
+                      </div>
+                    )}
+                  </div>
+
                   {/* 4. Cronograma de Parcelas */}
-                  <div className="pt-8 border-t border-slate-200 font-sans space-y-3">
+                  <div className="pt-6 border-t border-slate-200 font-sans space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-xs sm:text-sm text-slate-900 uppercase flex items-center gap-2">
                         <CalendarIcon className="w-4 h-4 text-blue-600" />
@@ -1885,6 +2285,7 @@ export default function Contratos() {
                         <th className="py-3 px-3">Contratante</th>
                         <th className="py-3 px-3">Data Início</th>
                         <th className="py-3 px-3">Data Final</th>
+                        <th className="py-3 px-3">Formas de Pagamento</th>
                         <th className="py-3 px-3 text-right">Valor Parcela</th>
                         <th className="py-3 px-3 text-center">Total Parcelas</th>
                         <th className="py-3 px-3 text-right">Total Contrato</th>
@@ -1931,7 +2332,49 @@ export default function Contratos() {
                               </div>
                             </td>
 
-                            {/* Valor Parcela */}
+                            {/* Condições e Formas de Pagamento (Forma 1 e Forma 2) */}
+                            <td className="py-3 px-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5">
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-800 border-blue-200"
+                                  >
+                                    1: {c.forma_pagamento_1 || 'Pix'}
+                                  </Badge>
+                                  {c.valor_1 ? (
+                                    <span className="font-mono text-[11px] font-semibold text-slate-800">
+                                      {formatarMoeda(c.valor_1)}
+                                    </span>
+                                  ) : null}
+                                  {c.vencimento_1 && (
+                                    <span className="text-[10px] text-slate-500">
+                                      ({formatarDataBr(c.vencimento_1)})
+                                    </span>
+                                  )}
+                                </div>
+                                {c.forma_pagamento_2 && c.valor_2 && c.valor_2 > 0 ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    >
+                                      2: {c.forma_pagamento_2}
+                                    </Badge>
+                                    <span className="font-mono text-[11px] font-semibold text-slate-800">
+                                      {formatarMoeda(c.valor_2)}
+                                    </span>
+                                    {c.vencimento_2 && (
+                                      <span className="text-[10px] text-slate-500">
+                                        ({formatarDataBr(c.vencimento_2)})
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </td>
+
+                            {/* Valor Parcela Mensal */}
                             <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
                               {formatarMoeda(valorNum)}
                             </td>

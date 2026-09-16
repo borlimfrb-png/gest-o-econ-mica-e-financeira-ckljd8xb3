@@ -306,12 +306,14 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/18 text-slate-200 hover:text-white text-xs border border-white/15 transition-all shadow-xs cursor-pointer group"
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-slate-100 hover:text-white text-xs border border-white/20 transition-all shadow-xs cursor-pointer group"
                 title="Pressione Ctrl+K para buscar módulos e relatórios"
               >
-                <Search className="w-3.5 h-3.5 text-blue-300 group-hover:text-white transition-colors" />
-                <span className="hidden lg:inline text-xs font-normal">Buscar módulo...</span>
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono bg-black/30 border border-white/15 rounded text-slate-300 group-hover:text-white">
+                <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
+                <span className="hidden lg:inline text-xs font-medium text-slate-100 group-hover:text-white">
+                  Buscar módulo...
+                </span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
                   <span className="text-[9px]">⌘</span>K
                 </kbd>
               </button>
@@ -585,7 +587,7 @@ export default function Layout() {
                       </button>
 
                       {isOpen && (
-                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1 animate-in fade-in duration-150">
+                        <div className="ml-3 pl-3 border-l border-blue-400/40 space-y-1 py-1 animate-in fade-in duration-150">
                           {subitens.map((item) => {
                             const SubIcon = item.icon
                             const isSubActive = item.path.includes('novo=balanco-dre')
@@ -601,24 +603,26 @@ export default function Layout() {
                                 key={item.id}
                                 to={item.path}
                                 onClick={() => setMobileDrawerOpen(false)}
-                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                                   isSubActive
-                                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
+                                    ? 'bg-blue-600 text-white shadow-xs'
+                                    : 'text-slate-200 hover:text-white hover:bg-white/10'
                                 }`}
                               >
                                 <div className="flex items-center gap-2.5 truncate">
                                   <SubIcon
                                     className={`w-3.5 h-3.5 shrink-0 ${
-                                      isSubActive ? 'text-white' : 'text-blue-300'
+                                      isSubActive ? 'text-white' : 'text-blue-200'
                                     }`}
                                   />
                                   <div className="flex flex-col truncate">
-                                    <span className="truncate">{item.name}</span>
+                                    <span className="truncate text-slate-100 hover:text-white">
+                                      {item.name}
+                                    </span>
                                   </div>
                                 </div>
                                 {item.badge && (
-                                  <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-1 py-0.2 rounded font-bold uppercase shrink-0">
+                                  <span className="text-[9px] bg-amber-400/30 text-amber-200 border border-amber-400/40 px-1 py-0.2 rounded font-bold uppercase shrink-0">
                                     {item.badge}
                                   </span>
                                 )}

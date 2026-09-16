@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T19:35:24.338Z",
+  "generatedAt": "2026-09-16T19:50:58.104Z",
   "collections": [
     {
       "name": "users",
@@ -1881,6 +1881,48 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "forma_pagamento_1",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_1",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "vencimento_1",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "forma_pagamento_2",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_2",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "vencimento_2",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes_pagamento",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

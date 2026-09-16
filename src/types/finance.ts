@@ -480,6 +480,14 @@ export interface ContratoRecord extends RecordModel {
   dia_vencimento: number
   data_final: string
   parcelas: number
+  // Suporte a 2 formas de pagamento distintas
+  forma_pagamento_1?: string
+  valor_1?: number
+  vencimento_1?: string
+  forma_pagamento_2?: string
+  valor_2?: number
+  vencimento_2?: string
+  observacoes_pagamento?: string
   expand?: {
     contratante?: EmpresaRecord
   }

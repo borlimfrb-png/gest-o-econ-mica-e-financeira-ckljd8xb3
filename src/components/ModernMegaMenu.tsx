@@ -90,11 +90,11 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
 
   const renderBadge = (badge?: string, variant?: string) => {
     if (!badge) return null
-    let colorClass = 'bg-blue-400/20 text-blue-200 border-blue-400/30'
-    if (variant === 'amber') colorClass = 'bg-amber-400/20 text-amber-300 border-amber-400/30'
+    let colorClass = 'bg-blue-500/30 text-blue-100 border-blue-400/40'
+    if (variant === 'amber') colorClass = 'bg-amber-500/30 text-amber-200 border-amber-400/50'
     if (variant === 'emerald')
-      colorClass = 'bg-emerald-400/20 text-emerald-300 border-emerald-400/30'
-    if (variant === 'purple') colorClass = 'bg-purple-400/20 text-purple-300 border-purple-400/30'
+      colorClass = 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
+    if (variant === 'purple') colorClass = 'bg-purple-500/30 text-purple-200 border-purple-400/50'
 
     return (
       <span
@@ -119,10 +119,10 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
         className={cn(
           'group flex items-start gap-3 p-2.5 rounded-xl transition-all duration-150 outline-none select-none text-left relative',
           active
-            ? 'bg-blue-600/35 border border-blue-400/50 text-white shadow-xs'
+            ? 'bg-blue-600/40 border border-blue-400/60 text-white shadow-sm ring-1 ring-blue-400/30'
             : item.destaque
-              ? 'bg-white/5 hover:bg-white/12 border border-amber-400/30 text-slate-100 hover:text-white'
-              : 'hover:bg-white/8 text-slate-200 hover:text-white border border-transparent hover:border-white/10',
+              ? 'bg-white/8 hover:bg-white/16 border border-amber-400/40 text-white hover:border-amber-300/60'
+              : 'hover:bg-white/12 text-slate-100 hover:text-white border border-transparent hover:border-white/15',
         )}
       >
         <div
@@ -131,8 +131,8 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
             active
               ? 'bg-blue-500 text-white shadow-xs'
               : item.destaque
-                ? 'bg-amber-500/20 text-amber-300 group-hover:bg-amber-500 group-hover:text-white'
-                : 'bg-white/10 text-blue-300 group-hover:bg-blue-600 group-hover:text-white',
+                ? 'bg-amber-500/25 text-amber-200 group-hover:bg-amber-500 group-hover:text-white'
+                : 'bg-white/15 text-blue-200 group-hover:bg-blue-600 group-hover:text-white',
           )}
         >
           <ItemIcon className="w-4 h-4" />
@@ -142,8 +142,8 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
           <div className="flex items-center justify-between gap-1.5">
             <span
               className={cn(
-                'text-xs font-semibold truncate transition-colors',
-                active ? 'text-white' : 'text-slate-100 group-hover:text-white',
+                'text-xs font-bold tracking-tight truncate transition-colors',
+                active ? 'text-white' : 'text-slate-50 group-hover:text-white',
               )}
             >
               {item.name}
@@ -151,7 +151,7 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
             <div className="flex items-center gap-1 shrink-0">
               {renderBadge(item.badge, item.badgeVariant)}
               {active && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400/50" />
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400/60" />
               )}
             </div>
           </div>
@@ -159,8 +159,8 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
           {item.descricao && (
             <p
               className={cn(
-                'text-[11px] leading-tight mt-0.5 line-clamp-2 transition-colors',
-                active ? 'text-blue-200' : 'text-slate-400 group-hover:text-slate-300',
+                'text-[11px] leading-snug mt-0.5 line-clamp-2 transition-colors font-medium',
+                active ? 'text-blue-100' : 'text-slate-300 group-hover:text-slate-100',
               )}
             >
               {item.descricao}
@@ -178,21 +178,21 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
       <NavLink
         to={grupo.path}
         className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none',
+          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none',
           isDirectActive
-            ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-            : 'text-slate-200 hover:text-white hover:bg-white/10',
+            ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
+            : 'text-slate-100 hover:text-white hover:bg-white/10',
         )}
       >
         <GroupIcon
           className={cn(
             'w-3.5 h-3.5 transition-colors',
-            isDirectActive ? 'text-white' : 'text-blue-300',
+            isDirectActive ? 'text-white' : 'text-blue-200',
           )}
         />
         <span>{grupo.label}</span>
         {grupo.badge && (
-          <span className="text-[9px] bg-blue-400/25 text-blue-200 border border-blue-400/40 px-1 py-0.2 rounded font-bold uppercase">
+          <span className="text-[9px] bg-blue-500/30 text-blue-100 border border-blue-400/40 px-1 py-0.2 rounded font-bold uppercase">
             {grupo.badge}
           </span>
         )}
@@ -217,25 +217,22 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
         aria-expanded={open}
         aria-haspopup="true"
         className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
+          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
           isActive
-            ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
+            ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
             : open
-              ? 'bg-white/15 text-white'
-              : 'text-slate-200 hover:text-white hover:bg-white/10',
+              ? 'bg-white/20 text-white'
+              : 'text-slate-100 hover:text-white hover:bg-white/10',
         )}
       >
         <GroupIcon
-          className={cn(
-            'w-3.5 h-3.5 transition-colors',
-            isActive ? 'text-blue-200' : 'text-blue-300',
-          )}
+          className={cn('w-3.5 h-3.5 transition-colors', isActive ? 'text-white' : 'text-blue-200')}
         />
         <span>{grupo.label}</span>
         <ChevronDown
           className={cn(
-            'w-3.5 h-3.5 opacity-70 transition-transform duration-200',
-            open && 'rotate-180 text-white opacity-100',
+            'w-3.5 h-3.5 transition-transform duration-200',
+            open ? 'rotate-180 text-white opacity-100' : 'text-slate-200 opacity-80',
           )}
         />
       </button>
@@ -253,11 +250,11 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
               : 'w-[290px] left-0',
           )}
         >
-          <div className="bg-[#0B1F3A]/98 backdrop-blur-md border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden p-3.5 text-white ring-1 ring-black/40">
+          <div className="bg-[#0B1F3A] border border-slate-600/90 rounded-2xl shadow-2xl overflow-hidden p-3.5 text-white ring-1 ring-white/10">
             {/* Cabeçalho do Menu com Subtítulo */}
-            <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10 px-1">
+            <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/15 px-1">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-6 h-6 rounded-md bg-blue-500/20 text-blue-300 flex items-center justify-center shrink-0 border border-blue-500/30">
+                <div className="w-6 h-6 rounded-md bg-blue-500/25 text-blue-200 flex items-center justify-center shrink-0 border border-blue-400/40">
                   <GroupIcon className="w-3.5 h-3.5" />
                 </div>
                 <div className="min-w-0">
@@ -265,11 +262,13 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
                     {grupo.label}
                   </h4>
                   {grupo.subtitulo && (
-                    <p className="text-[10px] text-blue-200/70 truncate">{grupo.subtitulo}</p>
+                    <p className="text-[10px] text-blue-100 font-medium truncate">
+                      {grupo.subtitulo}
+                    </p>
                   )}
                 </div>
               </div>
-              <span className="text-[9px] font-mono uppercase text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+              <span className="text-[9px] font-mono uppercase text-slate-200 bg-white/10 px-2 py-0.5 rounded border border-white/15 font-semibold">
                 {isMega ? 'Painel Expandido' : 'Módulos'}
               </span>
             </div>
@@ -286,15 +285,15 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
                 {grupo.colunas.map((col, idx) => (
                   <div
                     key={col.titulo || idx}
-                    className="flex flex-col gap-1.5 p-2 rounded-xl bg-white/[0.03] border border-white/5"
+                    className="flex flex-col gap-1.5 p-2 rounded-xl bg-white/[0.06] border border-white/10"
                   >
                     {col.titulo && (
                       <div className="px-1 py-0.5 mb-0.5">
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-blue-300/90 block">
+                        <span className="text-[11px] uppercase font-bold tracking-wider text-blue-200 block">
                           {col.titulo}
                         </span>
                         {col.descricao && (
-                          <span className="text-[10px] text-slate-400 block truncate">
+                          <span className="text-[10px] text-slate-300 font-medium block truncate">
                             {col.descricao}
                           </span>
                         )}
@@ -312,9 +311,9 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
             )}
 
             {/* Rodapé sutil com atalho de teclado rápido */}
-            <div className="mt-3 pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-400 px-1">
+            <div className="mt-3 pt-2 border-t border-white/15 flex items-center justify-between text-[10px] text-slate-300 font-medium px-1">
               <span>Navegação rápida por teclado</span>
-              <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[9px] font-mono text-slate-300 border border-white/10">
+              <kbd className="px-1.5 py-0.5 bg-white/15 rounded text-[9px] font-mono text-white font-semibold border border-white/20">
                 Ctrl + K
               </kbd>
             </div>
