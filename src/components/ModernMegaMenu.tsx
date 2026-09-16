@@ -8,9 +8,15 @@ interface ModernMegaMenuProps {
   grupo: NavGroupConfig
   isActive: boolean
   balancoDreUrl: string
+  align?: 'left' | 'right' | 'auto'
 }
 
-export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMenuProps) {
+export function ModernMegaMenu({
+  grupo,
+  isActive,
+  balancoDreUrl,
+  align = 'auto',
+}: ModernMegaMenuProps) {
   const [open, setOpen] = useState(false)
   const location = useLocation()
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -178,7 +184,7 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
       <NavLink
         to={grupo.path}
         className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none',
+          'flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none shrink-0',
           isDirectActive
             ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
             : 'text-slate-100 hover:text-white hover:bg-white/10',
@@ -186,7 +192,7 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
       >
         <GroupIcon
           className={cn(
-            'w-3.5 h-3.5 transition-colors',
+            'w-3.5 h-3.5 shrink-0 transition-colors',
             isDirectActive ? 'text-white' : 'text-blue-200',
           )}
         />
@@ -203,10 +209,36 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
   const isMega = grupo.tipo === 'mega' && grupo.colunas && grupo.colunas.length > 0
   const columnCount = isMega ? grupo.colunas!.length : 1
 
+  // Determinar posicionamento do painel suspenso para não estourar a viewport
+  const getPanelPositionClass = () => {
+    if (align === 'right') {
+      return isMega
+        ? columnCount >= 3
+          ? 'w-[720px] max-w-[88vw] right-0'
+          : 'w-[540px] max-w-[85vw] right-0'
+        : 'w-[280px] right-0'
+    }
+
+    if (align === 'left') {
+      return isMega
+        ? columnCount >= 3
+          ? 'w-[720px] max-w-[88vw] left-0'
+          : 'w-[540px] max-w-[85vw] left-0'
+        : 'w-[280px] left-0'
+    }
+
+    // Alinhamento padrão adaptativo
+    return isMega
+      ? columnCount >= 3
+        ? 'w-[720px] max-w-[88vw] -left-6 lg:-left-12 xl:-left-16'
+        : 'w-[540px] max-w-[85vw] -left-4 lg:-left-8'
+      : 'w-[280px] left-0'
+  }
+
   return (
     <div
       ref={containerRef}
-      className="relative"
+      className="relative shrink-0"
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -217,7 +249,7 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
         aria-expanded={open}
         aria-haspopup="true"
         className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
+          'flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
           isActive
             ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
             : open
@@ -226,12 +258,15 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
         )}
       >
         <GroupIcon
-          className={cn('w-3.5 h-3.5 transition-colors', isActive ? 'text-white' : 'text-blue-200')}
+          className={cn(
+            'w-3.5 h-3.5 shrink-0 transition-colors',
+            isActive ? 'text-white' : 'text-blue-200',
+          )}
         />
         <span>{grupo.label}</span>
         <ChevronDown
           className={cn(
-            'w-3.5 h-3.5 transition-transform duration-200',
+            'w-3 h-3 shrink-0 transition-transform duration-200',
             open ? 'rotate-180 text-white opacity-100' : 'text-slate-200 opacity-80',
           )}
         />
@@ -241,13 +276,8 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
       {open && (
         <div
           className={cn(
-            'absolute top-full left-0 pt-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150',
-            // Alinhamentos inteligentes dependendo do tipo e largura
-            isMega
-              ? columnCount >= 3
-                ? 'w-[780px] -left-12 lg:-left-20 xl:-left-24 max-w-[92vw]'
-                : 'w-[580px] -left-8 lg:-left-12 max-w-[90vw]'
-              : 'w-[290px] left-0',
+            'absolute top-full pt-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150',
+            getPanelPositionClass(),
           )}
         >
           <div className="bg-[#0B1F3A] border border-slate-600/90 rounded-2xl shadow-2xl overflow-hidden p-3.5 text-white ring-1 ring-white/10">

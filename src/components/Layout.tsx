@@ -44,6 +44,7 @@ import {
   extrairTodosItensNavegaveis,
   type NavGroupConfig,
 } from '@/lib/menuNavigationConfig'
+import { MoreHorizontal, ChevronRight } from 'lucide-react'
 
 export default function Layout() {
   const { user, logout, isAuthenticated, isLoading, isAdmin } = useAuth()
@@ -66,6 +67,21 @@ export default function Layout() {
 
   // Drawer mobile: controle de acordeões de grupos abertos
   const [openDrawerGroups, setOpenDrawerGroups] = useState<Record<string, boolean>>({})
+
+  // Medição da largura da tela para colapso responsivo dos grupos no botão "Mais"
+  // Grupos prioritários diretos (primeiros 6 ou 7 em telas médias, todos em telas ultra-wide)
+  // Largura < 1200px: 5 grupos visíveis + "Mais"
+  // Largura 1200px - 1439px: 7 grupos visíveis + "Mais"
+  // Largura >= 1440px: todos os grupos visíveis (ou 8+ se couber)
+  const [windowWidth, setWindowWidth] = useState<number>(
+    typeof window !== 'undefined' ? window.innerWidth : 1440,
+  )
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
   const userName = user?.name || 'Consultor Financeiro'
@@ -96,6 +112,28 @@ export default function Layout() {
   const itensNavegaveis = useMemo(() => {
     return extrairTodosItensNavegaveis(menuGruposFiltrados)
   }, [menuGruposFiltrados])
+
+  // Determinar limite de grupos visíveis diretamente
+  const maxVisibleDirectGroups = useMemo(() => {
+    if (windowWidth >= 1536) return 10 // 2xl: exibe todos os 9 grupos
+    if (windowWidth >= 1360) return 7 // 1366px: exibe os 7 principais (Cadastros..Relatórios) + "Mais"
+    if (windowWidth >= 1200) return 6 // 1200px: exibe 6 grupos + "Mais"
+    if (windowWidth >= 1024) return 5 // lg (1024px): exibe 5 grupos + "Mais"
+    return 4 // md (768px): exibe 4 grupos + "Mais"
+  }, [windowWidth])
+
+  const { gruposVisiveis, gruposExcedentes } = useMemo(() => {
+    if (menuGruposFiltrados.length <= maxVisibleDirectGroups) {
+      return {
+        gruposVisiveis: menuGruposFiltrados,
+        gruposExcedentes: [] as NavGroupConfig[],
+      }
+    }
+    return {
+      gruposVisiveis: menuGruposFiltrados.slice(0, maxVisibleDirectGroups),
+      gruposExcedentes: menuGruposFiltrados.slice(maxVisibleDirectGroups),
+    }
+  }, [menuGruposFiltrados, maxVisibleDirectGroups])
 
   // Atalho global de teclado Ctrl+K ou Cmd+K
   useEffect(() => {
@@ -173,6 +211,11 @@ export default function Layout() {
 
     return false
   }
+
+  // Verifica se algum grupo excedente (dentro do "Mais") está ativo
+  const isAnyExcedenteActive = useMemo(() => {
+    return gruposExcedentes.some((g) => isGroupActive(g))
+  }, [gruposExcedentes, location.pathname, location.search])
 
   // Atualiza acordeões do drawer mobile quando rota mudar
   useEffect(() => {
@@ -254,10 +297,10 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer"
+                className="flex items-center gap-2 text-left group focus:outline-hidden cursor-pointer"
               >
                 {logoUrl ? (
-                  <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden">
+                  <div className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden">
                     <img
                       src={logoUrl}
                       alt={minhaEmpresa?.nome_fantasia || 'Logo'}
@@ -266,55 +309,173 @@ export default function Layout() {
                   </div>
                 ) : (
                   <div
-                    className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
+                    className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
                     style={{ backgroundColor: corSecundaria }}
                   >
-                    <Scale className="w-4 h-4 md:w-5 md:h-5" />
+                    <Scale className="w-4 h-4" />
                   </div>
                 )}
-                <div className="truncate max-w-[140px] sm:max-w-[180px] xl:max-w-[210px]">
-                  <span className="font-bold text-sm md:text-base text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
+                <div className="truncate max-w-[110px] sm:max-w-[150px] xl:max-w-[190px]">
+                  <span className="font-bold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
                     {minhaEmpresa?.nome_fantasia ||
                       minhaEmpresa?.razao_social ||
                       'Análise de Balanço'}
                   </span>
-                  <span className="text-[10px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
-                    {minhaEmpresa?.razao_social ? 'Consultoria Oficial' : 'Consultoria'}
+                  <span className="text-[9px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
+                    {minhaEmpresa?.razao_social ? 'Consultoria' : 'Gestão'}
                   </span>
                 </div>
               </button>
             </div>
 
             {/* CENTRO: NAVEGAÇÃO HORIZONTAL PRINCIPAL COM MEGA-MENUS */}
-            <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 flex-1 justify-start overflow-visible py-1">
-              {menuGruposFiltrados.map((grupo) => {
+            <nav className="hidden md:flex items-center gap-0.5 xl:gap-1 flex-1 justify-start min-w-0 overflow-visible py-1">
+              {gruposVisiveis.map((grupo, idx) => {
                 const active = isGroupActive(grupo)
+                // Se estiver no último terço dos itens, alinhar painel à direita para não cortar
+                const align = idx >= gruposVisiveis.length - 2 ? 'right' : 'auto'
                 return (
                   <ModernMegaMenu
                     key={grupo.id}
                     grupo={grupo}
                     isActive={active}
                     balancoDreUrl={balancoDreUrl}
+                    align={align}
                   />
                 )
               })}
+
+              {/* DROPDOWN "MAIS" PARA GRUPOS EXCEDENTES */}
+              {gruposExcedentes.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300 shrink-0 ${
+                        isAnyExcedenteActive
+                          ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
+                          : 'text-slate-100 hover:text-white hover:bg-white/10'
+                      }`}
+                    >
+                      <MoreHorizontal className="w-3.5 h-3.5 text-blue-200" />
+                      <span>Mais</span>
+                      {isAnyExcedenteActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                      )}
+                      <ChevronDown className="w-3 h-3 text-slate-200 opacity-80" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    className="w-72 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
+                  >
+                    <div className="px-2.5 py-1.5 text-[10px] font-bold text-blue-200 uppercase tracking-wider border-b border-white/10 mb-1">
+                      Módulos Adicionais
+                    </div>
+                    {gruposExcedentes.map((grupo) => {
+                      const GroupIcon = grupo.icon
+                      const active = isGroupActive(grupo)
+
+                      // Se o grupo excedente for link direto
+                      if (grupo.tipo === 'link' && grupo.path) {
+                        return (
+                          <DropdownMenuItem
+                            key={grupo.id}
+                            onClick={() => navigate(grupo.path!)}
+                            className={`flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
+                              active
+                                ? 'bg-blue-600/40 text-white font-bold border border-blue-400/50'
+                                : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 truncate">
+                              <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-blue-200">
+                                <GroupIcon className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="flex flex-col truncate">
+                                <span className="font-bold truncate">{grupo.label}</span>
+                                {grupo.subtitulo && (
+                                  <span className="text-[10px] text-slate-300 truncate">
+                                    {grupo.subtitulo}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            {grupo.badge && (
+                              <span className="text-[9px] bg-blue-500/30 text-blue-100 border border-blue-400/40 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
+                                {grupo.badge}
+                              </span>
+                            )}
+                          </DropdownMenuItem>
+                        )
+                      }
+
+                      // Se o grupo excedente tiver itens/submódulos
+                      const subitens = grupo.colunas
+                        ? grupo.colunas.flatMap((c) => c.itens)
+                        : grupo.itens || []
+
+                      return (
+                        <div key={grupo.id} className="mb-1 last:mb-0">
+                          <div className="px-2.5 py-1 text-[11px] font-bold text-blue-200 flex items-center gap-2">
+                            <GroupIcon className="w-3.5 h-3.5 text-blue-300" />
+                            <span>{grupo.label}</span>
+                          </div>
+                          <div className="space-y-0.5 pl-2">
+                            {subitens.map((sub) => {
+                              const SubIcon = sub.icon
+                              const isSubActive =
+                                location.pathname === sub.path ||
+                                (sub.path.includes('novo=balanco-dre') &&
+                                  location.pathname.startsWith('/empresas') &&
+                                  location.search.includes('novo=balanco-dre'))
+                              return (
+                                <DropdownMenuItem
+                                  key={sub.id}
+                                  onClick={() => navigate(sub.path)}
+                                  className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                    isSubActive
+                                      ? 'bg-blue-600 text-white font-bold'
+                                      : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 truncate">
+                                    <SubIcon className="w-3 h-3 text-blue-200 shrink-0" />
+                                    <span className="truncate">{sub.name}</span>
+                                  </div>
+                                  {sub.badge && (
+                                    <span className="text-[8px] px-1 py-0.2 rounded font-bold uppercase bg-white/20 text-blue-100 shrink-0">
+                                      {sub.badge}
+                                    </span>
+                                  )}
+                                </DropdownMenuItem>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </nav>
 
             {/* LADO DIREITO: BUSCA RÁPIDA (Ctrl+K) + AVATAR */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 xl:gap-2 shrink-0">
               {/* Botão de Busca Rápida (Command Palette) */}
               <button
                 type="button"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-slate-100 hover:text-white text-xs border border-white/20 transition-all shadow-xs cursor-pointer group"
+                className="flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-slate-100 hover:text-white text-xs border border-white/20 transition-all shadow-xs cursor-pointer group"
                 title="Pressione Ctrl+K para buscar módulos e relatórios"
               >
                 <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
-                <span className="hidden lg:inline text-xs font-medium text-slate-100 group-hover:text-white">
-                  Buscar módulo...
+                <span className="hidden xl:inline text-xs font-medium text-slate-100 group-hover:text-white">
+                  Buscar...
                 </span>
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
-                  <span className="text-[9px]">⌘</span>K
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
+                  <span className="text-[8px]">⌘</span>K
                 </kbd>
               </button>
 
@@ -323,10 +484,10 @@ export default function Layout() {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
+                    className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
                   >
                     <Avatar
-                      className="w-8 h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
+                      className="w-7 h-7 md:w-8 md:h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
                       style={{ backgroundColor: corSecundaria }}
                     >
                       {user?.avatar && (
@@ -339,7 +500,7 @@ export default function Layout() {
                         {userInitial}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="hidden xl:flex flex-col items-start text-left max-w-[130px] truncate">
+                    <div className="hidden 2xl:flex flex-col items-start text-left max-w-[120px] truncate">
                       <span className="text-xs font-semibold text-white truncate leading-tight block">
                         {userName}
                       </span>
@@ -347,7 +508,7 @@ export default function Layout() {
                         {userRole}
                       </span>
                     </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/80 hidden xl:block" />
+                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/80 hidden 2xl:block" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
