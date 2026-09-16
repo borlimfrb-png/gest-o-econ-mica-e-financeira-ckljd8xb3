@@ -286,7 +286,7 @@ export default function Layout() {
             </div>
 
             {/* CENTRO: NAVEGAÇÃO HORIZONTAL PRINCIPAL COM MEGA-MENUS */}
-            <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 flex-1 justify-start overflow-x-auto no-scrollbar py-1">
+            <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 flex-1 justify-start overflow-visible py-1">
               {menuGruposFiltrados.map((grupo) => {
                 const active = isGroupActive(grupo)
                 return (

@@ -32,10 +32,16 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
     clearTimer()
     timeoutRef.current = setTimeout(() => {
       setOpen(false)
-    }, 180)
+    }, 200)
   }
 
-  // Fecha menu ao navegar ou clicar fora
+  const handleTriggerClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    clearTimer()
+    setOpen((prev) => !prev)
+  }
+
+  // Fecha menu ao navegar, ao clicar fora ou ao pressionar Escape
   useEffect(() => {
     setOpen(false)
   }, [location.pathname, location.search])
@@ -46,9 +52,18 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
         setOpen(false)
       }
     }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpen(false)
+      }
+    }
+
     document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
       clearTimer()
     }
   }, [])
@@ -198,10 +213,11 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
       {/* Botão Gatilho do Grupo */}
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={handleTriggerClick}
         aria-expanded={open}
+        aria-haspopup="true"
         className={cn(
-          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none',
+          'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-400',
           isActive
             ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
             : open
@@ -229,11 +245,11 @@ export function ModernMegaMenu({ grupo, isActive, balancoDreUrl }: ModernMegaMen
         <div
           className={cn(
             'absolute top-full left-0 pt-2 z-50 animate-in fade-in slide-in-from-top-1 duration-150',
-            // Alinhamentos inteligentes dependendo da largura
+            // Alinhamentos inteligentes dependendo do tipo e largura
             isMega
               ? columnCount >= 3
-                ? 'w-[780px] -left-20 xl:-left-24'
-                : 'w-[580px] -left-12'
+                ? 'w-[780px] -left-12 lg:-left-20 xl:-left-24 max-w-[92vw]'
+                : 'w-[580px] -left-8 lg:-left-12 max-w-[90vw]'
               : 'w-[290px] left-0',
           )}
         >
