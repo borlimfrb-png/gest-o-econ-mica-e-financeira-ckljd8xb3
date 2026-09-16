@@ -41,6 +41,7 @@ import { ModalGerenciarMetas } from '@/components/ModalGerenciarMetas'
 import { ModalRelatorioConsolidadoGrupoA4 } from '@/components/ModalRelatorioConsolidadoGrupoA4'
 import { GraficoEvolucaoScoreBsc } from '@/components/GraficoEvolucaoScoreBsc'
 import { WidgetAuditoriaSeguranca } from '@/components/WidgetAuditoriaSeguranca'
+import { AlertaCertificadoA1Dashboard } from '@/components/AlertaCertificadoA1Dashboard'
 import { calcularEvolucaoMensalScoreBsc } from '@/lib/bscMonthlyCalculations'
 import {
   calcularBalanco,
@@ -1878,6 +1879,25 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* ========================================================================= */}
+      {/* ALERTA DE VENCIMENTO DO CERTIFICADO DIGITAL A1 (EXCLUSIVO ADMIN)          */}
+      {/* ========================================================================= */}
+      {isAdmin && (
+        <AlertaCertificadoA1Dashboard
+          isAdmin={isAdmin}
+          empresaId={
+            selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
+              ? selectedEmpresaId
+              : empresas[0]?.id || null
+          }
+          empresaNome={
+            selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
+              ? selectedEmpresa?.nome
+              : empresas[0]?.nome || null
+          }
+        />
+      )}
+
       {/* ========================================================================= */}
       {/* WIDGET / RESUMO MENSAL DE AUDITORIA DE SEGURANÇA (EXCLUSIVO ADMIN)        */}
       {/* ========================================================================= */}

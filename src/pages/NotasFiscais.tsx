@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { notasFiscaisService, type EmitirNfseInput } from '@/services/notasFiscaisService'
 import { empresasService } from '@/services/financeService'
 import { useAuth } from '@/contexts/AuthContext'
@@ -122,6 +122,7 @@ export default function NotasFiscais() {
   const { user, isAdmin } = useAuth()
   const { minhaEmpresa } = useMinhaEmpresa()
   const { selectedEmpresaId, selectedAno } = useFilter()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const podeEmitir = isAdmin || user?.role === 'empresa' || user?.role === 'admin' || !user?.role
 
@@ -224,6 +225,18 @@ export default function NotasFiscais() {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Abertura automática do modal de configurações via parâmetro de URL (ex: ?configNfse=1 ou ?configNfse=true)
+  useEffect(() => {
+    const configParam = searchParams.get('configNfse')
+    if (configParam === '1' || configParam === 'true' || configParam === 'open') {
+      setModalConfigNacionalOpen(true)
+      // Remove o parâmetro da URL de forma limpa para não reabrir em refreshes manuais
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.delete('configNfse')
+      setSearchParams(nextParams, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   useRealtime<NotaFiscalRecord>('notas_fiscais', () => {
     loadData()
