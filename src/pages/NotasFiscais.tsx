@@ -1930,7 +1930,14 @@ export default function NotasFiscais() {
       <ModalConfiguracaoNfseNacional
         open={modalConfigNacionalOpen}
         onOpenChange={setModalConfigNacionalOpen}
-        empresaId={formData.empresa_id || empresas[0]?.id || ''}
+        empresaId={
+          formData.empresa_id ||
+          selectedEmpresaId ||
+          user?.empresa ||
+          minhaEmpresa?.id ||
+          empresas[0]?.id ||
+          ''
+        }
         serieAtual={serieConfig}
         proximoNumeroAtual={proximoNumeroSugerido}
         onSalvarSerieNumero={(serie, proxNum) => {

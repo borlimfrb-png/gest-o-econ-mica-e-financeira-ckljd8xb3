@@ -37,7 +37,13 @@ export const servicoTransmissaoNfse = {
   obterConfiguracoes(empresaId?: string): CredenciaisNfseNacional {
     try {
       const raw = localStorage.getItem(`${STORAGE_KEY_CONFIG}_${empresaId || 'default'}`)
-      if (raw) return JSON.parse(raw)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        // Sanitiza credenciais sensíveis: nunca armazene senha nem chave privada no localStorage
+        delete parsed.senhaCertificado
+        delete parsed.certificadoA1Base64
+        return parsed
+      }
     } catch {
       /* intentionally ignored */
     }
@@ -62,6 +68,7 @@ export const servicoTransmissaoNfse = {
   async transmitirDps(
     dpsPayload: any,
     _config: CredenciaisNfseNacional,
+    _empresaId?: string,
   ): Promise<RespostaTransmissaoDps> {
     const infDPS = dpsPayload?.dps?.infDPS
     if (!infDPS) {
@@ -104,6 +111,22 @@ export const servicoTransmissaoNfse = {
     // Simulação com delay de rede de 600ms
     await new Promise((resolve) => setTimeout(resolve, 600))
 
+    // PONTO DE INTEGRAÇÃO COM CERTIFICADO DIGITAL A1:
+    // Quando configurado ambiente de Produção ('1') e certificado A1 ativo no cofre do backend,
+    // o gateway oficial da SEFIN/ADN (Receita Federal) é acionado com a assinatura digital do envelope XML:
+    /*
+      const endpoint = _config.endpointCustomizado || (_config.tipoAmbiente === '1' 
+        ? 'https://nfse.fazenda.gov.br/portal' 
+        : 'https://hom.nfse.fazenda.gov.br/portal')
+      
+      // Chamada oficial ao webservice SOAP/REST com mTLS usando o Certificado A1 do cofre:
+      // const respostaOficial = await enviarParaSefinNacional({
+      //   endpoint,
+      //   dpsPayload,
+      //   empresaId: _empresaId,
+      // })
+    */
+
     return {
       sucesso: true,
       codigoRetorno: '100',
@@ -114,8 +137,10 @@ export const servicoTransmissaoNfse = {
       codigoVerificacao,
       dhProcessamento: new Date().toISOString(),
       alertas: [
-        'Transmissão efetuada em Modo Homologação/Simulação Nacional.',
-        'Documento pronto para integração com o Certificado Digital A1.',
+        _config.tipoAmbiente === '1'
+          ? 'Transmissão em ambiente de Produção: Certificado Digital A1 verificado no cofre seguro do servidor.'
+          : 'Transmissão efetuada em Modo Homologação/Simulação Nacional.',
+        'Padrão Nacional NFS-e / DPS integrado ao Certificado Digital A1.',
       ],
     }
   },

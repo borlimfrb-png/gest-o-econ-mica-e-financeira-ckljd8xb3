@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-15T10:19:22.826Z",
+  "generatedAt": "2026-09-16T14:26:59.774Z",
   "collections": [
     {
       "name": "users",
@@ -3688,7 +3688,14 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["empresas", "plano_contas", "users", "nfse", "nfse_tomadores"]
+          "selectValues": [
+            "empresas",
+            "plano_contas",
+            "users",
+            "nfse",
+            "nfse_tomadores",
+            "certificado_digital"
+          ]
         },
         {
           "name": "registro_id",
@@ -4521,6 +4528,112 @@
         "CREATE INDEX idx_pc_map_codigo_empresa ON plano_contas_mapeamentos (codigo_empresa)",
         "CREATE INDEX idx_pc_map_plano_conta ON plano_contas_mapeamentos (plano_conta)",
         "CREATE UNIQUE INDEX idx_pc_map_emp_cod ON plano_contas_mapeamentos (empresa, codigo_empresa)"
+      ]
+    },
+    {
+      "name": "certificados_digitais",
+      "type": "base",
+      "apiRules": {
+        "list": null,
+        "view": null,
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "nome_arquivo",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "arquivo_pfx",
+          "type": "file",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pfx_base64_criptografado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "senha_criptografada",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "validade_fim",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "validade_inicio",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titular_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titular_cnpj_cpf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "emissor",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["ativo", "expirado", "revogado"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_certificados_empresa ON certificados_digitais (empresa)",
+        "CREATE INDEX idx_certificados_status ON certificados_digitais (status)"
       ]
     }
   ]
