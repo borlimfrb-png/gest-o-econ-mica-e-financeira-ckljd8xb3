@@ -2,11 +2,22 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { empresasService } from '@/services/financeService'
 import { contratosService } from '@/services/contratosService'
-import { recebiveisService, type ParcelaPreview } from '@/services/recebiveisService'
+import {
+  recebiveisService,
+  type ParcelaPreview,
+  type ResumoTitulosContrato,
+  type SincronizarTitulosContratoResult,
+} from '@/services/recebiveisService'
+import { pb } from '@/lib/pocketbase/client'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'
-import type { EmpresaRecord, ContratoRecord, PeriodoCobrancaItem } from '@/types/finance'
+import type {
+  EmpresaRecord,
+  ContratoRecord,
+  PeriodoCobrancaItem,
+  RecebivelRecord,
+} from '@/types/finance'
 import {
   calcularMensalidadesPeriodo,
   normalizarPeriodoCobranca,
@@ -342,12 +353,59 @@ export default function Contratos() {
     }
   }, [contratanteId, toast])
 
-  // Carrega contratos salvos
+  // Resumo de títulos por contrato: idContrato => { total, pagos, pendentes, totalValor, valorPago, valorPendente }
+  const [resumosTitulosContrato, setResumosTitulosContrato] = useState<
+    Record<string, ResumoTitulosContrato>
+  >({})
+  const [carregandoResumosTitulos, setCarregandoResumosTitulos] = useState<boolean>(false)
+
+  // Carrega contratos salvos e seus resumos de recebíveis
   const carregarContratos = useCallback(async () => {
     try {
       setLoadingContratos(true)
       const list = await contratosService.listar()
       setContratosSalvos(list)
+
+      // Carrega estatísticas de títulos para cada contrato
+      try {
+        setCarregandoResumosTitulos(true)
+        const todosRecebiveis = await pb.collection('recebiveis').getFullList<RecebivelRecord>({
+          filter: "contrato != '' && contrato != null",
+          fields: 'id,contrato,status,valor',
+        })
+        const mapa: Record<string, ResumoTitulosContrato> = {}
+        for (const c of list) {
+          mapa[c.id] = {
+            contratoId: c.id,
+            total: 0,
+            pagos: 0,
+            pendentes: 0,
+            totalValor: 0,
+            valorPago: 0,
+            valorPendente: 0,
+          }
+        }
+        for (const r of todosRecebiveis) {
+          const cId = r.contrato
+          if (cId && mapa[cId]) {
+            const v = Number(r.valor) || 0
+            mapa[cId].total += 1
+            mapa[cId].totalValor += v
+            if (r.status === 'Pago') {
+              mapa[cId].pagos += 1
+              mapa[cId].valorPago += v
+            } else {
+              mapa[cId].pendentes += 1
+              mapa[cId].valorPendente += v
+            }
+          }
+        }
+        setResumosTitulosContrato(mapa)
+      } catch (errResumo) {
+        console.warn('Não foi possível carregar resumos de títulos:', errResumo)
+      } finally {
+        setCarregandoResumosTitulos(false)
+      }
     } catch (err) {
       console.error('Erro ao carregar contratos:', err)
     } finally {
@@ -800,13 +858,15 @@ export default function Contratos() {
     window.print()
   }
 
-  // 2. Salvar Contrato no backend
+  // 2. Salvar Contrato no backend com sincronização automática no módulo de Recebíveis
   const handleSalvarContrato = async () => {
     if (!contratoGerado) return
 
     setSalvandoContrato(true)
     try {
-      const record = await contratosService.criar({
+      let recordId = contratoSalvoId
+
+      const dadosContrato = {
         contratada_razao_social: contratoGerado.contratada.razao_social,
         contratada_cnpj: contratoGerado.contratada.cnpj,
         contratada_endereco: contratoGerado.contratada.endereco,
@@ -827,14 +887,57 @@ export default function Contratos() {
         valor_2: contratoGerado.valor_2,
         vencimento_2: contratoGerado.vencimento_2,
         observacoes_pagamento: contratoGerado.observacoes_pagamento,
-      })
+      }
 
-      setContratoSalvoId(record.id)
+      if (recordId) {
+        // Atualiza contrato existente
+        await contratosService.atualizar(recordId, dadosContrato)
+      } else {
+        // Cria novo contrato
+        const record = await contratosService.criar(dadosContrato)
+        recordId = record.id
+        setContratoSalvoId(recordId)
+      }
+
+      // SINCRONIZAÇÃO AUTOMÁTICA DOS TÍTULOS A RECEBER:
+      // Se houver períodos de cobrança definidos (ou parcelas no cronograma),
+      // gera e reconcilia os títulos a receber automaticamente no módulo de Recebíveis.
+      let resultadoSinc: SincronizarTitulosContratoResult | null = null
+      if (contratoGerado.parcelas && contratoGerado.parcelas.length > 0) {
+        const descricaoBase = `Contrato com ${contratoGerado.contratante.razao_social}`
+        resultadoSinc = await recebiveisService.sincronizarTitulosContrato(
+          {
+            id: recordId,
+            contratante: contratoGerado.contratante.id,
+            data_inicio: contratoGerado.data_inicio,
+            dia_vencimento: contratoGerado.dia_vencimento,
+            quantidade_meses: contratoGerado.quantidade_meses,
+            descricaoContrato: descricaoBase,
+          },
+          contratoGerado.parcelas.map((p) => ({
+            parcela: p.parcela,
+            vencimento: p.vencimento,
+            valor: p.valor,
+            forma_pagamento: p.forma_pagamento,
+            periodo_ordem: p.periodo_ordem,
+            lembrete_agendado:
+              p.lembrete_agendado !== undefined ? p.lembrete_agendado : enviarLembretesContrato,
+            nfse_automatica_agendada:
+              p.nfse_automatica_agendada !== undefined ? p.nfse_automatica_agendada : true,
+          })),
+        )
+        setFinanceiroGerado(true)
+      }
+
       await carregarContratos()
 
+      const detalheTitulos = resultadoSinc
+        ? ` ${resultadoSinc.totalAtual} títulos sincronizados no Financeiro (${resultadoSinc.criados} criados, ${resultadoSinc.atualizados} atualizados${resultadoSinc.mantidosPagos > 0 ? `, ${resultadoSinc.mantidosPagos} baixados preservados` : ''}).`
+        : ''
+
       toast({
-        title: 'Contrato salvo com sucesso!',
-        description: `O contrato com ${contratoGerado.contratante.razao_social} foi registrado com as condições de pagamento.`,
+        title: 'Contrato salvo e integrado!',
+        description: `Contrato com ${contratoGerado.contratante.razao_social} gravado com sucesso.${detalheTitulos}`,
       })
     } catch (err: any) {
       console.error('Erro ao salvar contrato:', err)
@@ -848,37 +951,76 @@ export default function Contratos() {
     }
   }
 
-  // 3. Gerar Parcelas no Financeiro
+  // 3. Gerar / Reconciliar Parcelas no Financeiro manualmente sob demanda
   const handleGerarParcelasNoFinanceiro = async () => {
     if (!contratoGerado) return
 
     setGerandoFinanceiro(true)
     try {
-      await recebiveisService.gerarParcelas(
-        {
-          empresa: contratoGerado.contratante.id,
-          data_inicio_servicos: contratoGerado.data_inicio,
-          dia_vencimento: contratoGerado.dia_vencimento,
-          valor: contratoGerado.valor_parcela,
-          meses: contratoGerado.quantidade_meses,
-          lembrete_agendado: enviarLembretesContrato,
-          nfse_automatica_agendada: true,
-        },
-        contratoGerado.parcelas.map((p) => ({
-          ...p,
-          lembrete_agendado:
-            p.lembrete_agendado !== undefined ? p.lembrete_agendado : enviarLembretesContrato,
-          nfse_automatica_agendada:
-            p.nfse_automatica_agendada !== undefined ? p.nfse_automatica_agendada : true,
-        })),
-      )
+      const cid = contratoSalvoId || 'temp'
+      const descricaoBase = `Contrato com ${contratoGerado.contratante.razao_social}`
 
-      setFinanceiroGerado(true)
+      if (contratoSalvoId) {
+        const res = await recebiveisService.sincronizarTitulosContrato(
+          {
+            id: contratoSalvoId,
+            contratante: contratoGerado.contratante.id,
+            data_inicio: contratoGerado.data_inicio,
+            dia_vencimento: contratoGerado.dia_vencimento,
+            quantidade_meses: contratoGerado.quantidade_meses,
+            descricaoContrato: descricaoBase,
+          },
+          contratoGerado.parcelas.map((p) => ({
+            parcela: p.parcela,
+            vencimento: p.vencimento,
+            valor: p.valor,
+            forma_pagamento: p.forma_pagamento,
+            periodo_ordem: p.periodo_ordem,
+            lembrete_agendado:
+              p.lembrete_agendado !== undefined ? p.lembrete_agendado : enviarLembretesContrato,
+            nfse_automatica_agendada:
+              p.nfse_automatica_agendada !== undefined ? p.nfse_automatica_agendada : true,
+          })),
+        )
 
-      toast({
-        title: 'Parcelas geradas no Financeiro!',
-        description: `Foram criados ${contratoGerado.parcelas.length} recebíveis no módulo Financeiro.`,
-      })
+        setFinanceiroGerado(true)
+        await carregarContratos()
+
+        toast({
+          title: 'Títulos sincronizados em Recebíveis!',
+          description: `${res.totalAtual} parcelas no Financeiro (${res.criados} criadas, ${res.atualizados} atualizadas${res.mantidosPagos > 0 ? `, ${res.mantidosPagos} pagas mantidas` : ''}).`,
+        })
+      } else {
+        await recebiveisService.gerarParcelas(
+          {
+            empresa: contratoGerado.contratante.id,
+            data_inicio_servicos: contratoGerado.data_inicio,
+            dia_vencimento: contratoGerado.dia_vencimento,
+            valor: contratoGerado.valor_parcela,
+            meses: contratoGerado.quantidade_meses,
+            lembrete_agendado: enviarLembretesContrato,
+            nfse_automatica_agendada: true,
+            contratoId: cid,
+            contratoDescricao: descricaoBase,
+          },
+          contratoGerado.parcelas.map((p) => ({
+            ...p,
+            contrato: cid,
+            lembrete_agendado:
+              p.lembrete_agendado !== undefined ? p.lembrete_agendado : enviarLembretesContrato,
+            nfse_automatica_agendada:
+              p.nfse_automatica_agendada !== undefined ? p.nfse_automatica_agendada : true,
+          })),
+        )
+
+        setFinanceiroGerado(true)
+        await carregarContratos()
+
+        toast({
+          title: 'Parcelas geradas no Financeiro!',
+          description: `Foram criados ${contratoGerado.parcelas.length} títulos a receber. Salve o contrato para vincular definitivamente.`,
+        })
+      }
     } catch (err: any) {
       console.error('Erro ao gerar parcelas no financeiro:', err)
       toast({
@@ -926,19 +1068,27 @@ export default function Contratos() {
       ? c.data_final.slice(0, 10)
       : calcularDataFinal(dataInicioStr, c.quantidade_meses)
 
-    const parcelasPreview = recebiveisService
-      .calcularPreviewParcelas({
-        empresa: c.contratante,
-        data_inicio_servicos: dataInicioStr,
-        dia_vencimento: c.dia_vencimento,
-        valor: valorNum,
-        meses: c.quantidade_meses,
-        lembrete_agendado: enviarLembretesContrato,
-      })
-      .map((p) => ({
-        ...p,
-        lembrete_agendado: enviarLembretesContrato,
-      }))
+    const periodosSalvos: PeriodoCobrancaItem[] =
+      Array.isArray(c.periodos_cobranca) && c.periodos_cobranca.length > 0
+        ? c.periodos_cobranca
+        : []
+
+    const parcelasPreview =
+      periodosSalvos.length > 0
+        ? gerarParcelasDePeriodos(periodosSalvos, c.dia_vencimento || 10, enviarLembretesContrato)
+        : recebiveisService
+            .calcularPreviewParcelas({
+              empresa: c.contratante,
+              data_inicio_servicos: dataInicioStr,
+              dia_vencimento: c.dia_vencimento,
+              valor: valorNum,
+              meses: c.quantidade_meses,
+              lembrete_agendado: enviarLembretesContrato,
+            })
+            .map((p) => ({
+              ...p,
+              lembrete_agendado: enviarLembretesContrato,
+            }))
 
     setContratanteId(c.contratante)
     setDataInicio(dataInicioStr)
@@ -948,11 +1098,6 @@ export default function Contratos() {
     setDiaVencimento(c.dia_vencimento)
 
     // Períodos de cobrança salvos
-    const periodosSalvos: PeriodoCobrancaItem[] =
-      Array.isArray(c.periodos_cobranca) && c.periodos_cobranca.length > 0
-        ? c.periodos_cobranca
-        : []
-
     if (periodosSalvos.length > 0) {
       const p1 = periodosSalvos[0]
       setPeriodo1Inicio(p1.data_inicio ? p1.data_inicio.slice(0, 10) : dataInicioStr)
@@ -2735,6 +2880,7 @@ export default function Contratos() {
                         <th className="py-3 px-3">Formas de Pagamento</th>
                         <th className="py-3 px-3 text-right">Valor Parcela</th>
                         <th className="py-3 px-3 text-center">Total Parcelas</th>
+                        <th className="py-3 px-3 text-center">Títulos a Receber</th>
                         <th className="py-3 px-3 text-right">Total Contrato</th>
                         <th className="py-3 px-3 text-center">Status</th>
                         <th className="py-3 px-3 text-right">Ações</th>
@@ -2875,6 +3021,76 @@ export default function Contratos() {
                               >
                                 {mesesNum} parcelas
                               </Badge>
+                            </td>
+
+                            {/* Indicador de Títulos a Receber (Situação Financeira + Atalho para Recebíveis) */}
+                            <td className="py-3 px-3 text-center">
+                              {(() => {
+                                const resumo = resumosTitulosContrato[c.id]
+                                if (!resumo || resumo.total === 0) {
+                                  return (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <span className="text-[10px] text-slate-400 italic">
+                                        Nenhum título
+                                      </span>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleCarregarContratoSalvo(c)}
+                                        className="h-5 px-1.5 text-[10px] text-blue-600 border-blue-200 hover:bg-blue-50"
+                                        title="Carregar para salvar e gerar títulos"
+                                      >
+                                        Gerar
+                                      </Button>
+                                    </div>
+                                  )
+                                }
+                                return (
+                                  <div className="flex flex-col items-center gap-1">
+                                    <div className="flex items-center gap-1 flex-wrap justify-center">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] font-mono font-bold bg-slate-50 text-slate-700 border-slate-200"
+                                        title={`${resumo.total} títulos gerados no total`}
+                                      >
+                                        {resumo.total} títulos
+                                      </Badge>
+                                      {resumo.pagos > 0 && (
+                                        <Badge
+                                          className="text-[10px] font-mono font-bold bg-emerald-50 text-emerald-700 border-emerald-300"
+                                          title={`${resumo.pagos} baixados/pagos`}
+                                        >
+                                          ✓ {resumo.pagos} baixados
+                                        </Badge>
+                                      )}
+                                      {resumo.pendentes > 0 && (
+                                        <Badge
+                                          className="text-[10px] font-mono font-bold bg-amber-50 text-amber-700 border-amber-300"
+                                          title={`${resumo.pendentes} em aberto`}
+                                        >
+                                          ⏳ {resumo.pendentes} em aberto
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() =>
+                                        navigate(
+                                          `/baixa-recebiveis?contrato=${c.id}&empresa=${c.contratante}`,
+                                        )
+                                      }
+                                      className="h-5 px-1.5 text-[10px] font-semibold text-blue-700 hover:text-blue-900 hover:bg-blue-50 gap-1"
+                                      title="Abrir os títulos deste contrato no módulo de Recebíveis"
+                                    >
+                                      <ExternalLink className="w-2.5 h-2.5" />
+                                      Ver em Recebíveis
+                                    </Button>
+                                  </div>
+                                )
+                              })()}
                             </td>
 
                             {/* Total Contrato */}

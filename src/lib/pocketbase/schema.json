@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T20:08:58.054Z",
+  "generatedAt": "2026-09-16T21:25:35.882Z",
   "collections": [
     {
       "name": "users",
@@ -1768,13 +1768,39 @@
           "type": "date",
           "required": false,
           "system": false
+        },
+        {
+          "name": "contrato",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "contratos"
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "forma_pagamento",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "periodo_ordem",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
         "CREATE INDEX idx_recebiveis_user ON recebiveis (user)",
         "CREATE INDEX idx_recebiveis_empresa ON recebiveis (empresa)",
         "CREATE INDEX idx_recebiveis_vencimento ON recebiveis (vencimento)",
-        "CREATE INDEX idx_recebiveis_status ON recebiveis (status)"
+        "CREATE INDEX idx_recebiveis_status ON recebiveis (status)",
+        "CREATE INDEX IF NOT EXISTS idx_recebiveis_contrato ON recebiveis (contrato)"
       ]
     },
     {

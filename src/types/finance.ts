@@ -447,6 +447,10 @@ export type StatusRecebivel = 'Pendente' | 'Pago'
 export interface RecebivelRecord extends RecordModel {
   user: string
   empresa: string
+  contrato?: string | null
+  descricao?: string
+  forma_pagamento?: string
+  periodo_ordem?: number
   parcela: number
   vencimento: string
   valor: number
@@ -462,6 +466,7 @@ export interface RecebivelRecord extends RecordModel {
   nfse_emitida_em?: string | null
   expand?: {
     empresa?: EmpresaRecord
+    contrato?: ContratoRecord
     nota_fiscal?: NotaFiscalRecord
   }
 }

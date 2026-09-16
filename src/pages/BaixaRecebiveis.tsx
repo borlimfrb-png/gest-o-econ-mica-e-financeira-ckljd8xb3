@@ -56,7 +56,7 @@ import {
   CalendarClock,
   Link2,
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { notasFiscaisService } from '@/services/notasFiscaisService'
 
 // Formata data ISO ou YYYY-MM-DD para dd/mm/aaaa
@@ -99,20 +99,35 @@ function periodoMesCorrenteIso(): { inicio: string; fim: string } {
 export default function BaixaRecebiveis() {
   const { toast } = useToast()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
-  // Estados principais de dados
-  const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [recebiveis, setRecebiveis] = useState<RecebivelRecord[]>([])
-  const [loading, setLoading] = useState(true)
+  const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
 
-  // Filtros
-  const [filtroEmpresa, setFiltroEmpresa] = useState<string>('todas')
+  // Filtros (inicializados ou sincronizados com query params da URL: ?contrato= & ?empresa=)
+  const filtroContratoUrl = searchParams.get('contrato') || ''
+  const filtroEmpresaUrl = searchParams.get('empresa') || ''
+
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>(filtroEmpresaUrl || 'todas')
+  const [filtroContrato, setFiltroContrato] = useState<string>(filtroContratoUrl)
   const [dataInicio, setDataInicio] = useState<string>('')
   const [dataFim, setDataFim] = useState<string>('')
   const [apenasPendentes, setApenasPendentes] = useState<boolean>(false)
   const [apenasAtrasados, setApenasAtrasados] = useState<boolean>(false)
   const [termoBusca, setTermoBusca] = useState<string>('')
 
+  // Sincroniza se a URL mudar com query params
+  useEffect(() => {
+    const cUrl = searchParams.get('contrato')
+    const eUrl = searchParams.get('empresa')
+    if (cUrl) {
+      setFiltroContrato(cUrl)
+    }
+    if (eUrl) {
+      setFiltroEmpresa(eUrl)
+    }
+  }, [searchParams])
   // Modal Dar Baixa
   const [modalBaixaOpen, setModalBaixaOpen] = useState(false)
   const [recebivelParaBaixa, setRecebivelParaBaixa] = useState<RecebivelRecord | null>(null)
@@ -258,16 +273,21 @@ export default function BaixaRecebiveis() {
 
   const handleLimparFiltros = () => {
     setFiltroEmpresa('todas')
+    setFiltroContrato('')
     setDataInicio('')
     setDataFim('')
     setApenasPendentes(false)
     setApenasAtrasados(false)
     setTermoBusca('')
+    setSearchParams({})
   }
 
   // ================== FILTRAGEM ==================
   const recebiveisFiltrados = useMemo(() => {
     const filtered = recebiveis.filter((r) => {
+      // Filtro contrato específico
+      if (filtroContrato && r.contrato !== filtroContrato) return false
+
       // Filtro empresa
       if (filtroEmpresa !== 'todas' && r.empresa !== filtroEmpresa) return false
 
@@ -289,8 +309,10 @@ export default function BaixaRecebiveis() {
         const termo = termoBusca.toLowerCase().trim()
         const emp = r.expand?.empresa || empresaMap.get(r.empresa)
         const nomeEmp = (emp?.nome || '').toLowerCase()
+        const desc = (r.descricao || '').toLowerCase()
         const parcelaStr = `parcela ${r.parcela}`
-        if (!nomeEmp.includes(termo) && !parcelaStr.includes(termo)) return false
+        if (!nomeEmp.includes(termo) && !parcelaStr.includes(termo) && !desc.includes(termo))
+          return false
       }
 
       return true
@@ -309,6 +331,7 @@ export default function BaixaRecebiveis() {
   }, [
     recebiveis,
     filtroEmpresa,
+    filtroContrato,
     apenasPendentes,
     apenasAtrasados,
     dataInicio,
@@ -741,20 +764,31 @@ export default function BaixaRecebiveis() {
                 <strong>{recebiveis.length}</strong> títulos
               </span>
               {(filtroEmpresa !== 'todas' ||
+                filtroContrato ||
                 dataInicio ||
                 dataFim ||
                 apenasPendentes ||
                 apenasAtrasados ||
                 termoBusca) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleLimparFiltros}
-                  className="h-7 text-xs text-blue-700 hover:text-blue-900"
-                >
-                  Limpar Filtros
-                </Button>
+                <div className="flex items-center gap-2">
+                  {filtroContrato && (
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-mono bg-blue-50 text-blue-800 border-blue-200"
+                    >
+                      Contrato: {filtroContrato.slice(0, 8)}
+                    </Badge>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLimparFiltros}
+                    className="h-7 text-xs text-blue-700 hover:text-blue-900"
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -961,7 +995,7 @@ export default function BaixaRecebiveis() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
-                    <th className="py-3 px-3.5">Empresa</th>
+                    <th className="py-3 px-3.5">Empresa / Contrato</th>
                     <th className="py-3 px-3 text-center w-24">Nº Parcela</th>
                     <th className="py-3 px-3">Vencimento</th>
                     <th className="py-3 px-3 text-right">Valor (R$)</th>
@@ -986,27 +1020,51 @@ export default function BaixaRecebiveis() {
                             : 'hover:bg-slate-50/80'
                         }`}
                       >
-                        {/* Empresa */}
-                        <td className="py-3 px-3.5 font-medium max-w-[200px]">
+                        {/* Empresa / Contrato e Descrição */}
+                        <td className="py-3 px-3.5 font-medium max-w-[220px]">
                           <div className="flex flex-col">
                             <span
                               className={`font-bold truncate ${
                                 isAtrasado ? 'text-red-950' : 'text-slate-900'
                               }`}
-                              title={emp?.nome}
+                              title={r.descricao || emp?.nome}
                             >
                               {emp?.nome || 'Empresa não encontrada'}
                             </span>
-                            <span
-                              className={`text-[10px] ${
-                                isAtrasado ? 'text-red-700/80' : 'text-slate-400'
-                              }`}
-                            >
-                              Início:{' '}
-                              {r.data_inicio_servicos
-                                ? formatarDataBr(r.data_inicio_servicos)
-                                : '—'}
-                            </span>
+                            {r.descricao && (
+                              <span
+                                className={`text-[11px] truncate ${
+                                  isAtrasado ? 'text-red-900 font-semibold' : 'text-slate-600'
+                                }`}
+                                title={r.descricao}
+                              >
+                                {r.descricao}
+                              </span>
+                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              {r.forma_pagamento && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9px] px-1 py-0 bg-blue-50/50 text-blue-700 border-blue-200"
+                                >
+                                  {r.forma_pagamento}
+                                </Badge>
+                              )}
+                              {r.contrato && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  Contrato {r.contrato.slice(0, 8)}
+                                </span>
+                              )}
+                              {!r.descricao && r.data_inicio_servicos && (
+                                <span
+                                  className={`text-[10px] ${
+                                    isAtrasado ? 'text-red-700/80' : 'text-slate-400'
+                                  }`}
+                                >
+                                  Início: {formatarDataBr(r.data_inicio_servicos)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
