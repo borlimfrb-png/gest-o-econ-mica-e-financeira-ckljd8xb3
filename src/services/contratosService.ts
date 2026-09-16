@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import type { ContratoRecord, EmpresaRecord } from '@/types/finance'
+import type { ContratoRecord, EmpresaRecord, PeriodoCobrancaItem } from '@/types/finance'
 
 function currentUserId(): string {
   const id = pb.authStore.record?.id
@@ -20,7 +20,9 @@ export interface SalvarContratoInput {
   dia_vencimento: number
   data_final: string // YYYY-MM-DD
   parcelas: number
-  // Novas formas de pagamento
+  // Suporte a períodos de cobrança recorrentes em faixas
+  periodos_cobranca?: PeriodoCobrancaItem[]
+  // Formas de pagamento pontuais (compatibilidade)
   forma_pagamento_1?: string
   valor_1?: number
   vencimento_1?: string
@@ -92,6 +94,7 @@ export const contratosService = {
       dia_vencimento: Number(data.dia_vencimento) || 1,
       data_final: dataFinalFormatted,
       parcelas: Number(data.parcelas) || 0,
+      periodos_cobranca: data.periodos_cobranca || [],
       forma_pagamento_1: data.forma_pagamento_1 || 'Pix',
       valor_1: Number(data.valor_1) || 0,
       vencimento_1: vencimento1Formatted,
@@ -135,6 +138,7 @@ export const contratosService = {
         : `${data.data_final} 12:00:00`
     }
     if (data.parcelas !== undefined) payload.parcelas = Number(data.parcelas) || 0
+    if (data.periodos_cobranca !== undefined) payload.periodos_cobranca = data.periodos_cobranca
 
     // Campos de formas de pagamento
     if (data.forma_pagamento_1 !== undefined) payload.forma_pagamento_1 = data.forma_pagamento_1

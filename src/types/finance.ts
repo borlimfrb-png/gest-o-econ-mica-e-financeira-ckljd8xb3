@@ -466,6 +466,17 @@ export interface RecebivelRecord extends RecordModel {
   }
 }
 
+export interface PeriodoCobrancaItem {
+  id?: string
+  ordem?: number
+  data_inicio: string // YYYY-MM-DD
+  data_final: string // YYYY-MM-DD
+  valor_mensal: number
+  forma_pagamento: string
+  meses?: number
+  total?: number
+}
+
 export interface ContratoRecord extends RecordModel {
   user: string
   contratada_razao_social: string
@@ -480,7 +491,9 @@ export interface ContratoRecord extends RecordModel {
   dia_vencimento: number
   data_final: string
   parcelas: number
-  // Suporte a 2 formas de pagamento distintas
+  // Suporte a períodos de cobrança recorrentes em faixas
+  periodos_cobranca?: PeriodoCobrancaItem[]
+  // Suporte a 2 formas de pagamento pontuais legadas/compatibilidade
   forma_pagamento_1?: string
   valor_1?: number
   vencimento_1?: string

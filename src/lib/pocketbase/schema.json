@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-16T19:50:58.104Z",
+  "generatedAt": "2026-09-16T20:08:58.054Z",
   "collections": [
     {
       "name": "users",
@@ -1921,6 +1921,12 @@
         {
           "name": "observacoes_pagamento",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "periodos_cobranca",
+          "type": "json",
           "required": false,
           "system": false
         }
