@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
@@ -6,46 +6,17 @@ import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { ModalPerfil } from '@/components/ModalPerfil'
 import {
   Scale,
-  LayoutDashboard,
-  BarChart3,
-  Building2,
-  PieChart,
-  Tags,
-  BookOpen,
-  FileText,
-  Upload,
   LogOut,
   Menu,
   X,
   ChevronDown,
   Calendar,
   Building,
-  FolderTree,
-  Folder,
   Users,
   Shield,
   Settings,
-  DollarSign,
-  CheckCircle2,
-  Calculator,
-  Gauge,
-  Activity,
-  TrendingDown,
-  TrendingUp,
-  FileCheck2,
-  Coins,
-  Clock,
-  Flame,
-  Package,
-  Layers,
-  ClipboardList,
-  Percent,
-  Network,
-  Target,
-  Compass,
-  User,
   Bell,
-  Presentation,
+  Search,
   Sparkles,
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -61,11 +32,18 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
+import { ModernMegaMenu } from '@/components/ModernMegaMenu'
+import { CommandPalette } from '@/components/CommandPalette'
+import {
+  MENU_GRUPOS,
+  filtrarMenuPorPerfil,
+  extrairTodosItensNavegaveis,
+  type NavGroupConfig,
+} from '@/lib/menuNavigationConfig'
 
 export default function Layout() {
   const { user, logout, isAuthenticated, isLoading, isAdmin } = useAuth()
@@ -84,6 +62,10 @@ export default function Layout() {
   const location = useLocation()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [modalPerfilOpen, setModalPerfilOpen] = useState(false)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  // Drawer mobile: controle de acordeões de grupos abertos
+  const [openDrawerGroups, setOpenDrawerGroups] = useState<Record<string, boolean>>({})
 
   const userInitial = user?.name ? user.name.charAt(0).toUpperCase() : 'U'
   const userName = user?.name || 'Consultor Financeiro'
@@ -100,301 +82,109 @@ export default function Layout() {
   const isUserFinanceiro = user?.role === 'financeiro'
   const isUserComercial = user?.role === 'comercial'
 
-  // Itens do submenu Cadastros
-  const rawCadastroSubItems = [
-    {
-      name: 'Empresas',
-      path: '/empresas',
-      icon: Building2,
-      adminOnly: false,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Grupo Empresarial',
-      path: '/cadastro/grupos-empresariais',
-      icon: Network,
-      adminOnly: false,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Centros de Custo',
-      path: '/centros',
-      icon: PieChart,
-      adminOnly: false,
-      hideFinanceiro: false,
-    },
-    {
-      name: 'Tipos de Despesas',
-      path: '/tipos-despesas',
-      icon: Tags,
-      adminOnly: false,
-      hideFinanceiro: false,
-    },
-    {
-      name: 'Cadastro de Contas',
-      path: '/contas',
-      icon: BookOpen,
-      adminOnly: false,
-      hideFinanceiro: false,
-    },
-    {
-      name: 'Plano de Contas',
-      path: '/plano-contas',
-      icon: FolderTree,
-      adminOnly: false,
-      hideFinanceiro: false,
-    },
-    {
-      name: 'Minha Empresa',
-      path: '/minha-empresa',
-      icon: Building,
-      adminOnly: false,
-      hideFinanceiro: false,
-    },
-    {
-      name: 'Usuários & Permissões',
-      path: '/admin/usuarios',
-      icon: Users,
-      adminOnly: true,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Auditoria de Segurança',
-      path: '/admin/auditoria',
-      icon: Shield,
-      adminOnly: true,
-      hideFinanceiro: true,
-    },
-  ]
-  const cadastroSubItems = rawCadastroSubItems.filter((item) => {
-    if (item.adminOnly && !isAdmin) return false
-    if (isUserFinanceiro && item.hideFinanceiro) return false
-    if (isUserComercial && item.path !== '/minha-empresa') return false
-    return true
-  })
-
-  // Itens do submenu Formação de Preço - Custo
-  const formacaoPrecoSubItems = [
-    { name: 'Cadastro de Produtos', path: '/formacao-preco/produtos', icon: Package },
-    { name: 'Cadastro de Matéria Prima', path: '/formacao-preco/materia-prima', icon: Layers },
-    {
-      name: 'Cadastro da Ficha Técnica',
-      path: '/formacao-preco/fichas-tecnicas',
-      icon: ClipboardList,
-    },
-    {
-      name: 'Impostos',
-      path: '/formacao-preco/impostos',
-      icon: Percent,
-    },
-    {
-      name: 'Simulador de Preços',
-      path: '/formacao-preco/simulador',
-      icon: Calculator,
-    },
-  ]
-
-  const isFormacaoPrecoActive = location.pathname.startsWith('/formacao-preco')
-
-  const isCadastroActive =
-    (location.pathname.startsWith('/empresas') && !location.search.includes('novo=balanco-dre')) ||
-    location.pathname.startsWith('/cadastro/grupos-empresariais') ||
-    location.pathname.startsWith('/centros') ||
-    location.pathname.startsWith('/tipos-despesas') ||
-    location.pathname.startsWith('/contas') ||
-    location.pathname.startsWith('/plano-contas') ||
-    location.pathname === '/minha-empresa' ||
-    location.pathname.startsWith('/admin/usuarios') ||
-    location.pathname.startsWith('/admin/auditoria')
-
   // Atalho Balanço e DRE destino
   const balancoDreUrl = selectedEmpresaId
     ? `/empresas/${selectedEmpresaId}?aba=comparativo-mensal&novo=balanco-dre`
     : '/empresas'
 
-  const isLancamentosActive =
-    location.pathname === '/lancamentos' ||
-    (location.pathname.startsWith('/empresas') && location.search.includes('novo=balanco-dre'))
+  // Menu filtrado por permissão do perfil ativo
+  const menuGruposFiltrados = useMemo(() => {
+    return filtrarMenuPorPerfil(MENU_GRUPOS, user?.role, isAdmin, balancoDreUrl)
+  }, [user?.role, isAdmin, balancoDreUrl])
 
-  // Itens do submenu Financeiro (Comercial não vê tela geral /financeiro)
-  const rawFinanceiroSubItems = [
-    { name: 'Financeiro', path: '/financeiro', icon: Calendar, hideComercial: true },
-    { name: 'Baixa dos Recebíveis', path: '/baixa-recebiveis', icon: CheckCircle2 },
-    { name: 'Contratos', path: '/contratos', icon: FileText },
-    { name: 'Emissor NFS-e Nacional', path: '/notas-fiscais', icon: FileCheck2 },
-  ]
-  const financeiroSubItems = rawFinanceiroSubItems.filter((item) => {
-    if (isUserComercial && item.hideComercial) return false
-    return true
-  })
+  // Lista plana de itens navegáveis para o CommandPalette (Ctrl+K)
+  const itensNavegaveis = useMemo(() => {
+    return extrairTodosItensNavegaveis(menuGruposFiltrados)
+  }, [menuGruposFiltrados])
 
-  const isDashboardActive =
-    location.pathname === '/dashboard' ||
-    location.pathname === '/dashboard-bi' ||
-    location.pathname === '/bi'
-
-  // Subitens de Dashboard (Dashboard Geral e Dashboard BI interativo para apresentação)
-  const rawDashboardSubItems = [
-    {
-      name: 'Dashboard Geral',
-      path: '/dashboard',
-      icon: LayoutDashboard,
-      descricao: 'Visão executiva geral e evolução patrimonial',
-    },
-    {
-      name: 'Dashboard BI (Apresentação)',
-      path: '/dashboard-bi',
-      icon: BarChart3,
-      descricao: 'BI interativo de indicadores, gráficos e drill-down',
-      destaque: true,
-    },
-  ]
-  const dashboardSubItems = rawDashboardSubItems.filter(() => {
-    // Apenas Admin e Empresa têm acesso ao BI (Financeiro e Comercial bloqueados)
-    if (isUserFinanceiro || isUserComercial) {
-      return false
+  // Atalho global de teclado Ctrl+K ou Cmd+K
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen((prev) => !prev)
+      }
     }
-    return true
-  })
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [])
 
-  const isFinanceiroActive =
-    location.pathname === '/financeiro' ||
-    location.pathname === '/baixa-recebiveis' ||
-    location.pathname === '/contratos' ||
-    location.pathname === '/notas-fiscais'
+  // Verifica se um grupo específico está ativo baseado na rota atual
+  const isGroupActive = (grupo: NavGroupConfig): boolean => {
+    if (grupo.tipo === 'link' && grupo.path) {
+      return location.pathname === grupo.path
+    }
 
-  // Itens do submenu Indicadores (Financeiro não vê Valuation)
-  const rawIndicadoresSubItems = [
-    {
-      name: 'Apresentação dos Indicadores',
-      path: '/indicadores/apresentacao',
-      icon: Presentation,
-      hideFinanceiro: true,
-      destaque: true,
-    },
-    { name: 'Painel & Benchmarks', path: '/indicadores/painel', icon: Gauge, hideFinanceiro: true },
-    {
-      name: 'Indicadores de Liquidez',
-      path: '/indicadores/liquidez',
-      icon: Activity,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Análise do Capital de Giro',
-      path: '/indicadores/capital-giro',
-      icon: Coins,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Indicadores de Endividamento',
-      path: '/indicadores/endividamento',
-      icon: TrendingDown,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Indicadores de Rentabilidade',
-      path: '/indicadores/rentabilidade',
-      icon: TrendingUp,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Indicadores de Estrutura de Capital',
-      path: '/indicadores/estrutura-capital',
-      icon: Building2,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'EBITDA',
-      path: '/indicadores/ebitda',
-      icon: TrendingUp,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Eficiência Operacional',
-      path: '/indicadores/eficiencia-operacional',
-      icon: Clock,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Econômicos (análise mais avançada)',
-      path: '/indicadores/economicos',
-      icon: TrendingUp,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Valuation',
-      path: '/indicadores/valuation',
-      icon: TrendingUp,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Ponto de Equilíbrio',
-      path: '/indicadores/ponto-equilibrio',
-      icon: Scale,
-      hideFinanceiro: true,
-    },
-    {
-      name: 'Kanitz (Insolvência)',
-      path: '/indicadores/kanitz',
-      icon: Flame,
-      hideFinanceiro: true,
-    },
-  ]
-  const indicadoresSubItems = rawIndicadoresSubItems.filter(
-    (item) => !isUserFinanceiro || !item.hideFinanceiro,
-  )
+    if (grupo.id === 'dashboard') {
+      return (
+        location.pathname === '/dashboard' ||
+        location.pathname === '/dashboard-bi' ||
+        location.pathname === '/bi'
+      )
+    }
 
-  const isIndicadoresActive = location.pathname.startsWith('/indicadores')
+    if (grupo.id === 'cadastros') {
+      return (
+        (location.pathname.startsWith('/empresas') &&
+          !location.search.includes('novo=balanco-dre')) ||
+        location.pathname.startsWith('/cadastro/grupos-empresariais') ||
+        location.pathname.startsWith('/grupos-empresariais') ||
+        location.pathname.startsWith('/centros') ||
+        location.pathname.startsWith('/tipos-despesas') ||
+        location.pathname.startsWith('/contas') ||
+        location.pathname.startsWith('/plano-contas') ||
+        location.pathname === '/minha-empresa' ||
+        location.pathname.startsWith('/admin/usuarios') ||
+        location.pathname.startsWith('/admin/auditoria')
+      )
+    }
 
-  // Itens do submenu Planejamento (Balanced Scorecard)
-  const planejamentoSubItems = [
-    {
-      name: 'Balanced Scorecard',
-      path: '/planejamento/bsc',
-      icon: Target,
-    },
-  ]
-  const isPlanejamentoActive = location.pathname.startsWith('/planejamento')
+    if (grupo.id === 'lancamentos') {
+      return (
+        location.pathname === '/lancamentos' ||
+        (location.pathname.startsWith('/empresas') && location.search.includes('novo=balanco-dre'))
+      )
+    }
 
-  // Grupos móveis (drawer) expansível/colapsável
-  const [dashboardOpen, setDashboardOpen] = useState(isDashboardActive)
-  const [cadastrosOpen, setCadastrosOpen] = useState(isCadastroActive)
-  const [lancamentosOpen, setLancamentosOpen] = useState<boolean>(isLancamentosActive || true)
-  const [financeiroOpen, setFinanceiroOpen] = useState(isFinanceiroActive)
-  const [formacaoPrecoOpen, setFormacaoPrecoOpen] = useState<boolean>(isFormacaoPrecoActive || true)
-  const [indicadoresOpen, setIndicadoresOpen] = useState<boolean>(isIndicadoresActive || true)
-  const [planejamentoOpen, setPlanejamentoOpen] = useState<boolean>(isPlanejamentoActive || true)
+    if (grupo.id === 'financeiro') {
+      return (
+        location.pathname === '/financeiro' ||
+        location.pathname === '/baixa-recebiveis' ||
+        location.pathname === '/contratos' ||
+        location.pathname === '/notas-fiscais'
+      )
+    }
 
-  React.useEffect(() => {
-    if (isDashboardActive) setDashboardOpen(true)
-  }, [isDashboardActive])
+    if (grupo.id === 'formacao-preco') {
+      return location.pathname.startsWith('/formacao-preco')
+    }
 
-  React.useEffect(() => {
-    if (isCadastroActive) setCadastrosOpen(true)
-  }, [isCadastroActive])
+    if (grupo.id === 'indicadores') {
+      return location.pathname.startsWith('/indicadores')
+    }
 
-  React.useEffect(() => {
-    if (isLancamentosActive) setLancamentosOpen(true)
-  }, [isLancamentosActive])
+    if (grupo.id === 'planejamento') {
+      return location.pathname.startsWith('/planejamento')
+    }
 
-  React.useEffect(() => {
-    if (isFinanceiroActive) setFinanceiroOpen(true)
-  }, [isFinanceiroActive])
+    if (grupo.id === 'relatorios') {
+      return location.pathname === '/relatorios' || location.pathname === '/relatorio-anual'
+    }
 
-  React.useEffect(() => {
-    if (isFormacaoPrecoActive) setFormacaoPrecoOpen(true)
-  }, [isFormacaoPrecoActive])
+    return false
+  }
 
-  React.useEffect(() => {
-    if (isIndicadoresActive) setIndicadoresOpen(true)
-  }, [isIndicadoresActive])
-
-  React.useEffect(() => {
-    if (isPlanejamentoActive) setPlanejamentoOpen(true)
-  }, [isPlanejamentoActive])
+  // Atualiza acordeões do drawer mobile quando rota mudar
+  useEffect(() => {
+    menuGruposFiltrados.forEach((g) => {
+      if (isGroupActive(g)) {
+        setOpenDrawerGroups((prev) => ({ ...prev, [g.id]: true }))
+      }
+    })
+  }, [location.pathname, location.search, menuGruposFiltrados])
 
   // Redirect to login if not authenticated
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isLoading && !isAuthenticated && location.pathname !== '/') {
       navigate('/', { replace: true })
     }
@@ -429,36 +219,42 @@ export default function Layout() {
     location.pathname.startsWith('/empresas/') ||
     location.pathname.startsWith('/formacao-preco')
 
+  const toggleDrawerGroup = (id: string) => {
+    setOpenDrawerGroups((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F7FA] flex flex-col antialiased text-slate-800">
       {/* ========================================================
-          BARRA SUPERIOR HORIZONTAL (TOPBAR)
-          Em mobile (< 768px): modo compacto com hambúrguer
-          Em tablet e desktop (>= 768px): barra horizontal completa com menus dropdown
+          BARRA SUPERIOR HORIZONTAL (TOPBAR) MODERNA
+          - Mega Menu suspenso com colunas por grupo
+          - Botão de Busca Rápida (Ctrl+K)
+          - Indicadores de estado e item ativo
+          - Identidade corporativa azul-marinho
       ======================================================== */}
       <header
         className="sticky top-0 z-40 text-white border-b border-white/10 shadow-md transition-colors"
         style={{ backgroundColor: corPrimaria }}
       >
         <div className="w-full px-3 lg:px-5">
-          <div className="flex items-center justify-between h-14 md:h-16 gap-2 md:gap-4">
-            {/* LADO ESQUERDO: Botão Mobile Hambúrguer + Logotipo e Nome */}
+          <div className="flex items-center justify-between h-14 md:h-16 gap-2 md:gap-3">
+            {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo */}
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
               {/* Hambúrguer apenas em mobile */}
               <button
                 type="button"
                 onClick={() => setMobileDrawerOpen(true)}
-                className="md:hidden p-2 -ml-1 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 transition-colors"
+                className="md:hidden p-2 -ml-1 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
                 aria-label="Abrir menu de navegação"
               >
                 <Menu className="w-5 h-5" />
               </button>
 
-              {/* Logotipo clicável (leva ao dashboard ou home) */}
+              {/* Logotipo clicável */}
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2.5 text-left group focus:outline-hidden"
+                className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer"
               >
                 {logoUrl ? (
                   <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden">
@@ -476,7 +272,7 @@ export default function Layout() {
                     <Scale className="w-4 h-4 md:w-5 md:h-5" />
                   </div>
                 )}
-                <div className="truncate max-w-[150px] sm:max-w-[190px] xl:max-w-[220px]">
+                <div className="truncate max-w-[140px] sm:max-w-[180px] xl:max-w-[210px]">
                   <span className="font-bold text-sm md:text-base text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
                     {minhaEmpresa?.nome_fantasia ||
                       minhaEmpresa?.razao_social ||
@@ -489,538 +285,38 @@ export default function Layout() {
               </button>
             </div>
 
-            {/* CENTRO: NAVEGAÇÃO HORIZONTAL PRINCIPAL (>= 768px) COM DROPDOWNS */}
-            <nav className="hidden md:flex items-center gap-1 xl:gap-1.5 flex-1 justify-start overflow-x-auto no-scrollbar py-1">
-              {/* 1. Dashboard (Dropdown com Dashboard Geral e Dashboard BI interativo) */}
-              {!isUserComercial && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        isDashboardActive
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <LayoutDashboard
-                        className={`w-3.5 h-3.5 ${isDashboardActive ? 'text-blue-200' : 'text-blue-300'}`}
-                      />
-                      <span>Dashboard</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
-                      Painéis & BI
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    <DropdownMenuItem
-                      asChild
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        location.pathname === '/dashboard'
-                          ? 'bg-blue-600 text-white font-semibold'
-                          : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                      }`}
-                    >
-                      <NavLink to="/dashboard">
-                        <LayoutDashboard className="w-4 h-4 shrink-0 text-blue-300" />
-                        <div className="flex flex-col min-w-0">
-                          <span className="truncate font-semibold">Dashboard Geral</span>
-                          <span className="text-[10px] text-blue-200/70 truncate">
-                            Visão executiva patrimonial
-                          </span>
-                        </div>
-                      </NavLink>
-                    </DropdownMenuItem>
-                    {!isUserFinanceiro && !isUserComercial && (
-                      <DropdownMenuItem
-                        asChild
-                        className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          location.pathname === '/dashboard-bi' || location.pathname === '/bi'
-                            ? 'bg-blue-600 text-white font-semibold'
-                            : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                        }`}
-                      >
-                        <NavLink
-                          to="/dashboard-bi"
-                          className="flex items-center justify-between w-full"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <BarChart3 className="w-4 h-4 shrink-0 text-amber-400" />
-                            <div className="flex flex-col min-w-0">
-                              <span className="truncate font-semibold">Dashboard BI</span>
-                              <span className="text-[10px] text-amber-200/70 truncate">
-                                Apresentação às Empresas
-                              </span>
-                            </div>
-                          </div>
-                          <span className="text-[9px] bg-amber-400/20 text-amber-300 px-1.5 py-0.5 rounded font-bold border border-amber-400/30">
-                            BI
-                          </span>
-                        </NavLink>
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* 2. Cadastros (Dropdown) */}
-              {cadastroSubItems.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        isCadastroActive
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <Folder
-                        className={`w-3.5 h-3.5 ${isCadastroActive ? 'text-blue-200' : 'text-blue-300'}`}
-                      />
-                      <span>Cadastros</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-56 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
-                      Cadastros Gerais
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    {cadastroSubItems.map((sub) => {
-                      const SubIcon = sub.icon
-                      const isSubActive =
-                        sub.path === '/empresas'
-                          ? location.pathname.startsWith('/empresas') &&
-                            !location.search.includes('novo=balanco-dre')
-                          : location.pathname === sub.path
-
-                      return (
-                        <DropdownMenuItem
-                          key={sub.path}
-                          asChild
-                          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                            isSubActive
-                              ? 'bg-blue-600 text-white font-semibold'
-                              : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                          }`}
-                        >
-                          <NavLink to={sub.path}>
-                            <SubIcon
-                              className={`w-4 h-4 shrink-0 ${
-                                isSubActive ? 'text-white' : 'text-blue-300'
-                              }`}
-                            />
-                            <span className="truncate">{sub.name}</span>
-                          </NavLink>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* 3. Lançamentos (Dropdown com Lançamentos Rápidos e Balanço e DRE) */}
-              {!isUserComercial && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        isLancamentosActive
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <FileText
-                        className={`w-3.5 h-3.5 ${isLancamentosActive ? 'text-blue-200' : 'text-blue-300'}`}
-                      />
-                      <span>Lançamentos</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-56 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
-                      Registros Contábeis
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    <DropdownMenuItem
-                      asChild
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        location.pathname === '/lancamentos'
-                          ? 'bg-blue-600 text-white font-semibold'
-                          : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                      }`}
-                    >
-                      <NavLink to="/lancamentos">
-                        <FileText className="w-4 h-4 shrink-0 text-blue-300" />
-                        <span className="truncate">Lançamentos Rápidos</span>
-                      </NavLink>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      asChild
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        location.search.includes('novo=balanco-dre')
-                          ? 'bg-blue-600 text-white font-semibold'
-                          : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                      }`}
-                    >
-                      <NavLink to={balancoDreUrl}>
-                        <Scale className="w-4 h-4 shrink-0 text-emerald-400" />
-                        <span className="truncate">Balanço e DRE (Mensal)</span>
-                      </NavLink>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* 4. Financeiro (Dropdown) */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                      isFinanceiroActive
-                        ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                        : 'text-slate-200 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    <DollarSign
-                      className={`w-3.5 h-3.5 ${isFinanceiroActive ? 'text-emerald-200' : 'text-emerald-400'}`}
-                    />
-                    <span>Financeiro</span>
-                    <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  sideOffset={8}
-                  className="w-56 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                >
-                  <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-emerald-300/80 px-2.5 py-1">
-                    Gestão Financeira
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator className="bg-white/10 my-1" />
-                  {financeiroSubItems.map((sub) => {
-                    const SubIcon = sub.icon
-                    const isSubActive = location.pathname === sub.path
-
-                    return (
-                      <DropdownMenuItem
-                        key={sub.path}
-                        asChild
-                        className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          isSubActive
-                            ? 'bg-blue-600 text-white font-semibold'
-                            : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                        }`}
-                      >
-                        <NavLink to={sub.path}>
-                          <SubIcon
-                            className={`w-4 h-4 shrink-0 ${
-                              isSubActive ? 'text-white' : 'text-emerald-400'
-                            }`}
-                          />
-                          <span className="truncate">{sub.name}</span>
-                        </NavLink>
-                      </DropdownMenuItem>
-                    )
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* 5. Formação de Preço (Dropdown) */}
-              {!isUserFinanceiro && !isUserComercial && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        isFormacaoPrecoActive
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <Calculator
-                        className={`w-3.5 h-3.5 ${isFormacaoPrecoActive ? 'text-amber-200' : 'text-amber-400'}`}
-                      />
-                      <span>Formação de Preço</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-60 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-amber-300/80 px-2.5 py-1">
-                      Custos & Precificação
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    {formacaoPrecoSubItems.map((sub) => {
-                      const SubIcon = sub.icon
-                      const isSubActive = location.pathname === sub.path
-
-                      return (
-                        <DropdownMenuItem
-                          key={sub.path}
-                          asChild
-                          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                            isSubActive
-                              ? 'bg-blue-600 text-white font-semibold'
-                              : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                          }`}
-                        >
-                          <NavLink to={sub.path}>
-                            <SubIcon
-                              className={`w-4 h-4 shrink-0 ${
-                                isSubActive ? 'text-white' : 'text-amber-400'
-                              }`}
-                            />
-                            <span className="truncate">{sub.name}</span>
-                          </NavLink>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* 6. Indicadores (Dropdown) */}
-              {!isUserFinanceiro && !isUserComercial && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        isIndicadoresActive
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <Gauge
-                        className={`w-3.5 h-3.5 ${isIndicadoresActive ? 'text-blue-200' : 'text-blue-300'}`}
-                      />
-                      <span>Indicadores</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-64 max-h-[70vh] overflow-y-auto bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
-                      Painel & Análise de Indicadores
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    {indicadoresSubItems.map((sub) => {
-                      const SubIcon = sub.icon
-                      const isSubActive = location.pathname === sub.path
-                      const isDestaque = (sub as any).destaque
-
-                      return (
-                        <DropdownMenuItem
-                          key={sub.path}
-                          asChild
-                          className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                            isSubActive
-                              ? 'bg-emerald-600 text-white font-semibold'
-                              : isDestaque
-                                ? 'bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-white font-semibold border border-emerald-500/30 mb-1'
-                                : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                          }`}
-                        >
-                          <NavLink
-                            to={sub.path}
-                            className="flex items-center justify-between w-full"
-                          >
-                            <div className="flex items-center gap-2.5 truncate">
-                              <SubIcon
-                                className={`w-3.5 h-3.5 shrink-0 ${
-                                  isSubActive
-                                    ? 'text-white'
-                                    : isDestaque
-                                      ? 'text-emerald-300'
-                                      : 'text-blue-300'
-                                }`}
-                              />
-                              <span className="truncate">{sub.name}</span>
-                            </div>
-                            {isDestaque && (
-                              <span className="text-[9px] bg-emerald-400/20 text-emerald-300 px-1.5 py-0.2 rounded font-bold border border-emerald-400/30 uppercase">
-                                Novo
-                              </span>
-                            )}
-                          </NavLink>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* 7. Planejamento (Dropdown com Balanced Scorecard) */}
-              {!isUserFinanceiro && !isUserComercial && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        isPlanejamentoActive
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <Compass
-                        className={`w-3.5 h-3.5 ${isPlanejamentoActive ? 'text-blue-200' : 'text-blue-300'}`}
-                      />
-                      <span>Planejamento</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-56 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
-                      Estratégia Empresarial
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    {planejamentoSubItems.map((sub) => {
-                      const SubIcon = sub.icon
-                      const isSubActive = location.pathname === sub.path
-
-                      return (
-                        <DropdownMenuItem
-                          key={sub.path}
-                          asChild
-                          className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                            isSubActive
-                              ? 'bg-blue-600 text-white font-semibold'
-                              : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                          }`}
-                        >
-                          <NavLink to={sub.path}>
-                            <SubIcon
-                              className={`w-4 h-4 shrink-0 ${
-                                isSubActive ? 'text-white' : 'text-blue-300'
-                              }`}
-                            />
-                            <span className="truncate">{sub.name}</span>
-                          </NavLink>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
-              {/* 8. Análise Tributária (Link direto) */}
-              {!isUserFinanceiro && !isUserComercial && (
-                <NavLink
-                  to="/analise-tributaria"
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all ${
-                    location.pathname === '/analise-tributaria'
-                      ? 'bg-white/20 text-white font-semibold shadow-xs'
-                      : 'text-slate-200 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Calculator className="w-3.5 h-3.5 text-emerald-300" />
-                  <span>Análise Tributária</span>
-                </NavLink>
-              )}
-
-              {/* 9. Importação (Link direto) */}
-              {!isUserFinanceiro && !isUserComercial && (
-                <NavLink
-                  to="/importacao"
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all ${
-                    location.pathname === '/importacao'
-                      ? 'bg-white/20 text-white font-semibold shadow-xs'
-                      : 'text-slate-200 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  <Upload className="w-3.5 h-3.5 text-blue-300" />
-                  <span>Importação</span>
-                </NavLink>
-              )}
-
-              {/* 10. Relatórios (Dropdown com Relatório Geral e Anual) */}
-              {!isUserFinanceiro && !isUserComercial && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs lg:text-sm font-medium whitespace-nowrap transition-all cursor-pointer select-none outline-hidden ${
-                        location.pathname === '/relatorios' ||
-                        location.pathname === '/relatorio-anual'
-                          ? 'bg-white/20 text-white font-semibold shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-200 hover:text-white hover:bg-white/10'
-                      }`}
-                    >
-                      <FileText className="w-3.5 h-3.5 text-blue-300" />
-                      <span>Relatórios</span>
-                      <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="start"
-                    sideOffset={8}
-                    className="w-56 bg-[#0B1F3A] border-slate-700/80 text-white shadow-xl rounded-xl p-1.5 z-50 backdrop-blur-md"
-                  >
-                    <DropdownMenuLabel className="text-[10px] uppercase font-bold tracking-wider text-blue-300/80 px-2.5 py-1">
-                      Demonstrações & Pareceres
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-white/10 my-1" />
-                    <DropdownMenuItem
-                      asChild
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        location.pathname === '/relatorios'
-                          ? 'bg-blue-600 text-white font-semibold'
-                          : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                      }`}
-                    >
-                      <NavLink to="/relatorios">
-                        <FileText className="w-4 h-4 shrink-0 text-blue-300" />
-                        <span className="truncate">Relatórios Executivos</span>
-                      </NavLink>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      asChild
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                        location.pathname === '/relatorio-anual'
-                          ? 'bg-blue-600 text-white font-semibold'
-                          : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                      }`}
-                    >
-                      <NavLink to="/relatorio-anual">
-                        <FileText className="w-4 h-4 shrink-0 text-blue-300" />
-                        <span className="truncate">Relatório Consolidado Anual</span>
-                      </NavLink>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+            {/* CENTRO: NAVEGAÇÃO HORIZONTAL PRINCIPAL COM MEGA-MENUS */}
+            <nav className="hidden md:flex items-center gap-0.5 lg:gap-1 flex-1 justify-start overflow-x-auto no-scrollbar py-1">
+              {menuGruposFiltrados.map((grupo) => {
+                const active = isGroupActive(grupo)
+                return (
+                  <ModernMegaMenu
+                    key={grupo.id}
+                    grupo={grupo}
+                    isActive={active}
+                    balancoDreUrl={balancoDreUrl}
+                  />
+                )
+              })}
             </nav>
 
-            {/* LADO DIREITO: MENU DE AVATAR DO USUÁRIO (Substitui o antigo cartão do rodapé) */}
+            {/* LADO DIREITO: BUSCA RÁPIDA (Ctrl+K) + AVATAR */}
             <div className="flex items-center gap-2 shrink-0">
+              {/* Botão de Busca Rápida (Command Palette) */}
+              <button
+                type="button"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/18 text-slate-200 hover:text-white text-xs border border-white/15 transition-all shadow-xs cursor-pointer group"
+                title="Pressione Ctrl+K para buscar módulos e relatórios"
+              >
+                <Search className="w-3.5 h-3.5 text-blue-300 group-hover:text-white transition-colors" />
+                <span className="hidden lg:inline text-xs font-normal">Buscar módulo...</span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono bg-black/30 border border-white/15 rounded text-slate-300 group-hover:text-white">
+                  <span className="text-[9px]">⌘</span>K
+                </kbd>
+              </button>
+
+              {/* Menu de Avatar do Usuário */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -1041,7 +337,7 @@ export default function Layout() {
                         {userInitial}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="hidden xl:flex flex-col items-start text-left max-w-[140px] truncate">
+                    <div className="hidden xl:flex flex-col items-start text-left max-w-[130px] truncate">
                       <span className="text-xs font-semibold text-white truncate leading-tight block">
                         {userName}
                       </span>
@@ -1145,7 +441,7 @@ export default function Layout() {
 
       {/* ========================================================
           DRAWER MOBILE (< 768px)
-          Mantido completo para navegação móvel com hambúrguer
+          Modernizado com busca e suporte aos mesmos dados ricos
       ======================================================== */}
       {mobileDrawerOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
@@ -1157,12 +453,12 @@ export default function Layout() {
 
           {/* Drawer Lateral */}
           <div
-            className="relative w-72 max-w-[85vw] text-white flex flex-col justify-between h-full p-5 shadow-2xl z-10 transition-colors"
+            className="relative w-80 max-w-[85vw] text-white flex flex-col justify-between h-full p-4 sm:p-5 shadow-2xl z-10 transition-colors"
             style={{ backgroundColor: corPrimaria }}
           >
             <div>
               {/* Cabeçalho do Drawer */}
-              <div className="flex items-center justify-between pb-5 border-b border-white/10">
+              <div className="flex items-center justify-between pb-4 border-b border-white/10">
                 <div className="flex items-center gap-2.5 overflow-hidden">
                   {logoUrl ? (
                     <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md">
@@ -1194,606 +490,146 @@ export default function Layout() {
                 <button
                   type="button"
                   onClick={() => setMobileDrawerOpen(false)}
-                  className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10"
+                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
                   aria-label="Fechar menu"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
+              {/* Botão de Busca no Mobile */}
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileDrawerOpen(false)
+                    setCommandPaletteOpen(true)
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs border border-white/15 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Search className="w-4 h-4 text-blue-300" />
+                    <span>Buscar módulo...</span>
+                  </div>
+                  <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-black/30 rounded border border-white/10 text-slate-300">
+                    Ctrl+K
+                  </kbd>
+                </button>
+              </div>
+
               {/* Lista de navegação mobile */}
-              <nav className="mt-5 space-y-1 overflow-y-auto max-h-[calc(100vh-210px)] pr-1">
-                {/* 1. Dashboard (Expansível no Mobile) */}
-                {!isUserComercial && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setDashboardOpen((prev) => !prev)}
-                      style={
-                        isDashboardActive
-                          ? {
-                              backgroundColor: `${corSecundaria}33`,
-                              borderColor: `${corSecundaria}66`,
-                            }
-                          : undefined
-                      }
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                        isDashboardActive
-                          ? 'text-white font-semibold border'
-                          : 'text-slate-300 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <LayoutDashboard
-                          className={`w-4 h-4 ${isDashboardActive ? 'text-blue-300' : 'text-blue-400'}`}
-                        />
-                        <span>Dashboard</span>
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                          dashboardOpen ? 'rotate-0' : '-rotate-90'
+              <nav className="mt-4 space-y-1 overflow-y-auto max-h-[calc(100vh-250px)] pr-1">
+                {menuGruposFiltrados.map((grupo) => {
+                  const GroupIcon = grupo.icon
+                  const active = isGroupActive(grupo)
+
+                  // Link direto no mobile
+                  if (grupo.tipo === 'link' && grupo.path) {
+                    const isLinkActive = location.pathname === grupo.path
+                    return (
+                      <NavLink
+                        key={grupo.id}
+                        to={grupo.path}
+                        onClick={() => setMobileDrawerOpen(false)}
+                        className={`flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+                          isLinkActive
+                            ? 'bg-white/20 text-white font-semibold shadow-xs'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
                         }`}
-                      />
-                    </button>
-
-                    <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                        dashboardOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
-                          <NavLink
-                            to="/dashboard"
-                            onClick={() => setMobileDrawerOpen(false)}
-                            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                              location.pathname === '/dashboard'
-                                ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                : 'text-slate-300 hover:text-white hover:bg-white/5'
-                            }`}
-                          >
-                            <LayoutDashboard className="w-3.5 h-3.5 text-blue-300" />
-                            <span className="truncate">Dashboard Geral</span>
-                          </NavLink>
-
-                          {!isUserFinanceiro && !isUserComercial && (
-                            <NavLink
-                              to="/dashboard-bi"
-                              onClick={() => setMobileDrawerOpen(false)}
-                              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                location.pathname === '/dashboard-bi' || location.pathname === '/bi'
-                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
-                              <span className="truncate">Dashboard BI (Apresentação)</span>
-                            </NavLink>
-                          )}
+                      >
+                        <div className="flex items-center gap-3 truncate">
+                          <GroupIcon
+                            className={`w-4 h-4 ${isLinkActive ? 'text-white' : 'text-blue-300'}`}
+                          />
+                          <span className="truncate">{grupo.label}</span>
                         </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                        {grupo.badge && (
+                          <span className="text-[9px] bg-blue-400/25 text-blue-200 border border-blue-400/30 px-1.5 py-0.5 rounded font-bold uppercase">
+                            {grupo.badge}
+                          </span>
+                        )}
+                      </NavLink>
+                    )
+                  }
 
-                {/* 2. Cadastros (Expansível) */}
-                <div className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setCadastrosOpen((prev) => !prev)}
-                    style={
-                      isCadastroActive
-                        ? {
-                            backgroundColor: `${corSecundaria}33`,
-                            borderColor: `${corSecundaria}66`,
-                          }
-                        : undefined
-                    }
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                      isCadastroActive
-                        ? 'text-white font-semibold border'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Folder
-                        className={`w-4 h-4 ${isCadastroActive ? 'text-blue-300' : 'text-blue-400'}`}
-                      />
-                      <span>Cadastros</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                        cadastrosOpen ? 'rotate-0' : '-rotate-90'
-                      }`}
-                    />
-                  </button>
+                  // Grupo expansível (mega ou dropdown)
+                  const isOpen = !!openDrawerGroups[grupo.id]
 
-                  <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                      cadastrosOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="ml-3 pl-3 border-l border-blue-500/20 space-y-1 py-1">
-                        {cadastroSubItems.map((sub) => {
-                          const SubIcon = sub.icon
-                          const isSubActive =
-                            sub.path === '/empresas'
+                  // Achatar itens do grupo para exibição no mobile
+                  const subitens = grupo.colunas
+                    ? grupo.colunas.flatMap((c) => c.itens)
+                    : grupo.itens || []
+
+                  return (
+                    <div key={grupo.id} className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleDrawerGroup(grupo.id)}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+                          active
+                            ? 'text-white font-semibold bg-white/15 border border-white/20'
+                            : 'text-slate-300 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 truncate">
+                          <GroupIcon
+                            className={`w-4 h-4 ${active ? 'text-blue-200' : 'text-blue-300'}`}
+                          />
+                          <span className="truncate">{grupo.label}</span>
+                        </div>
+                        <ChevronDown
+                          className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                            isOpen ? 'rotate-180 text-white' : ''
+                          }`}
+                        />
+                      </button>
+
+                      {isOpen && (
+                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1 animate-in fade-in duration-150">
+                          {subitens.map((item) => {
+                            const SubIcon = item.icon
+                            const isSubActive = item.path.includes('novo=balanco-dre')
                               ? location.pathname.startsWith('/empresas') &&
-                                !location.search.includes('novo=balanco-dre')
-                              : location.pathname === sub.path
-
-                          return (
-                            <NavLink
-                              key={sub.path}
-                              to={sub.path}
-                              onClick={() => setMobileDrawerOpen(false)}
-                              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                isSubActive
-                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              <SubIcon
-                                className={`w-3.5 h-3.5 ${
-                                  isSubActive ? 'text-blue-300' : 'text-slate-400'
-                                }`}
-                              />
-                              <span className="truncate">{sub.name}</span>
-                            </NavLink>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Lançamentos (Expansível) */}
-                {!isUserComercial && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setLancamentosOpen((prev) => !prev)}
-                      style={
-                        isLancamentosActive
-                          ? {
-                              backgroundColor: `${corSecundaria}33`,
-                              borderColor: `${corSecundaria}66`,
-                            }
-                          : undefined
-                      }
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                        isLancamentosActive
-                          ? 'text-white font-semibold border'
-                          : 'text-slate-300 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText
-                          className={`w-4 h-4 ${isLancamentosActive ? 'text-blue-300' : 'text-blue-400'}`}
-                        />
-                        <span>Lançamentos</span>
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                          lancamentosOpen ? 'rotate-0' : '-rotate-90'
-                        }`}
-                      />
-                    </button>
-
-                    <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                        lancamentosOpen
-                          ? 'grid-rows-[1fr] opacity-100'
-                          : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
-                          <NavLink
-                            to="/lancamentos"
-                            onClick={() => setMobileDrawerOpen(false)}
-                            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                              location.pathname === '/lancamentos'
-                                ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                : 'text-slate-300 hover:text-white hover:bg-white/5'
-                            }`}
-                          >
-                            <FileText
-                              className={`w-3.5 h-3.5 ${
-                                location.pathname === '/lancamentos'
-                                  ? 'text-blue-300'
-                                  : 'text-slate-400'
-                              }`}
-                            />
-                            <span className="truncate">Lançamentos Rápidos</span>
-                          </NavLink>
-
-                          <NavLink
-                            to={balancoDreUrl}
-                            onClick={() => setMobileDrawerOpen(false)}
-                            className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                              location.search.includes('novo=balanco-dre')
-                                ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                : 'text-slate-300 hover:text-white hover:bg-white/5'
-                            }`}
-                          >
-                            <Scale
-                              className={`w-3.5 h-3.5 ${
                                 location.search.includes('novo=balanco-dre')
-                                  ? 'text-blue-300'
-                                  : 'text-emerald-400'
-                              }`}
-                            />
-                            <span className="truncate">Balanço e DRE (Mensal)</span>
-                          </NavLink>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 4. Financeiro (Expansível) */}
-                <div className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => setFinanceiroOpen((prev) => !prev)}
-                    style={
-                      isFinanceiroActive
-                        ? {
-                            backgroundColor: `${corSecundaria}33`,
-                            borderColor: `${corSecundaria}66`,
-                          }
-                        : undefined
-                    }
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                      isFinanceiroActive
-                        ? 'text-white font-semibold border'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <DollarSign
-                        className={`w-4 h-4 ${isFinanceiroActive ? 'text-emerald-300' : 'text-emerald-400'}`}
-                      />
-                      <span>Financeiro</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                        financeiroOpen ? 'rotate-0' : '-rotate-90'
-                      }`}
-                    />
-                  </button>
-
-                  <div
-                    className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                      financeiroOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                    }`}
-                  >
-                    <div className="overflow-hidden">
-                      <div className="ml-3 pl-3 border-l border-emerald-500/30 space-y-1 py-1">
-                        {financeiroSubItems.map((sub) => {
-                          const SubIcon = sub.icon
-                          const isSubActive = location.pathname === sub.path
-
-                          return (
-                            <NavLink
-                              key={sub.path}
-                              to={sub.path}
-                              onClick={() => setMobileDrawerOpen(false)}
-                              className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                isSubActive
-                                  ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                  : 'text-slate-300 hover:text-white hover:bg-white/5'
-                              }`}
-                            >
-                              <SubIcon
-                                className={`w-3.5 h-3.5 ${
-                                  isSubActive ? 'text-emerald-300' : 'text-slate-400'
-                                }`}
-                              />
-                              <span className="truncate">{sub.name}</span>
-                            </NavLink>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 5. Formação de Preço - Custo (Expansível) */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setFormacaoPrecoOpen((prev) => !prev)}
-                      style={
-                        isFormacaoPrecoActive
-                          ? {
-                              backgroundColor: `${corSecundaria}33`,
-                              borderColor: `${corSecundaria}66`,
-                            }
-                          : undefined
-                      }
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                        isFormacaoPrecoActive
-                          ? 'text-white font-semibold border'
-                          : 'text-slate-300 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Calculator
-                          className={`w-4 h-4 ${isFormacaoPrecoActive ? 'text-amber-300' : 'text-amber-400'}`}
-                        />
-                        <span className="truncate">Formação de Preço - Custo</span>
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                          formacaoPrecoOpen ? 'rotate-0' : '-rotate-90'
-                        }`}
-                      />
-                    </button>
-
-                    <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                        formacaoPrecoOpen
-                          ? 'grid-rows-[1fr] opacity-100'
-                          : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="ml-3 pl-3 border-l border-amber-500/30 space-y-1 py-1">
-                          {formacaoPrecoSubItems.map((sub) => {
-                            const SubIcon = sub.icon
-                            const isSubActive = location.pathname === sub.path
+                              : item.path === '/empresas'
+                                ? location.pathname.startsWith('/empresas') &&
+                                  !location.search.includes('novo=balanco-dre')
+                                : location.pathname === item.path
 
                             return (
                               <NavLink
-                                key={sub.path}
-                                to={sub.path}
+                                key={item.id}
+                                to={item.path}
                                 onClick={() => setMobileDrawerOpen(false)}
-                                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${
                                   isSubActive
-                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
+                                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
                                     : 'text-slate-300 hover:text-white hover:bg-white/5'
-                                }`}
-                              >
-                                <SubIcon
-                                  className={`w-3.5 h-3.5 ${
-                                    isSubActive ? 'text-amber-300' : 'text-slate-400'
-                                  }`}
-                                />
-                                <span className="truncate">{sub.name}</span>
-                              </NavLink>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 6. Indicadores (Expansível) */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setIndicadoresOpen((prev) => !prev)}
-                      style={
-                        isIndicadoresActive
-                          ? {
-                              backgroundColor: `${corSecundaria}33`,
-                              borderColor: `${corSecundaria}66`,
-                            }
-                          : undefined
-                      }
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                        isIndicadoresActive
-                          ? 'text-white font-semibold border'
-                          : 'text-slate-300 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Gauge
-                          className={`w-4 h-4 ${isIndicadoresActive ? 'text-blue-300' : 'text-blue-400'}`}
-                        />
-                        <span>Indicadores</span>
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                          indicadoresOpen ? 'rotate-0' : '-rotate-90'
-                        }`}
-                      />
-                    </button>
-
-                    <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                        indicadoresOpen
-                          ? 'grid-rows-[1fr] opacity-100'
-                          : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
-                          {indicadoresSubItems.map((sub) => {
-                            const SubIcon = sub.icon
-                            const isSubActive = location.pathname === sub.path
-                            const isDestaque = (sub as any).destaque
-
-                            return (
-                              <NavLink
-                                key={sub.path}
-                                to={sub.path}
-                                onClick={() => setMobileDrawerOpen(false)}
-                                className={`flex items-center justify-between px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                  isSubActive
-                                    ? 'bg-emerald-600 text-white font-semibold shadow-xs'
-                                    : isDestaque
-                                      ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-500/30'
-                                      : 'text-slate-300 hover:text-white hover:bg-white/5'
                                 }`}
                               >
                                 <div className="flex items-center gap-2.5 truncate">
                                   <SubIcon
-                                    className={`w-3.5 h-3.5 ${
-                                      isSubActive
-                                        ? 'text-white'
-                                        : isDestaque
-                                          ? 'text-emerald-300'
-                                          : 'text-blue-300'
+                                    className={`w-3.5 h-3.5 shrink-0 ${
+                                      isSubActive ? 'text-white' : 'text-blue-300'
                                     }`}
                                   />
-                                  <span className="truncate">{sub.name}</span>
+                                  <div className="flex flex-col truncate">
+                                    <span className="truncate">{item.name}</span>
+                                  </div>
                                 </div>
-                                {isDestaque && (
-                                  <span className="text-[9px] bg-emerald-400/20 text-emerald-300 px-1 py-0.2 rounded font-bold">
-                                    Novo
+                                {item.badge && (
+                                  <span className="text-[9px] bg-amber-400/20 text-amber-300 border border-amber-400/30 px-1 py-0.2 rounded font-bold uppercase shrink-0">
+                                    {item.badge}
                                   </span>
                                 )}
                               </NavLink>
                             )
                           })}
                         </div>
-                      </div>
+                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* 7. Planejamento (Expansível) */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => setPlanejamentoOpen((prev) => !prev)}
-                      style={
-                        isPlanejamentoActive
-                          ? {
-                              backgroundColor: `${corSecundaria}33`,
-                              borderColor: `${corSecundaria}66`,
-                            }
-                          : undefined
-                      }
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                        isPlanejamentoActive
-                          ? 'text-white font-semibold border'
-                          : 'text-slate-300 hover:text-white hover:bg-white/5'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <Compass
-                          className={`w-4 h-4 ${isPlanejamentoActive ? 'text-blue-300' : 'text-blue-400'}`}
-                        />
-                        <span>Planejamento</span>
-                      </div>
-                      <ChevronDown
-                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-                          planejamentoOpen ? 'rotate-0' : '-rotate-90'
-                        }`}
-                      />
-                    </button>
-
-                    <div
-                      className={`grid transition-[grid-template-rows,opacity] duration-200 ease-in-out ${
-                        planejamentoOpen
-                          ? 'grid-rows-[1fr] opacity-100'
-                          : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="ml-3 pl-3 border-l border-blue-500/30 space-y-1 py-1">
-                          {planejamentoSubItems.map((sub) => {
-                            const SubIcon = sub.icon
-                            const isSubActive = location.pathname === sub.path
-
-                            return (
-                              <NavLink
-                                key={sub.path}
-                                to={sub.path}
-                                onClick={() => setMobileDrawerOpen(false)}
-                                className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                                  isSubActive
-                                    ? 'bg-white/15 text-white font-semibold shadow-xs'
-                                    : 'text-slate-300 hover:text-white hover:bg-white/5'
-                                }`}
-                              >
-                                <SubIcon
-                                  className={`w-3.5 h-3.5 ${
-                                    isSubActive ? 'text-blue-300' : 'text-slate-400'
-                                  }`}
-                                />
-                                <span className="truncate">{sub.name}</span>
-                              </NavLink>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 8. Análise Tributária */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <NavLink
-                    to="/analise-tributaria"
-                    onClick={() => setMobileDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/analise-tributaria'
-                        ? 'bg-white/15 text-white font-semibold shadow-inner'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Calculator className="w-4 h-4 text-emerald-400" />
-                    <span>Análise Tributária</span>
-                  </NavLink>
-                )}
-
-                {/* 9. Importação */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <NavLink
-                    to="/importacao"
-                    onClick={() => setMobileDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/importacao'
-                        ? 'bg-white/15 text-white font-semibold shadow-inner'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <Upload className="w-4 h-4 text-blue-400" />
-                    <span>Importação</span>
-                  </NavLink>
-                )}
-
-                {/* 10. Relatório Anual */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <NavLink
-                    to="/relatorio-anual"
-                    onClick={() => setMobileDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/relatorio-anual'
-                        ? 'bg-white/15 text-white font-semibold shadow-inner'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    <span>Relatório Anual</span>
-                  </NavLink>
-                )}
-
-                {/* 11. Relatórios */}
-                {!isUserFinanceiro && !isUserComercial && (
-                  <NavLink
-                    to="/relatorios"
-                    onClick={() => setMobileDrawerOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
-                      location.pathname === '/relatorios'
-                        ? 'bg-white/15 text-white font-semibold shadow-inner'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <FileText className="w-4 h-4 text-blue-400" />
-                    <span>Relatórios</span>
-                  </NavLink>
-                )}
+                  )
+                })}
               </nav>
             </div>
 
@@ -1805,7 +641,7 @@ export default function Layout() {
                   setMobileDrawerOpen(false)
                   navigate('/configuracoes')
                 }}
-                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left"
+                className="w-full flex items-center justify-between p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left cursor-pointer"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <Avatar className="w-9 h-9 border border-white/20 shrink-0">
@@ -1844,7 +680,7 @@ export default function Layout() {
                   setMobileDrawerOpen(false)
                   setModalPerfilOpen(true)
                 }}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-200 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-slate-200 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 transition-colors cursor-pointer"
               >
                 <Bell className="w-4 h-4 text-blue-300" />
                 Alertas e Notificações
@@ -1855,7 +691,7 @@ export default function Layout() {
                   logout()
                   navigate('/')
                 }}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-red-300 bg-red-950/40 hover:bg-red-900/50 rounded-lg border border-red-800/40 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-red-300 bg-red-950/40 hover:bg-red-900/50 rounded-lg border border-red-800/40 transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
                 Sair do sistema
@@ -2013,6 +849,14 @@ export default function Layout() {
 
       {/* Modal de Perfil e Preferências de Alertas */}
       <ModalPerfil open={modalPerfilOpen} onOpenChange={setModalPerfilOpen} />
+
+      {/* Busca Rápida de Comandos / Telas (Ctrl+K) */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        itens={itensNavegaveis}
+        currentPath={location.pathname}
+      />
     </div>
   )
 }
