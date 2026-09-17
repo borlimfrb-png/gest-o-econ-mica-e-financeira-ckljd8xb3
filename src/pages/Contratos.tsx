@@ -8,7 +8,7 @@ import {
   type ResumoTitulosContrato,
   type SincronizarTitulosContratoResult,
 } from '@/services/recebiveisService'
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useToast } from '@/hooks/use-toast'
 import useRealtime from '@/hooks/use-realtime'

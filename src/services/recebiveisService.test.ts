@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { recebiveisService } from './recebiveisService'
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import { normalizarPeriodoCobranca, gerarParcelasDePeriodos } from '@/lib/periodosCobranca'
 
 describe('Integração Contratos -> Recebíveis e Reconciliação', () => {

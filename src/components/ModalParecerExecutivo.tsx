@@ -28,9 +28,10 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
-import type { EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
+import type { EmpresaRecord, MinhaEmpresaRecord, TributoLancamentoRecord } from '@/types/finance'
 import type { AnaliseTributariaResultado } from '@/lib/taxCalculations'
 import { formatCurrency, formatPercent, formatCnpj } from '@/lib/financeCalculations'
+import { ShoppingCart } from 'lucide-react'
 
 interface ModalParecerExecutivoProps {
   open: boolean
@@ -43,6 +44,8 @@ interface ModalParecerExecutivoProps {
   analise: AnaliseTributariaResultado
   minhaEmpresa: MinhaEmpresaRecord | null
   logoUrl: string | null
+  lancamentosEntradas?: TributoLancamentoRecord[]
+  lancamentosSaidas?: TributoLancamentoRecord[]
 }
 
 export function ModalParecerExecutivo({
@@ -56,10 +59,18 @@ export function ModalParecerExecutivo({
   analise,
   minhaEmpresa,
   logoUrl,
+  lancamentosEntradas = [],
+  lancamentosSaidas = [],
 }: ModalParecerExecutivoProps) {
   const handlePrint = () => {
     window.print()
   }
+
+  const apuracao = analise.apuracaoEntradasSaidas
+
+  const totalMercadoriasEntradas = apuracao
+    ? apuracao.totalMercadoriasEntradas
+    : lancamentosEntradas.reduce((s, e) => s + (Number(e.valor_mercadoria) || 0), 0)
 
   const margemLiquida = receitaBruta > 0 ? (lucroLiquido / receitaBruta) * 100 : 0
   const dataEmissao = new Date().toLocaleDateString('pt-BR', {
@@ -288,6 +299,14 @@ export function ModalParecerExecutivo({
                 </button>
                 <button
                   type="button"
+                  onClick={() => scrollToSection('sec-3b-apuracao')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                >
+                  <span>3.1 Apuração Débitos x Créditos</span>
+                  <span className="text-[10px] text-slate-400">Ir &darr;</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => scrollToSection('sec-4-resultados')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
@@ -413,14 +432,31 @@ export function ModalParecerExecutivo({
                   <tbody className="divide-y divide-slate-200">
                     <tr>
                       <td className="py-2 px-3 font-semibold text-slate-900">
-                        Receita Operacional Bruta
+                        Receita Operacional Bruta (Saídas / Faturamento)
                       </td>
                       <td className="py-2 px-3 text-right font-bold text-slate-900">
                         {formatCurrency(receitaBruta)}
                       </td>
                       <td className="py-2 px-3 text-right">100,0%</td>
                       <td className="py-2 px-3 text-slate-500">
-                        Base de cálculo dos tributos sobre faturamento
+                        Base de cálculo dos tributos sobre vendas / saídas
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 px-3 font-semibold text-amber-950 flex items-center gap-1.5">
+                        <ShoppingCart className="w-3.5 h-3.5 text-amber-600 inline" />
+                        Compras e Entradas de Mercadorias / Insumos
+                      </td>
+                      <td className="py-2 px-3 text-right font-bold text-amber-950">
+                        {formatCurrency(totalMercadoriasEntradas)}
+                      </td>
+                      <td className="py-2 px-3 text-right">
+                        {receitaBruta > 0
+                          ? formatPercent((totalMercadoriasEntradas / receitaBruta) * 100, 1)
+                          : '—'}
+                      </td>
+                      <td className="py-2 px-3 text-slate-500">
+                        Base geradora de créditos de ICMS, IPI, PIS e COFINS (regimes aplicáveis)
                       </td>
                     </tr>
                     <tr>
@@ -475,9 +511,120 @@ export function ModalParecerExecutivo({
             </section>
 
             {/* ========================================================= */}
+            {/* 3.1 DEMONSTRATIVO DE APURAÇÃO DE ENTRADAS E SAÍDAS */}
+            {/* ========================================================= */}
+            {apuracao && (
+              <div id="sec-3b-apuracao" className="mt-4 space-y-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wide flex items-center gap-1.5">
+                    <Scale className="w-4 h-4 text-blue-600" />
+                    Apuração de Débitos (Saídas) e Créditos (Entradas) por Tributo
+                  </h3>
+                  <Badge variant="outline" className="text-[10px] font-bold text-slate-600">
+                    ICMS · IPI · PIS · COFINS
+                  </Badge>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 font-bold text-slate-800 border-b border-slate-300">
+                        <th className="py-2 px-3">Tributo</th>
+                        <th className="py-2 px-3 text-right">Base Saídas (R$)</th>
+                        <th className="py-2 px-3 text-right">Débitos (R$)</th>
+                        <th className="py-2 px-3 text-right">Base Entradas (R$)</th>
+                        <th className="py-2 px-3 text-right">Créditos (R$)</th>
+                        <th className="py-2 px-3 text-right">Saldo Apurado (R$)</th>
+                        <th className="py-2 px-3 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {[
+                        apuracao.tributos.icms,
+                        apuracao.tributos.ipi,
+                        apuracao.tributos.pis,
+                        apuracao.tributos.cofins,
+                      ].map((t) => (
+                        <tr key={t.tributo} className="hover:bg-slate-50/50">
+                          <td className="py-2 px-3">
+                            <span className="font-bold text-slate-900">{t.tributo}</span>
+                            <span className="text-[10px] text-slate-400 block">
+                              {t.nomeCompleto}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-right text-slate-700">
+                            {formatCurrency(t.baseDebito)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-slate-900">
+                            {formatCurrency(t.valorDebito)}
+                          </td>
+                          <td className="py-2 px-3 text-right text-slate-700">
+                            {formatCurrency(t.baseCredito)}
+                          </td>
+                          <td className="py-2 px-3 text-right font-bold text-emerald-700">
+                            {formatCurrency(t.valorCredito)}
+                          </td>
+                          <td
+                            className={`py-2 px-3 text-right font-extrabold ${
+                              t.tipoSaldo === 'a_recolher' ? 'text-red-700' : 'text-emerald-700'
+                            }`}
+                          >
+                            {formatCurrency(t.saldoApurado)}
+                          </td>
+                          <td className="py-2 px-3 text-center">
+                            {t.saldoApurado === 0 ? (
+                              <span className="text-[10px] text-slate-400 font-medium">Zerado</span>
+                            ) : t.tipoSaldo === 'a_recolher' ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-800">
+                                A Recolher
+                              </span>
+                            ) : (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800">
+                                Saldo Credor
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100 font-bold text-slate-900 border-t-2 border-slate-300">
+                        <td className="py-2 px-3">TOTAIS APURADOS</td>
+                        <td className="py-2 px-3 text-right text-slate-600">—</td>
+                        <td className="py-2 px-3 text-right font-bold text-slate-900">
+                          {formatCurrency(apuracao.totalDebitos)}
+                        </td>
+                        <td className="py-2 px-3 text-right text-slate-600">—</td>
+                        <td className="py-2 px-3 text-right font-bold text-emerald-800">
+                          {formatCurrency(apuracao.totalCreditos)}
+                        </td>
+                        <td className="py-2 px-3 text-right font-extrabold text-red-700">
+                          {formatCurrency(apuracao.totalSaldoARecolher)} (a recolher)
+                        </td>
+                        <td className="py-2 px-3 text-center text-[10px] text-emerald-700 font-bold">
+                          {apuracao.totalSaldoCredor > 0
+                            ? `+${formatCurrency(apuracao.totalSaldoCredor)} credor`
+                            : '—'}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <p className="text-[10px] text-slate-500 italic">
+                  * No regime Simples Nacional, os créditos sobre entradas de compras não abatem a
+                  guia única do DAS, tendo finalidade gerencial e de composição de custo. Nos
+                  regimes Lucro Presumido e Lucro Real, o saldo a recolher reflete a compensação dos
+                  créditos apropriáveis de ICMS, IPI, PIS e COFINS.
+                </p>
+              </div>
+            )}
+
+            {/* ========================================================= */}
             {/* 4. RESULTADOS POR REGIME */}
             {/* ========================================================= */}
             <section id="sec-4-resultados" className="space-y-3">
+              {' '}
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
                   4
@@ -488,7 +635,6 @@ export function ModalParecerExecutivo({
                 Quadro consolidado de tributação anual estimada comparando as três alternativas
                 legais:
               </p>
-
               <div className="overflow-x-auto rounded-xl border border-slate-200">
                 <table className="w-full text-xs text-left border-collapse">
                   <thead>
@@ -550,7 +696,6 @@ export function ModalParecerExecutivo({
                   </tbody>
                 </table>
               </div>
-
               {/* Detalhamento dos Tributos por Regime */}
               <div className="pt-2 space-y-3">
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide">

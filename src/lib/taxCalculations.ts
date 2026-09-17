@@ -1,4 +1,4 @@
-import type { DreRecord } from '@/types/finance'
+import type { DreRecord, TributoLancamentoRecord } from '@/types/finance'
 
 export interface ItemTributoBreakdown {
   nome: string
@@ -7,6 +7,34 @@ export interface ItemTributoBreakdown {
   aliquotaNominal: number // em %
   valor: number
   descricao?: string
+}
+
+export interface ApuracaoTributoItem {
+  tributo: 'ICMS' | 'IPI' | 'PIS' | 'COFINS'
+  nomeCompleto: string
+  baseDebito: number
+  aliquotaDebitoMedia: number
+  valorDebito: number // Débitos sobre saídas
+  baseCredito: number
+  aliquotaCreditoMedia: number
+  valorCredito: number // Créditos sobre compras / entradas
+  saldoApurado: number // Débito - Crédito
+  tipoSaldo: 'a_recolher' | 'credor'
+}
+
+export interface ApuracaoEntradasSaidasResultado {
+  totalMercadoriasSaidas: number
+  totalMercadoriasEntradas: number
+  tributos: {
+    icms: ApuracaoTributoItem
+    ipi: ApuracaoTributoItem
+    pis: ApuracaoTributoItem
+    cofins: ApuracaoTributoItem
+  }
+  totalDebitos: number
+  totalCreditos: number
+  totalSaldoARecolher: number
+  totalSaldoCredor: number
 }
 
 export interface RegimeResultado {
@@ -45,6 +73,7 @@ export interface AnaliseTributariaResultado {
   maiorCustoRegime: RegimeResultado
   economiaMaximaAnual: number
   temDados: boolean
+  apuracaoEntradasSaidas?: ApuracaoEntradasSaidasResultado
 }
 
 // Faixas do Simples Nacional (Anexo III - Serviços)
@@ -491,6 +520,169 @@ export function calcularLucroReal(
 /**
  * Motor comparador de regimes tributários
  */
+/**
+ * Apura os tributos sobre Saídas (Débitos) e Compras/Entradas (Créditos)
+ * para ICMS, IPI, PIS e COFINS com o mesmo motor de cálculo.
+ */
+export function apurarTributosEntradasSaidas(
+  lancamentos: TributoLancamentoRecord[],
+  regime: 'simples' | 'presumido' | 'real' = 'real',
+): ApuracaoEntradasSaidasResultado {
+  let totalMercadoriasSaidas = 0
+  let totalMercadoriasEntradas = 0
+
+  // Débitos (sobre saídas)
+  let baseIcmsSaidas = 0
+  let debitoIcms = 0
+  let baseIpiSaidas = 0
+  let debitoIpi = 0
+  let basePisSaidas = 0
+  let debitoPis = 0
+  let baseCofinsSaidas = 0
+  let debitoCofins = 0
+
+  // Créditos (sobre entradas)
+  let baseIcmsEntradas = 0
+  let creditoIcms = 0
+  let baseIpiEntradas = 0
+  let creditoIpi = 0
+  let basePisEntradas = 0
+  let creditoPis = 0
+  let baseCofinsEntradas = 0
+  let creditoCofins = 0
+
+  for (const lanc of lancamentos) {
+    const val = Number(lanc.valor_mercadoria) || 0
+    if (lanc.tipo === 'saida') {
+      totalMercadoriasSaidas += val
+      baseIcmsSaidas += Number(lanc.base_icms) || val
+      debitoIcms += Number(lanc.valor_icms) || 0
+
+      baseIpiSaidas += Number(lanc.base_ipi) || val
+      debitoIpi += Number(lanc.valor_ipi) || 0
+
+      basePisSaidas += Number(lanc.base_pis) || val
+      debitoPis += Number(lanc.valor_pis) || 0
+
+      baseCofinsSaidas += Number(lanc.base_cofins) || val
+      debitoCofins += Number(lanc.valor_cofins) || 0
+    } else if (lanc.tipo === 'entrada') {
+      totalMercadoriasEntradas += val
+      baseIcmsEntradas += Number(lanc.base_icms) || val
+      creditoIcms += Number(lanc.valor_icms) || 0
+
+      baseIpiEntradas += Number(lanc.base_ipi) || val
+      creditoIpi += Number(lanc.valor_ipi) || 0
+
+      basePisEntradas += Number(lanc.base_pis) || val
+      creditoPis += Number(lanc.valor_pis) || 0
+
+      baseCofinsEntradas += Number(lanc.base_cofins) || val
+      creditoCofins += Number(lanc.valor_cofins) || 0
+    }
+  }
+
+  // Regra por regime:
+  // No Simples Nacional: Entradas NÃO geram crédito fiscal utilizável na guia DAS.
+  // Servem como composição e rastreamento de custos das compras.
+  const permiteCredito = regime !== 'simples'
+
+  const valorCreditoEfetivoIcms = permiteCredito ? creditoIcms : 0
+  const valorCreditoEfetivoIpi = permiteCredito ? creditoIpi : 0
+  const valorCreditoEfetivoPis = permiteCredito ? creditoPis : 0
+  const valorCreditoEfetivoCofins = permiteCredito ? creditoCofins : 0
+
+  const calcularItem = (
+    tributo: 'ICMS' | 'IPI' | 'PIS' | 'COFINS',
+    nomeCompleto: string,
+    baseDeb: number,
+    valDeb: number,
+    baseCred: number,
+    valCred: number,
+  ): ApuracaoTributoItem => {
+    const saldo = valDeb - valCred
+    return {
+      tributo,
+      nomeCompleto,
+      baseDebito: baseDeb,
+      aliquotaDebitoMedia: baseDeb > 0 ? (valDeb / baseDeb) * 100 : 0,
+      valorDebito: Math.round(valDeb * 100) / 100,
+      baseCredito: baseCred,
+      aliquotaCreditoMedia: baseCred > 0 ? (valCred / baseCred) * 100 : 0,
+      valorCredito: Math.round(valCred * 100) / 100,
+      saldoApurado: Math.round(Math.abs(saldo) * 100) / 100,
+      tipoSaldo: saldo >= 0 ? 'a_recolher' : 'credor',
+    }
+  }
+
+  const icms = calcularItem(
+    'ICMS',
+    'Imposto sobre Circulação de Mercadorias e Serviços',
+    baseIcmsSaidas,
+    debitoIcms,
+    baseIcmsEntradas,
+    valorCreditoEfetivoIcms,
+  )
+
+  const ipi = calcularItem(
+    'IPI',
+    'Imposto sobre Produtos Industrializados',
+    baseIpiSaidas,
+    debitoIpi,
+    baseIpiEntradas,
+    valorCreditoEfetivoIpi,
+  )
+
+  const pis = calcularItem(
+    'PIS',
+    'Programa de Integração Social',
+    basePisSaidas,
+    debitoPis,
+    basePisEntradas,
+    valorCreditoEfetivoPis,
+  )
+
+  const cofins = calcularItem(
+    'COFINS',
+    'Contribuição para o Financiamento da Seguridade Social',
+    baseCofinsSaidas,
+    debitoCofins,
+    baseCofinsEntradas,
+    valorCreditoEfetivoCofins,
+  )
+
+  const totalDebitos = debitoIcms + debitoIpi + debitoPis + debitoCofins
+  const totalCreditos =
+    valorCreditoEfetivoIcms +
+    valorCreditoEfetivoIpi +
+    valorCreditoEfetivoPis +
+    valorCreditoEfetivoCofins
+
+  let totalSaldoARecolher = 0
+  let totalSaldoCredor = 0
+
+  ;[icms, ipi, pis, cofins].forEach((item) => {
+    if (item.tipoSaldo === 'a_recolher') {
+      totalSaldoARecolher += item.saldoApurado
+    } else {
+      totalSaldoCredor += item.saldoApurado
+    }
+  })
+
+  return {
+    totalMercadoriasSaidas,
+    totalMercadoriasEntradas,
+    tributos: { icms, ipi, pis, cofins },
+    totalDebitos: Math.round(totalDebitos * 100) / 100,
+    totalCreditos: Math.round(totalCreditos * 100) / 100,
+    totalSaldoARecolher: Math.round(totalSaldoARecolher * 100) / 100,
+    totalSaldoCredor: Math.round(totalSaldoCredor * 100) / 100,
+  }
+}
+
+/**
+ * Motor comparador de regimes tributários
+ */
 export function compararRegimesTributarios(options: {
   ano: number
   receitaBruta: number
@@ -498,6 +690,7 @@ export function compararRegimesTributarios(options: {
   folhaPagamento?: number
   aliquotaIssPercent?: number
   anexoSimples?: string
+  lancamentosTributarios?: TributoLancamentoRecord[]
 }): AnaliseTributariaResultado {
   const {
     ano,
@@ -506,6 +699,7 @@ export function compararRegimesTributarios(options: {
     folhaPagamento = 0,
     aliquotaIssPercent = 5,
     anexoSimples = 'Anexo I - Comércio',
+    lancamentosTributarios = [],
   } = options
 
   const folha = folhaPagamento > 0 ? folhaPagamento : receitaBruta * 0.25 // estimativa 25% se não informada
@@ -536,6 +730,11 @@ export function compararRegimesTributarios(options: {
 
   const economiaMaximaAnual = piorRegime.impostoTotal - melhorRegime.impostoTotal
 
+  const apuracaoEntradasSaidas =
+    lancamentosTributarios.length > 0
+      ? apurarTributosEntradasSaidas(lancamentosTributarios, melhorRegime.id)
+      : undefined
+
   return {
     ano,
     receitaBruta,
@@ -551,6 +750,7 @@ export function compararRegimesTributarios(options: {
     maiorCustoRegime: piorRegime,
     economiaMaximaAnual: Math.max(economiaMaximaAnual, 0),
     temDados,
+    apuracaoEntradasSaidas,
   }
 }
 

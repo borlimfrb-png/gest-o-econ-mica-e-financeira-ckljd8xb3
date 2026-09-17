@@ -1121,3 +1121,68 @@ export interface BiApresentacaoRecord extends RecordModel {
     grupo?: GrupoEmpresarialRecord
   }
 }
+
+export type TipoLancamentoTributario = 'entrada' | 'saida'
+
+export interface TributoLancamentoInput {
+  empresa: string
+  tipo: TipoLancamentoTributario
+  fornecedor_tomador: string
+  cnpj_cpf?: string
+  numero_nota?: string
+  cfop?: string
+  data: string
+  valor_mercadoria: number
+  // ICMS
+  base_icms?: number
+  aliquota_icms?: number
+  valor_icms?: number
+  // IPI
+  base_ipi?: number
+  aliquota_ipi?: number
+  valor_ipi?: number
+  // PIS
+  base_pis?: number
+  aliquota_pis?: number
+  valor_pis?: number
+  // COFINS
+  base_cofins?: number
+  aliquota_cofins?: number
+  valor_cofins?: number
+  observacoes?: string
+}
+
+export interface TributoLancamentoRecord extends RecordModel {
+  user?: string
+  empresa: string
+  tipo: TipoLancamentoTributario
+  fornecedor_tomador: string
+  cnpj_cpf?: string
+  numero_nota?: string
+  cfop?: string
+  data: string
+  valor_mercadoria: number
+  // ICMS
+  base_icms?: number
+  aliquota_icms?: number
+  valor_icms?: number
+  // IPI
+  base_ipi?: number
+  aliquota_ipi?: number
+  valor_ipi?: number
+  // PIS
+  base_pis?: number
+  aliquota_pis?: number
+  valor_pis?: number
+  // COFINS
+  base_cofins?: number
+  aliquota_cofins?: number
+  valor_cofins?: number
+  observacoes?: string
+  created: string
+  updated: string
+  expand?: {
+    empresa?: EmpresaRecord
+    user?: UserRecord
+  }
+}

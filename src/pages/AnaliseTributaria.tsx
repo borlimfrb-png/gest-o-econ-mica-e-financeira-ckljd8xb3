@@ -61,6 +61,17 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { ModalParecerExecutivo } from '@/components/ModalParecerExecutivo'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ModalLancamentoTributario } from '@/components/ModalLancamentoTributario'
+import { TabelaLancamentosTributarios } from '@/components/TabelaLancamentosTributarios'
+import { PainelApuracaoEntradasSaidas } from '@/components/PainelApuracaoEntradasSaidas'
+import { tributosLancamentosService } from '@/services/tributosLancamentosService'
+import type {
+  TributoLancamentoRecord,
+  TributoLancamentoInput,
+  TipoLancamentoTributario,
+} from '@/types/finance'
+import { ShoppingCart } from 'lucide-react'
 
 export default function AnaliseTributaria() {
   const {
@@ -95,6 +106,36 @@ export default function AnaliseTributaria() {
   // 3. Estado do Modal de Parecer Executivo
   const [modalParecerOpen, setModalParecerOpen] = useState<boolean>(false)
 
+  // 4. Estados dos Lançamentos Fiscais (Entradas e Saídas) e Aba Ativa
+  const [abaAtiva, setAbaAtiva] = useState<string>('comparativo')
+  const [lancamentosTributarios, setLancamentosTributarios] = useState<TributoLancamentoRecord[]>(
+    [],
+  )
+  const [loadingLancamentos, setLoadingLancamentos] = useState<boolean>(false)
+
+  // Modal de Lançamento (Novo / Edição)
+  const [modalLancamentoOpen, setModalLancamentoOpen] = useState<boolean>(false)
+  const [tipoLancamentoModal, setTipoLancamentoModal] =
+    useState<TipoLancamentoTributario>('entrada')
+  const [lancamentoEmEdicao, setLancamentoEmEdicao] = useState<TributoLancamentoRecord | null>(null)
+
+  // Carregar lançamentos tributários da empresa e ano
+  const carregarLancamentos = async () => {
+    if (!selectedEmpresaId) return
+    try {
+      setLoadingLancamentos(true)
+      const lista = await tributosLancamentosService.listar({
+        empresaId: selectedEmpresaId,
+        ano: selectedAno,
+      })
+      setLancamentosTributarios(lista)
+    } catch (error) {
+      console.error('Erro ao carregar lançamentos tributários:', error)
+    } finally {
+      setLoadingLancamentos(false)
+    }
+  }
+
   // Carregar dados de Balanço e DRE
   const loadData = async () => {
     if (!selectedEmpresaId) return
@@ -120,7 +161,8 @@ export default function AnaliseTributaria() {
 
   useEffect(() => {
     loadData()
-  }, [selectedEmpresaId])
+    carregarLancamentos()
+  }, [selectedEmpresaId, selectedAno])
 
   // Realtime updates
   useRealtime<BalancoRecord>('balancos', () => {
@@ -128,6 +170,9 @@ export default function AnaliseTributaria() {
   })
   useRealtime<DreRecord>('dre', () => {
     if (selectedEmpresaId) loadData()
+  })
+  useRealtime<TributoLancamentoRecord>('tributos_lancamentos', () => {
+    if (selectedEmpresaId) carregarLancamentos()
   })
 
   // DRE e Balanço do ano selecionado (Atual)
@@ -142,7 +187,6 @@ export default function AnaliseTributaria() {
   const receitaBrutaAtual = dreAtual?.receita_bruta || 0
   const lucroLiquidoAtual = dreCalculadoAtual.lucroLiquido || 0
   const folhaEstimadaAtual = receitaBrutaAtual * (folhaPercentual / 100)
-  const temDadosAno = !!dreAtual && receitaBrutaAtual > 0
 
   // DRE e Balanço do ano anterior (Comparativo)
   const dreAnterior = useMemo(() => {
@@ -158,21 +202,46 @@ export default function AnaliseTributaria() {
   const folhaEstimadaAnterior = receitaBrutaAnterior * (folhaPercentual / 100)
   const temDadosAnoAnterior = !!dreAnterior && receitaBrutaAnterior > 0
 
+  // Lançamentos divididos em Entradas e Saídas
+  const lancamentosEntradas = useMemo(() => {
+    return lancamentosTributarios.filter((l) => l.tipo === 'entrada')
+  }, [lancamentosTributarios])
+
+  const lancamentosSaidas = useMemo(() => {
+    return lancamentosTributarios.filter((l) => l.tipo === 'saida')
+  }, [lancamentosTributarios])
+
+  // Receita base: se não houver DRE, usa a soma dos lançamentos de saídas
+  const receitaEfetiva = useMemo(() => {
+    if (receitaBrutaAtual > 0) return receitaBrutaAtual
+    return lancamentosSaidas.reduce((sum, l) => sum + (Number(l.valor_mercadoria) || 0), 0)
+  }, [receitaBrutaAtual, lancamentosSaidas])
+
+  const temDadosAno = receitaEfetiva > 0 || lancamentosTributarios.length > 0
+
   // Análise Base Real (Sem simulação)
   const analiseReal: AnaliseTributariaResultado = useMemo(() => {
     return compararRegimesTributarios({
       ano: selectedAno,
-      receitaBruta: receitaBrutaAtual,
+      receitaBruta: receitaEfetiva,
       lucroLiquido: lucroLiquidoAtual,
       folhaPagamento: folhaEstimadaAtual,
       aliquotaIssPercent: aliquotaIss,
+      lancamentosTributarios,
     })
-  }, [selectedAno, receitaBrutaAtual, lucroLiquidoAtual, folhaEstimadaAtual, aliquotaIss])
+  }, [
+    selectedAno,
+    receitaEfetiva,
+    lucroLiquidoAtual,
+    folhaEstimadaAtual,
+    aliquotaIss,
+    lancamentosTributarios,
+  ])
 
   // Análise Simulada (com variação % de receita e lucro)
   const receitaSimulada = useMemo(() => {
-    return Math.max(0, receitaBrutaAtual * (1 + varReceitaPercent / 100))
-  }, [receitaBrutaAtual, varReceitaPercent])
+    return Math.max(0, receitaEfetiva * (1 + varReceitaPercent / 100))
+  }, [receitaEfetiva, varReceitaPercent])
 
   const lucroSimulado = useMemo(() => {
     return lucroLiquidoAtual * (1 + varLucroPercent / 100)
@@ -277,6 +346,67 @@ export default function AnaliseTributaria() {
     ]
   }, [analiseReal, analiseAnterior, temDadosAnoAnterior])
 
+  // Handlers para ações dos lançamentos fiscais
+  const handleAbrirNovoLancamento = (tipo: TipoLancamentoTributario) => {
+    setTipoLancamentoModal(tipo)
+    setLancamentoEmEdicao(null)
+    setModalLancamentoOpen(true)
+  }
+
+  const handleEditarLancamento = (item: TributoLancamentoRecord) => {
+    setTipoLancamentoModal(item.tipo)
+    setLancamentoEmEdicao(item)
+    setModalLancamentoOpen(true)
+  }
+
+  const handleExcluirLancamento = async (id: string) => {
+    try {
+      await tributosLancamentosService.excluir(id)
+      toast({
+        title: 'Lançamento Removido',
+        description: 'O lançamento tributário foi excluído com sucesso.',
+      })
+      carregarLancamentos()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        title: 'Erro ao excluir',
+        description: 'Não foi possível excluir o lançamento.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const handleSalvarLancamento = async (
+    dados: TributoLancamentoInput,
+    id?: string,
+  ): Promise<boolean> => {
+    try {
+      if (id) {
+        await tributosLancamentosService.atualizar(id, dados)
+        toast({
+          title: 'Lançamento Atualizado',
+          description: 'Os dados fiscais foram atualizados com sucesso.',
+        })
+      } else {
+        await tributosLancamentosService.criar(dados)
+        toast({
+          title: 'Lançamento Registrado',
+          description: `${dados.tipo === 'entrada' ? 'Compra (Entrada)' : 'Venda (Saída)'} cadastrada com sucesso.`,
+        })
+      }
+      return true
+    } catch (error: any) {
+      console.error(error)
+      toast({
+        title: 'Erro ao salvar',
+        description: error?.message || 'Falha ao salvar lançamento.',
+        variant: 'destructive',
+      })
+      return false
+    }
+  }
+
   // Exportar CSV
   const handleExportCsv = () => {
     if (!selectedEmpresa) return
@@ -291,7 +421,7 @@ export default function AnaliseTributaria() {
     }
     csv += `Data de Emissão;${new Date().toLocaleDateString('pt-BR')}\n`
     csv += `Alíquota ISS Aplicada;${aliquotaIss.toFixed(2)}%\n`
-    csv += `Receita Bruta Anual;${formatCurrency(receitaBrutaAtual)}\n`
+    csv += `Receita Bruta Anual;${formatCurrency(receitaEfetiva)}\n`
     csv += `Lucro Líquido Contábil;${formatCurrency(lucroLiquidoAtual)}\n\n`
 
     csv += `COMPARATIVO DOS REGIMES TRIBUTÁRIOS (${selectedAno})\n`
@@ -299,6 +429,43 @@ export default function AnaliseTributaria() {
     csv += `Simples Nacional;${formatPercent(analiseReal.regimes.simples.aliquotaEfetiva, 2)};${formatCurrency(analiseReal.regimes.simples.impostoTotal)};${formatCurrency(analiseReal.regimes.simples.economiaVsPior)};${analiseReal.regimes.simples.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n`
     csv += `Lucro Presumido;${formatPercent(analiseReal.regimes.presumido.aliquotaEfetiva, 2)};${formatCurrency(analiseReal.regimes.presumido.impostoTotal)};${formatCurrency(analiseReal.regimes.presumido.economiaVsPior)};${analiseReal.regimes.presumido.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n`
     csv += `Lucro Real;${formatPercent(analiseReal.regimes.real.aliquotaEfetiva, 2)};${formatCurrency(analiseReal.regimes.real.impostoTotal)};${formatCurrency(analiseReal.regimes.real.economiaVsPior)};${analiseReal.regimes.real.isRecomendado ? 'SIM (Recomendado)' : 'Não'}\n\n`
+
+    if (analiseReal.apuracaoEntradasSaidas) {
+      const ap = analiseReal.apuracaoEntradasSaidas
+      csv += `APURAÇÃO INTEGRADA DE ENTRADAS (COMPRAS) E SAÍDAS (VENDAS)\n`
+      csv += `Total Vendas (Saídas);${formatCurrency(ap.totalMercadoriasSaidas)}\n`
+      csv += `Total Compras (Entradas);${formatCurrency(ap.totalMercadoriasEntradas)}\n`
+      csv += `Total Débitos Fiscais;${formatCurrency(ap.totalDebitos)}\n`
+      csv += `Total Créditos Fiscais;${formatCurrency(ap.totalCreditos)}\n`
+      csv += `Saldo a Recolher;${formatCurrency(ap.totalSaldoARecolher)}\n`
+      csv += `Saldo Credor Acumulado;${formatCurrency(ap.totalSaldoCredor)}\n\n`
+
+      csv += `DETALHAMENTO POR TRIBUTO (ICMS, IPI, PIS, COFINS)\n`
+      csv += `Tributo;Base Débito;Débitos R$;Base Crédito;Créditos R$;Saldo Apurado R$;Situação\n`
+      const tribs = [ap.tributos.icms, ap.tributos.ipi, ap.tributos.pis, ap.tributos.cofins]
+      tribs.forEach((t) => {
+        csv += `${t.tributo};${formatCurrency(t.baseDebito)};${formatCurrency(t.valorDebito)};${formatCurrency(t.baseCredito)};${formatCurrency(t.valorCredito)};${formatCurrency(t.saldoApurado)};${t.tipoSaldo === 'a_recolher' ? 'A Recolher' : 'Saldo Credor'}\n`
+      })
+      csv += `\n`
+
+      if (lancamentosEntradas.length > 0) {
+        csv += `LANÇAMENTOS DE ENTRADAS (COMPRAS)\n`
+        csv += `Data;Fornecedor;CNPJ;NF-e;CFOP;Valor Mercadoria;ICMS Crédito;IPI Crédito;PIS Crédito;COFINS Crédito\n`
+        lancamentosEntradas.forEach((e) => {
+          csv += `${e.data ? e.data.split('T')[0] : ''};${e.fornecedor_tomador};${e.cnpj_cpf || ''};${e.numero_nota || ''};${e.cfop || ''};${formatCurrency(Number(e.valor_mercadoria) || 0)};${formatCurrency(Number(e.valor_icms) || 0)};${formatCurrency(Number(e.valor_ipi) || 0)};${formatCurrency(Number(e.valor_pis) || 0)};${formatCurrency(Number(e.valor_cofins) || 0)}\n`
+        })
+        csv += `\n`
+      }
+
+      if (lancamentosSaidas.length > 0) {
+        csv += `LANÇAMENTOS DE SAÍDAS (VENDAS)\n`
+        csv += `Data;Cliente/Tomador;CNPJ;NF-e;CFOP;Valor Mercadoria;ICMS Débito;IPI Débito;PIS Débito;COFINS Débito\n`
+        lancamentosSaidas.forEach((s) => {
+          csv += `${s.data ? s.data.split('T')[0] : ''};${s.fornecedor_tomador};${s.cnpj_cpf || ''};${s.numero_nota || ''};${s.cfop || ''};${formatCurrency(Number(s.valor_mercadoria) || 0)};${formatCurrency(Number(s.valor_icms) || 0)};${formatCurrency(Number(s.valor_ipi) || 0)};${formatCurrency(Number(s.valor_pis) || 0)};${formatCurrency(Number(s.valor_cofins) || 0)}\n`
+        })
+        csv += `\n`
+      }
+    }
 
     if (compararAnoAnterior && temDadosAnoAnterior) {
       csv += `EVOLUÇÃO DA CARGA TRIBUTÁRIA (${selectedAno} vs ${anoAnterior})\n`
@@ -351,7 +518,7 @@ export default function AnaliseTributaria() {
   const renderCardRegime = (regime: RegimeResultado, isSimuladoView: boolean = false) => {
     const isRec = regime.isRecomendado && temDadosAno
     const isSimplesAcimaDoTeto =
-      regime.id === 'simples' && (isSimuladoView ? receitaSimulada : receitaBrutaAtual) > 4800000
+      regime.id === 'simples' && (isSimuladoView ? receitaSimulada : receitaEfetiva) > 4800000
 
     return (
       <div
@@ -710,32 +877,30 @@ export default function AnaliseTributaria() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-500 font-medium mb-1">
-            <span>Receita Bruta (DRE)</span>
+            <span>Receita Operacional</span>
             <DollarSign className="w-4 h-4 text-blue-600" />
           </div>
           <div className="text-xl font-extrabold text-[#0B1F3A]">
-            {temDadosAno ? formatCurrency(receitaBrutaAtual) : 'R$ 0,00'}
+            {temDadosAno ? formatCurrency(receitaEfetiva) : 'R$ 0,00'}
           </div>
-          <div className="text-[11px] text-slate-400 mt-1">Base anual para faturamento</div>
+          <div className="text-[11px] text-slate-400 mt-1">
+            {receitaBrutaAtual > 0 ? 'Base consolidada via DRE' : 'Base por notas de saídas'}
+          </div>
         </div>
 
         <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-2xs">
           <div className="flex items-center justify-between text-xs text-slate-500 font-medium mb-1">
-            <span>Lucro Líquido (DRE)</span>
-            <TrendingUp className="w-4 h-4 text-emerald-600" />
+            <span>Compras (Entradas)</span>
+            <ShoppingCart className="w-4 h-4 text-amber-600" />
           </div>
-          <div
-            className={`text-xl font-extrabold ${
-              lucroLiquidoAtual >= 0 ? 'text-emerald-700' : 'text-red-600'
-            }`}
-          >
-            {temDadosAno ? formatCurrency(lucroLiquidoAtual) : 'R$ 0,00'}
+          <div className="text-xl font-extrabold text-amber-900">
+            {formatCurrency(
+              lancamentosEntradas.reduce((s, l) => s + (Number(l.valor_mercadoria) || 0), 0),
+            )}
           </div>
           <div className="text-[11px] text-slate-400 mt-1">
-            Margem Líquida:{' '}
-            {receitaBrutaAtual > 0
-              ? formatPercent((lucroLiquidoAtual / receitaBrutaAtual) * 100, 1)
-              : '—'}
+            {lancamentosEntradas.length}{' '}
+            {lancamentosEntradas.length === 1 ? 'nota de compra' : 'notas de compras'}
           </div>
         </div>
 
@@ -779,55 +944,315 @@ export default function AnaliseTributaria() {
               Dados Financeiros Ausentes no Exercício {selectedAno}
             </h3>
             <p className="text-sm text-amber-800 leading-relaxed mb-6">
-              Esta empresa não possui dados de balanço ou DRE cadastrados para o ano de{' '}
-              {selectedAno}. Cadastre os lançamentos ou faça a importação do DRE para habilitar a
-              análise tributária comparativa completa.
+              Esta empresa não possui dados de DRE ou lançamentos fiscais cadastrados para o ano de{' '}
+              {selectedAno}. Cadastre as entradas e saídas de notas ou importe o DRE para habilitar
+              a análise tributária comparativa completa.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Button
-                variant="outline"
                 onClick={() => {
-                  if (anosDisponiveis.length > 0) {
-                    setSelectedAno(anosDisponiveis[0])
-                  }
+                  setAbaAtiva('entradas')
+                  handleAbrirNovoLancamento('entrada')
                 }}
-                className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
               >
-                <RotateCcw className="w-4 h-4 mr-2" />
-                Alternar para Ano Disponível
+                <ShoppingCart className="w-4 h-4 mr-2" />
+                Lançar Compra / Entrada
+              </Button>
+              <Button
+                onClick={() => {
+                  setAbaAtiva('saidas')
+                  handleAbrirNovoLancamento('saida')
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold"
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Lançar Venda / Saída
               </Button>
             </div>
           </div>
         </Card>
       )}
 
-      {/* 4. Três Cards Lado a Lado (Desktop) / 2 Colunas (Tablet) / Empilhados (Mobile) */}
-      {temDadosAno && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-[#0B1F3A]">
-                Comparativo Detalhado dos Três Regimes Tributários ({selectedAno})
-              </h2>
-              <p className="text-xs text-slate-500">
-                Avaliação direta entre Simples Nacional (Anexo III), Lucro Presumido e Lucro Real
-              </p>
-            </div>
-            <Badge
-              variant="outline"
-              className="text-xs bg-slate-50 border-slate-200 text-slate-600 hidden sm:inline-flex"
-            >
-              Simulação para Prestação de Serviços / Consultoria
+      {/* 4. Navegação por Abas: Comparativo de Regimes, Apuração Entradas/Saídas, Entradas (Compras), Saídas (Vendas) */}
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="space-y-6">
+        <TabsList className="bg-slate-100 p-1 rounded-xl h-auto flex flex-wrap gap-1 border border-slate-200">
+          <TabsTrigger
+            value="comparativo"
+            className="rounded-lg text-xs font-bold py-2 px-3.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
+          >
+            <Calculator className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+            Comparativo de Regimes
+          </TabsTrigger>
+          <TabsTrigger
+            value="apuracao"
+            className="rounded-lg text-xs font-bold py-2 px-3.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
+          >
+            <Scale className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+            Apuração Débito x Crédito
+            {analiseReal.apuracaoEntradasSaidas && (
+              <Badge variant="secondary" className="ml-1.5 text-[10px] py-0 px-1 font-bold">
+                ICMS / IPI / PIS / COFINS
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger
+            value="entradas"
+            className="rounded-lg text-xs font-bold py-2 px-3.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
+          >
+            <ShoppingCart className="w-3.5 h-3.5 mr-1.5 text-amber-600" />
+            Entradas (Compras)
+            <Badge className="ml-1.5 text-[10px] py-0 px-1 bg-amber-100 text-amber-800 border-amber-300">
+              {lancamentosEntradas.length}
             </Badge>
-          </div>
+          </TabsTrigger>
+          <TabsTrigger
+            value="saidas"
+            className="rounded-lg text-xs font-bold py-2 px-3.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
+          >
+            <TrendingUp className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
+            Saídas (Vendas)
+            <Badge className="ml-1.5 text-[10px] py-0 px-1 bg-blue-100 text-blue-800 border-blue-300">
+              {lancamentosSaidas.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-            {renderCardRegime(analiseReal.regimes.simples)}
-            {renderCardRegime(analiseReal.regimes.presumido)}
-            {renderCardRegime(analiseReal.regimes.real)}
-          </div>
-        </div>
-      )}
+        {/* ABA 1: COMPARATIVO DOS REGIMES */}
+        <TabsContent value="comparativo" className="space-y-6 m-0">
+          {temDadosAno && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-[#0B1F3A]">
+                    Comparativo Detalhado dos Três Regimes Tributários ({selectedAno})
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Avaliação direta entre Simples Nacional (Anexo III), Lucro Presumido e Lucro
+                    Real
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-slate-50 border-slate-200 text-slate-600 hidden sm:inline-flex"
+                >
+                  Confronto de Alíquotas Efetivas & Encargos
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+                {renderCardRegime(analiseReal.regimes.simples)}
+                {renderCardRegime(analiseReal.regimes.presumido)}
+                {renderCardRegime(analiseReal.regimes.real)}
+              </div>
+            </div>
+          )}
+
+          {/* Gráfico de Barras Comparativo com Recharts (Ano Atual) */}
+          {temDadosAno && (
+            <Card className="rounded-2xl border-slate-200 bg-white shadow-xs">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                      <Scale className="w-4 h-4 text-blue-600" />
+                      Carga Tributária por Regime (R$ no Ano {selectedAno})
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Comparação gráfica do montante total de tributos devidos no exercício{' '}
+                      {selectedAno}
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs font-medium">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />
+                      <span className="text-slate-600">Recomendado</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 rounded-full bg-slate-400 inline-block" />
+                      <span className="text-slate-600">Outros Regimes</span>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                      <XAxis
+                        dataKey="regime"
+                        tick={{ fill: '#475569', fontSize: 12, fontWeight: 600 }}
+                        axisLine={{ stroke: '#CBD5E1' }}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                        tick={{ fill: '#64748B', fontSize: 11 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload
+                            return (
+                              <div className="bg-[#0B1F3A] text-white p-3.5 rounded-xl shadow-xl text-xs space-y-1.5 border border-blue-900 min-w-[200px]">
+                                <p className="font-bold text-sm text-blue-200">{data.regime}</p>
+                                <div className="flex justify-between gap-4 text-slate-300">
+                                  <span>Imposto Total:</span>
+                                  <span className="font-bold text-white">
+                                    {formatCurrency(data.imposto)}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between gap-4 text-slate-300">
+                                  <span>Alíquota Efetiva:</span>
+                                  <span className="font-bold text-emerald-300">
+                                    {formatPercent(data.aliquota, 2)}
+                                  </span>
+                                </div>
+                                {data.isRecomendado && (
+                                  <p className="pt-1 text-emerald-400 font-bold border-t border-white/10 flex items-center gap-1">
+                                    <Award className="w-3.5 h-3.5" /> Regime Mais Econômico
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          }
+                          return null
+                        }}
+                      />
+                      <Bar dataKey="imposto" radius={[8, 8, 0, 0]} maxBarSize={70}>
+                        {chartData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={entry.isRecomendado ? '#10b981' : '#64748b'}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Veredito do Consultor Tributário */}
+                <div className="mt-6 p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-[#0B1F3A]">
+                        Parecer do Diagnóstico Fiscal
+                      </h4>
+                      <p className="text-xs text-slate-600 leading-relaxed mt-0.5">
+                        Para o perfil operacional de{' '}
+                        <strong className="text-slate-800">{selectedEmpresa?.nome}</strong> em{' '}
+                        {selectedAno}, com faturamento de{' '}
+                        <strong>{formatCurrency(receitaEfetiva)}</strong> e lucro contábil de{' '}
+                        <strong>{formatCurrency(lucroLiquidoAtual)}</strong>, a opção pelo{' '}
+                        <strong className="text-emerald-700">
+                          {analiseReal.regimeRecomendado?.nome}
+                        </strong>{' '}
+                        proporciona uma alíquota efetiva de{' '}
+                        <strong className="text-emerald-700">
+                          {formatPercent(analiseReal.regimeRecomendado?.aliquotaEfetiva, 2)}
+                        </strong>
+                        , gerando economia anual estimada de{' '}
+                        <strong className="text-emerald-700">
+                          {formatCurrency(analiseReal.economiaMaximaAnual)}
+                        </strong>{' '}
+                        frente ao pior cenário ({analiseReal.maiorCustoRegime?.nome}).
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ABA 2: APURAÇÃO DÉBITOS X CRÉDITOS */}
+        <TabsContent value="apuracao" className="space-y-6 m-0">
+          {analiseReal.apuracaoEntradasSaidas ? (
+            <PainelApuracaoEntradasSaidas
+              apuracao={analiseReal.apuracaoEntradasSaidas}
+              regimeNome={analiseReal.regimeRecomendado?.nome || 'Regime Recomendado'}
+              regimeId={analiseReal.regimeRecomendado?.id || 'real'}
+              ano={selectedAno}
+            />
+          ) : (
+            <Card className="p-8 text-center rounded-2xl border-slate-200">
+              <div className="max-w-md mx-auto space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 mx-auto flex items-center justify-center">
+                  <Scale className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-[#0B1F3A]">
+                  Sem Lançamentos Fiscais Cadastrados para Apuração
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Cadastre as notas de entradas (compras) e saídas (vendas) para que o motor apure
+                  os débitos, créditos e o saldo a recolher por tributo (ICMS, IPI, PIS e COFINS).
+                </p>
+                <div className="flex items-center justify-center gap-3 pt-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setAbaAtiva('entradas')
+                      handleAbrirNovoLancamento('entrada')
+                    }}
+                    className="text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                  >
+                    <ShoppingCart className="w-4 h-4 mr-1.5" />
+                    Cadastrar Compra (Entrada)
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setAbaAtiva('saidas')
+                      handleAbrirNovoLancamento('saida')
+                    }}
+                    className="text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    <TrendingUp className="w-4 h-4 mr-1.5" />
+                    Cadastrar Venda (Saída)
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ABA 3: ENTRADAS (COMPRAS) */}
+        <TabsContent value="entradas" className="space-y-6 m-0">
+          <TabelaLancamentosTributarios
+            tipo="entrada"
+            lancamentos={lancamentosEntradas}
+            loading={loadingLancamentos}
+            ano={selectedAno}
+            onNovo={() => handleAbrirNovoLancamento('entrada')}
+            onEditar={handleEditarLancamento}
+            onExcluir={handleExcluirLancamento}
+            onRecarregar={carregarLancamentos}
+          />
+        </TabsContent>
+
+        {/* ABA 4: SAÍDAS (VENDAS) */}
+        <TabsContent value="saidas" className="space-y-6 m-0">
+          <TabelaLancamentosTributarios
+            tipo="saida"
+            lancamentos={lancamentosSaidas}
+            loading={loadingLancamentos}
+            ano={selectedAno}
+            onNovo={() => handleAbrirNovoLancamento('saida')}
+            onEditar={handleEditarLancamento}
+            onExcluir={handleExcluirLancamento}
+            onRecarregar={carregarLancamentos}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* 5. Gráfico de Barras Comparativo com Recharts (Ano Atual) */}
       {temDadosAno && (
@@ -1682,13 +2107,28 @@ export default function AnaliseTributaria() {
         onOpenChange={setModalParecerOpen}
         selectedEmpresa={selectedEmpresa}
         selectedAno={selectedAno}
-        receitaBruta={receitaBrutaAtual}
+        receitaBruta={receitaEfetiva}
         lucroLiquido={lucroLiquidoAtual}
         aliquotaIss={aliquotaIss}
         analise={analiseReal}
         minhaEmpresa={minhaEmpresa}
         logoUrl={logoUrl}
+        lancamentosEntradas={lancamentosEntradas}
+        lancamentosSaidas={lancamentosSaidas}
       />
+
+      {/* 4. Modal para Lançamento de Entradas ou Saídas */}
+      {selectedEmpresaId && (
+        <ModalLancamentoTributario
+          open={modalLancamentoOpen}
+          onOpenChange={setModalLancamentoOpen}
+          tipo={tipoLancamentoModal}
+          empresaId={selectedEmpresaId}
+          lancamentoEmEdicao={lancamentoEmEdicao}
+          onSalvo={carregarLancamentos}
+          onSalvar={handleSalvarLancamento}
+        />
+      )}
     </div>
   )
 }

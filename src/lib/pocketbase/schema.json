@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T00:21:59.546Z",
+  "generatedAt": "2026-09-17T00:56:41.857Z",
   "collections": [
     {
       "name": "users",
@@ -4708,6 +4708,175 @@
       "indexes": [
         "CREATE UNIQUE INDEX idx_certificados_empresa ON certificados_digitais (empresa)",
         "CREATE INDEX idx_certificados_status ON certificados_digitais (status)"
+      ]
+    },
+    {
+      "name": "tributos_lancamentos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["entrada", "saida"]
+        },
+        {
+          "name": "fornecedor_tomador",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "cnpj_cpf",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "numero_nota",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cfop",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "valor_mercadoria",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "base_icms",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_icms",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_icms",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "base_ipi",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_ipi",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_ipi",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "base_pis",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_pis",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_pis",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "base_cofins",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aliquota_cofins",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_cofins",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_trib_lanc_empresa ON tributos_lancamentos (empresa)",
+        "CREATE INDEX idx_trib_lanc_tipo ON tributos_lancamentos (tipo)",
+        "CREATE INDEX idx_trib_lanc_data ON tributos_lancamentos (data)",
+        "CREATE INDEX idx_trib_lanc_user ON tributos_lancamentos (user)",
+        "CREATE INDEX idx_trib_lanc_empresa_tipo_data ON tributos_lancamentos (empresa, tipo, data)"
       ]
     }
   ]
