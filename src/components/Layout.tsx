@@ -113,13 +113,15 @@ export default function Layout() {
     return extrairTodosItensNavegaveis(menuGruposFiltrados)
   }, [menuGruposFiltrados])
 
-  // Determinar limite de grupos visíveis diretamente
+  // Determinar limite de grupos visíveis diretamente na linha 2 de navegação
+  // Com a topbar dividida em duas linhas, a linha 2 possui a largura inteira disponível
+  // para os grupos de navegação (sem disputar espaço com logo, busca, seletores ou avatar).
+  // Assim, em 1366px e acima todos os 10 grupos cabem com folga; em larguras menores colapsam suavemente no "Mais".
   const maxVisibleDirectGroups = useMemo(() => {
-    if (windowWidth >= 1536) return 10 // 2xl: exibe todos os 9 grupos
-    if (windowWidth >= 1360) return 7 // 1366px: exibe os 7 principais (Cadastros..Relatórios) + "Mais"
-    if (windowWidth >= 1200) return 6 // 1200px: exibe 6 grupos + "Mais"
-    if (windowWidth >= 1024) return 5 // lg (1024px): exibe 5 grupos + "Mais"
-    return 4 // md (768px): exibe 4 grupos + "Mais"
+    if (windowWidth >= 1360) return 12 // >= 1360px (inclui 1366px e 1920px): exibe todos os 10 grupos com folga total
+    if (windowWidth >= 1200) return 8 // 1200px - 1359px: 8 grupos visíveis + "Mais"
+    if (windowWidth >= 1024) return 6 // 1024px - 1199px: 6 grupos visíveis + "Mais"
+    return 4 // 768px - 1023px (md): 4 grupos visíveis + "Mais"
   }, [windowWidth])
 
   const { gruposVisiveis, gruposExcedentes } = useMemo(() => {
@@ -269,19 +271,19 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-[#F5F7FA] flex flex-col antialiased text-slate-800">
       {/* ========================================================
-          BARRA SUPERIOR HORIZONTAL (TOPBAR) MODERNA
-          - Mega Menu suspenso com colunas por grupo
-          - Botão de Busca Rápida (Ctrl+K)
-          - Indicadores de estado e item ativo
-          - Identidade corporativa azul-marinho
+          BARRA SUPERIOR HORIZONTAL (TOPBAR) DIVIDIDA EM DUAS LINHAS
+          - Linha 1 (Superior): Logo/Nome da Empresa + Seletores Globais (Empresa/Ano) + Busca (Ctrl+K) + Avatar
+          - Linha 2 (Inferior): Barra de Navegação Horizontal com Mega-Menus e botão "Mais ▾"
+          - Evita qualquer sobreposição entre navegação e logo/busca em 1366px e em qualquer resolução
       ======================================================== */}
       <header
-        className="sticky top-0 z-40 text-white border-b border-white/10 shadow-md transition-colors"
+        className="sticky top-0 z-40 text-white shadow-md transition-colors"
         style={{ backgroundColor: corPrimaria }}
       >
-        <div className="w-full px-3 lg:px-5">
-          <div className="flex items-center justify-between h-14 md:h-16 gap-2 md:gap-3">
-            {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo */}
+        {/* ---------------- LINHA 1: CABEÇALHO SUPERIOR (UTILITÁRIOS & MARCA) ---------------- */}
+        <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/15">
+          <div className="flex items-center justify-between h-13 md:h-14 gap-2 md:gap-4">
+            {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo Borlim / Consultoria */}
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
               {/* Hambúrguer apenas em mobile */}
               <button
@@ -297,10 +299,10 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2 text-left group focus:outline-hidden cursor-pointer"
+                className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer"
               >
                 {logoUrl ? (
-                  <div className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden">
+                  <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden border border-white/15 group-hover:border-white/30 transition-all">
                     <img
                       src={logoUrl}
                       alt={minhaEmpresa?.nome_fantasia || 'Logo'}
@@ -309,30 +311,243 @@ export default function Layout() {
                   </div>
                 ) : (
                   <div
-                    className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs"
+                    className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs border border-white/15"
                     style={{ backgroundColor: corSecundaria }}
                   >
-                    <Scale className="w-4 h-4" />
+                    <Scale className="w-4 h-4 md:w-4.5 md:h-4.5" />
                   </div>
                 )}
-                <div className="truncate max-w-[110px] sm:max-w-[150px] xl:max-w-[190px]">
+                <div className="truncate max-w-[150px] sm:max-w-[220px] md:max-w-[280px]">
                   <span className="font-bold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
                     {minhaEmpresa?.nome_fantasia ||
                       minhaEmpresa?.razao_social ||
-                      'Análise de Balanço'}
+                      'Borlim · Gestão Financeira'}
                   </span>
-                  <span className="text-[9px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
-                    {minhaEmpresa?.razao_social ? 'Consultoria' : 'Gestão'}
+                  <span className="text-[9px] md:text-[10px] text-blue-200/90 uppercase tracking-wider font-semibold block truncate">
+                    {minhaEmpresa?.razao_social
+                      ? 'Gestão Financeira & Econômica'
+                      : 'Gestão Financeira'}
                   </span>
                 </div>
               </button>
             </div>
 
-            {/* CENTRO: NAVEGAÇÃO HORIZONTAL PRINCIPAL COM MEGA-MENUS */}
-            <nav className="hidden md:flex items-center gap-0.5 xl:gap-1 flex-1 justify-start min-w-0 overflow-visible py-1">
+            {/* LADO DIREITO: SELETORES GLOBAIS (EMPRESA/ANO) + BUSCA (Ctrl+K) + AVATAR */}
+            <div className="flex items-center gap-2 md:gap-3 shrink-0">
+              {/* Seletores Globais de Empresa e Ano integrados na Linha 1 */}
+              <div className="hidden sm:flex items-center gap-1.5 md:gap-2">
+                {/* Seletor Empresa */}
+                <div className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2.5 py-1 text-xs transition-colors">
+                  <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                  {isUserAdmin ? (
+                    <Select
+                      value={selectedEmpresaId}
+                      onValueChange={(id) => {
+                        setSelectedEmpresaId(id)
+                        if (
+                          location.pathname.startsWith('/empresas/') &&
+                          location.pathname !== `/empresas/${id}`
+                        ) {
+                          navigate(`/empresas/${id}`)
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[130px] md:w-[170px] lg:w-[200px] cursor-pointer">
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
+                        <SelectEmpresaOuGrupoItems
+                          todasEntidades={todasEntidades}
+                          empresas={empresas}
+                        />
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div
+                      className="flex items-center gap-1.5 py-0.5 text-xs font-semibold text-white max-w-[150px] md:max-w-[190px] truncate"
+                      title={
+                        empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                        'Sua Empresa'
+                      }
+                    >
+                      <span className="truncate">
+                        {empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                          empresas.find((e) => e.id === selectedEmpresaId)?.nome ||
+                          'Empresa Vinculada'}
+                      </span>
+                      <span className="text-[9px] bg-white/20 text-blue-100 px-1 py-0.2 rounded font-normal shrink-0">
+                        Fixa
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Seletor Ano */}
+                <div className="flex items-center gap-1 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2 py-1 text-xs transition-colors">
+                  <Calendar className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                  <Select
+                    value={String(selectedAno)}
+                    onValueChange={(val) => setSelectedAno(Number(val))}
+                  >
+                    <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[58px] cursor-pointer">
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
+                      {anosDisponiveis.map((ano) => (
+                        <SelectItem key={ano} value={String(ano)} className="text-xs">
+                          {ano}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Botão de Busca Rápida (Command Palette Ctrl+K) */}
+              <button
+                type="button"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-slate-100 hover:text-white text-xs border border-white/20 transition-all shadow-xs cursor-pointer group"
+                title="Pressione Ctrl+K para buscar módulos e relatórios"
+              >
+                <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
+                <span className="inline text-xs font-medium text-slate-100 group-hover:text-white">
+                  Buscar...
+                </span>
+                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
+                  <span className="text-[8px]">⌘</span>K
+                </kbd>
+              </button>
+
+              {/* Menu de Avatar do Usuário */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
+                  >
+                    <Avatar
+                      className="w-7 h-7 md:w-8 md:h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
+                      style={{ backgroundColor: corSecundaria }}
+                    >
+                      {user?.avatar && (
+                        <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
+                      )}
+                      <AvatarFallback
+                        style={{ backgroundColor: corSecundaria }}
+                        className="text-white font-semibold text-xs"
+                      >
+                        {userInitial}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="hidden xl:flex flex-col items-start text-left max-w-[130px] truncate">
+                      <span className="text-xs font-semibold text-white truncate leading-tight block">
+                        {userName}
+                      </span>
+                      <span className="text-[10px] text-blue-200/80 truncate block">
+                        {userRole}
+                      </span>
+                    </div>
+                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/80 hidden xl:block" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={8}
+                  className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
+                >
+                  {/* Cabeçalho do usuário */}
+                  <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10 mb-1">
+                    <Avatar
+                      className="w-10 h-10 border border-white/20 shrink-0"
+                      style={{ backgroundColor: corSecundaria }}
+                    >
+                      {user?.avatar && (
+                        <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
+                      )}
+                      <AvatarFallback
+                        style={{ backgroundColor: corSecundaria }}
+                        className="text-white font-bold text-sm"
+                      >
+                        {userInitial}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-white truncate">{userName}</p>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${
+                            isUserAdmin
+                              ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
+                              : isUserFinanceiro
+                                ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
+                                : isUserComercial
+                                  ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
+                                  : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                          }`}
+                        >
+                          {userRole}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-blue-200/70 truncate mt-0.5">{userEmail}</p>
+                    </div>
+                  </div>
+
+                  <DropdownMenuSeparator className="bg-white/10 my-1" />
+
+                  {/* Configurações da Conta */}
+                  <DropdownMenuItem
+                    onClick={() => navigate('/configuracoes')}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
+                  >
+                    <Settings className="w-4 h-4 text-slate-300" />
+                    <span>Configurações do Sistema</span>
+                  </DropdownMenuItem>
+
+                  {/* Perfil & Alertas */}
+                  <DropdownMenuItem
+                    onClick={() => setModalPerfilOpen(true)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
+                  >
+                    <Bell className="w-4 h-4 text-blue-300" />
+                    <span>Alertas & Preferências</span>
+                  </DropdownMenuItem>
+
+                  {/* Minha Empresa */}
+                  <DropdownMenuItem
+                    onClick={() => navigate('/minha-empresa')}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
+                  >
+                    <Building className="w-4 h-4 text-emerald-400" />
+                    <span>Dados da Minha Consultoria</span>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="bg-white/10 my-1" />
+
+                  {/* Logout */}
+                  <DropdownMenuItem
+                    onClick={() => {
+                      logout()
+                      navigate('/')
+                    }}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-300 bg-red-950/30 hover:bg-red-900/50 hover:text-red-100 cursor-pointer focus:bg-red-900/50 focus:text-red-100 border border-red-800/30"
+                  >
+                    <LogOut className="w-4 h-4 text-red-400" />
+                    <span>Sair do sistema</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        </div>
+
+        {/* ---------------- LINHA 2: BARRA DE NAVEGAÇÃO HORIZONTAL (MEGA-MENUS & MAIS) ---------------- */}
+        <div className="w-full px-3 lg:px-5 border-b border-white/10 hidden md:block">
+          <div className="flex items-center justify-between h-10 lg:h-11 overflow-visible">
+            <nav className="flex items-center gap-1 xl:gap-1.5 flex-1 justify-start min-w-0 overflow-visible py-1">
               {gruposVisiveis.map((grupo, idx) => {
                 const active = isGroupActive(grupo)
-                // Se estiver no último terço dos itens, alinhar painel à direita para não cortar
+                // Se estiver no último terço dos itens, alinhar painel à direita para não cortar na borda direita
                 const align = idx >= gruposVisiveis.length - 2 ? 'right' : 'auto'
                 return (
                   <ModernMegaMenu
@@ -460,148 +675,9 @@ export default function Layout() {
                 </DropdownMenu>
               )}
             </nav>
-
-            {/* LADO DIREITO: BUSCA RÁPIDA (Ctrl+K) + AVATAR */}
-            <div className="flex items-center gap-1.5 xl:gap-2 shrink-0">
-              {/* Botão de Busca Rápida (Command Palette) */}
-              <button
-                type="button"
-                onClick={() => setCommandPaletteOpen(true)}
-                className="flex items-center gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-slate-100 hover:text-white text-xs border border-white/20 transition-all shadow-xs cursor-pointer group"
-                title="Pressione Ctrl+K para buscar módulos e relatórios"
-              >
-                <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
-                <span className="hidden xl:inline text-xs font-medium text-slate-100 group-hover:text-white">
-                  Buscar...
-                </span>
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
-                  <span className="text-[8px]">⌘</span>K
-                </kbd>
-              </button>
-
-              {/* Menu de Avatar do Usuário */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
-                  >
-                    <Avatar
-                      className="w-7 h-7 md:w-8 md:h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
-                      style={{ backgroundColor: corSecundaria }}
-                    >
-                      {user?.avatar && (
-                        <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
-                      )}
-                      <AvatarFallback
-                        style={{ backgroundColor: corSecundaria }}
-                        className="text-white font-semibold text-xs"
-                      >
-                        {userInitial}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="hidden 2xl:flex flex-col items-start text-left max-w-[120px] truncate">
-                      <span className="text-xs font-semibold text-white truncate leading-tight block">
-                        {userName}
-                      </span>
-                      <span className="text-[10px] text-blue-200/80 truncate block">
-                        {userRole}
-                      </span>
-                    </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/80 hidden 2xl:block" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
-                >
-                  {/* Cabeçalho do usuário */}
-                  <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10 mb-1">
-                    <Avatar
-                      className="w-10 h-10 border border-white/20 shrink-0"
-                      style={{ backgroundColor: corSecundaria }}
-                    >
-                      {user?.avatar && (
-                        <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
-                      )}
-                      <AvatarFallback
-                        style={{ backgroundColor: corSecundaria }}
-                        className="text-white font-bold text-sm"
-                      >
-                        {userInitial}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-bold text-white truncate">{userName}</p>
-                        <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${
-                            isUserAdmin
-                              ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
-                              : isUserFinanceiro
-                                ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
-                                : isUserComercial
-                                  ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
-                                  : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
-                          }`}
-                        >
-                          {userRole}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-blue-200/70 truncate mt-0.5">{userEmail}</p>
-                    </div>
-                  </div>
-
-                  <DropdownMenuSeparator className="bg-white/10 my-1" />
-
-                  {/* Configurações da Conta */}
-                  <DropdownMenuItem
-                    onClick={() => navigate('/configuracoes')}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
-                  >
-                    <Settings className="w-4 h-4 text-slate-300" />
-                    <span>Configurações do Sistema</span>
-                  </DropdownMenuItem>
-
-                  {/* Perfil & Alertas */}
-                  <DropdownMenuItem
-                    onClick={() => setModalPerfilOpen(true)}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
-                  >
-                    <Bell className="w-4 h-4 text-blue-300" />
-                    <span>Alertas & Preferências</span>
-                  </DropdownMenuItem>
-
-                  {/* Minha Empresa */}
-                  <DropdownMenuItem
-                    onClick={() => navigate('/minha-empresa')}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
-                  >
-                    <Building className="w-4 h-4 text-emerald-400" />
-                    <span>Dados da Minha Consultoria</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuSeparator className="bg-white/10 my-1" />
-
-                  {/* Logout */}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      logout()
-                      navigate('/')
-                    }}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-300 bg-red-950/30 hover:bg-red-900/50 hover:text-red-100 cursor-pointer focus:bg-red-900/50 focus:text-red-100 border border-red-800/30"
-                  >
-                    <LogOut className="w-4 h-4 text-red-400" />
-                    <span>Sair do sistema</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
           </div>
         </div>
       </header>
-
       {/* ========================================================
           DRAWER MOBILE (< 768px)
           Modernizado com busca e suporte aos mesmos dados ricos
@@ -872,7 +948,7 @@ export default function Layout() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Cabeçalho de Página com Título e Seletores Globais */}
         {showHeaderFilters && (
-          <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-14 md:top-16 z-20 shadow-xs">
+          <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-13 md:top-[100px] z-20 shadow-xs">
             <div>
               <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
                 {location.pathname === '/indicadores/apresentacao' &&

@@ -230,8 +230,8 @@ export function ModernMegaMenu({
     // Alinhamento padrão adaptativo
     return isMega
       ? columnCount >= 3
-        ? 'w-[720px] max-w-[88vw] -left-6 lg:-left-12 xl:-left-16'
-        : 'w-[540px] max-w-[85vw] -left-4 lg:-left-8'
+        ? 'w-[720px] max-w-[88vw] left-0'
+        : 'w-[540px] max-w-[85vw] left-0'
       : 'w-[280px] left-0'
   }
 
