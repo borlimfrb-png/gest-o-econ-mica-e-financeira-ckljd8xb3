@@ -1187,6 +1187,39 @@ export interface TributoLancamentoRecord extends RecordModel {
   }
 }
 
+// Snapshot do Histórico de Valuations por Ano e Metodologia
+export type MetodologiaValuation = 'fcd' | 'superlucro' | 'multiplos' | 'consenso'
+
+export interface ValuationHistoricoRecord extends RecordModel {
+  user?: string
+  empresa: string
+  ano: number
+  metodologia: MetodologiaValuation
+  valor: number
+  detalhes?: Record<string, any>
+  data_calculo?: string
+  expand?: {
+    empresa?: EmpresaRecord
+    user?: UserRecord
+  }
+}
+
+export interface HistoricoValuationPontoAno {
+  ano: number
+  valorFcd: number | null
+  valorSuperlucro: number | null
+  valorMultiplos: number | null
+  consenso: number
+  minimo: number
+  maximo: number
+  metodosContados: number
+  variacaoPercentualVsAnterior?: number | null
+  detalhesFcd?: Record<string, any>
+  detalhesSuperlucro?: Record<string, any>
+  detalhesMultiplos?: Record<string, any>
+  origem: 'snapshot' | 'calculado'
+}
+
 // Configuração e Registro de Múltiplos de Mercado para Valuation
 export interface ValuationMultiplosRecord extends RecordModel {
   user?: string

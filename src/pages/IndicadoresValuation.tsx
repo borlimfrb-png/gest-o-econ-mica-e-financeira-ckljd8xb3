@@ -76,6 +76,7 @@ import { useToast } from '@/hooks/use-toast'
 import { ModalLaudoValuation } from '@/components/ModalLaudoValuation'
 import { AbaMultiplosMercado } from '@/components/AbaMultiplosMercado'
 import { PainelComparativoTresMetodos } from '@/components/PainelComparativoTresMetodos'
+import { AbaHistoricoValuation } from '@/components/AbaHistoricoValuation'
 import {
   calcularMultiplosMercado,
   gerarComparativoTresMetodos,
@@ -85,7 +86,12 @@ import {
   type MultiploKey,
 } from '@/lib/valuationMultiplos'
 import { valuationMultiplosService } from '@/services/valuationMultiplosService'
-import type { ValuationMultiplosRecord } from '@/types/finance'
+import { valuationHistoricoService } from '@/services/valuationHistoricoService'
+import type {
+  ValuationMultiplosRecord,
+  ValuationHistoricoRecord,
+  HistoricoValuationPontoAno,
+} from '@/types/finance'
 
 // Função auxiliar de cálculo de Valuation para um ano específico
 function calcularValuationParaAno({
@@ -253,6 +259,8 @@ export default function IndicadoresValuation() {
   const [registroMultiplosDb, setRegistroMultiplosDb] = useState<ValuationMultiplosRecord | null>(
     null,
   )
+  const [historicoDb, setHistoricoDb] = useState<ValuationHistoricoRecord[]>([])
+  const [salvandoSnapshotHistorico, setSalvandoSnapshotHistorico] = useState<boolean>(false)
 
   // Carregar dados das coleções balancos e dre
   const loadData = async () => {
@@ -671,6 +679,28 @@ export default function IndicadoresValuation() {
     diferencaPercentual,
   ])
 
+  // Carregar histórico de valuations da empresa selecionada
+  const carregarHistoricoDb = async () => {
+    if (!selectedEmpresaId) {
+      setHistoricoDb([])
+      return
+    }
+    try {
+      const records = await valuationHistoricoService.getByEmpresa(selectedEmpresaId)
+      setHistoricoDb(records)
+    } catch (err) {
+      console.warn('Erro ao carregar histórico de valuation:', err)
+    }
+  }
+
+  useEffect(() => {
+    carregarHistoricoDb()
+  }, [selectedEmpresaId])
+
+  useRealtime<ValuationHistoricoRecord>('valuation_historico', () => {
+    carregarHistoricoDb()
+  })
+
   // Carregar configuração salva de múltiplos de mercado para a empresa e ano
   const carregarMultiplosDb = async () => {
     if (!selectedEmpresaId || !selectedAno) return
@@ -863,6 +893,155 @@ export default function IndicadoresValuation() {
     selectedEmpresa?.segmento,
   ])
 
+  // ================= HISTÓRICO DE VALUATIONS CONSOLIDADO =================
+  const historicoValuationSerie = useMemo<HistoricoValuationPontoAno[]>(() => {
+    return valuationHistoricoService.consolidarSerieHistorica(historicoDb, anosEmpresa, (ano) => {
+      // Se for o ano atualmente selecionado com todos os parâmetros customizados
+      if (ano === selectedAno) {
+        return {
+          valorFcd: isWaccMenorOuIgualG ? null : valorEmpresaFCD,
+          valorSuperlucro: valorEmpresaGoodwill,
+          valorMultiplos:
+            resumoMultiplos.valorPonderado > 0 ? resumoMultiplos.valorPonderado : null,
+          detalhesFcd: { taxaWacc, taxaPerpetuidade, anosProjecao },
+          detalhesSuperlucro: { taxaRetornoEsperadoPL, taxaCapitalizacaoGoodwill },
+          detalhesMultiplos: { segmento: segmentoRefMultiplos },
+        }
+      }
+
+      // Anos adicionais: calcula a partir das demonstrações daquele ano
+      const balAno = balancos.find((b) => b.ano === ano) || null
+      const dreAno = dres.find((d) => d.ano === ano) || null
+      const v = calcularValuationParaAno({
+        balanco: balAno,
+        dre: dreAno,
+        taxaWacc,
+        taxaPerpetuidade,
+        anosProjecao,
+        crescimentoAnualFcf,
+        taxaRetornoEsperadoPL,
+        taxaCapitalizacaoGoodwill,
+      })
+
+      return {
+        valorFcd: v.valorFCD > 0 ? v.valorFCD : null,
+        valorSuperlucro: v.valorGoodwill > 0 ? v.valorGoodwill : null,
+        valorMultiplos: null,
+        detalhesFcd: { fcd: v.valorFCD },
+        detalhesSuperlucro: { goodwill: v.valorGoodwill },
+      }
+    })
+  }, [
+    historicoDb,
+    anosEmpresa,
+    selectedAno,
+    isWaccMenorOuIgualG,
+    valorEmpresaFCD,
+    valorEmpresaGoodwill,
+    resumoMultiplos.valorPonderado,
+    taxaWacc,
+    taxaPerpetuidade,
+    anosProjecao,
+    taxaRetornoEsperadoPL,
+    taxaCapitalizacaoGoodwill,
+    segmentoRefMultiplos,
+    balancos,
+    dres,
+  ])
+
+  const cagrHistorico = useMemo(() => {
+    return valuationHistoricoService.calcularCagr(historicoValuationSerie)
+  }, [historicoValuationSerie])
+
+  // Gravar Snapshot do Ano Atual
+  const handleSalvarSnapshotAnoAtual = async () => {
+    if (!selectedEmpresaId) {
+      toast({
+        title: 'Selecione uma empresa',
+        description: 'Selecione uma empresa antes de salvar o snapshot histórico.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      setSalvandoSnapshotHistorico(true)
+      const fcdVal = isWaccMenorOuIgualG ? 0 : valorEmpresaFCD
+      const superlucroVal = valorEmpresaGoodwill
+      const multiplosVal = resumoMultiplos.valorPonderado
+      const consensoVal = comparativoTresMetodos.valorCentralTriplo
+
+      await valuationHistoricoService.salvarSnapshotsAno(selectedEmpresaId, selectedAno, {
+        fcd:
+          fcdVal > 0
+            ? {
+                valor: fcdVal,
+                detalhes: {
+                  taxaWacc,
+                  taxaPerpetuidade,
+                  anosProjecao,
+                  crescimentoAnualFcf,
+                  somaVp: projecaoAnual.somaVp,
+                  vpValorTerminal,
+                },
+              }
+            : null,
+        superlucro:
+          superlucroVal > 0
+            ? {
+                valor: superlucroVal,
+                detalhes: {
+                  patrimonioLiquido,
+                  lucroLiquido,
+                  lucroNormal,
+                  superlucro,
+                  goodwill,
+                  taxaRetornoEsperadoPL,
+                  taxaCapitalizacaoGoodwill,
+                },
+              }
+            : null,
+        multiplos:
+          multiplosVal > 0
+            ? {
+                valor: multiplosVal,
+                detalhes: {
+                  segmentoRef: segmentoRefMultiplos,
+                  multiplosRef: multiplosRefState,
+                  pesos: pesosMultiplosState,
+                },
+              }
+            : null,
+        consenso:
+          consensoVal > 0
+            ? {
+                valor: consensoVal,
+                detalhes: {
+                  faixaMin: comparativoTresMetodos.faixaGeralMin,
+                  faixaMax: comparativoTresMetodos.faixaGeralMax,
+                },
+              }
+            : null,
+      })
+
+      await carregarHistoricoDb()
+
+      toast({
+        title: 'Snapshot de Valuation Salvo!',
+        description: `Os valores calculados para o exercício de ${selectedAno} foram consolidados no histórico com sucesso.`,
+      })
+    } catch (err) {
+      console.error('Erro ao salvar snapshot de valuation:', err)
+      toast({
+        title: 'Erro ao salvar snapshot',
+        description: 'Não foi possível gravar o snapshot histórico no banco.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSalvandoSnapshotHistorico(false)
+    }
+  }
+
   // ================= 7. EXPORTAÇÃO CSV COMPLETA =================
   const handleExportCsv = () => {
     if (!selectedEmpresa) {
@@ -949,7 +1128,34 @@ export default function IndicadoresValuation() {
     csvContent += `Piso Faixa Negocial;${comparativoTresMetodos.faixaGeralMin.toFixed(2).replace('.', ',')}\n`
     csvContent += `Teto Faixa Negocial;${comparativoTresMetodos.faixaGeralMax.toFixed(2).replace('.', ',')}\n\n`
 
-    csvContent += `EVOLUÇÃO HISTÓRICA DO VALUATION (ÚLTIMOS ANOS)\n`
+    csvContent += `HISTÓRICO DE VALUATIONS POR EXERCÍCIO (EVOLUÇÃO PLURIANUAL)\n`
+    csvContent += `Ano;FCD (Gordon) (R$);Superlucro (Goodwill) (R$);Múltiplos de Mercado (R$);Consenso Central (R$);Mínimo (R$);Máximo (R$);Variação vs Ano Anterior (%)\n`
+    historicoValuationSerie.forEach((hp) => {
+      const fcdStr =
+        hp.valorFcd && hp.valorFcd > 0 ? hp.valorFcd.toFixed(2).replace('.', ',') : 'N/D'
+      const slStr =
+        hp.valorSuperlucro && hp.valorSuperlucro > 0
+          ? hp.valorSuperlucro.toFixed(2).replace('.', ',')
+          : 'N/D'
+      const multStr =
+        hp.valorMultiplos && hp.valorMultiplos > 0
+          ? hp.valorMultiplos.toFixed(2).replace('.', ',')
+          : 'N/D'
+      const consStr = hp.consenso > 0 ? hp.consenso.toFixed(2).replace('.', ',') : 'N/D'
+      const minStr = hp.minimo > 0 ? hp.minimo.toFixed(2).replace('.', ',') : 'N/D'
+      const maxStr = hp.maximo > 0 ? hp.maximo.toFixed(2).replace('.', ',') : 'N/D'
+      const varStr =
+        hp.variacaoPercentualVsAnterior !== null && hp.variacaoPercentualVsAnterior !== undefined
+          ? `${hp.variacaoPercentualVsAnterior.toFixed(2).replace('.', ',')}%`
+          : 'Base'
+      csvContent += `${hp.ano};${fcdStr};${slStr};${multStr};${consStr};${minStr};${maxStr};${varStr}\n`
+    })
+    if (cagrHistorico !== null) {
+      csvContent += `CAGR do Período;;;;;;;${cagrHistorico.toFixed(2).replace('.', ',')}%\n`
+    }
+    csvContent += `\n`
+
+    csvContent += `EVOLUÇÃO CONTÁBIL DOS ÚLTIMOS ANOS (BALANÇO/DRE)\n`
     csvContent += `Ano;FCD (R$);Goodwill (R$);Patrimônio Líquido (R$);Lucro Líquido (R$)\n`
     evolucaoUltimosAnos.dados.forEach((ev) => {
       csvContent += `${ev.ano};${ev.fcd.toFixed(2).replace('.', ',')};${ev.goodwill.toFixed(2).replace('.', ',')};${ev.patrimonioLiquido.toFixed(2).replace('.', ',')};${ev.lucroLiquido.toFixed(2).replace('.', ',')}\n`
@@ -1265,6 +1471,18 @@ export default function IndicadoresValuation() {
           <div className="flex items-center justify-between border-b border-slate-200 pb-2">
             <TabsList className="bg-slate-100 p-1 rounded-xl h-10">
               <TabsTrigger
+                value="historico"
+                className="text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-emerald-700 data-[state=active]:shadow-xs"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                Histórico / Evolução
+                {historicoValuationSerie.length > 0 && (
+                  <Badge className="ml-1 bg-emerald-100 text-emerald-800 border-none text-[10px] px-1.5 py-0 h-4">
+                    {historicoValuationSerie.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
                 value="multiplos"
                 className="text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs"
               >
@@ -1282,7 +1500,7 @@ export default function IndicadoresValuation() {
                 value="fcd_goodwill"
                 className="text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
               >
-                <TrendingUp className="w-3.5 h-3.5" />
+                <Layers className="w-3.5 h-3.5" />
                 FCD &amp; Goodwill
               </TabsTrigger>
             </TabsList>
@@ -1290,14 +1508,30 @@ export default function IndicadoresValuation() {
             <span className="text-xs text-slate-500 hidden sm:inline">
               Abordagem ativa:{' '}
               <strong className="text-slate-800">
-                {abaAtiva === 'multiplos'
-                  ? 'Múltiplos de Mercado'
-                  : abaAtiva === 'comparativo'
-                    ? 'Comparativo Triplo'
-                    : 'FCD & Goodwill'}
+                {abaAtiva === 'historico'
+                  ? 'Histórico / Evolução Temporal'
+                  : abaAtiva === 'multiplos'
+                    ? 'Múltiplos de Mercado'
+                    : abaAtiva === 'comparativo'
+                      ? 'Comparativo Triplo'
+                      : 'FCD & Goodwill'}
               </strong>
             </span>
           </div>
+
+          {/* TAB HISTÓRICO: EVOLUÇÃO TEMPORAL POR ANO */}
+          <TabsContent value="historico" className="mt-0">
+            <AbaHistoricoValuation
+              historicoSerie={historicoValuationSerie}
+              cagr={cagrHistorico}
+              empresaNome={selectedEmpresa?.nome}
+              anoAtual={selectedAno}
+              onSalvarSnapshotAnoAtual={handleSalvarSnapshotAnoAtual}
+              salvandoSnapshot={salvandoSnapshotHistorico}
+              onSelecionarAno={(ano) => setSelectedAno(ano)}
+              loading={loading}
+            />
+          </TabsContent>
 
           {/* TAB 1: MÚLTIPLOS DE MERCADO */}
           <TabsContent value="multiplos" className="mt-0">
@@ -2400,6 +2634,8 @@ export default function IndicadoresValuation() {
         resumoMultiplos={resumoMultiplos}
         comparativoTresMetodos={comparativoTresMetodos}
         segmentoRefMultiplos={segmentoRefMultiplos}
+        historicoSerie={historicoValuationSerie}
+        cagrHistorico={cagrHistorico}
       />
     </div>
   )

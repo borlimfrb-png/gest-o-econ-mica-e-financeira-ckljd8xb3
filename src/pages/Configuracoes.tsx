@@ -22,6 +22,8 @@ import {
   Trash2,
   RefreshCw,
   CalendarCheck,
+  Server,
+  Send,
 } from 'lucide-react'
 
 export default function Configuracoes() {
@@ -53,6 +55,10 @@ export default function Configuracoes() {
   const [notificacoesVencimento, setNotificacoesVencimento] = useState(true)
   const [savingNotificacoesVencimento, setSavingNotificacoesVencimento] = useState(false)
 
+  // Teste de conexão SMTP
+  const [emailTesteSmtp, setEmailTesteSmtp] = useState('')
+  const [testandoSmtp, setTestandoSmtp] = useState(false)
+
   // Atualizar estado inicial a partir do usuário autenticado e da minhaEmpresa
   useEffect(() => {
     if (user) {
@@ -73,8 +79,44 @@ export default function Configuracoes() {
       } else {
         setAvatarPreview(null)
       }
+
+      setEmailTesteSmtp(user.email || '')
     }
   }, [user, minhaEmpresa])
+
+  const handleTestarSmtp = async () => {
+    const emailDestino = emailTesteSmtp.trim() || user?.email
+    if (!emailDestino) {
+      toast({
+        title: 'Informe um e-mail',
+        description: 'Digite o endereço de e-mail de destino para o teste SMTP.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      setTestandoSmtp(true)
+      const res = await pb.send('/api/test-smtp-connection', {
+        method: 'POST',
+        body: { email: emailDestino },
+      })
+      toast({
+        title: 'Conexão SMTP com Sucesso!',
+        description: res?.message || `E-mail de teste enviado com êxito para ${emailDestino}.`,
+      })
+    } catch (err: any) {
+      console.error('Erro no teste SMTP:', err)
+      const msg = err?.data?.error || err?.message || 'Falha ao testar conexão SMTP.'
+      toast({
+        title: 'Falha no teste SMTP',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setTestandoSmtp(false)
+    }
+  }
 
   // Handlers para Foto de Perfil
   const handleSelectFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -701,6 +743,63 @@ export default function Configuracoes() {
                 className="data-[state=checked]:bg-blue-600"
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* CARD 5: TESTE DE CONEXÃO SMTP (BÔNUS) */}
+        <Card className="bg-white border-slate-200 shadow-2xs">
+          <CardHeader className="pb-3 border-b border-slate-100">
+            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+              <Server className="w-4 h-4 text-blue-600" />
+              Teste de Conexão SMTP / Servidor de E-mails
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Valide se o servidor de e-mail da Borlim está conectado e disparando mensagens para
+              notificações, laudos de valuation e lembretes de cobrança.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-5 space-y-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="space-y-1.5 flex-1">
+                <Label htmlFor="email-teste-smtp" className="text-xs font-semibold text-slate-700">
+                  E-mail de Destino para Teste
+                </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <Input
+                    id="email-teste-smtp"
+                    type="email"
+                    value={emailTesteSmtp}
+                    onChange={(e) => setEmailTesteSmtp(e.target.value)}
+                    placeholder="ex: flavio@borlim.com.br"
+                    className="pl-9 h-9 text-xs border-slate-300"
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                onClick={handleTestarSmtp}
+                disabled={testandoSmtp}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-9 px-4 gap-1.5 shrink-0 shadow-xs"
+              >
+                {testandoSmtp ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Testando Envio...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-3.5 h-3.5" />
+                    Disparar E-mail de Teste
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-[11px] text-slate-500">
+              O teste utiliza o cliente de e-mails do sistema via protocolo SMTP seguro configurado
+              no servidor da aplicação.
+            </p>
           </CardContent>
         </Card>
       </div>

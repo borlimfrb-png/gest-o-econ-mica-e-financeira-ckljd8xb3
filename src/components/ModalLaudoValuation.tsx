@@ -28,6 +28,7 @@ import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type { EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
 import { formatCurrency, formatPercent, formatCnpj, formatNumber } from '@/lib/financeCalculations'
 import type { ResumoConsolidadoMultiplos, ComparativoTresMetodos } from '@/lib/valuationMultiplos'
+import type { HistoricoValuationPontoAno } from '@/types/finance'
 
 export interface SensibilidadeItem {
   wacc: number
@@ -81,6 +82,8 @@ export interface ModalLaudoValuationProps {
   resumoMultiplos?: ResumoConsolidadoMultiplos
   comparativoTresMetodos?: ComparativoTresMetodos
   segmentoRefMultiplos?: string
+  historicoSerie?: HistoricoValuationPontoAno[]
+  cagrHistorico?: number | null
 }
 
 export function ModalLaudoValuation({
@@ -113,6 +116,8 @@ export function ModalLaudoValuation({
   resumoMultiplos,
   comparativoTresMetodos,
   segmentoRefMultiplos,
+  historicoSerie,
+  cagrHistorico,
 }: ModalLaudoValuationProps) {
   const handlePrint = () => {
     window.print()
@@ -366,12 +371,25 @@ export function ModalLaudoValuation({
                   <span>4. Sensibilidade FCD</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
+                {historicoSerie && historicoSerie.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => scrollToSection('sec-historico-evolucao')}
+                    className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                  >
+                    <span>5. Evolução Histórica</span>
+                    <span className="text-[10px] text-slate-400">Ir &darr;</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => scrollToSection('sec-4-conclusao')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>5. Conclusão &amp; Parecer</span>
+                  <span>
+                    {historicoSerie && historicoSerie.length > 0 ? '6' : '5'}. Conclusão &amp;
+                    Parecer
+                  </span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
               </div>
@@ -805,12 +823,126 @@ export function ModalLaudoValuation({
             </section>
 
             {/* ========================================================= */}
-            {/* 5. CONCLUSÃO E RESSALVAS */}
+            {/* SEÇÃO: EVOLUÇÃO HISTÓRICA DO VALOR DA EMPRESA */}
+            {/* ========================================================= */}
+            {historicoSerie && historicoSerie.length > 0 && (
+              <section id="sec-historico-evolucao" className="space-y-3">
+                <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
+                    5
+                  </span>
+                  Evolução do Valor da Empresa por Ano (Série Histórica Plurianual)
+                </h2>
+
+                <p className="text-slate-600 text-xs leading-relaxed text-justify">
+                  Série histórica que acompanha a trajetória de geração de valor da sociedade ao
+                  longo dos exercícios contábeis, consolidando os métodos de Fluxo Descontado,
+                  Superlucro (Goodwill) e Múltiplos com o consenso central e faixa de dispersão.
+                </p>
+
+                {/* Tabela impressa do Histórico */}
+                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead className="bg-slate-100 text-slate-700">
+                      <tr>
+                        <th className="p-2 border-b font-bold w-16">Ano</th>
+                        <th className="p-2 border-b text-right font-bold">FCD (Gordon)</th>
+                        <th className="p-2 border-b text-right font-bold">Superlucro</th>
+                        <th className="p-2 border-b text-right font-bold">Múltiplos</th>
+                        <th className="p-2 border-b text-right font-bold text-blue-900 bg-blue-50/80">
+                          Consenso Central
+                        </th>
+                        <th className="p-2 border-b text-right font-bold">Faixa (Mín–Máx)</th>
+                        <th className="p-2 border-b text-right font-bold">Var. % Anual</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {historicoSerie.map((item) => {
+                        const isAnoBase = item.ano === selectedAno
+                        return (
+                          <tr
+                            key={item.ano}
+                            className={
+                              isAnoBase ? 'bg-blue-50/50 font-semibold' : 'hover:bg-slate-50'
+                            }
+                          >
+                            <td className="p-2 font-bold text-[#0B1F3A]">
+                              {item.ano} {isAnoBase && '(Base)'}
+                            </td>
+                            <td className="p-2 text-right font-mono text-slate-700">
+                              {item.valorFcd && item.valorFcd > 0
+                                ? formatCurrency(item.valorFcd)
+                                : '—'}
+                            </td>
+                            <td className="p-2 text-right font-mono text-slate-700">
+                              {item.valorSuperlucro && item.valorSuperlucro > 0
+                                ? formatCurrency(item.valorSuperlucro)
+                                : '—'}
+                            </td>
+                            <td className="p-2 text-right font-mono text-slate-700">
+                              {item.valorMultiplos && item.valorMultiplos > 0
+                                ? formatCurrency(item.valorMultiplos)
+                                : '—'}
+                            </td>
+                            <td className="p-2 text-right font-mono font-bold text-blue-900 bg-blue-50/40">
+                              {item.consenso > 0 ? formatCurrency(item.consenso) : '—'}
+                            </td>
+                            <td className="p-2 text-right font-mono text-slate-600 text-[11px]">
+                              {item.minimo > 0 && item.maximo > 0
+                                ? `${formatCurrency(item.minimo)} – ${formatCurrency(item.maximo)}`
+                                : '—'}
+                            </td>
+                            <td className="p-2 text-right font-mono font-bold">
+                              {item.variacaoPercentualVsAnterior !== null &&
+                              item.variacaoPercentualVsAnterior !== undefined ? (
+                                <span
+                                  className={
+                                    item.variacaoPercentualVsAnterior > 0
+                                      ? 'text-emerald-700'
+                                      : item.variacaoPercentualVsAnterior < 0
+                                        ? 'text-red-700'
+                                        : 'text-slate-600'
+                                  }
+                                >
+                                  {item.variacaoPercentualVsAnterior > 0 ? '+' : ''}
+                                  {formatPercent(item.variacaoPercentualVsAnterior, 1)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 font-normal">Base</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Síntese do CAGR histórico */}
+                {cagrHistorico !== null && (
+                  <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-lg flex items-center justify-between text-xs text-indigo-950">
+                    <div>
+                      <strong>Crescimento Anual Composto (CAGR do Período):</strong>{' '}
+                      <span>
+                        Taxa geométrica média de expansão do consenso central de valor da empresa.
+                      </span>
+                    </div>
+                    <span className="text-sm font-black font-mono text-indigo-800">
+                      {cagrHistorico > 0 ? '+' : ''}
+                      {formatPercent(cagrHistorico, 1)} a.a.
+                    </span>
+                  </div>
+                )}
+              </section>
+            )}
+
+            {/* ========================================================= */}
+            {/* CONCLUSÃO E RESSALVAS */}
             {/* ========================================================= */}
             <section id="sec-4-conclusao" className="space-y-3">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  5
+                  {historicoSerie && historicoSerie.length > 0 ? '6' : '5'}
                 </span>
                 Conclusão, Parecer Comparativo dos 3 Métodos e Ressalvas
               </h2>

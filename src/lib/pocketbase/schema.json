@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T11:16:26.612Z",
+  "generatedAt": "2026-09-19T11:38:09.458Z",
   "collections": [
     {
       "name": "users",
@@ -5025,6 +5025,84 @@
         "CREATE UNIQUE INDEX idx_val_multiplos_empresa_ano ON valuation_multiplos (empresa, ano)",
         "CREATE INDEX idx_val_multiplos_empresa ON valuation_multiplos (empresa)",
         "CREATE INDEX idx_val_multiplos_ano ON valuation_multiplos (ano)"
+      ]
+    },
+    {
+      "name": "valuation_historico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "metodologia",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["fcd", "superlucro", "multiplos", "consenso"]
+        },
+        {
+          "name": "valor",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "detalhes",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "data_calculo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_val_hist_empresa_ano_metodologia ON valuation_historico (empresa, ano, metodologia)",
+        "CREATE INDEX idx_val_hist_empresa ON valuation_historico (empresa)",
+        "CREATE INDEX idx_val_hist_ano ON valuation_historico (ano)",
+        "CREATE INDEX idx_val_hist_metodologia ON valuation_historico (metodologia)"
       ]
     }
   ]
