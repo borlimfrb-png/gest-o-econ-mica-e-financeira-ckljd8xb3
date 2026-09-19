@@ -250,7 +250,9 @@ export default function IndicadoresValuation() {
   })
   const [dividaLiquidaManual, setDividaLiquidaManual] = useState<number | undefined>(undefined)
   const [salvandoMultiplos, setSalvandoMultiplos] = useState<boolean>(false)
-  const [registroMultiplosDb, setRegistroMultiplosDb] = useState<ValuationMultiplosRecord | null>(null)
+  const [registroMultiplosDb, setRegistroMultiplosDb] = useState<ValuationMultiplosRecord | null>(
+    null,
+  )
 
   // Carregar dados das coleções balancos e dre
   const loadData = async () => {
@@ -799,7 +801,7 @@ export default function IndicadoresValuation() {
         ev_ebit_peso: pesosMultiplosState.ev_ebit,
         p_ebitda_peso: pesosMultiplosState.p_ebitda,
         multiplos_ativos: ativosMultiplosState,
-        dividaLiquidaManual: dividaLiquidaManual,
+        divida_liquida_manual: dividaLiquidaManual,
       })
       setRegistroMultiplosDb(salvo)
       toast({
@@ -861,7 +863,8 @@ export default function IndicadoresValuation() {
     selectedEmpresa?.segmento,
   ])
 
-  // ================= 7. EXPORTAÇÃO CSV COMPLETA =================  const handleExportCsv = () => {
+  // ================= 7. EXPORTAÇÃO CSV COMPLETA =================
+  const handleExportCsv = () => {
     if (!selectedEmpresa) {
       toast({
         title: 'Selecione uma empresa',
@@ -1005,8 +1008,8 @@ export default function IndicadoresValuation() {
               </Badge>
             </div>
             <p className="text-xs text-[#5B6B7F] mt-0.5">
-              Estimativa do valor da empresa (Enterprise Value) por Múltiplos de Mercado, Fluxo de Caixa
-              Descontado e Capitalização de Superlucro (Goodwill)
+              Estimativa do valor da empresa (Enterprise Value) por Múltiplos de Mercado, Fluxo de
+              Caixa Descontado e Capitalização de Superlucro (Goodwill)
             </p>
           </div>
         </div>
@@ -1329,1025 +1332,1035 @@ export default function IndicadoresValuation() {
 
           {/* TAB 3: FCD & SUPERLUCRO (GOODWILL) */}
           <TabsContent value="fcd_goodwill" className="mt-0 space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-blue-600" />
-                Modelo A — Fluxo de Caixa Descontado (FCD / Gordon)
-              </h2>
-              <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs">
-                Base: {nomeBaseFluxo} ({formatCurrency(baseFluxoCaixa)})
-              </Badge>
-            </div>
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-blue-600" />
+                  Modelo A — Fluxo de Caixa Descontado (FCD / Gordon)
+                </h2>
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs">
+                  Base: {nomeBaseFluxo} ({formatCurrency(baseFluxoCaixa)})
+                </Badge>
+              </div>
 
-            {/* Cards de Destaque FCD: VP Fluxos, Valor Terminal e Enterprise Value Total */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Card 1: VP dos Fluxos Projetados */}
-              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
-                <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
-                  <div>
-                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                      Período Explícito ({anosProjecao} anos)
-                    </span>
-                    <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
-                      VP dos Fluxos Projetados
-                    </CardTitle>
-                  </div>
-                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-bold text-[11px]">
-                    Σ VP Fluxos
-                  </Badge>
-                </CardHeader>
-
-                <CardContent className="p-4 space-y-2">
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase block">
-                    Valor Presente Acumulado
-                  </span>
-                  <div className="text-2xl font-extrabold text-[#0B1F3A]">
-                    {formatCurrency(projecaoAnual.somaVp)}
-                  </div>
-                  <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
-                    Soma dos fluxos de caixa livres projetados ano a ano descontados pela taxa WACC
-                    de {taxaWacc}%.
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Card 2: Valor Terminal na Perpetuidade */}
-              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
-                <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
-                  <div>
-                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
-                      Perpetuidade de Gordon
-                    </span>
-                    <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
-                      VP do Valor Terminal
-                    </CardTitle>
-                  </div>
-                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-bold text-[11px]">
-                    g = {taxaPerpetuidade}%
-                  </Badge>
-                </CardHeader>
-
-                <CardContent className="p-4 space-y-2">
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase block">
-                    Valor Terminal a Valor Presente
-                  </span>
-                  <div className="text-2xl font-extrabold text-emerald-700">
-                    {isWaccMenorOuIgualG ? 'N/D' : formatCurrency(vpValorTerminal)}
-                  </div>
-                  <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
-                    Nominal de {formatCurrency(valorTerminalNominal)} descontado do ano{' '}
-                    {anosProjecao} pelo WACC.
-                  </p>
-                </CardContent>
-              </Card>
-
-              {/* Card 3: Valor Total da Empresa (Enterprise Value) */}
-              <Card className="bg-gradient-to-br from-blue-900 via-[#0B1F3A] to-slate-900 text-white border-blue-800 shadow-md flex flex-col justify-between">
-                <CardHeader className="p-4 pb-2 border-b border-white/10 flex flex-row items-start justify-between gap-2 space-y-0">
-                  <div>
-                    <span className="text-[10px] font-extrabold text-blue-300 uppercase tracking-wider bg-blue-500/20 px-2 py-0.5 rounded border border-blue-400/30">
-                      Enterprise Value (EV)
-                    </span>
-                    <CardTitle className="text-base font-bold text-white mt-1.5">
-                      Valor Total da Empresa (FCD)
-                    </CardTitle>
-                  </div>
-                  <Badge className="bg-emerald-500 text-white font-bold text-xs">
-                    🟢 Avaliação FCD
-                  </Badge>
-                </CardHeader>
-
-                <CardContent className="p-4 space-y-2">
-                  <span className="text-[10px] font-semibold text-blue-200 uppercase block">
-                    VP dos Fluxos + VP do Terminal
-                  </span>
-                  <div className="text-2xl sm:text-3xl font-black text-emerald-300">
-                    {isWaccMenorOuIgualG ? 'N/D' : formatCurrency(valorEmpresaFCD)}
-                  </div>
-                  <span className="text-[10px] text-slate-300 block">
-                    Capacidade futura de geração de riqueza descontada a valor presente
-                  </span>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Tabela de Projeção Ano a Ano + Botão Ver Detalhes */}
-            <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
-              <CardHeader className="p-4 pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                    Tabela de Projeção dos Fluxos de Caixa Livres ({anosProjecao} anos)
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Evolução projetada com crescimento de {crescimentoAnualFcf}% a.a. e desconto
-                    pelo WACC de {taxaWacc}% a.a.
-                  </CardDescription>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setExpandDetailsFcd((prev) => !prev)}
-                  className="text-xs font-semibold text-blue-700 border-blue-200 h-8"
-                >
-                  <Layers className="w-3.5 h-3.5 mr-1.5" />
-                  {expandDetailsFcd ? 'Ocultar Fórmulas e Detalhes' : 'Ver Detalhes e Fórmulas'}
-                  {expandDetailsFcd ? (
-                    <ChevronUp className="w-3.5 h-3.5 ml-1" />
-                  ) : (
-                    <ChevronDown className="w-3.5 h-3.5 ml-1" />
-                  )}
-                </Button>
-              </CardHeader>
-
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="bg-slate-50/80">
-                      <TableRow>
-                        <TableHead className="text-xs font-bold text-slate-700 w-24">
-                          Período
-                        </TableHead>
-                        <TableHead className="text-xs font-bold text-slate-700">
-                          Ano Calendário
-                        </TableHead>
-                        <TableHead className="text-xs font-bold text-slate-700 text-right">
-                          FCF Projetado (R$)
-                        </TableHead>
-                        <TableHead className="text-xs font-bold text-slate-700 text-right">
-                          Fator de Desconto (1+WACC)ᵗ
-                        </TableHead>
-                        <TableHead className="text-xs font-bold text-slate-700 text-right">
-                          Valor Presente (VP) (R$)
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow className="bg-blue-50/30 font-medium">
-                        <TableCell className="text-xs text-slate-600">Ano 0 (Base)</TableCell>
-                        <TableCell className="text-xs text-slate-900 font-semibold">
-                          {selectedAno} (Exercício Atual)
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-mono font-bold text-slate-900">
-                          {formatCurrency(baseFluxoCaixa)}
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-mono text-slate-500">
-                          1,0000
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-mono text-slate-500">
-                          Base de Partida
-                        </TableCell>
-                      </TableRow>
-
-                      {projecaoAnual.fluxos.map((f) => (
-                        <TableRow key={f.anoIndex} className="hover:bg-slate-50/60">
-                          <TableCell className="text-xs font-bold text-blue-900">
-                            Ano {f.anoIndex}
-                          </TableCell>
-                          <TableCell className="text-xs text-slate-800">
-                            {f.anoCalendario}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono text-slate-900 font-semibold">
-                            {formatCurrency(f.fcf)}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono text-slate-600">
-                            {formatNumber(f.fatorDesconto, 4)}
-                          </TableCell>
-                          <TableCell className="text-xs text-right font-mono font-bold text-emerald-700">
-                            {formatCurrency(f.vp)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-
-                      <TableRow className="bg-slate-100/70 font-bold border-t-2 border-slate-200">
-                        <TableCell colSpan={4} className="text-xs text-slate-800">
-                          Soma do Valor Presente dos Fluxos Projetados ({anosProjecao} anos)
-                        </TableCell>
-                        <TableCell className="text-xs text-right font-mono text-emerald-800 text-sm">
-                          {formatCurrency(projecaoAnual.somaVp)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Detalhes expandidos com fórmulas por extenso */}
-                {expandDetailsFcd && (
-                  <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3 text-xs animate-fadeIn">
-                    <div className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-                      <Info className="w-3.5 h-3.5 text-blue-600" />
-                      Fórmulas e Memorial de Cálculo do Modelo FCD
+              {/* Cards de Destaque FCD: VP Fluxos, Valor Terminal e Enterprise Value Total */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Card 1: VP dos Fluxos Projetados */}
+                <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                  <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
+                    <div>
+                      <span className="text-[10px] font-bold text-blue-700 uppercase tracking-wider bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                        Período Explícito ({anosProjecao} anos)
+                      </span>
+                      <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
+                        VP dos Fluxos Projetados
+                      </CardTitle>
                     </div>
+                    <Badge className="bg-blue-100 text-blue-800 border-blue-200 font-bold text-[11px]">
+                      Σ VP Fluxos
+                    </Badge>
+                  </CardHeader>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-700">
-                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
-                        <span className="font-semibold text-blue-900 block">
-                          1. Projeção do Fluxo de Caixa Livre (FCF):
-                        </span>
-                        <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
-                          FCFₜ = Base ({nomeBaseFluxo}: {formatCurrency(baseFluxoCaixa)}) × (1 +{' '}
-                          {crescimentoAnualFcf}%)ᵗ
-                        </code>
-                        <p className="text-[11px] text-slate-500">
-                          O fluxo é projetado a uma taxa de {crescimentoAnualFcf}% ao ano ao longo
-                          de {anosProjecao} exercícios.
-                        </p>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
-                        <span className="font-semibold text-blue-900 block">
-                          2. Desconto pelo Custo Médio Ponderado (WACC):
-                        </span>
-                        <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
-                          VPₜ = FCFₜ ÷ (1 + {taxaWacc}%)ᵗ
-                        </code>
-                        <p className="text-[11px] text-slate-500">
-                          Cada fluxo futuro é trazido a valor presente utilizando a taxa de desconto
-                          WACC de {taxaWacc}%.
-                        </p>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
-                        <span className="font-semibold text-blue-900 block">
-                          3. Valor Terminal pela Perpetuidade de Gordon:
-                        </span>
-                        <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
-                          VT = [FCF_{anosProjecao} × (1 + {taxaPerpetuidade}%)] ÷ ({taxaWacc}% −{' '}
-                          {taxaPerpetuidade}%)
-                        </code>
-                        <p className="text-[11px] text-slate-500">
-                          Valor nominal do terminal: {formatCurrency(valorTerminalNominal)}. VP do
-                          terminal = VT ÷ (1 + {taxaWacc}%)^{anosProjecao} ={' '}
-                          {formatCurrency(vpValorTerminal)}.
-                        </p>
-                      </div>
-
-                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
-                        <span className="font-semibold text-blue-900 block">
-                          4. Valor da Empresa (Enterprise Value):
-                        </span>
-                        <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
-                          EV = Σ VP(Fluxos) + VP(Terminal) = {formatCurrency(projecaoAnual.somaVp)}{' '}
-                          + {formatCurrency(vpValorTerminal)} = {formatCurrency(valorEmpresaFCD)}
-                        </code>
-                        <p className="text-[11px] text-slate-500">
-                          Representa o valor total do negócio baseado na capacidade futura de
-                          geração de caixa livre.
-                        </p>
-                      </div>
+                  <CardContent className="p-4 space-y-2">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                      Valor Presente Acumulado
+                    </span>
+                    <div className="text-2xl font-extrabold text-[#0B1F3A]">
+                      {formatCurrency(projecaoAnual.somaVp)}
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                    <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                      Soma dos fluxos de caixa livres projetados ano a ano descontados pela taxa
+                      WACC de {taxaWacc}%.
+                    </p>
+                  </CardContent>
+                </Card>
 
-            {/* ================= MELHORIA 1: TABELA DE SENSIBILIDADE HEATMAP NO FCD ================= */}
-            <Card className="bg-white border-blue-200/90 shadow-2xs overflow-hidden">
-              <CardHeader className="p-4 pb-3 bg-gradient-to-r from-blue-50/50 via-slate-50 to-emerald-50/30 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
-                    <Grid className="w-3.5 h-3.5" />
-                  </div>
+                {/* Card 2: Valor Terminal na Perpetuidade */}
+                <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                  <CardHeader className="p-4 pb-2 border-b border-slate-100 flex flex-row items-start justify-between gap-2 space-y-0">
+                    <div>
+                      <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                        Perpetuidade de Gordon
+                      </span>
+                      <CardTitle className="text-sm font-bold text-[#0B1F3A] mt-1.5">
+                        VP do Valor Terminal
+                      </CardTitle>
+                    </div>
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200 font-bold text-[11px]">
+                      g = {taxaPerpetuidade}%
+                    </Badge>
+                  </CardHeader>
+
+                  <CardContent className="p-4 space-y-2">
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase block">
+                      Valor Terminal a Valor Presente
+                    </span>
+                    <div className="text-2xl font-extrabold text-emerald-700">
+                      {isWaccMenorOuIgualG ? 'N/D' : formatCurrency(vpValorTerminal)}
+                    </div>
+                    <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                      Nominal de {formatCurrency(valorTerminalNominal)} descontado do ano{' '}
+                      {anosProjecao} pelo WACC.
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {/* Card 3: Valor Total da Empresa (Enterprise Value) */}
+                <Card className="bg-gradient-to-br from-blue-900 via-[#0B1F3A] to-slate-900 text-white border-blue-800 shadow-md flex flex-col justify-between">
+                  <CardHeader className="p-4 pb-2 border-b border-white/10 flex flex-row items-start justify-between gap-2 space-y-0">
+                    <div>
+                      <span className="text-[10px] font-extrabold text-blue-300 uppercase tracking-wider bg-blue-500/20 px-2 py-0.5 rounded border border-blue-400/30">
+                        Enterprise Value (EV)
+                      </span>
+                      <CardTitle className="text-base font-bold text-white mt-1.5">
+                        Valor Total da Empresa (FCD)
+                      </CardTitle>
+                    </div>
+                    <Badge className="bg-emerald-500 text-white font-bold text-xs">
+                      🟢 Avaliação FCD
+                    </Badge>
+                  </CardHeader>
+
+                  <CardContent className="p-4 space-y-2">
+                    <span className="text-[10px] font-semibold text-blue-200 uppercase block">
+                      VP dos Fluxos + VP do Terminal
+                    </span>
+                    <div className="text-2xl sm:text-3xl font-black text-emerald-300">
+                      {isWaccMenorOuIgualG ? 'N/D' : formatCurrency(valorEmpresaFCD)}
+                    </div>
+                    <span className="text-[10px] text-slate-300 block">
+                      Capacidade futura de geração de riqueza descontada a valor presente
+                    </span>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tabela de Projeção Ano a Ano + Botão Ver Detalhes */}
+              <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
+                <CardHeader className="p-4 pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                      Análise de Sensibilidade do Valuation FCD (Heatmap)
+                      Tabela de Projeção dos Fluxos de Caixa Livres ({anosProjecao} anos)
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      Valor Total da Empresa para diferentes combinações de WACC e Crescimento na
-                      Perpetuidade (g)
+                      Evolução projetada com crescimento de {crescimentoAnualFcf}% a.a. e desconto
+                      pelo WACC de {taxaWacc}% a.a.
                     </CardDescription>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-[11px] flex-wrap">
-                  <span className="flex items-center gap-1 font-semibold text-slate-600">
-                    <span className="w-3 h-3 rounded bg-blue-600 ring-1 ring-blue-700" />
-                    Cenário Atual ({taxaWacc}% / {taxaPerpetuidade}%)
-                  </span>
-                  <span className="flex items-center gap-1 text-slate-500">
-                    <span className="w-3 h-3 rounded bg-emerald-600" /> Maior Valor
-                  </span>
-                  <span className="flex items-center gap-1 text-slate-500">
-                    <span className="w-3 h-3 rounded bg-red-100 border border-red-300" /> Menor
-                    Valor
-                  </span>
-                </div>
-              </CardHeader>
-
-              <CardContent className="p-4 space-y-3">
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <Table className="text-xs">
-                    <TableHeader className="bg-slate-100">
-                      <TableRow>
-                        <TableHead className="font-extrabold text-[#0B1F3A] bg-slate-200/80 w-32">
-                          WACC \ g (%)
-                        </TableHead>
-                        {sensibilidadeGrid.gValues.map((g) => {
-                          const isColSelected = Math.abs(g - taxaPerpetuidade) < 0.01
-                          return (
-                            <TableHead
-                              key={g}
-                              className={`text-right font-bold ${
-                                isColSelected
-                                  ? 'bg-blue-100/90 text-blue-950 font-black border-x border-blue-200'
-                                  : 'text-slate-700'
-                              }`}
-                            >
-                              g = {g.toFixed(1)}%
-                            </TableHead>
-                          )
-                        })}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sensibilidadeGrid.waccValues.map((wVal, rIdx) => {
-                        const isRowSelected = Math.abs(wVal - taxaWacc) < 0.01
-
-                        return (
-                          <TableRow key={wVal} className="hover:bg-slate-50/50">
-                            <TableCell
-                              className={`font-bold ${
-                                isRowSelected
-                                  ? 'bg-blue-100/90 text-blue-950 font-black border-y border-blue-200'
-                                  : 'bg-slate-100/70 text-slate-800'
-                              }`}
-                            >
-                              WACC = {wVal.toFixed(1)}%
-                            </TableCell>
-
-                            {sensibilidadeGrid.gValues.map((gVal, cIdx) => {
-                              const cellVal = sensibilidadeGrid.matrix[rIdx]?.[cIdx]
-                              const isExactMatch =
-                                Math.abs(wVal - taxaWacc) < 0.01 &&
-                                Math.abs(gVal - taxaPerpetuidade) < 0.01
-
-                              const colorClass = getHeatmapColorClass(
-                                cellVal,
-                                sensibilidadeGrid.minVal,
-                                sensibilidadeGrid.maxVal,
-                                isExactMatch,
-                              )
-
-                              return (
-                                <TableCell
-                                  key={gVal}
-                                  className={`text-right font-mono transition-all py-2.5 px-3 border-b border-slate-100 ${colorClass} ${
-                                    isExactMatch ? 'font-extrabold shadow-sm' : ''
-                                  }`}
-                                >
-                                  {cellVal === null ? (
-                                    <span className="text-slate-400 font-sans text-xs select-none">
-                                      —
-                                    </span>
-                                  ) : (
-                                    <span>{formatCurrency(cellVal)}</span>
-                                  )}
-                                </TableCell>
-                              )
-                            })}
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 flex-wrap gap-2">
-                  <span>
-                    💡 <strong>Interpretação da Sensibilidade:</strong> O valor da empresa aumenta à
-                    medida que o custo de capital (WACC) diminui e a taxa de crescimento perpétuo
-                    (g) aumenta. Células com &ldquo;—&rdquo; indicam restrição matemática do modelo
-                    de Gordon (WACC ≤ g).
-                  </span>
-                  <span className="font-semibold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
-                    Cenário Atual Selecionado: {formatCurrency(valorEmpresaFCD)}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* ================= SEÇÃO B: MODELO GOODWILL (SUPERLUCRO) ================= */}
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-                <Briefcase className="w-4 h-4 text-emerald-600" />
-                Modelo B — Goodwill (Método Indireto de Capitalização do Superlucro)
-              </h2>
-              <Badge
-                className={
-                  superlucro >= 0
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs'
-                    : 'bg-amber-50 text-amber-700 border-amber-200 font-semibold text-xs'
-                }
-              >
-                {superlucro >= 0
-                  ? '🟢 Superlucro Positivo'
-                  : '🟠 Superlucro Negativo (Sem Goodwill)'}
-              </Badge>
-            </div>
-
-            {/* Grid com 5 Cards: PL, Lucro Normal, Superlucro, Goodwill e Valor Total */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-              {/* Card 1: Patrimônio Líquido */}
-              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
-                <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase">
-                    1. Valor Contábil
-                  </span>
-                  <CardTitle className="text-xs font-bold text-[#0B1F3A]">
-                    Patrimônio Líquido (PL)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3.5 pt-2">
-                  <div className="text-lg font-extrabold text-slate-900">
-                    {formatCurrency(patrimonioLiquido)}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">
-                    Capital e reservas contábeis
-                  </span>
-                </CardContent>
-              </Card>
-
-              {/* Card 2: Lucro Normal Esperado */}
-              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
-                <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
-                  <span className="text-[10px] font-bold text-blue-600 uppercase">
-                    2. Custo do Capital Próprio
-                  </span>
-                  <CardTitle className="text-xs font-bold text-[#0B1F3A]">
-                    Lucro Normal Esperado
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3.5 pt-2">
-                  <div className="text-lg font-extrabold text-blue-700">
-                    {formatCurrency(lucroNormal)}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">
-                    PL × {taxaRetornoEsperadoPL}% retorno
-                  </span>
-                </CardContent>
-              </Card>
-
-              {/* Card 3: Superlucro */}
-              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
-                <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
-                  <span className="text-[10px] font-bold text-indigo-600 uppercase">
-                    3. Lucro Excedente
-                  </span>
-                  <CardTitle className="text-xs font-bold text-[#0B1F3A]">
-                    Superlucro do Exercício
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3.5 pt-2">
-                  <div
-                    className={`text-lg font-extrabold ${
-                      superlucro >= 0 ? 'text-emerald-700' : 'text-amber-600'
-                    }`}
-                  >
-                    {formatCurrency(superlucro)}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">
-                    LL ({formatCurrency(lucroLiquido)}) − Lucro Normal
-                  </span>
-                </CardContent>
-              </Card>
-
-              {/* Card 4: Goodwill Apurado */}
-              <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
-                <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
-                  <span className="text-[10px] font-bold text-emerald-600 uppercase">
-                    4. Ativo Intangível
-                  </span>
-                  <CardTitle className="text-xs font-bold text-[#0B1F3A]">
-                    Goodwill Capitalizado
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3.5 pt-2">
-                  <div
-                    className={`text-lg font-extrabold ${
-                      goodwill >= 0 ? 'text-emerald-700' : 'text-amber-600'
-                    }`}
-                  >
-                    {formatCurrency(goodwill)}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block mt-0.5">
-                    Superlucro ÷ {taxaCapitalizacaoGoodwill}% taxa
-                  </span>
-                </CardContent>
-              </Card>
-
-              {/* Card 5: Valor Total da Empresa pelo Goodwill */}
-              <Card className="bg-gradient-to-br from-emerald-900 via-slate-900 to-[#0B1F3A] text-white border-emerald-800 shadow-md flex flex-col justify-between">
-                <CardHeader className="p-3.5 pb-2 border-b border-white/10">
-                  <span className="text-[10px] font-extrabold text-emerald-300 uppercase">
-                    5. Avaliação Global
-                  </span>
-                  <CardTitle className="text-xs font-bold text-white">
-                    Valor Empresa (Goodwill)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-3.5 pt-2">
-                  <div className="text-lg font-black text-emerald-300">
-                    {formatCurrency(valorEmpresaGoodwill)}
-                  </div>
-                  <span className="text-[10px] text-slate-300 block mt-0.5">PL + Goodwill</span>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Interpretação do Goodwill e Botão Detalhes */}
-            <Card className="bg-white border-slate-200 shadow-2xs">
-              <CardContent className="p-4 space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <Info className="w-4 h-4 text-emerald-600" />
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                      Diagnóstico do Modelo Goodwill
-                    </h3>
                   </div>
 
                   <Button
                     type="button"
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    onClick={() => setExpandDetailsGoodwill((prev) => !prev)}
-                    className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-7 px-2"
+                    onClick={() => setExpandDetailsFcd((prev) => !prev)}
+                    className="text-xs font-semibold text-blue-700 border-blue-200 h-8"
                   >
-                    <Layers className="w-3.5 h-3.5 mr-1" />
-                    {expandDetailsGoodwill
-                      ? 'Ocultar Breakdown Contábil'
-                      : 'Ver Breakdown do Superlucro'}
-                    {expandDetailsGoodwill ? (
+                    <Layers className="w-3.5 h-3.5 mr-1.5" />
+                    {expandDetailsFcd ? 'Ocultar Fórmulas e Detalhes' : 'Ver Detalhes e Fórmulas'}
+                    {expandDetailsFcd ? (
                       <ChevronUp className="w-3.5 h-3.5 ml-1" />
                     ) : (
                       <ChevronDown className="w-3.5 h-3.5 ml-1" />
                     )}
                   </Button>
-                </div>
+                </CardHeader>
 
-                <p className="text-xs leading-relaxed text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                  {superlucro >= 0 ? (
-                    <>
-                      A empresa gerou um <strong>Superlucro de {formatCurrency(superlucro)}</strong>{' '}
-                      acima da taxa de retorno esperada de {taxaRetornoEsperadoPL}% sobre o
-                      Patrimônio Líquido. A capitalização dessa vantagem competitiva a uma taxa de{' '}
-                      {taxaCapitalizacaoGoodwill}% a.a. resulta em um{' '}
-                      <strong>Goodwill positivo de {formatCurrency(goodwill)}</strong>, elevando o
-                      valor econômico da empresa para além do seu patrimônio contábil estrito (PL de{' '}
-                      {formatCurrency(patrimonioLiquido)}).
-                    </>
-                  ) : (
-                    <>
-                      O lucro líquido apurado ({formatCurrency(lucroLiquido)}) foi inferior ao Lucro
-                      Normal esperado de {formatCurrency(lucroNormal)} ({taxaRetornoEsperadoPL}%
-                      sobre o PL de {formatCurrency(patrimonioLiquido)}), gerando um{' '}
-                      <strong>superlucro negativo de {formatCurrency(superlucro)}</strong>. Nesse
-                      cenário, não há goodwill positivo constituído no exercício, indicando
-                      sub-remuneração do capital próprio contábil investido na empresa.
-                    </>
-                  )}
-                </p>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="bg-slate-50/80">
+                        <TableRow>
+                          <TableHead className="text-xs font-bold text-slate-700 w-24">
+                            Período
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-700">
+                            Ano Calendário
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-700 text-right">
+                            FCF Projetado (R$)
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-700 text-right">
+                            Fator de Desconto (1+WACC)ᵗ
+                          </TableHead>
+                          <TableHead className="text-xs font-bold text-slate-700 text-right">
+                            Valor Presente (VP) (R$)
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow className="bg-blue-50/30 font-medium">
+                          <TableCell className="text-xs text-slate-600">Ano 0 (Base)</TableCell>
+                          <TableCell className="text-xs text-slate-900 font-semibold">
+                            {selectedAno} (Exercício Atual)
+                          </TableCell>
+                          <TableCell className="text-xs text-right font-mono font-bold text-slate-900">
+                            {formatCurrency(baseFluxoCaixa)}
+                          </TableCell>
+                          <TableCell className="text-xs text-right font-mono text-slate-500">
+                            1,0000
+                          </TableCell>
+                          <TableCell className="text-xs text-right font-mono text-slate-500">
+                            Base de Partida
+                          </TableCell>
+                        </TableRow>
 
-                {/* Detalhes expandidos */}
-                {expandDetailsGoodwill && (
-                  <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs animate-fadeIn">
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block uppercase font-semibold">
-                        Patrimônio Líquido (PL)
-                      </span>
-                      <strong className="text-slate-900 text-sm block mt-0.5">
-                        {formatCurrency(patrimonioLiquido)}
-                      </strong>
-                      <span className="text-[10px] text-slate-400">
-                        Capital Social + Reservas + Lucros
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block uppercase font-semibold">
-                        Lucro Líquido do DRE
-                      </span>
-                      <strong className="text-slate-900 text-sm block mt-0.5">
-                        {formatCurrency(lucroLiquido)}
-                      </strong>
-                      <span className="text-[10px] text-slate-400">
-                        Resultado final pós-impostos
-                      </span>
-                    </div>
-
-                    <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                      <span className="text-[10px] text-slate-500 block uppercase font-semibold">
-                        Fórmula de Goodwill
-                      </span>
-                      <code className="text-xs font-mono font-bold text-emerald-800 block mt-0.5">
-                        (LL − PL×{taxaRetornoEsperadoPL}%) ÷ {taxaCapitalizacaoGoodwill}%
-                      </code>
-                      <span className="text-[10px] text-slate-400">
-                        Método clássico indireto de superlucro
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* ================= SEÇÃO 3: COMPARATIVO ENTRE OS DOIS MODELOS ================= */}
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-indigo-600" />
-                Seção 3 — Comparativo: Valor pelo FCD vs Valor pelo Goodwill
-              </h2>
-              <span className="text-xs text-slate-500">
-                Diferença:{' '}
-                <strong className="text-slate-900">
-                  {diferencaValor >= 0
-                    ? `+${formatCurrency(diferencaValor)}`
-                    : formatCurrency(diferencaValor)}{' '}
-                  ({formatPercent(diferencaPercentual, 1)})
-                </strong>
-              </span>
-            </div>
-
-            <Card className="bg-white border-slate-200 shadow-2xs">
-              <CardHeader className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                    Comparação de Avaliação entre Métodos ({selectedAno})
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    Valor da empresa em reais (R$) calculado pelos dois métodos de precificação
-                  </CardDescription>
-                </div>
-
-                <div className="flex items-center gap-3 text-[11px] font-semibold">
-                  <span className="flex items-center gap-1 text-blue-700">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
-                    FCD (Fluxo Descontado)
-                  </span>
-                  <span className="flex items-center gap-1 text-emerald-700">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" />
-                    Goodwill (Superlucro)
-                  </span>
-                </div>
-              </CardHeader>
-
-              <CardContent className="pt-6">
-                <div className="h-60 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      layout="vertical"
-                      data={dadosGraficoComparativo}
-                      margin={{ top: 10, right: 30, left: 60, bottom: 10 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
-                      <XAxis
-                        type="number"
-                        tick={{ fontSize: 11, fill: '#64748B' }}
-                        tickFormatter={(v) =>
-                          Math.abs(v) >= 1000000
-                            ? `R$ ${(v / 1000000).toFixed(1)}M`
-                            : Math.abs(v) >= 1000
-                              ? `R$ ${(v / 1000).toFixed(0)}k`
-                              : `R$ ${v}`
-                        }
-                      />
-                      <YAxis
-                        dataKey="sigla"
-                        type="category"
-                        tick={{ fontSize: 12, fill: '#0B1F3A', fontWeight: 700 }}
-                        width={130}
-                      />
-                      <RechartsTooltip
-                        formatter={(val: any, name: any, item: any) => [
-                          formatCurrency(Number(val)),
-                          item.payload.nome,
-                        ]}
-                        labelFormatter={(label: any) => `Modelo: ${label}`}
-                      />
-                      <ReferenceLine x={0} stroke="#94A3B8" />
-                      <Bar dataKey="valor" radius={[0, 6, 6, 0]} barSize={28}>
-                        {dadosGraficoComparativo.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.cor} />
+                        {projecaoAnual.fluxos.map((f) => (
+                          <TableRow key={f.anoIndex} className="hover:bg-slate-50/60">
+                            <TableCell className="text-xs font-bold text-blue-900">
+                              Ano {f.anoIndex}
+                            </TableCell>
+                            <TableCell className="text-xs text-slate-800">
+                              {f.anoCalendario}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono text-slate-900 font-semibold">
+                              {formatCurrency(f.fcf)}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono text-slate-600">
+                              {formatNumber(f.fatorDesconto, 4)}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono font-bold text-emerald-700">
+                              {formatCurrency(f.vp)}
+                            </TableCell>
+                          </TableRow>
                         ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
 
-                {/* Explicação de aplicabilidade metodológica em português */}
-                <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100 space-y-1.5">
-                    <span className="font-bold text-blue-900 block flex items-center gap-1.5">
-                      <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                      Quando utilizar o Fluxo de Caixa Descontado (FCD)?
-                    </span>
-                    <p className="text-slate-700 leading-relaxed">
-                      O <strong>FCD</strong> é o método padrão de mercado para empresas em marcha
-                      normal (going concern) com histórico previsível de receitas e capacidade de
-                      projeção de fluxos livres. Ele reflete a capacidade futura de geração de
-                      riqueza da operação, independentemente dos registros contábeis históricos.
-                    </p>
+                        <TableRow className="bg-slate-100/70 font-bold border-t-2 border-slate-200">
+                          <TableCell colSpan={4} className="text-xs text-slate-800">
+                            Soma do Valor Presente dos Fluxos Projetados ({anosProjecao} anos)
+                          </TableCell>
+                          <TableCell className="text-xs text-right font-mono text-emerald-800 text-sm">
+                            {formatCurrency(projecaoAnual.somaVp)}
+                          </TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
                   </div>
 
-                  <div className="p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-1.5">
-                    <span className="font-bold text-emerald-900 block flex items-center gap-1.5">
-                      <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
-                      Quando utilizar o Modelo Goodwill (Superlucro)?
-                    </span>
-                    <p className="text-slate-700 leading-relaxed">
-                      O <strong>Modelo Goodwill</strong> é indicado quando se busca uma ponte direta
-                      entre o valor contábil patrimonial (PL) e o valor econômico de mercado. Ele
-                      quantifica o valor da marca, clientela e vantagens competitivas através do
-                      lucro que excede a remuneração normal exigida pelos acionistas.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                  {/* Detalhes expandidos com fórmulas por extenso */}
+                  {expandDetailsFcd && (
+                    <div className="p-4 bg-slate-50 border-t border-slate-200 space-y-3 text-xs animate-fadeIn">
+                      <div className="font-bold text-slate-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                        <Info className="w-3.5 h-3.5 text-blue-600" />
+                        Fórmulas e Memorial de Cálculo do Modelo FCD
+                      </div>
 
-          {/* ================= MELHORIA 2: GRÁFICO DE EVOLUÇÃO DOS ÚLTIMOS 3 ANOS ================= */}
-          <div className="space-y-4 pt-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-                <History className="w-4 h-4 text-blue-600" />
-                Evolução do Valuation ao Longo dos Últimos 3 Anos
-              </h2>
-              <Badge className="bg-slate-100 text-slate-700 border-slate-200 font-semibold text-xs">
-                {selectedAno - 2} — {selectedAno}
-              </Badge>
-            </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-slate-700">
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                          <span className="font-semibold text-blue-900 block">
+                            1. Projeção do Fluxo de Caixa Livre (FCF):
+                          </span>
+                          <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
+                            FCFₜ = Base ({nomeBaseFluxo}: {formatCurrency(baseFluxoCaixa)}) × (1 +{' '}
+                            {crescimentoAnualFcf}%)ᵗ
+                          </code>
+                          <p className="text-[11px] text-slate-500">
+                            O fluxo é projetado a uma taxa de {crescimentoAnualFcf}% ao ano ao longo
+                            de {anosProjecao} exercícios.
+                          </p>
+                        </div>
 
-            <Card className="bg-white border-slate-200 shadow-2xs">
-              <CardHeader className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                    Trajetória Histórica do Enterprise Value ({selectedEmpresa?.nome || 'Empresa'})
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    Comparativo dos modelos FCD e Goodwill para o exercício selecionado (
-                    {selectedAno}) e os dois anos anteriores
-                  </CardDescription>
-                </div>
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                          <span className="font-semibold text-blue-900 block">
+                            2. Desconto pelo Custo Médio Ponderado (WACC):
+                          </span>
+                          <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
+                            VPₜ = FCFₜ ÷ (1 + {taxaWacc}%)ᵗ
+                          </code>
+                          <p className="text-[11px] text-slate-500">
+                            Cada fluxo futuro é trazido a valor presente utilizando a taxa de
+                            desconto WACC de {taxaWacc}%.
+                          </p>
+                        </div>
 
-                <div className="flex items-center gap-3 text-[11px] font-semibold">
-                  <span className="flex items-center gap-1 text-blue-700">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
-                    FCD (Fluxo Descontado)
-                  </span>
-                  <span className="flex items-center gap-1 text-emerald-700">
-                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" />
-                    Goodwill (Superlucro)
-                  </span>
-                </div>
-              </CardHeader>
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                          <span className="font-semibold text-blue-900 block">
+                            3. Valor Terminal pela Perpetuidade de Gordon:
+                          </span>
+                          <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
+                            VT = [FCF_{anosProjecao} × (1 + {taxaPerpetuidade}%)] ÷ ({taxaWacc}% −{' '}
+                            {taxaPerpetuidade}%)
+                          </code>
+                          <p className="text-[11px] text-slate-500">
+                            Valor nominal do terminal: {formatCurrency(valorTerminalNominal)}. VP do
+                            terminal = VT ÷ (1 + {taxaWacc}%)^{anosProjecao} ={' '}
+                            {formatCurrency(vpValorTerminal)}.
+                          </p>
+                        </div>
 
-              <CardContent className="pt-6 space-y-4">
-                {evolucaoUltimosAnos.anosComDados.length === 0 ? (
-                  <div className="p-8 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    Não há demonstrações contábeis disponíveis para o período de {selectedAno - 2} a{' '}
-                    {selectedAno}.
-                  </div>
-                ) : (
-                  <>
-                    <div className="h-64 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={evolucaoUltimosAnos.dados}
-                          margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" vertical={false} />
-                          <XAxis
-                            dataKey="ano"
-                            tick={{ fontSize: 12, fill: '#0B1F3A', fontWeight: 700 }}
-                          />
-                          <YAxis
-                            tick={{ fontSize: 11, fill: '#64748B' }}
-                            tickFormatter={(v) =>
-                              Math.abs(v) >= 1000000
-                                ? `R$ ${(v / 1000000).toFixed(1)}M`
-                                : Math.abs(v) >= 1000
-                                  ? `R$ ${(v / 1000).toFixed(0)}k`
-                                  : `R$ ${v}`
-                            }
-                          />
-                          <RechartsTooltip
-                            formatter={(val: any, name: any) => [
-                              Number(val) > 0 ? formatCurrency(Number(val)) : 'Sem Dados / N/D',
-                              name === 'fcd' ? 'FCD (Fluxo Descontado)' : 'Goodwill (Superlucro)',
-                            ]}
-                            labelFormatter={(label) => `Exercício: ${label}`}
-                          />
-                          <Legend
-                            formatter={(value) =>
-                              value === 'fcd'
-                                ? 'Fluxo de Caixa Descontado (FCD)'
-                                : 'Modelo Goodwill (Superlucro)'
-                            }
-                            wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
-                          />
-                          <ReferenceLine y={0} stroke="#94A3B8" />
-                          <Bar
-                            dataKey="fcd"
-                            name="fcd"
-                            fill="#2563EB"
-                            radius={[4, 4, 0, 0]}
-                            barSize={32}
-                          />
-                          <Bar
-                            dataKey="goodwill"
-                            name="goodwill"
-                            fill="#059669"
-                            radius={[4, 4, 0, 0]}
-                            barSize={32}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-
-                    {/* Nota informativa quando faltam dados em algum dos anos */}
-                    {evolucaoUltimosAnos.faltamAnos && (
-                      <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-900">
-                        <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                        <div>
-                          <strong>Nota sobre a série histórica:</strong> Exibindo apenas os
-                          exercícios com demonstrações contábeis (Balanço/DRE) cadastradas no
-                          sistema. Para uma série trienal completa ({selectedAno - 2},{' '}
-                          {selectedAno - 1} e {selectedAno}), realize o cadastro ou importação dos
-                          dados contábeis pendentes.
+                        <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
+                          <span className="font-semibold text-blue-900 block">
+                            4. Valor da Empresa (Enterprise Value):
+                          </span>
+                          <code className="block font-mono text-xs bg-slate-100 p-1.5 rounded text-slate-800">
+                            EV = Σ VP(Fluxos) + VP(Terminal) ={' '}
+                            {formatCurrency(projecaoAnual.somaVp)} +{' '}
+                            {formatCurrency(vpValorTerminal)} = {formatCurrency(valorEmpresaFCD)}
+                          </code>
+                          <p className="text-[11px] text-slate-500">
+                            Representa o valor total do negócio baseado na capacidade futura de
+                            geração de caixa livre.
+                          </p>
                         </div>
                       </div>
-                    )}
-
-                    {/* Resumo em tabela dos 3 anos */}
-                    <div className="overflow-x-auto rounded-xl border border-slate-200">
-                      <Table className="text-xs">
-                        <TableHeader className="bg-slate-50">
-                          <TableRow>
-                            <TableHead className="font-bold text-slate-700">Ano</TableHead>
-                            <TableHead className="text-right font-bold text-slate-700">
-                              FCD (Enterprise Value)
-                            </TableHead>
-                            <TableHead className="text-right font-bold text-slate-700">
-                              Goodwill (PL + Superlucro)
-                            </TableHead>
-                            <TableHead className="text-right font-bold text-slate-700">
-                              Patrimônio Líquido (PL)
-                            </TableHead>
-                            <TableHead className="text-right font-bold text-slate-700">
-                              Lucro Líquido
-                            </TableHead>
-                            <TableHead className="text-center font-bold text-slate-700">
-                              Status dos Dados
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {evolucaoUltimosAnos.dados.map((ev) => (
-                            <TableRow
-                              key={ev.ano}
-                              className={
-                                ev.ano === selectedAno
-                                  ? 'bg-blue-50/50 font-semibold'
-                                  : 'hover:bg-slate-50/50'
-                              }
-                            >
-                              <TableCell className="font-bold text-[#0B1F3A]">
-                                {ev.ano} {ev.ano === selectedAno && '(Atual)'}
-                              </TableCell>
-                              <TableCell className="text-right font-mono font-bold text-blue-700">
-                                {ev.temDados && !isWaccMenorOuIgualG ? formatCurrency(ev.fcd) : '—'}
-                              </TableCell>
-                              <TableCell className="text-right font-mono font-bold text-emerald-700">
-                                {ev.temDados ? formatCurrency(ev.goodwill) : '—'}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-slate-700">
-                                {ev.temDados ? formatCurrency(ev.patrimonioLiquido) : '—'}
-                              </TableCell>
-                              <TableCell className="text-right font-mono text-slate-700">
-                                {ev.temDados ? formatCurrency(ev.lucroLiquido) : '—'}
-                              </TableCell>
-                              <TableCell className="text-center">
-                                {ev.temDados ? (
-                                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[10px]">
-                                    ✓ Disponível
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-slate-100 text-slate-500 border-slate-200 font-normal text-[10px]">
-                                    Sem Demonstração
-                                  </Badge>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
                     </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                  )}
+                </CardContent>
+              </Card>
 
-          {/* ================= SEÇÃO 4: ANÁLISE CONSOLIDADA E PARECER EXECUTIVO ================= */}
-          {parecerConsolidado && (
-            <Card
-              className={`border shadow-md overflow-hidden ${
-                parecerConsolidado.nivel === 'critico'
-                  ? 'bg-gradient-to-br from-red-950 via-slate-900 to-[#0B1F3A] border-red-900 text-white'
-                  : parecerConsolidado.nivel === 'alerta'
-                    ? 'bg-gradient-to-br from-amber-950 via-slate-900 to-[#0B1F3A] border-amber-900 text-white'
-                    : 'bg-gradient-to-br from-blue-950 via-[#0B1F3A] to-slate-900 border-blue-900 text-white'
-              }`}
-            >
-              <CardHeader className="pb-3 border-b border-white/10">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex items-center gap-2.5">
-                    <div
-                      className={`p-2 rounded-xl text-white ${
-                        parecerConsolidado.nivel === 'critico'
-                          ? 'bg-red-600/40 border border-red-500/40'
-                          : parecerConsolidado.nivel === 'alerta'
-                            ? 'bg-amber-600/40 border border-amber-500/40'
-                            : 'bg-emerald-600/40 border border-emerald-500/40'
-                      }`}
-                    >
-                      <ShieldCheck className="w-5 h-5" />
+              {/* ================= MELHORIA 1: TABELA DE SENSIBILIDADE HEATMAP NO FCD ================= */}
+              <Card className="bg-white border-blue-200/90 shadow-2xs overflow-hidden">
+                <CardHeader className="p-4 pb-3 bg-gradient-to-r from-blue-50/50 via-slate-50 to-emerald-50/30 border-b border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
+                      <Grid className="w-3.5 h-3.5" />
                     </div>
                     <div>
-                      <CardTitle className="text-base font-bold text-white">
-                        {parecerConsolidado.titulo}
+                      <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                        Análise de Sensibilidade do Valuation FCD (Heatmap)
                       </CardTitle>
-                      <CardDescription className="text-xs text-blue-200/80">
-                        Parecer Integrado de Valuation · Exercício {selectedAno}
+                      <CardDescription className="text-xs">
+                        Valor Total da Empresa para diferentes combinações de WACC e Crescimento na
+                        Perpetuidade (g)
                       </CardDescription>
                     </div>
                   </div>
 
-                  <Badge
-                    className={`font-bold text-xs uppercase px-3 py-1 ${
-                      parecerConsolidado.nivel === 'critico'
-                        ? 'bg-red-500 text-white'
-                        : parecerConsolidado.nivel === 'alerta'
-                          ? 'bg-amber-500 text-slate-900'
-                          : 'bg-emerald-500 text-white'
-                    }`}
-                  >
-                    Diagnóstico: {parecerConsolidado.nivel.toUpperCase()}
-                  </Badge>
-                </div>
-              </CardHeader>
+                  <div className="flex items-center gap-2 text-[11px] flex-wrap">
+                    <span className="flex items-center gap-1 font-semibold text-slate-600">
+                      <span className="w-3 h-3 rounded bg-blue-600 ring-1 ring-blue-700" />
+                      Cenário Atual ({taxaWacc}% / {taxaPerpetuidade}%)
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-500">
+                      <span className="w-3 h-3 rounded bg-emerald-600" /> Maior Valor
+                    </span>
+                    <span className="flex items-center gap-1 text-slate-500">
+                      <span className="w-3 h-3 rounded bg-red-100 border border-red-300" /> Menor
+                      Valor
+                    </span>
+                  </div>
+                </CardHeader>
 
-              <CardContent className="pt-5 space-y-4 text-xs leading-relaxed">
-                {/* 1. Diagnóstico FCD */}
-                <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
-                  <span className="font-bold text-blue-300 uppercase tracking-wider text-[11px] block">
-                    1. Diagnóstico do Fluxo de Caixa Descontado (FCD)
-                  </span>
-                  <p className="text-slate-200 leading-relaxed">
-                    {parecerConsolidado.diagnosticoFCD}
+                <CardContent className="p-4 space-y-3">
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <Table className="text-xs">
+                      <TableHeader className="bg-slate-100">
+                        <TableRow>
+                          <TableHead className="font-extrabold text-[#0B1F3A] bg-slate-200/80 w-32">
+                            WACC \ g (%)
+                          </TableHead>
+                          {sensibilidadeGrid.gValues.map((g) => {
+                            const isColSelected = Math.abs(g - taxaPerpetuidade) < 0.01
+                            return (
+                              <TableHead
+                                key={g}
+                                className={`text-right font-bold ${
+                                  isColSelected
+                                    ? 'bg-blue-100/90 text-blue-950 font-black border-x border-blue-200'
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                g = {g.toFixed(1)}%
+                              </TableHead>
+                            )
+                          })}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {sensibilidadeGrid.waccValues.map((wVal, rIdx) => {
+                          const isRowSelected = Math.abs(wVal - taxaWacc) < 0.01
+
+                          return (
+                            <TableRow key={wVal} className="hover:bg-slate-50/50">
+                              <TableCell
+                                className={`font-bold ${
+                                  isRowSelected
+                                    ? 'bg-blue-100/90 text-blue-950 font-black border-y border-blue-200'
+                                    : 'bg-slate-100/70 text-slate-800'
+                                }`}
+                              >
+                                WACC = {wVal.toFixed(1)}%
+                              </TableCell>
+
+                              {sensibilidadeGrid.gValues.map((gVal, cIdx) => {
+                                const cellVal = sensibilidadeGrid.matrix[rIdx]?.[cIdx]
+                                const isExactMatch =
+                                  Math.abs(wVal - taxaWacc) < 0.01 &&
+                                  Math.abs(gVal - taxaPerpetuidade) < 0.01
+
+                                const colorClass = getHeatmapColorClass(
+                                  cellVal,
+                                  sensibilidadeGrid.minVal,
+                                  sensibilidadeGrid.maxVal,
+                                  isExactMatch,
+                                )
+
+                                return (
+                                  <TableCell
+                                    key={gVal}
+                                    className={`text-right font-mono transition-all py-2.5 px-3 border-b border-slate-100 ${colorClass} ${
+                                      isExactMatch ? 'font-extrabold shadow-sm' : ''
+                                    }`}
+                                  >
+                                    {cellVal === null ? (
+                                      <span className="text-slate-400 font-sans text-xs select-none">
+                                        —
+                                      </span>
+                                    ) : (
+                                      <span>{formatCurrency(cellVal)}</span>
+                                    )}
+                                  </TableCell>
+                                )
+                              })}
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 flex-wrap gap-2">
+                    <span>
+                      💡 <strong>Interpretação da Sensibilidade:</strong> O valor da empresa aumenta
+                      à medida que o custo de capital (WACC) diminui e a taxa de crescimento
+                      perpétuo (g) aumenta. Células com &ldquo;—&rdquo; indicam restrição matemática
+                      do modelo de Gordon (WACC ≤ g).
+                    </span>
+                    <span className="font-semibold text-blue-900 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-100">
+                      Cenário Atual Selecionado: {formatCurrency(valorEmpresaFCD)}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* ================= SEÇÃO B: MODELO GOODWILL (SUPERLUCRO) ================= */}
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <Briefcase className="w-4 h-4 text-emerald-600" />
+                  Modelo B — Goodwill (Método Indireto de Capitalização do Superlucro)
+                </h2>
+                <Badge
+                  className={
+                    superlucro >= 0
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-xs'
+                      : 'bg-amber-50 text-amber-700 border-amber-200 font-semibold text-xs'
+                  }
+                >
+                  {superlucro >= 0
+                    ? '🟢 Superlucro Positivo'
+                    : '🟠 Superlucro Negativo (Sem Goodwill)'}
+                </Badge>
+              </div>
+
+              {/* Grid com 5 Cards: PL, Lucro Normal, Superlucro, Goodwill e Valor Total */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                {/* Card 1: Patrimônio Líquido */}
+                <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                  <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">
+                      1. Valor Contábil
+                    </span>
+                    <CardTitle className="text-xs font-bold text-[#0B1F3A]">
+                      Patrimônio Líquido (PL)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3.5 pt-2">
+                    <div className="text-lg font-extrabold text-slate-900">
+                      {formatCurrency(patrimonioLiquido)}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">
+                      Capital e reservas contábeis
+                    </span>
+                  </CardContent>
+                </Card>
+
+                {/* Card 2: Lucro Normal Esperado */}
+                <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                  <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
+                    <span className="text-[10px] font-bold text-blue-600 uppercase">
+                      2. Custo do Capital Próprio
+                    </span>
+                    <CardTitle className="text-xs font-bold text-[#0B1F3A]">
+                      Lucro Normal Esperado
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3.5 pt-2">
+                    <div className="text-lg font-extrabold text-blue-700">
+                      {formatCurrency(lucroNormal)}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">
+                      PL × {taxaRetornoEsperadoPL}% retorno
+                    </span>
+                  </CardContent>
+                </Card>
+
+                {/* Card 3: Superlucro */}
+                <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                  <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
+                    <span className="text-[10px] font-bold text-indigo-600 uppercase">
+                      3. Lucro Excedente
+                    </span>
+                    <CardTitle className="text-xs font-bold text-[#0B1F3A]">
+                      Superlucro do Exercício
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3.5 pt-2">
+                    <div
+                      className={`text-lg font-extrabold ${
+                        superlucro >= 0 ? 'text-emerald-700' : 'text-amber-600'
+                      }`}
+                    >
+                      {formatCurrency(superlucro)}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">
+                      LL ({formatCurrency(lucroLiquido)}) − Lucro Normal
+                    </span>
+                  </CardContent>
+                </Card>
+
+                {/* Card 4: Goodwill Apurado */}
+                <Card className="bg-white border-slate-200 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between">
+                  <CardHeader className="p-3.5 pb-2 border-b border-slate-100">
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase">
+                      4. Ativo Intangível
+                    </span>
+                    <CardTitle className="text-xs font-bold text-[#0B1F3A]">
+                      Goodwill Capitalizado
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3.5 pt-2">
+                    <div
+                      className={`text-lg font-extrabold ${
+                        goodwill >= 0 ? 'text-emerald-700' : 'text-amber-600'
+                      }`}
+                    >
+                      {formatCurrency(goodwill)}
+                    </div>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">
+                      Superlucro ÷ {taxaCapitalizacaoGoodwill}% taxa
+                    </span>
+                  </CardContent>
+                </Card>
+
+                {/* Card 5: Valor Total da Empresa pelo Goodwill */}
+                <Card className="bg-gradient-to-br from-emerald-900 via-slate-900 to-[#0B1F3A] text-white border-emerald-800 shadow-md flex flex-col justify-between">
+                  <CardHeader className="p-3.5 pb-2 border-b border-white/10">
+                    <span className="text-[10px] font-extrabold text-emerald-300 uppercase">
+                      5. Avaliação Global
+                    </span>
+                    <CardTitle className="text-xs font-bold text-white">
+                      Valor Empresa (Goodwill)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3.5 pt-2">
+                    <div className="text-lg font-black text-emerald-300">
+                      {formatCurrency(valorEmpresaGoodwill)}
+                    </div>
+                    <span className="text-[10px] text-slate-300 block mt-0.5">PL + Goodwill</span>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Interpretação do Goodwill e Botão Detalhes */}
+              <Card className="bg-white border-slate-200 shadow-2xs">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Info className="w-4 h-4 text-emerald-600" />
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
+                        Diagnóstico do Modelo Goodwill
+                      </h3>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandDetailsGoodwill((prev) => !prev)}
+                      className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 h-7 px-2"
+                    >
+                      <Layers className="w-3.5 h-3.5 mr-1" />
+                      {expandDetailsGoodwill
+                        ? 'Ocultar Breakdown Contábil'
+                        : 'Ver Breakdown do Superlucro'}
+                      {expandDetailsGoodwill ? (
+                        <ChevronUp className="w-3.5 h-3.5 ml-1" />
+                      ) : (
+                        <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                      )}
+                    </Button>
+                  </div>
+
+                  <p className="text-xs leading-relaxed text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    {superlucro >= 0 ? (
+                      <>
+                        A empresa gerou um{' '}
+                        <strong>Superlucro de {formatCurrency(superlucro)}</strong> acima da taxa de
+                        retorno esperada de {taxaRetornoEsperadoPL}% sobre o Patrimônio Líquido. A
+                        capitalização dessa vantagem competitiva a uma taxa de{' '}
+                        {taxaCapitalizacaoGoodwill}% a.a. resulta em um{' '}
+                        <strong>Goodwill positivo de {formatCurrency(goodwill)}</strong>, elevando o
+                        valor econômico da empresa para além do seu patrimônio contábil estrito (PL
+                        de {formatCurrency(patrimonioLiquido)}).
+                      </>
+                    ) : (
+                      <>
+                        O lucro líquido apurado ({formatCurrency(lucroLiquido)}) foi inferior ao
+                        Lucro Normal esperado de {formatCurrency(lucroNormal)} (
+                        {taxaRetornoEsperadoPL}% sobre o PL de {formatCurrency(patrimonioLiquido)}),
+                        gerando um{' '}
+                        <strong>superlucro negativo de {formatCurrency(superlucro)}</strong>. Nesse
+                        cenário, não há goodwill positivo constituído no exercício, indicando
+                        sub-remuneração do capital próprio contábil investido na empresa.
+                      </>
+                    )}
                   </p>
-                </div>
 
-                {/* 2. Diagnóstico Goodwill */}
-                <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
-                  <span className="font-bold text-emerald-300 uppercase tracking-wider text-[11px] block">
-                    2. Diagnóstico do Modelo Goodwill e Superlucro
-                  </span>
-                  <p className="text-slate-200 leading-relaxed">
-                    {parecerConsolidado.diagnosticoGoodwill}
-                  </p>
-                </div>
+                  {/* Detalhes expandidos */}
+                  {expandDetailsGoodwill && (
+                    <div className="pt-2 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs animate-fadeIn">
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block uppercase font-semibold">
+                          Patrimônio Líquido (PL)
+                        </span>
+                        <strong className="text-slate-900 text-sm block mt-0.5">
+                          {formatCurrency(patrimonioLiquido)}
+                        </strong>
+                        <span className="text-[10px] text-slate-400">
+                          Capital Social + Reservas + Lucros
+                        </span>
+                      </div>
 
-                {/* 3. Comparativo Metodológico */}
-                {parecerConsolidado.comparativoTexto && (
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block uppercase font-semibold">
+                          Lucro Líquido do DRE
+                        </span>
+                        <strong className="text-slate-900 text-sm block mt-0.5">
+                          {formatCurrency(lucroLiquido)}
+                        </strong>
+                        <span className="text-[10px] text-slate-400">
+                          Resultado final pós-impostos
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                        <span className="text-[10px] text-slate-500 block uppercase font-semibold">
+                          Fórmula de Goodwill
+                        </span>
+                        <code className="text-xs font-mono font-bold text-emerald-800 block mt-0.5">
+                          (LL − PL×{taxaRetornoEsperadoPL}%) ÷ {taxaCapitalizacaoGoodwill}%
+                        </code>
+                        <span className="text-[10px] text-slate-400">
+                          Método clássico indireto de superlucro
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* ================= SEÇÃO 3: COMPARATIVO ENTRE OS DOIS MODELOS ================= */}
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-indigo-600" />
+                  Seção 3 — Comparativo: Valor pelo FCD vs Valor pelo Goodwill
+                </h2>
+                <span className="text-xs text-slate-500">
+                  Diferença:{' '}
+                  <strong className="text-slate-900">
+                    {diferencaValor >= 0
+                      ? `+${formatCurrency(diferencaValor)}`
+                      : formatCurrency(diferencaValor)}{' '}
+                    ({formatPercent(diferencaPercentual, 1)})
+                  </strong>
+                </span>
+              </div>
+
+              <Card className="bg-white border-slate-200 shadow-2xs">
+                <CardHeader className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                      Comparação de Avaliação entre Métodos ({selectedAno})
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Valor da empresa em reais (R$) calculado pelos dois métodos de precificação
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-[11px] font-semibold">
+                    <span className="flex items-center gap-1 text-blue-700">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
+                      FCD (Fluxo Descontado)
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-700">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" />
+                      Goodwill (Superlucro)
+                    </span>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="pt-6">
+                  <div className="h-60 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        layout="vertical"
+                        data={dadosGraficoComparativo}
+                        margin={{ top: 10, right: 30, left: 60, bottom: 10 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+                        <XAxis
+                          type="number"
+                          tick={{ fontSize: 11, fill: '#64748B' }}
+                          tickFormatter={(v) =>
+                            Math.abs(v) >= 1000000
+                              ? `R$ ${(v / 1000000).toFixed(1)}M`
+                              : Math.abs(v) >= 1000
+                                ? `R$ ${(v / 1000).toFixed(0)}k`
+                                : `R$ ${v}`
+                          }
+                        />
+                        <YAxis
+                          dataKey="sigla"
+                          type="category"
+                          tick={{ fontSize: 12, fill: '#0B1F3A', fontWeight: 700 }}
+                          width={130}
+                        />
+                        <RechartsTooltip
+                          formatter={(val: any, name: any, item: any) => [
+                            formatCurrency(Number(val)),
+                            item.payload.nome,
+                          ]}
+                          labelFormatter={(label: any) => `Modelo: ${label}`}
+                        />
+                        <ReferenceLine x={0} stroke="#94A3B8" />
+                        <Bar dataKey="valor" radius={[0, 6, 6, 0]} barSize={28}>
+                          {dadosGraficoComparativo.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.cor} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Explicação de aplicabilidade metodológica em português */}
+                  <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="p-3.5 bg-blue-50/50 rounded-xl border border-blue-100 space-y-1.5">
+                      <span className="font-bold text-blue-900 block flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
+                        Quando utilizar o Fluxo de Caixa Descontado (FCD)?
+                      </span>
+                      <p className="text-slate-700 leading-relaxed">
+                        O <strong>FCD</strong> é o método padrão de mercado para empresas em marcha
+                        normal (going concern) com histórico previsível de receitas e capacidade de
+                        projeção de fluxos livres. Ele reflete a capacidade futura de geração de
+                        riqueza da operação, independentemente dos registros contábeis históricos.
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 bg-emerald-50/50 rounded-xl border border-emerald-100 space-y-1.5">
+                      <span className="font-bold text-emerald-900 block flex items-center gap-1.5">
+                        <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
+                        Quando utilizar o Modelo Goodwill (Superlucro)?
+                      </span>
+                      <p className="text-slate-700 leading-relaxed">
+                        O <strong>Modelo Goodwill</strong> é indicado quando se busca uma ponte
+                        direta entre o valor contábil patrimonial (PL) e o valor econômico de
+                        mercado. Ele quantifica o valor da marca, clientela e vantagens competitivas
+                        através do lucro que excede a remuneração normal exigida pelos acionistas.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* ================= MELHORIA 2: GRÁFICO DE EVOLUÇÃO DOS ÚLTIMOS 3 ANOS ================= */}
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <History className="w-4 h-4 text-blue-600" />
+                  Evolução do Valuation ao Longo dos Últimos 3 Anos
+                </h2>
+                <Badge className="bg-slate-100 text-slate-700 border-slate-200 font-semibold text-xs">
+                  {selectedAno - 2} — {selectedAno}
+                </Badge>
+              </div>
+
+              <Card className="bg-white border-slate-200 shadow-2xs">
+                <CardHeader className="pb-2 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                      Trajetória Histórica do Enterprise Value ({selectedEmpresa?.nome || 'Empresa'}
+                      )
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Comparativo dos modelos FCD e Goodwill para o exercício selecionado (
+                      {selectedAno}) e os dois anos anteriores
+                    </CardDescription>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-[11px] font-semibold">
+                    <span className="flex items-center gap-1 text-blue-700">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-blue-600" />
+                      FCD (Fluxo Descontado)
+                    </span>
+                    <span className="flex items-center gap-1 text-emerald-700">
+                      <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600" />
+                      Goodwill (Superlucro)
+                    </span>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="pt-6 space-y-4">
+                  {evolucaoUltimosAnos.anosComDados.length === 0 ? (
+                    <div className="p-8 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                      Não há demonstrações contábeis disponíveis para o período de {selectedAno - 2}{' '}
+                      a {selectedAno}.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={evolucaoUltimosAnos.dados}
+                            margin={{ top: 10, right: 20, left: 20, bottom: 10 }}
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="#F1F5F9"
+                              vertical={false}
+                            />
+                            <XAxis
+                              dataKey="ano"
+                              tick={{ fontSize: 12, fill: '#0B1F3A', fontWeight: 700 }}
+                            />
+                            <YAxis
+                              tick={{ fontSize: 11, fill: '#64748B' }}
+                              tickFormatter={(v) =>
+                                Math.abs(v) >= 1000000
+                                  ? `R$ ${(v / 1000000).toFixed(1)}M`
+                                  : Math.abs(v) >= 1000
+                                    ? `R$ ${(v / 1000).toFixed(0)}k`
+                                    : `R$ ${v}`
+                              }
+                            />
+                            <RechartsTooltip
+                              formatter={(val: any, name: any) => [
+                                Number(val) > 0 ? formatCurrency(Number(val)) : 'Sem Dados / N/D',
+                                name === 'fcd' ? 'FCD (Fluxo Descontado)' : 'Goodwill (Superlucro)',
+                              ]}
+                              labelFormatter={(label) => `Exercício: ${label}`}
+                            />
+                            <Legend
+                              formatter={(value) =>
+                                value === 'fcd'
+                                  ? 'Fluxo de Caixa Descontado (FCD)'
+                                  : 'Modelo Goodwill (Superlucro)'
+                              }
+                              wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }}
+                            />
+                            <ReferenceLine y={0} stroke="#94A3B8" />
+                            <Bar
+                              dataKey="fcd"
+                              name="fcd"
+                              fill="#2563EB"
+                              radius={[4, 4, 0, 0]}
+                              barSize={32}
+                            />
+                            <Bar
+                              dataKey="goodwill"
+                              name="goodwill"
+                              fill="#059669"
+                              radius={[4, 4, 0, 0]}
+                              barSize={32}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+
+                      {/* Nota informativa quando faltam dados em algum dos anos */}
+                      {evolucaoUltimosAnos.faltamAnos && (
+                        <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex items-start gap-2 text-xs text-amber-900">
+                          <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <strong>Nota sobre a série histórica:</strong> Exibindo apenas os
+                            exercícios com demonstrações contábeis (Balanço/DRE) cadastradas no
+                            sistema. Para uma série trienal completa ({selectedAno - 2},{' '}
+                            {selectedAno - 1} e {selectedAno}), realize o cadastro ou importação dos
+                            dados contábeis pendentes.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Resumo em tabela dos 3 anos */}
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <Table className="text-xs">
+                          <TableHeader className="bg-slate-50">
+                            <TableRow>
+                              <TableHead className="font-bold text-slate-700">Ano</TableHead>
+                              <TableHead className="text-right font-bold text-slate-700">
+                                FCD (Enterprise Value)
+                              </TableHead>
+                              <TableHead className="text-right font-bold text-slate-700">
+                                Goodwill (PL + Superlucro)
+                              </TableHead>
+                              <TableHead className="text-right font-bold text-slate-700">
+                                Patrimônio Líquido (PL)
+                              </TableHead>
+                              <TableHead className="text-right font-bold text-slate-700">
+                                Lucro Líquido
+                              </TableHead>
+                              <TableHead className="text-center font-bold text-slate-700">
+                                Status dos Dados
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {evolucaoUltimosAnos.dados.map((ev) => (
+                              <TableRow
+                                key={ev.ano}
+                                className={
+                                  ev.ano === selectedAno
+                                    ? 'bg-blue-50/50 font-semibold'
+                                    : 'hover:bg-slate-50/50'
+                                }
+                              >
+                                <TableCell className="font-bold text-[#0B1F3A]">
+                                  {ev.ano} {ev.ano === selectedAno && '(Atual)'}
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-bold text-blue-700">
+                                  {ev.temDados && !isWaccMenorOuIgualG
+                                    ? formatCurrency(ev.fcd)
+                                    : '—'}
+                                </TableCell>
+                                <TableCell className="text-right font-mono font-bold text-emerald-700">
+                                  {ev.temDados ? formatCurrency(ev.goodwill) : '—'}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-slate-700">
+                                  {ev.temDados ? formatCurrency(ev.patrimonioLiquido) : '—'}
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-slate-700">
+                                  {ev.temDados ? formatCurrency(ev.lucroLiquido) : '—'}
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {ev.temDados ? (
+                                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-semibold text-[10px]">
+                                      ✓ Disponível
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-slate-100 text-slate-500 border-slate-200 font-normal text-[10px]">
+                                      Sem Demonstração
+                                    </Badge>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* ================= SEÇÃO 4: ANÁLISE CONSOLIDADA E PARECER EXECUTIVO ================= */}
+            {parecerConsolidado && (
+              <Card
+                className={`border shadow-md overflow-hidden ${
+                  parecerConsolidado.nivel === 'critico'
+                    ? 'bg-gradient-to-br from-red-950 via-slate-900 to-[#0B1F3A] border-red-900 text-white'
+                    : parecerConsolidado.nivel === 'alerta'
+                      ? 'bg-gradient-to-br from-amber-950 via-slate-900 to-[#0B1F3A] border-amber-900 text-white'
+                      : 'bg-gradient-to-br from-blue-950 via-[#0B1F3A] to-slate-900 border-blue-900 text-white'
+                }`}
+              >
+                <CardHeader className="pb-3 border-b border-white/10">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className={`p-2 rounded-xl text-white ${
+                          parecerConsolidado.nivel === 'critico'
+                            ? 'bg-red-600/40 border border-red-500/40'
+                            : parecerConsolidado.nivel === 'alerta'
+                              ? 'bg-amber-600/40 border border-amber-500/40'
+                              : 'bg-emerald-600/40 border border-emerald-500/40'
+                        }`}
+                      >
+                        <ShieldCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-base font-bold text-white">
+                          {parecerConsolidado.titulo}
+                        </CardTitle>
+                        <CardDescription className="text-xs text-blue-200/80">
+                          Parecer Integrado de Valuation · Exercício {selectedAno}
+                        </CardDescription>
+                      </div>
+                    </div>
+
+                    <Badge
+                      className={`font-bold text-xs uppercase px-3 py-1 ${
+                        parecerConsolidado.nivel === 'critico'
+                          ? 'bg-red-500 text-white'
+                          : parecerConsolidado.nivel === 'alerta'
+                            ? 'bg-amber-500 text-slate-900'
+                            : 'bg-emerald-500 text-white'
+                      }`}
+                    >
+                      Diagnóstico: {parecerConsolidado.nivel.toUpperCase()}
+                    </Badge>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="pt-5 space-y-4 text-xs leading-relaxed">
+                  {/* 1. Diagnóstico FCD */}
                   <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
-                    <span className="font-bold text-indigo-300 uppercase tracking-wider text-[11px] block">
-                      3. Análise Comparativa entre FCD e Goodwill
+                    <span className="font-bold text-blue-300 uppercase tracking-wider text-[11px] block">
+                      1. Diagnóstico do Fluxo de Caixa Descontado (FCD)
                     </span>
                     <p className="text-slate-200 leading-relaxed">
-                      {parecerConsolidado.comparativoTexto}
+                      {parecerConsolidado.diagnosticoFCD}
                     </p>
                   </div>
-                )}
 
-                {/* 4. Recomendações do Consultor */}
-                <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
-                  <span className="font-bold text-amber-300 uppercase tracking-wider text-[11px] block">
-                    4. Recomendações Estratégicas e Sensibilidade
-                  </span>
-                  <p className="text-slate-200 leading-relaxed">
-                    {parecerConsolidado.recomendacao}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                  {/* 2. Diagnóstico Goodwill */}
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
+                    <span className="font-bold text-emerald-300 uppercase tracking-wider text-[11px] block">
+                      2. Diagnóstico do Modelo Goodwill e Superlucro
+                    </span>
+                    <p className="text-slate-200 leading-relaxed">
+                      {parecerConsolidado.diagnosticoGoodwill}
+                    </p>
+                  </div>
+
+                  {/* 3. Comparativo Metodológico */}
+                  {parecerConsolidado.comparativoTexto && (
+                    <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
+                      <span className="font-bold text-indigo-300 uppercase tracking-wider text-[11px] block">
+                        3. Análise Comparativa entre FCD e Goodwill
+                      </span>
+                      <p className="text-slate-200 leading-relaxed">
+                        {parecerConsolidado.comparativoTexto}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 4. Recomendações do Consultor */}
+                  <div className="bg-white/5 p-4 rounded-xl border border-white/10 space-y-1.5">
+                    <span className="font-bold text-amber-300 uppercase tracking-wider text-[11px] block">
+                      4. Recomendações Estratégicas e Sensibilidade
+                    </span>
+                    <p className="text-slate-200 leading-relaxed">
+                      {parecerConsolidado.recomendacao}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       )}

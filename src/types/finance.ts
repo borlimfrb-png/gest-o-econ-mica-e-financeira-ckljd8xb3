@@ -1188,8 +1188,7 @@ export interface TributoLancamentoRecord extends RecordModel {
 }
 
 // Configuração e Registro de Múltiplos de Mercado para Valuation
-export interface ValuationMultiplosRecord {
-  id: string
+export interface ValuationMultiplosRecord extends RecordModel {
   user?: string
   empresa: string
   ano: number
@@ -1212,8 +1211,6 @@ export interface ValuationMultiplosRecord {
   multiplos_ativos?: Record<string, boolean>
   divida_liquida_manual?: number
   observacoes?: string
-  created: string
-  updated: string
   expand?: {
     empresa?: EmpresaRecord
     user?: UserRecord

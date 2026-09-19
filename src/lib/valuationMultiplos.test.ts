@@ -21,7 +21,7 @@ describe('Valuation por Múltiplos de Mercado', () => {
   })
 
   it('calcula corretamente os múltiplos de mercado a partir de DRE e Balanço', () => {
-    const balancoMock: BalancoRecord = {
+    const balancoMock = {
       id: 'b1',
       empresa: 'emp1',
       ano: 2024,
@@ -45,9 +45,9 @@ describe('Valuation por Múltiplos de Mercado', () => {
       reservas_lucros: 100000,
       created: '',
       updated: '',
-    }
+    } as unknown as BalancoRecord
 
-    const dreMock: DreRecord = {
+    const dreMock = {
       id: 'd1',
       empresa: 'emp1',
       ano: 2024,
@@ -67,7 +67,7 @@ describe('Valuation por Múltiplos de Mercado', () => {
       participacoes_debentures: 0,
       created: '',
       updated: '',
-    }
+    } as unknown as DreRecord
 
     const res = calcularMultiplosMercado({
       balanco: balancoMock,
