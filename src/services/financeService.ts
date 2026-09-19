@@ -290,6 +290,7 @@ export const empresasService = {
       nome: string
       cnpj: string
       segmento: string
+      setor?: string
     },
   ): Promise<EmpresaRecord> {
     const record = await pb.collection('empresas').create<EmpresaRecord>(data)

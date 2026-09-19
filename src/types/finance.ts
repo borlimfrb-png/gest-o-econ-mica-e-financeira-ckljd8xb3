@@ -10,6 +10,31 @@ export type SegmentoEmpresa =
   | 'Financeiro'
   | 'Outros'
 
+export type SetorEmpresa =
+  | 'Serviços'
+  | 'Comércio'
+  | 'Indústria'
+  | 'Tecnologia'
+  | 'Agronegócio'
+  | 'Construção'
+  | 'Saúde'
+  | 'Educação'
+  | 'Financeiro'
+  | 'Outros'
+
+export const SETORES_PADRAO: SetorEmpresa[] = [
+  'Serviços',
+  'Comércio',
+  'Indústria',
+  'Tecnologia',
+  'Agronegócio',
+  'Construção',
+  'Saúde',
+  'Educação',
+  'Financeiro',
+  'Outros',
+]
+
 export type PorteEmpresa = 'MEI' | 'Microempresa' | 'Pequena' | 'Média' | 'Grande'
 
 export type UfEmpresa =
@@ -63,6 +88,7 @@ export interface EmpresaRecord extends RecordModel {
   nome: string
   cnpj: string
   segmento: SegmentoEmpresa
+  setor?: SetorEmpresa
   nome_fantasia?: string
   porte?: PorteEmpresa
   data_fundacao?: string

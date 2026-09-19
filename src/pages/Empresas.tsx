@@ -5,9 +5,11 @@ import type {
   EmpresaRecord,
   BalancoRecord,
   SegmentoEmpresa,
+  SetorEmpresa,
   PorteEmpresa,
   UfEmpresa,
 } from '@/types/finance'
+import { SETORES_PADRAO } from '@/types/finance'
 import {
   formatCnpj,
   cleanCnpj,
@@ -115,6 +117,7 @@ interface EmpresaFormData {
   nome_fantasia: string
   cnpj: string
   segmento: SegmentoEmpresa
+  setor: SetorEmpresa | ''
   porte: PorteEmpresa | ''
   data_fundacao: string
   logradouro: string
@@ -137,6 +140,7 @@ const EMPTY_FORM: EmpresaFormData = {
   nome_fantasia: '',
   cnpj: '',
   segmento: 'Serviços',
+  setor: '',
   porte: '',
   data_fundacao: '',
   logradouro: '',
@@ -253,6 +257,7 @@ export default function Empresas() {
       nome_fantasia: empresa.nome_fantasia || '',
       cnpj: formatCnpj(empresa.cnpj),
       segmento: empresa.segmento,
+      setor: empresa.setor || '',
       porte: empresa.porte || '',
       data_fundacao: empresa.data_fundacao ? empresa.data_fundacao.slice(0, 10) : '',
       logradouro: empresa.logradouro || '',
@@ -345,6 +350,7 @@ export default function Empresas() {
       nome_fantasia: formData.nome_fantasia.trim(),
       cnpj: cleanCnpj(formData.cnpj),
       segmento: formData.segmento,
+      setor: formData.setor || undefined,
       porte: formData.porte || undefined,
       data_fundacao: formData.data_fundacao || undefined,
       logradouro: formData.logradouro.trim(),
@@ -526,6 +532,7 @@ export default function Empresas() {
                     <th className="py-3 px-4">Razão Social / Nome Fantasia</th>
                     <th className="py-3 px-4">CNPJ</th>
                     <th className="py-3 px-4">Segmento</th>
+                    <th className="py-3 px-4">Setor (Mercado)</th>
                     <th className="py-3 px-4">Porte</th>
                     <th className="py-3 px-4">Cidade / UF</th>
                     <th className="py-3 px-4 text-center">NFSe</th>
@@ -573,10 +580,22 @@ export default function Empresas() {
                         <td className="py-3 px-4">
                           <Badge
                             variant="secondary"
-                            className="text-[10px] font-semibold bg-slate-100 text-slate-700 border-none px-1.5 py-0"
+                            className="text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0"
                           >
                             {emp.segmento}
                           </Badge>
+                        </td>
+                        <td className="py-3 px-4">
+                          {emp.setor ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-semibold bg-blue-50 text-blue-700 border-blue-200 px-1.5 py-0"
+                            >
+                              {emp.setor}
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">Não informado</span>
+                          )}
                         </td>
                         <td className="py-3 px-4">
                           {porteInfo ? (
@@ -755,7 +774,7 @@ export default function Empresas() {
                       htmlFor="empresa-segmento"
                       className="text-xs font-semibold text-slate-700"
                     >
-                      Segmento / Setor *
+                      Segmento de Atuação *
                     </Label>
                     <Select
                       value={formData.segmento}
@@ -775,6 +794,42 @@ export default function Empresas() {
                     {formErrors.segmento && (
                       <p className="text-[11px] text-red-600 font-medium">{formErrors.segmento}</p>
                     )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="empresa-setor"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Setor (Mercado / Benchmarks)
+                      </Label>
+                      <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
+                    </div>
+                    <Select
+                      value={formData.setor || 'NONE'}
+                      onValueChange={(val) =>
+                        setField('setor', val === 'NONE' ? '' : (val as SetorEmpresa))
+                      }
+                    >
+                      <SelectTrigger id="empresa-setor" className="h-9 text-xs bg-white">
+                        <SelectValue placeholder="Selecione o setor de referência" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE" className="text-xs text-slate-400">
+                          (Nenhum / Definir depois)
+                        </SelectItem>
+                        {SETORES_PADRAO.map((set) => (
+                          <SelectItem key={set} value={set} className="text-xs">
+                            {set}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-slate-500">
+                      Usado para calibrar múltiplos e benchmarks no módulo Planejamento &gt;
+                      Setores.
+                    </p>
                   </div>
 
                   <div className="space-y-1.5">

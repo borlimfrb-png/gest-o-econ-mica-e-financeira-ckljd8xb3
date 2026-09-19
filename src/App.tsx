@@ -52,6 +52,7 @@ const AgenteIA = lazy(() => import('./pages/AgenteIA'))
 const Importacao = lazy(() => import('./pages/Importacao'))
 const AnaliseTributaria = lazy(() => import('./pages/AnaliseTributaria'))
 const BalancedScorecard = lazy(() => import('./pages/BalancedScorecard'))
+const SetoresMercado = lazy(() => import('./pages/SetoresMercado'))
 const Configuracoes = lazy(() => import('./pages/Configuracoes'))
 const GruposEmpresariais = lazy(() => import('./pages/GruposEmpresariais'))
 const DashboardEmpresa = lazy(() => import('./pages/DashboardEmpresa'))
@@ -340,6 +341,14 @@ const App = () => (
                     element={
                       <ModuloRoute modulo="planejamento">
                         <BalancedScorecard />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/planejamento/setores"
+                    element={
+                      <ModuloRoute modulo="planejamento">
+                        <SetoresMercado />
                       </ModuloRoute>
                     }
                   />

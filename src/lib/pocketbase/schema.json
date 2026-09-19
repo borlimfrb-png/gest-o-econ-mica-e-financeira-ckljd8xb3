@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T11:38:09.458Z",
+  "generatedAt": "2026-09-19T11:49:12.222Z",
   "collections": [
     {
       "name": "users",
@@ -262,11 +262,30 @@
           "type": "bool",
           "required": false,
           "system": false
+        },
+        {
+          "name": "setor",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Serviços",
+            "Comércio",
+            "Indústria",
+            "Tecnologia",
+            "Agronegócio",
+            "Construção",
+            "Saúde",
+            "Educação",
+            "Financeiro",
+            "Outros"
+          ]
         }
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_empresas_cnpj ON empresas (cnpj)",
-        "CREATE INDEX idx_empresas_segmento ON empresas (segmento)"
+        "CREATE INDEX idx_empresas_segmento ON empresas (segmento)",
+        "CREATE INDEX `idx_empresas_setor` ON `empresas` (setor)"
       ]
     },
     {
