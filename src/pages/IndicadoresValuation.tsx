@@ -71,8 +71,21 @@ import {
   History,
   Grid,
 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { ModalLaudoValuation } from '@/components/ModalLaudoValuation'
+import { AbaMultiplosMercado } from '@/components/AbaMultiplosMercado'
+import { PainelComparativoTresMetodos } from '@/components/PainelComparativoTresMetodos'
+import {
+  calcularMultiplosMercado,
+  gerarComparativoTresMetodos,
+  obterMultiplosPadraoSetor,
+  PESOS_PADRAO,
+  ATIVOS_PADRAO,
+  type MultiploKey,
+} from '@/lib/valuationMultiplos'
+import { valuationMultiplosService } from '@/services/valuationMultiplosService'
+import type { ValuationMultiplosRecord } from '@/types/finance'
 
 // Função auxiliar de cálculo de Valuation para um ano específico
 function calcularValuationParaAno({
@@ -217,6 +230,27 @@ export default function IndicadoresValuation() {
   // Detalhes expandidos dos cards
   const [expandDetailsFcd, setExpandDetailsFcd] = useState<boolean>(false)
   const [expandDetailsGoodwill, setExpandDetailsGoodwill] = useState<boolean>(false)
+
+  // ================= PARÂMETROS DA ABA MÚLTIPLOS DE MERCADO =================
+  const [abaAtiva, setAbaAtiva] = useState<string>('multiplos')
+  const [segmentoRefMultiplos, setSegmentoRefMultiplos] = useState<string>('Serviços')
+  const [multiplosRefState, setMultiplosRefState] = useState<Record<MultiploKey, number>>({
+    ev_ebitda: 6.5,
+    pl: 10.0,
+    pvp: 2.2,
+    ev_receita: 1.4,
+    ev_ebit: 8.5,
+    p_ebitda: 5.5,
+  })
+  const [pesosMultiplosState, setPesosMultiplosState] = useState<Record<MultiploKey, number>>({
+    ...PESOS_PADRAO,
+  })
+  const [ativosMultiplosState, setAtivosMultiplosState] = useState<Record<MultiploKey, boolean>>({
+    ...ATIVOS_PADRAO,
+  })
+  const [dividaLiquidaManual, setDividaLiquidaManual] = useState<number | undefined>(undefined)
+  const [salvandoMultiplos, setSalvandoMultiplos] = useState<boolean>(false)
+  const [registroMultiplosDb, setRegistroMultiplosDb] = useState<ValuationMultiplosRecord | null>(null)
 
   // Carregar dados das coleções balancos e dre
   const loadData = async () => {
@@ -625,18 +659,209 @@ export default function IndicadoresValuation() {
     projecaoAnual,
     vpValorTerminal,
     baseFluxoCaixa,
+    superlucro,
+    taxaRetornoEsperadoPL,
+    goodwill,
     lucroLiquido,
     lucroNormal,
-    superlucro,
-    goodwill,
     patrimonioLiquido,
-    taxaRetornoEsperadoPL,
     diferencaValor,
     diferencaPercentual,
   ])
 
-  // ================= 7. EXPORTAÇÃO CSV COMPLETA =================
-  const handleExportCsv = () => {
+  // Carregar configuração salva de múltiplos de mercado para a empresa e ano
+  const carregarMultiplosDb = async () => {
+    if (!selectedEmpresaId || !selectedAno) return
+    try {
+      const reg = await valuationMultiplosService.getByEmpresaEAno(selectedEmpresaId, selectedAno)
+      setRegistroMultiplosDb(reg)
+      const segmentoEmpresa = selectedEmpresa?.segmento || 'Serviços'
+      const setorBase = reg?.segmento_referencia || segmentoEmpresa
+      setSegmentoRefMultiplos(setorBase)
+
+      const padrao = obterMultiplosPadraoSetor(setorBase)
+
+      setMultiplosRefState({
+        ev_ebitda: reg?.ev_ebitda_ref ?? padrao.ev_ebitda,
+        pl: reg?.pl_ref ?? padrao.pl,
+        pvp: reg?.pvp_ref ?? padrao.pvp,
+        ev_receita: reg?.ev_receita_ref ?? padrao.ev_receita,
+        ev_ebit: reg?.ev_ebit_ref ?? padrao.ev_ebit,
+        p_ebitda: reg?.p_ebitda_ref ?? padrao.p_ebitda,
+      })
+
+      setPesosMultiplosState({
+        ev_ebitda: reg?.ev_ebitda_peso ?? PESOS_PADRAO.ev_ebitda,
+        pl: reg?.pl_peso ?? PESOS_PADRAO.pl,
+        pvp: reg?.pvp_peso ?? PESOS_PADRAO.pvp,
+        ev_receita: reg?.ev_receita_peso ?? PESOS_PADRAO.ev_receita,
+        ev_ebit: reg?.ev_ebit_peso ?? PESOS_PADRAO.ev_ebit,
+        p_ebitda: reg?.p_ebitda_peso ?? PESOS_PADRAO.p_ebitda,
+      })
+
+      if (reg?.multiplos_ativos && typeof reg.multiplos_ativos === 'object') {
+        setAtivosMultiplosState({
+          ev_ebitda: reg.multiplos_ativos.ev_ebitda ?? true,
+          pl: reg.multiplos_ativos.pl ?? true,
+          pvp: reg.multiplos_ativos.pvp ?? true,
+          ev_receita: reg.multiplos_ativos.ev_receita ?? true,
+          ev_ebit: reg.multiplos_ativos.ev_ebit ?? true,
+          p_ebitda: reg.multiplos_ativos.p_ebitda ?? true,
+        })
+      } else {
+        setAtivosMultiplosState({ ...ATIVOS_PADRAO })
+      }
+
+      setDividaLiquidaManual(reg?.divida_liquida_manual ?? undefined)
+    } catch (err) {
+      console.warn('Erro ao carregar múltiplos do banco:', err)
+    }
+  }
+
+  useEffect(() => {
+    carregarMultiplosDb()
+  }, [selectedEmpresaId, selectedAno, selectedEmpresa?.segmento])
+
+  useRealtime<ValuationMultiplosRecord>('valuation_multiplos', () => {
+    carregarMultiplosDb()
+  })
+
+  // Handlers para Múltiplos
+  const handleSegmentoMultiploChange = (novoSetor: string) => {
+    setSegmentoRefMultiplos(novoSetor)
+    const padrao = obterMultiplosPadraoSetor(novoSetor)
+    setMultiplosRefState({
+      ev_ebitda: padrao.ev_ebitda,
+      pl: padrao.pl,
+      pvp: padrao.pvp,
+      ev_receita: padrao.ev_receita,
+      ev_ebit: padrao.ev_ebit,
+      p_ebitda: padrao.p_ebitda,
+    })
+  }
+
+  const handleRestaurarPadroesSetor = () => {
+    const padrao = obterMultiplosPadraoSetor(segmentoRefMultiplos)
+    setMultiplosRefState({
+      ev_ebitda: padrao.ev_ebitda,
+      pl: padrao.pl,
+      pvp: padrao.pvp,
+      ev_receita: padrao.ev_receita,
+      ev_ebit: padrao.ev_ebit,
+      p_ebitda: padrao.p_ebitda,
+    })
+    setPesosMultiplosState({ ...PESOS_PADRAO })
+    setAtivosMultiplosState({ ...ATIVOS_PADRAO })
+    toast({
+      title: 'Padrões setoriais restaurados',
+      description: `Múltiplos e pesos restaurados para os benchmarks de ${segmentoRefMultiplos}.`,
+    })
+  }
+
+  const handleMultiploRefChange = (key: MultiploKey, val: number) => {
+    setMultiplosRefState((prev) => ({ ...prev, [key]: val }))
+  }
+
+  const handlePesoChange = (key: MultiploKey, val: number) => {
+    setPesosMultiplosState((prev) => ({ ...prev, [key]: val }))
+  }
+
+  const handleToggleAtivo = (key: MultiploKey, ativo: boolean) => {
+    setAtivosMultiplosState((prev) => ({ ...prev, [key]: ativo }))
+  }
+
+  const handleSalvarConfigMultiplos = async () => {
+    if (!selectedEmpresaId) {
+      toast({
+        title: 'Selecione uma empresa',
+        description: 'Selecione uma empresa antes de salvar os múltiplos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      setSalvandoMultiplos(true)
+      const salvo = await valuationMultiplosService.save({
+        empresa: selectedEmpresaId,
+        ano: selectedAno,
+        segmento_referencia: segmentoRefMultiplos,
+        ev_ebitda_ref: multiplosRefState.ev_ebitda,
+        pl_ref: multiplosRefState.pl,
+        pvp_ref: multiplosRefState.pvp,
+        ev_receita_ref: multiplosRefState.ev_receita,
+        ev_ebit_ref: multiplosRefState.ev_ebit,
+        p_ebitda_ref: multiplosRefState.p_ebitda,
+        ev_ebitda_peso: pesosMultiplosState.ev_ebitda,
+        pl_peso: pesosMultiplosState.pl,
+        pvp_peso: pesosMultiplosState.pvp,
+        ev_receita_peso: pesosMultiplosState.ev_receita,
+        ev_ebit_peso: pesosMultiplosState.ev_ebit,
+        p_ebitda_peso: pesosMultiplosState.p_ebitda,
+        multiplos_ativos: ativosMultiplosState,
+        dividaLiquidaManual: dividaLiquidaManual,
+      })
+      setRegistroMultiplosDb(salvo)
+      toast({
+        title: 'Configurações de Múltiplos salvas!',
+        description: `Múltiplos e ponderações de ${selectedAno} salvos com sucesso no banco.`,
+      })
+    } catch (err) {
+      console.error('Erro ao salvar múltiplos:', err)
+      toast({
+        title: 'Erro ao salvar múltiplos',
+        description: 'Não foi possível persistir as configurações. Tente novamente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSalvandoMultiplos(false)
+    }
+  }
+
+  // ================= CÁLCULO DOS MÚLTIPLOS DE MERCADO =================
+  const resumoMultiplos = useMemo(() => {
+    return calcularMultiplosMercado({
+      balanco: balancoAtual,
+      dre: dreAtual,
+      segmento: segmentoRefMultiplos,
+      multiplosRef: multiplosRefState,
+      pesos: pesosMultiplosState,
+      multiplosAtivos: ativosMultiplosState,
+      dividaLiquidaManual,
+    })
+  }, [
+    balancoAtual,
+    dreAtual,
+    segmentoRefMultiplos,
+    multiplosRefState,
+    pesosMultiplosState,
+    ativosMultiplosState,
+    dividaLiquidaManual,
+  ])
+
+  // ================= COMPARATIVO DOS 3 MÉTODOS =================
+  const comparativoTresMetodos = useMemo(() => {
+    return gerarComparativoTresMetodos({
+      valorFCD: isWaccMenorOuIgualG ? 0 : valorEmpresaFCD,
+      valorSuperlucro: valorEmpresaGoodwill,
+      valorMultiplos: resumoMultiplos.valorPonderado,
+      ebitda: calcD.ebitda,
+      lucroLiquido: calcD.lucroLiquido,
+      patrimonioLiquido: calcB.patrimonioLiquido,
+      segmento: selectedEmpresa?.segmento,
+    })
+  }, [
+    isWaccMenorOuIgualG,
+    valorEmpresaFCD,
+    valorEmpresaGoodwill,
+    resumoMultiplos.valorPonderado,
+    calcD.ebitda,
+    calcD.lucroLiquido,
+    calcB.patrimonioLiquido,
+    selectedEmpresa?.segmento,
+  ])
+
+  // ================= 7. EXPORTAÇÃO CSV COMPLETA =================  const handleExportCsv = () => {
     if (!selectedEmpresa) {
       toast({
         title: 'Selecione uma empresa',
@@ -701,6 +926,26 @@ export default function IndicadoresValuation() {
     })
     csvContent += `\n`
 
+    csvContent += `AVALIAÇÃO POR MÚLTIPLOS DE MERCADO\n`
+    csvContent += `Setor de Referência;${segmentoRefMultiplos}\n`
+    csvContent += `Múltiplo;Conceito;Métrica-Base (R$);Múltiplo Ref (x);Peso (%);Valor Implícito (R$);Ativo\n`
+    resumoMultiplos.itens.forEach((m) => {
+      csvContent += `${m.sigla};${m.nome};${m.valorMetricaBase.toFixed(2).replace('.', ',')};${m.multiploReferencia.toFixed(1).replace('.', ',')};${m.pesoPercentual}%;${m.valorImplícitoEmpresa.toFixed(2).replace('.', ',')};${m.ativo ? 'SIM' : 'NÃO'}\n`
+    })
+    csvContent += `Valuation Ponderado por Múltiplos;;;;;${resumoMultiplos.valorPonderado.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Média Simples;;;;;${resumoMultiplos.valorMedio.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Mediana;;;;;${resumoMultiplos.valorMediana.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Piso (Mínimo);;;;;${resumoMultiplos.valorMinimo.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Teto (Máximo);;;;;${resumoMultiplos.valorMaximo.toFixed(2).replace('.', ',')}\n\n`
+
+    csvContent += `COMPARATIVO DOS 3 MÉTODOS DE VALUATION\n`
+    csvContent += `Método 1 - Fluxo de Caixa Descontado (FCD);${isWaccMenorOuIgualG ? 'N/D' : valorEmpresaFCD.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Método 2 - Superlucro Capitalizado (Goodwill);${valorEmpresaGoodwill.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Método 3 - Múltiplos de Mercado (Consolidado);${resumoMultiplos.valorPonderado.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Consenso Central Triplo;${comparativoTresMetodos.valorCentralTriplo.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Piso Faixa Negocial;${comparativoTresMetodos.faixaGeralMin.toFixed(2).replace('.', ',')}\n`
+    csvContent += `Teto Faixa Negocial;${comparativoTresMetodos.faixaGeralMax.toFixed(2).replace('.', ',')}\n\n`
+
     csvContent += `EVOLUÇÃO HISTÓRICA DO VALUATION (ÚLTIMOS ANOS)\n`
     csvContent += `Ano;FCD (R$);Goodwill (R$);Patrimônio Líquido (R$);Lucro Líquido (R$)\n`
     evolucaoUltimosAnos.dados.forEach((ev) => {
@@ -756,12 +1001,12 @@ export default function IndicadoresValuation() {
                 Valuation — Avaliação da Empresa
               </h1>
               <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs">
-                FCD &amp; Goodwill
+                Múltiplos · FCD · Goodwill
               </Badge>
             </div>
             <p className="text-xs text-[#5B6B7F] mt-0.5">
-              Estimativa do valor da empresa (Enterprise Value) por Fluxo de Caixa Descontado e
-              Capitalização de Superlucro (Goodwill)
+              Estimativa do valor da empresa (Enterprise Value) por Múltiplos de Mercado, Fluxo de Caixa
+              Descontado e Capitalização de Superlucro (Goodwill)
             </p>
           </div>
         </div>
@@ -995,7 +1240,8 @@ export default function IndicadoresValuation() {
                   {selectedEmpresa?.nome || 'selecionada'}
                 </span>{' '}
                 ainda não possui lançamentos de Balanço Patrimonial ou DRE cadastrados para o
-                exercício de {selectedAno}. Cadastre os demonstrativos para apurar o valuation.
+                exercício de {selectedAno}. Cadastre os demonstrativos para apurar o valuation por
+                Múltiplos de Mercado, Fluxo Descontado ou Goodwill.
               </p>
             </div>
             <div className="flex items-center gap-3 flex-wrap justify-center pt-2">
@@ -1012,8 +1258,77 @@ export default function IndicadoresValuation() {
           </CardContent>
         </Card>
       ) : (
-        <>
-          {/* ================= SEÇÃO A: MODELO FLUXO DE CAIXA DESCONTADO (FCD) ================= */}
+        <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="w-full space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+            <TabsList className="bg-slate-100 p-1 rounded-xl h-10">
+              <TabsTrigger
+                value="multiplos"
+                className="text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-xs"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                Múltiplos de Mercado
+              </TabsTrigger>
+              <TabsTrigger
+                value="comparativo"
+                className="text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-xs"
+              >
+                <Scale className="w-3.5 h-3.5" />
+                Comparativo dos 3 Métodos
+              </TabsTrigger>
+              <TabsTrigger
+                value="fcd_goodwill"
+                className="text-xs font-bold gap-1.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
+              >
+                <TrendingUp className="w-3.5 h-3.5" />
+                FCD &amp; Goodwill
+              </TabsTrigger>
+            </TabsList>
+
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              Abordagem ativa:{' '}
+              <strong className="text-slate-800">
+                {abaAtiva === 'multiplos'
+                  ? 'Múltiplos de Mercado'
+                  : abaAtiva === 'comparativo'
+                    ? 'Comparativo Triplo'
+                    : 'FCD & Goodwill'}
+              </strong>
+            </span>
+          </div>
+
+          {/* TAB 1: MÚLTIPLOS DE MERCADO */}
+          <TabsContent value="multiplos" className="mt-0">
+            <AbaMultiplosMercado
+              resumoMultiplos={resumoMultiplos}
+              segmentoSelecionado={segmentoRefMultiplos}
+              onSegmentoChange={handleSegmentoMultiploChange}
+              multiplosRef={multiplosRefState}
+              onMultiploRefChange={handleMultiploRefChange}
+              pesos={pesosMultiplosState}
+              onPesoChange={handlePesoChange}
+              multiplosAtivos={ativosMultiplosState}
+              onToggleAtivo={handleToggleAtivo}
+              dividaLiquidaManual={dividaLiquidaManual}
+              onDividaLiquidaChange={setDividaLiquidaManual}
+              onRestaurarPadroesSetor={handleRestaurarPadroesSetor}
+              onSalvarConfiguracao={handleSalvarConfigMultiplos}
+              salvando={salvandoMultiplos}
+              empresaNome={selectedEmpresa?.nome}
+              ano={selectedAno}
+            />
+          </TabsContent>
+
+          {/* TAB 2: COMPARATIVO DOS 3 MÉTODOS */}
+          <TabsContent value="comparativo" className="mt-0">
+            <PainelComparativoTresMetodos
+              comparativo={comparativoTresMetodos}
+              empresaNome={selectedEmpresa?.nome}
+              ano={selectedAno}
+            />
+          </TabsContent>
+
+          {/* TAB 3: FCD & SUPERLUCRO (GOODWILL) */}
+          <TabsContent value="fcd_goodwill" className="mt-0 space-y-6">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
@@ -2033,7 +2348,8 @@ export default function IndicadoresValuation() {
               </CardContent>
             </Card>
           )}
-        </>
+          </TabsContent>
+        </Tabs>
       )}
 
       {/* Modal Laudo de Valuation (A4 PDF) */}
@@ -2068,6 +2384,9 @@ export default function IndicadoresValuation() {
           matrix: sensibilidadeGrid.matrix,
         }}
         parecerConsolidado={parecerConsolidado}
+        resumoMultiplos={resumoMultiplos}
+        comparativoTresMetodos={comparativoTresMetodos}
+        segmentoRefMultiplos={segmentoRefMultiplos}
       />
     </div>
   )

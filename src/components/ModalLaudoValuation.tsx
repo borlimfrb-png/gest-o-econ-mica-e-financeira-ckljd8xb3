@@ -27,6 +27,7 @@ import { Link } from 'react-router-dom'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import type { EmpresaRecord, MinhaEmpresaRecord } from '@/types/finance'
 import { formatCurrency, formatPercent, formatCnpj, formatNumber } from '@/lib/financeCalculations'
+import type { ResumoConsolidadoMultiplos, ComparativoTresMetodos } from '@/lib/valuationMultiplos'
 
 export interface SensibilidadeItem {
   wacc: number
@@ -76,6 +77,10 @@ export interface ModalLaudoValuationProps {
     comparativoTexto: string
     recomendacao: string
   } | null
+  // Múltiplos de Mercado e Comparativo Triplo
+  resumoMultiplos?: ResumoConsolidadoMultiplos
+  comparativoTresMetodos?: ComparativoTresMetodos
+  segmentoRefMultiplos?: string
 }
 
 export function ModalLaudoValuation({
@@ -105,6 +110,9 @@ export function ModalLaudoValuation({
   valorEmpresaGoodwill,
   sensibilidadeGrid,
   parecerConsolidado,
+  resumoMultiplos,
+  comparativoTresMetodos,
+  segmentoRefMultiplos,
 }: ModalLaudoValuationProps) {
   const handlePrint = () => {
     window.print()
@@ -123,12 +131,17 @@ export function ModalLaudoValuation({
   )
 
   const isWaccMenorOuIgualG = taxaWacc <= taxaPerpetuidade
+  const valorMultiplos = resumoMultiplos?.valorPonderado || 0
+  const metodosDisponiveis = [
+    !isWaccMenorOuIgualG && valorEmpresaFCD > 0 ? valorEmpresaFCD : null,
+    valorEmpresaGoodwill > 0 ? valorEmpresaGoodwill : null,
+    valorMultiplos > 0 ? valorMultiplos : null,
+  ].filter((v): v is number => v !== null)
+
   const valorMedioSugerido =
-    !isWaccMenorOuIgualG && valorEmpresaFCD > 0 && valorEmpresaGoodwill > 0
-      ? (valorEmpresaFCD + valorEmpresaGoodwill) / 2
-      : valorEmpresaFCD > 0
-        ? valorEmpresaFCD
-        : valorEmpresaGoodwill
+    metodosDisponiveis.length > 0
+      ? metodosDisponiveis.reduce((a, b) => a + b, 0) / metodosDisponiveis.length
+      : 0
 
   const diferencaValor = valorEmpresaFCD - valorEmpresaGoodwill
   const diferencaPercentual =
@@ -262,8 +275,9 @@ export function ModalLaudoValuation({
                   LAUDO DE VALUATION
                 </h1>
                 <p className="text-xs text-slate-500 max-w-lg mx-auto">
-                  Determinação do Valor Econômico da Empresa (Enterprise Value) mediante Fluxo de
-                  Caixa Descontado (FCD) e Capitalização de Superlucro (Goodwill)
+                  Determinação do Valor Econômico da Empresa (Enterprise Value) mediante Múltiplos
+                  de Mercado, Fluxo de Caixa Descontado (FCD) e Capitalização de Superlucro
+                  (Goodwill)
                 </p>
               </div>
 
@@ -319,13 +333,21 @@ export function ModalLaudoValuation({
                 <Layers className="w-3.5 h-3.5 text-blue-600" />
                 Sumário do Laudo de Valuation
               </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                 <button
                   type="button"
                   onClick={() => scrollToSection('sec-1-objetivo')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>1. Objetivo e Metodologia</span>
+                  <span>1. Metodologias</span>
+                  <span className="text-[10px] text-slate-400">Ir &darr;</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => scrollToSection('sec-multiplos')}
+                  className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
+                >
+                  <span>2. Múltiplos de Mercado</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
@@ -333,7 +355,7 @@ export function ModalLaudoValuation({
                   onClick={() => scrollToSection('sec-2-resultados')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>2. Resultados dos Modelos</span>
+                  <span>3. Síntese Tripla</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
@@ -341,7 +363,7 @@ export function ModalLaudoValuation({
                   onClick={() => scrollToSection('sec-3-sensibilidade')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>3. Análise de Sensibilidade</span>
+                  <span>4. Sensibilidade FCD</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
                 <button
@@ -349,7 +371,7 @@ export function ModalLaudoValuation({
                   onClick={() => scrollToSection('sec-4-conclusao')}
                   className="text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-800 font-medium transition-colors flex items-center justify-between"
                 >
-                  <span>4. Conclusão e Ressalvas</span>
+                  <span>5. Conclusão &amp; Parecer</span>
                   <span className="text-[10px] text-slate-400">Ir &darr;</span>
                 </button>
               </div>
@@ -374,53 +396,165 @@ export function ModalLaudoValuation({
                 <strong>{selectedAno}</strong>.
               </p>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1.5">
                   <strong className="text-blue-900 block font-bold flex items-center gap-1.5">
                     <TrendingUp className="w-3.5 h-3.5 text-blue-600" />
-                    Modelo A: Fluxo de Caixa Descontado (FCD / Gordon)
+                    Modelo A: FCD (Gordon)
                   </strong>
                   <p className="text-slate-600 text-[11px] leading-relaxed text-justify">
-                    Método amplamente reconhecido no mercado financeiro global. Projeta os fluxos de
-                    caixa livres operacionais da empresa por um período explícito de{' '}
-                    <strong>{anosProjecao} anos</strong> à taxa de crescimento anual de{' '}
-                    <strong>{formatPercent(crescimentoAnualFcf, 1)}</strong>, descontados ao Custo
-                    Médio Ponderado de Capital (WACC de{' '}
-                    <strong>{formatPercent(taxaWacc, 1)}</strong>) e somados ao Valor Terminal
-                    calculado pelo Modelo de Gordon com crescimento perpétuo (g) de{' '}
-                    <strong>{formatPercent(taxaPerpetuidade, 1)}</strong>.
+                    Projeta os fluxos de caixa livres operacionais por {anosProjecao} anos a{' '}
+                    {formatPercent(crescimentoAnualFcf, 1)} a.a., descontados pelo WACC de{' '}
+                    {formatPercent(taxaWacc, 1)} somados à perpetuidade (g ={' '}
+                    {formatPercent(taxaPerpetuidade, 1)}).
                   </p>
-                  <div className="text-[10px] font-mono bg-blue-50 p-1.5 rounded border border-blue-100 text-blue-900">
-                    Base FCF: {nomeBaseFluxo} ({formatCurrency(baseFluxoCaixa)}) · WACC: {taxaWacc}%
-                    · g: {taxaPerpetuidade}%
+                  <div className="text-[10px] font-mono bg-blue-50 p-1 rounded border border-blue-100 text-blue-900">
+                    WACC: {taxaWacc}% · g: {taxaPerpetuidade}%
                   </div>
                 </div>
 
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1.5">
                   <strong className="text-emerald-900 block font-bold flex items-center gap-1.5">
                     <Briefcase className="w-3.5 h-3.5 text-emerald-600" />
-                    Modelo B: Goodwill (Capitalização do Superlucro)
+                    Modelo B: Goodwill
                   </strong>
                   <p className="text-slate-600 text-[11px] leading-relaxed text-justify">
-                    Método contábil-econômico que parte do valor patrimonial contábil (Patrimônio
-                    Líquido de <strong>{formatCurrency(patrimonioLiquido)}</strong>) e soma o
-                    Goodwill decorrente de lucros anormais (superlucro). O superlucro é o excedente
-                    do lucro líquido frente à remuneração mínima esperada do capital próprio (
-                    <strong>{formatPercent(taxaRetornoEsperadoPL, 1)} a.a.</strong>), capitalizado à
-                    taxa de <strong>{formatPercent(taxaCapitalizacaoGoodwill, 1)} a.a.</strong>
+                    Parte do PL ({formatCurrency(patrimonioLiquido)}) e soma o Goodwill do
+                    superlucro (retorno esperado de {taxaRetornoEsperadoPL}% e capitalização de{' '}
+                    {taxaCapitalizacaoGoodwill}%).
                   </p>
-                  <div className="text-[10px] font-mono bg-emerald-50 p-1.5 rounded border border-emerald-100 text-emerald-900">
-                    PL: {formatCurrency(patrimonioLiquido)} · Retorno Esperado:{' '}
-                    {taxaRetornoEsperadoPL}% · Cap: {taxaCapitalizacaoGoodwill}%
+                  <div className="text-[10px] font-mono bg-emerald-50 p-1 rounded border border-emerald-100 text-emerald-900">
+                    PL: {formatCurrency(patrimonioLiquido)}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                  <strong className="text-purple-900 block font-bold flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-purple-600" />
+                    Modelo C: Múltiplos
+                  </strong>
+                  <p className="text-slate-600 text-[11px] leading-relaxed text-justify">
+                    Calcula o valor da firma a partir de múltiplos de mercado praticados em
+                    transações e balizados para o setor de {segmentoRefMultiplos || 'atuação'}{' '}
+                    (EV/EBITDA, P/L, P/VP, EV/Receita, etc.).
+                  </p>
+                  <div className="text-[10px] font-mono bg-purple-50 p-1 rounded border border-purple-100 text-purple-900">
+                    Setor: {segmentoRefMultiplos || 'Serviços'}
                   </div>
                 </div>
               </div>
             </section>
 
             {/* ========================================================= */}
-            {/* 2. RESULTADOS */}
+            {/* SEÇÃO ESPECÍFICA: MÚLTIPLOS DE MERCADO */}
+            {/* ========================================================= */}
+            {resumoMultiplos && (
+              <section id="sec-multiplos" className="space-y-3">
+                <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
+                    2
+                  </span>
+                  Avaliação Detalhada por Múltiplos de Mercado
+                </h2>
+
+                <p className="text-slate-600 text-xs leading-relaxed text-justify">
+                  A tabela a seguir discrimina as métricas financeiras auferidas pela empresa no
+                  exercício de <strong>{selectedAno}</strong>, os múltiplos de mercado adotados com
+                  base no setor de <strong>{segmentoRefMultiplos || 'atuação'}</strong> e os
+                  respectivos valores implícitos resultantes:
+                </p>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 font-bold text-slate-800 border-b border-slate-300">
+                        <th className="py-2 px-3">Múltiplo</th>
+                        <th className="py-2 px-3">Métrica-Base ({selectedAno})</th>
+                        <th className="py-2 px-3 text-right">Valor Base (R$)</th>
+                        <th className="py-2 px-3 text-center">Ref. Mercado (x)</th>
+                        <th className="py-2 px-3 text-center">Peso (%)</th>
+                        <th className="py-2 px-3 text-right">Valor Implícito (R$)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {resumoMultiplos.itens.map((item) => (
+                        <tr
+                          key={item.key}
+                          className={!item.ativo ? 'opacity-40 bg-slate-50' : 'hover:bg-slate-50'}
+                        >
+                          <td className="py-2 px-3 font-bold text-slate-900">
+                            {item.sigla}
+                            <span className="block text-[10px] text-slate-500 font-normal">
+                              {item.nome}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-slate-700">{item.nomeMetricaBase}</td>
+                          <td className="py-2 px-3 text-right font-mono text-slate-800 font-semibold">
+                            {formatCurrency(item.valorMetricaBase)}
+                          </td>
+                          <td className="py-2 px-3 text-center font-bold text-slate-900">
+                            {item.multiploReferencia.toFixed(1)}x
+                          </td>
+                          <td className="py-2 px-3 text-center font-semibold text-slate-700">
+                            {item.ativo ? `${item.pesoPercentual}%` : 'Inativo'}
+                          </td>
+                          <td className="py-2 px-3 text-right font-mono font-bold text-blue-900">
+                            {item.ativo && item.valorImplícitoEmpresa > 0
+                              ? formatCurrency(item.valorImplícitoEmpresa)
+                              : '—'}
+                          </td>
+                        </tr>
+                      ))}
+
+                      <tr className="bg-purple-50/60 font-bold border-t-2 border-purple-200">
+                        <td colSpan={4} className="py-2.5 px-3 text-purple-950 uppercase">
+                          Valuation Consolidado por Múltiplos (Ponderado)
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-purple-900">
+                          {resumoMultiplos.somaPesosAtivos}%
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black text-purple-900 text-sm font-mono">
+                          {formatCurrency(resumoMultiplos.valorPonderado)}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px] pt-1">
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <span className="text-slate-500 block">Média Simples:</span>
+                    <strong className="text-slate-800 font-mono text-xs">
+                      {formatCurrency(resumoMultiplos.valorMedio)}
+                    </strong>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <span className="text-slate-500 block">Mediana dos Múltiplos:</span>
+                    <strong className="text-slate-800 font-mono text-xs">
+                      {formatCurrency(resumoMultiplos.valorMediana)}
+                    </strong>
+                  </div>
+                  <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                    <span className="text-slate-500 block">Faixa Mínimo - Máximo:</span>
+                    <strong className="text-slate-800 font-mono text-xs">
+                      {formatCurrency(resumoMultiplos.valorMinimo)} -{' '}
+                      {formatCurrency(resumoMultiplos.valorMaximo)}
+                    </strong>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {/* ========================================================= */}
+            {/* 3. RESULTADOS E SÍNTESE COMPARATIVA TRIPLA */}
             {/* ========================================================= */}
             <section id="sec-2-resultados" className="space-y-3">
+              <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
+                <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
+                  3
+                </span>
+                Síntese Comparativa das 3 Abordagens de Valuation
+              </h2>
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
                   2
@@ -490,6 +624,32 @@ export function ModalLaudoValuation({
                         </Badge>
                       </td>
                     </tr>
+
+                    {/* Linha Múltiplos de Mercado */}
+                    {resumoMultiplos && (
+                      <tr className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3 font-bold text-purple-900">
+                          Múltiplos de Mercado (Consolidado)
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600">
+                          Setor: {segmentoRefMultiplos || 'Serviços'} (
+                          {resumoMultiplos.itensAtivos.length} múltiplos ativos)
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-extrabold text-purple-700 text-sm">
+                          {formatCurrency(resumoMultiplos.valorPonderado)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-slate-700">
+                          {resumoMultiplos.valorPonderado >= valorEmpresaGoodwill
+                            ? `+${formatCurrency(resumoMultiplos.valorPonderado - valorEmpresaGoodwill)}`
+                            : formatCurrency(resumoMultiplos.valorPonderado - valorEmpresaGoodwill)}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <Badge className="bg-purple-50 text-purple-800 border-purple-200 font-bold text-[10px]">
+                            Mercado / Transações
+                          </Badge>
+                        </td>
+                      </tr>
+                    )}
 
                     {/* Linha Valor Médio Sugerido */}
                     <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
@@ -562,12 +722,12 @@ export function ModalLaudoValuation({
             </section>
 
             {/* ========================================================= */}
-            {/* 3. ANÁLISE DE SENSIBILIDADE NO FCD */}
+            {/* 4. ANÁLISE DE SENSIBILIDADE NO FCD */}
             {/* ========================================================= */}
             <section id="sec-3-sensibilidade" className="space-y-3">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  3
+                  4
                 </span>
                 Análise de Sensibilidade no FCD (WACC vs Taxa de Crescimento g)
               </h2>
@@ -645,17 +805,39 @@ export function ModalLaudoValuation({
             </section>
 
             {/* ========================================================= */}
-            {/* 4. CONCLUSÃO E RESSALVAS */}
+            {/* 5. CONCLUSÃO E RESSALVAS */}
             {/* ========================================================= */}
             <section id="sec-4-conclusao" className="space-y-3">
               <h2 className="text-sm font-bold text-[#0B1F3A] uppercase tracking-wide border-b border-slate-200 pb-1 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-md bg-[#0B1F3A] text-white flex items-center justify-center text-[10px] font-bold">
-                  4
+                  5
                 </span>
-                Conclusão, Diagnóstico e Ressalvas Técnicas
+                Conclusão, Parecer Comparativo dos 3 Métodos e Ressalvas
               </h2>
 
-              {parecerConsolidado && (
+              {/* Parecer dos 3 Métodos */}
+              {comparativoTresMetodos && (
+                <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-200 text-slate-800 space-y-2 text-xs leading-relaxed text-justify">
+                  <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wide text-purple-950">
+                    <Award className="w-4 h-4 text-purple-700" />
+                    Parecer Comparativo do Avaliador: {comparativoTresMetodos.tituloParecer}
+                  </div>
+                  <p className="text-slate-700">{comparativoTresMetodos.textoParecer}</p>
+                  <div className="pt-1.5 border-t border-purple-200/80">
+                    <p className="text-purple-950 font-medium">
+                      <strong>Faixa de Negociação Recomendada:</strong>{' '}
+                      {formatCurrency(comparativoTresMetodos.faixaGeralMin)} a{' '}
+                      {formatCurrency(comparativoTresMetodos.faixaGeralMax)} (Valor Central:{' '}
+                      {formatCurrency(comparativoTresMetodos.valorCentralTriplo)}).
+                    </p>
+                    <p className="text-slate-700 mt-1">
+                      <strong>Estratégia:</strong> {comparativoTresMetodos.recomendacaoNegociacao}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {parecerConsolidado && !comparativoTresMetodos && (
                 <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-slate-800 space-y-2 text-xs leading-relaxed text-justify">
                   <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wide text-blue-950">
                     <Award className="w-4 h-4 text-blue-700" />
@@ -743,7 +925,7 @@ export function ModalLaudoValuation({
 
             {/* Rodapé fixo formal na impressão */}
             <DocumentPrintFooter
-              documentTitle="Laudo Técnico de Valuation (FCD & Goodwill)"
+              documentTitle="Laudo Técnico de Valuation (Múltiplos, FCD & Goodwill)"
               empresaNome={selectedEmpresa?.nome}
               exercicioAno={selectedAno}
             />

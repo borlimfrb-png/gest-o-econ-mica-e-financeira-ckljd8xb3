@@ -1186,3 +1186,36 @@ export interface TributoLancamentoRecord extends RecordModel {
     user?: UserRecord
   }
 }
+
+// Configuração e Registro de Múltiplos de Mercado para Valuation
+export interface ValuationMultiplosRecord {
+  id: string
+  user?: string
+  empresa: string
+  ano: number
+  segmento_referencia?: string
+  // Múltiplos de Referência
+  ev_ebitda_ref?: number
+  pl_ref?: number
+  pvp_ref?: number
+  ev_receita_ref?: number
+  ev_ebit_ref?: number
+  p_ebitda_ref?: number
+  // Pesos
+  ev_ebitda_peso?: number
+  pl_peso?: number
+  pvp_peso?: number
+  ev_receita_peso?: number
+  ev_ebit_peso?: number
+  p_ebitda_peso?: number
+  // Múltiplos ativos
+  multiplos_ativos?: Record<string, boolean>
+  divida_liquida_manual?: number
+  observacoes?: string
+  created: string
+  updated: string
+  expand?: {
+    empresa?: EmpresaRecord
+    user?: UserRecord
+  }
+}

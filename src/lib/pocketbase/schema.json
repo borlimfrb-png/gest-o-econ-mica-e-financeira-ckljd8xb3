@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-17T00:56:41.857Z",
+  "generatedAt": "2026-09-19T11:16:26.612Z",
   "collections": [
     {
       "name": "users",
@@ -4877,6 +4877,154 @@
         "CREATE INDEX idx_trib_lanc_data ON tributos_lancamentos (data)",
         "CREATE INDEX idx_trib_lanc_user ON tributos_lancamentos (user)",
         "CREATE INDEX idx_trib_lanc_empresa_tipo_data ON tributos_lancamentos (empresa, tipo, data)"
+      ]
+    },
+    {
+      "name": "valuation_multiplos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "segmento_referencia",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ev_ebitda_ref",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pl_ref",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pvp_ref",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ev_receita_ref",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ev_ebit_ref",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "p_ebitda_ref",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ev_ebitda_peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pl_peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pvp_peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ev_receita_peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ev_ebit_peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "p_ebitda_peso",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "multiplos_ativos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "divida_liquida_manual",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_val_multiplos_empresa_ano ON valuation_multiplos (empresa, ano)",
+        "CREATE INDEX idx_val_multiplos_empresa ON valuation_multiplos (empresa)",
+        "CREATE INDEX idx_val_multiplos_ano ON valuation_multiplos (ano)"
       ]
     }
   ]
