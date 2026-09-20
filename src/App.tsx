@@ -12,6 +12,7 @@ import { lazy, Suspense } from 'react'
 
 import Index from './pages/Index'
 import Layout from './components/Layout'
+import WelcomeSplash, { hasSeenSplashThisSession } from './pages/WelcomeSplash'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const DashboardBi = lazy(() => import('./pages/DashboardBi'))
@@ -125,7 +126,31 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/" replace />
   }
 
+  // Se o usuário autenticado acabou de acessar a aplicação ou recarregou e ainda não viu a splash inicial nesta sessão, redireciona para a tela inicial com logomarca
+  if (!hasSeenSplashThisSession()) {
+    return <Navigate to="/splash" replace />
+  }
+
   return <>{children}</>
+}
+
+// Componente para rota da tela inicial (Splash)
+function SplashRoute() {
+  const { isAuthenticated, isLoading } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#0B1F3A] flex items-center justify-center">
+        <div className="w-8 h-8 border-3 border-blue-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace />
+  }
+
+  return <WelcomeSplash />
 }
 
 const App = () => (
@@ -146,6 +171,9 @@ const App = () => (
               <Routes>
                 {/* Rota pública de login/cadastro */}
                 <Route path="/" element={<Index />} />
+
+                {/* Tela Inicial (Splash/Welcome com Logomarca da Consultoria) pós-autenticação */}
+                <Route path="/splash" element={<SplashRoute />} />
 
                 {/* Rotas autenticadas dentro do Layout Corporativo */}
                 <Route

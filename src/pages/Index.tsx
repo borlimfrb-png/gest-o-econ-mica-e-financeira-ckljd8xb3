@@ -84,7 +84,7 @@ export default function Index() {
 
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate('/dashboard', { replace: true })
+      navigate('/splash', { replace: true })
     }
   }, [isAuthenticated, isLoading, navigate])
 
@@ -131,7 +131,7 @@ export default function Index() {
         title: 'Bem-vindo de volta!',
         description: 'Autenticação realizada com sucesso.',
       })
-      navigate('/dashboard')
+      navigate('/splash')
     } catch (err: any) {
       console.error('Login error:', err)
       setGeneralError(
@@ -154,7 +154,7 @@ export default function Index() {
         title: 'Conta criada com sucesso!',
         description: 'Você já está conectado ao sistema.',
       })
-      navigate('/dashboard')
+      navigate('/splash')
     } catch (err: any) {
       console.error('Signup error:', err)
       setGeneralError(

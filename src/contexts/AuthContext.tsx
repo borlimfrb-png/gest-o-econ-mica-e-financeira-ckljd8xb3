@@ -129,6 +129,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const logout = () => {
+    try {
+      sessionStorage.removeItem('ge_splash_visto_sessao')
+    } catch (_) {
+      // ignore
+    }
     pb.authStore.clear()
     setUser(null)
     setToken(null)
