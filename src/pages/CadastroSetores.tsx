@@ -163,11 +163,8 @@ export default function CadastroSetores() {
   }, [carregarDados])
 
   // Realtime updates na coleção 'setores'
-  useRealtime({
-    collection: 'setores',
-    onRecordChange: () => {
-      carregarDados()
-    },
+  useRealtime<SetorRecord>('setores', () => {
+    carregarDados()
   })
 
   // Mapeamento de contagem de empresas por setor

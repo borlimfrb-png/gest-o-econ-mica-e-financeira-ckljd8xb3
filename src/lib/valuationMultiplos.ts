@@ -4,6 +4,7 @@ import { calcularBalanco, calcularDre } from '@/lib/financeCalculations'
 export type MultiploKey = 'ev_ebitda' | 'pl' | 'pvp' | 'ev_receita' | 'ev_ebit' | 'p_ebitda'
 
 export interface MultiploConfigSetor {
+  setor?: string
   ev_ebitda: number
   pl: number
   pvp: number

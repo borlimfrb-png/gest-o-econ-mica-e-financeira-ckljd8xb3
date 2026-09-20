@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Building2,
@@ -456,7 +456,7 @@ export default function SetoresMercado() {
             <Select
               value={setorSelecionado}
               onValueChange={(val) => {
-                setSetorSelecionado(val as SetorEmpresa)
+                setSetorSelecionado(val)
                 if (tabAtiva === 'visao_geral') setTabAtiva('detalhes')
               }}
             >
@@ -1334,7 +1334,7 @@ export default function SetoresMercado() {
                       : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
                   }`}
                   onClick={() => {
-                    setSetorSelecionado(item.setor as SetorEmpresa)
+                    setSetorSelecionado(item.setor)
                     setTabAtiva('detalhes')
                   }}
                 >

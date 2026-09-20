@@ -53,7 +53,7 @@ import type {
   MultiploKey,
   ResumoConsolidadoMultiplos,
 } from '@/lib/valuationMultiplos'
-import { MULTIPLOS_SETORIAIS_PADRAO } from '@/lib/valuationMultiplos'
+import { MULTIPLOS_SETORIAIS_PADRAO, registrarMultiplosDinamicos } from '@/lib/valuationMultiplos'
 import { setoresService } from '@/services/setoresService'
 import { useRealtime } from '@/hooks/use-realtime'
 import type { SetorRecord } from '@/types/finance'
@@ -100,16 +100,32 @@ export const AbaMultiplosMercado: React.FC<AbaMultiplosMercadoProps> = ({
   const [setoresDb, setSetoresDb] = React.useState<SetorRecord[]>([])
 
   React.useEffect(() => {
-    setoresService.getAtivos().then(setSetoresDb).catch(console.error)
+    setoresService
+      .getAtivos()
+      .then((list) => {
+        setSetoresDb(list)
+        if (list.length > 0) {
+          registrarMultiplosDinamicos(list)
+        }
+      })
+      .catch(console.error)
   }, [])
 
   useRealtime<SetorRecord>('setores', () => {
-    setoresService.getAtivos().then(setSetoresDb).catch(console.error)
+    setoresService
+      .getAtivos()
+      .then((list) => {
+        setSetoresDb(list)
+        if (list.length > 0) {
+          registrarMultiplosDinamicos(list)
+        }
+      })
+      .catch(console.error)
   })
 
   const setoresOpcoes = React.useMemo(() => {
     if (setoresDb.length > 0) {
-      return setoresDb.map((s) => s.nome)
+      return setoresDb.filter((s) => s.ativo).map((s) => s.nome)
     }
     return SETORES_DISPONIVEIS
   }, [setoresDb])

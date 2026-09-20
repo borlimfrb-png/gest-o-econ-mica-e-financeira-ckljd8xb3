@@ -92,6 +92,7 @@ import type {
   ValuationMultiplosRecord,
   ValuationHistoricoRecord,
   HistoricoValuationPontoAno,
+  SetorRecord,
 } from '@/types/finance'
 
 // Função auxiliar de cálculo de Valuation para um ano específico
@@ -266,11 +267,13 @@ export default function IndicadoresValuation() {
   // Carregar dados das coleções balancos, dre e setores dinâmicos
   const loadData = async () => {
     try {
-      // Pré-carrega setores ativos da base para alimentar o cache de múltiplos
+      // Pré-carrega setores ativos da base para alimentar o cache de múltiplos e benchmarks
       const setoresList = await setoresService.getAll()
       if (setoresList.length > 0) {
         const { registrarMultiplosDinamicos } = await import('@/lib/valuationMultiplos')
+        const { registrarBenchmarksDinamicos } = await import('@/lib/benchmarks')
         registrarMultiplosDinamicos(setoresList)
+        registrarBenchmarksDinamicos(setoresList)
       }
     } catch (e) {
       console.warn('Erro ao pré-carregar setores dinâmicos:', e)
@@ -311,6 +314,10 @@ export default function IndicadoresValuation() {
   })
   useRealtime<DreRecord>('dre', () => {
     loadData()
+  })
+  useRealtime<SetorRecord>('setores', () => {
+    loadData()
+    carregarMultiplosDb()
   })
 
   // Demonstrações do ano selecionado

@@ -249,6 +249,7 @@ export default function Empresas() {
 
   useRealtime<SetorRecord>('setores', () => {
     setoresService.getAtivos().then(setListaSetores).catch(console.error)
+    loadData()
   })
 
   const openNewModal = () => {
