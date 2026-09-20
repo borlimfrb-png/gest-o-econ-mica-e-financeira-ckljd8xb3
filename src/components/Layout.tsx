@@ -407,7 +407,7 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => setCommandPaletteOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-slate-100 hover:text-white text-xs border border-white/20 transition-all shadow-xs cursor-pointer group"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-blue-600/35 hover:border-blue-400/50 hover:text-white text-slate-100 text-xs border border-white/20 transition-all duration-150 shadow-xs cursor-pointer group"
                 title="Pressione Ctrl+K para buscar módulos e relatórios"
               >
                 <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
@@ -744,13 +744,13 @@ export default function Layout() {
                     setMobileDrawerOpen(false)
                     setCommandPaletteOpen(true)
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-slate-200 text-xs border border-white/15 transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/12 hover:bg-blue-600/35 hover:border-blue-400/50 hover:text-white text-slate-100 text-xs border border-white/20 transition-all duration-150 cursor-pointer shadow-xs group"
                 >
                   <div className="flex items-center gap-2">
-                    <Search className="w-4 h-4 text-blue-300" />
-                    <span>Buscar módulo...</span>
+                    <Search className="w-4 h-4 text-blue-300 group-hover:text-white transition-colors" />
+                    <span className="font-medium">Buscar módulo ou comando...</span>
                   </div>
-                  <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-black/30 rounded border border-white/10 text-slate-300">
+                  <kbd className="px-1.5 py-0.5 text-[10px] font-mono bg-black/40 rounded border border-white/20 text-slate-200 group-hover:text-white font-semibold">
                     Ctrl+K
                   </kbd>
                 </button>
