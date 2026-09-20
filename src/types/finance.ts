@@ -304,7 +304,48 @@ export type EntidadeAuditoriaCadastro =
   | 'users'
   | 'nfse'
   | 'nfse_tomadores'
+  | 'certificado_digital'
+  | 'setores'
 export type AcaoAuditoriaCadastro = 'criacao' | 'edicao' | 'exclusao'
+
+export interface FaixasIndicadoresSetor {
+  margemLiquida?: number
+  margemBruta?: number
+  margemEbitda?: number
+  margemOperacional?: number
+  roe?: number
+  roa?: number
+  liquidezCorrente?: number
+  liquidezSeca?: number
+  liquidezImediata?: number
+  liquidezGeral?: number
+  endividamentoGeral?: number
+  composicaoEndividamento?: number
+  giroAtivo?: number
+  coberturaJuros?: number
+  pme?: number
+  pmr?: number
+  pmp?: number
+  roic?: number
+  [key: string]: number | undefined
+}
+
+export interface SetorRecord extends RecordModel {
+  nome: string
+  descricao?: string
+  ativo: boolean
+  ordem?: number
+  padrao_sistema?: boolean
+  // Múltiplos de mercado
+  ev_ebitda: number
+  pl: number
+  pvp: number
+  ev_receita: number
+  ev_ebit: number
+  p_ebitda: number
+  // Faixas e indicadores setoriais
+  faixas_indicadores?: FaixasIndicadoresSetor | null
+}
 
 export interface AuditoriaCadastroRecord extends RecordModel {
   empresa?: string

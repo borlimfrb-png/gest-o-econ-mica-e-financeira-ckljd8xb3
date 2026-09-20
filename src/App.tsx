@@ -53,6 +53,7 @@ const Importacao = lazy(() => import('./pages/Importacao'))
 const AnaliseTributaria = lazy(() => import('./pages/AnaliseTributaria'))
 const BalancedScorecard = lazy(() => import('./pages/BalancedScorecard'))
 const SetoresMercado = lazy(() => import('./pages/SetoresMercado'))
+const CadastroSetores = lazy(() => import('./pages/CadastroSetores'))
 const Configuracoes = lazy(() => import('./pages/Configuracoes'))
 const GruposEmpresariais = lazy(() => import('./pages/GruposEmpresariais'))
 const DashboardEmpresa = lazy(() => import('./pages/DashboardEmpresa'))
@@ -351,6 +352,18 @@ const App = () => (
                         <SetoresMercado />
                       </ModuloRoute>
                     }
+                  />
+                  <Route
+                    path="/planejamento/setores/cadastro"
+                    element={
+                      <ModuloRoute modulo="planejamento">
+                        <CadastroSetores />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/cadastro/setores"
+                    element={<Navigate to="/planejamento/setores/cadastro" replace />}
                   />
                   <Route
                     path="/planejamento"

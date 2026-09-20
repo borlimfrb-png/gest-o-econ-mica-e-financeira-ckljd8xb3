@@ -9,7 +9,8 @@ import type {
   PorteEmpresa,
   UfEmpresa,
 } from '@/types/finance'
-import { SETORES_PADRAO } from '@/types/finance'
+import { SETORES_PADRAO, type SetorRecord } from '@/types/finance'
+import { setoresService } from '@/services/setoresService'
 import {
   formatCnpj,
   cleanCnpj,
@@ -203,6 +204,7 @@ export default function Empresas() {
 
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
+  const [listaSetores, setListaSetores] = useState<SetorRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [searchFilter, setSearchFilter] = useState('')
 
@@ -221,12 +223,14 @@ export default function Empresas() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const [empList, bList] = await Promise.all([
+      const [empList, bList, setList] = await Promise.all([
         empresasService.getAll(),
         balancosService.getAll(),
+        setoresService.getAtivos(),
       ])
       setEmpresas(empList)
       setBalancos(bList)
+      setListaSetores(setList)
     } catch (err) {
       console.error('Erro ao carregar empresas:', err)
     } finally {
@@ -241,6 +245,10 @@ export default function Empresas() {
   useRealtime<EmpresaRecord>('empresas', () => {
     loadData()
     reloadEmpresas()
+  })
+
+  useRealtime<SetorRecord>('setores', () => {
+    setoresService.getAtivos().then(setListaSetores).catch(console.error)
   })
 
   const openNewModal = () => {
@@ -819,11 +827,26 @@ export default function Empresas() {
                         <SelectItem value="NONE" className="text-xs text-slate-400">
                           (Nenhum / Definir depois)
                         </SelectItem>
-                        {SETORES_PADRAO.map((set) => (
-                          <SelectItem key={set} value={set} className="text-xs">
-                            {set}
-                          </SelectItem>
-                        ))}
+                        {/* Opções dinâmicas da coleção de setores com fallback para SETORES_PADRAO */}
+                        {listaSetores.length > 0
+                          ? listaSetores.map((s) => (
+                              <SelectItem key={s.id} value={s.nome} className="text-xs">
+                                {s.nome}
+                              </SelectItem>
+                            ))
+                          : SETORES_PADRAO.map((set) => (
+                              <SelectItem key={set} value={set} className="text-xs">
+                                {set}
+                              </SelectItem>
+                            ))}
+                        {/* Se o valor atual não estiver na lista de ativos, mantém visível para não perder */}
+                        {formData.setor &&
+                          !listaSetores.some((s) => s.nome === formData.setor) &&
+                          !SETORES_PADRAO.includes(formData.setor as any) && (
+                            <SelectItem value={formData.setor} className="text-xs">
+                              {formData.setor} (Personalizado)
+                            </SelectItem>
+                          )}
                       </SelectContent>
                     </Select>
                     <p className="text-[10px] text-slate-500">

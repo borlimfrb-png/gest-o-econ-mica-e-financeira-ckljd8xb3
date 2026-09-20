@@ -54,6 +54,9 @@ import type {
   ResumoConsolidadoMultiplos,
 } from '@/lib/valuationMultiplos'
 import { MULTIPLOS_SETORIAIS_PADRAO } from '@/lib/valuationMultiplos'
+import { setoresService } from '@/services/setoresService'
+import { useRealtime } from '@/hooks/use-realtime'
+import type { SetorRecord } from '@/types/finance'
 
 export interface AbaMultiplosMercadoProps {
   resumoMultiplos: ResumoConsolidadoMultiplos
@@ -94,6 +97,22 @@ export const AbaMultiplosMercado: React.FC<AbaMultiplosMercadoProps> = ({
   empresaNome,
   ano,
 }) => {
+  const [setoresDb, setSetoresDb] = React.useState<SetorRecord[]>([])
+
+  React.useEffect(() => {
+    setoresService.getAtivos().then(setSetoresDb).catch(console.error)
+  }, [])
+
+  useRealtime<SetorRecord>('setores', () => {
+    setoresService.getAtivos().then(setSetoresDb).catch(console.error)
+  })
+
+  const setoresOpcoes = React.useMemo(() => {
+    if (setoresDb.length > 0) {
+      return setoresDb.map((s) => s.nome)
+    }
+    return SETORES_DISPONIVEIS
+  }, [setoresDb])
   const {
     itens,
     itensAtivos,
@@ -157,12 +176,17 @@ export const AbaMultiplosMercado: React.FC<AbaMultiplosMercadoProps> = ({
                 <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-bold text-slate-800 p-0 focus:ring-0 w-[120px]">
                   <SelectValue placeholder="Setor" />
                 </SelectTrigger>
-                <SelectContent>
-                  {SETORES_DISPONIVEIS.map((setor) => (
+                <SelectContent className="max-h-80">
+                  {setoresOpcoes.map((setor) => (
                     <SelectItem key={setor} value={setor} className="text-xs">
                       {setor}
                     </SelectItem>
                   ))}
+                  {segmentoSelecionado && !setoresOpcoes.includes(segmentoSelecionado) && (
+                    <SelectItem value={segmentoSelecionado} className="text-xs">
+                      {segmentoSelecionado}
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </div>

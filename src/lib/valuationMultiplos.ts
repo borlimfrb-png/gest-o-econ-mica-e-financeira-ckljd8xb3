@@ -96,8 +96,47 @@ export const MULTIPLOS_SETORIAIS_PADRAO: Record<string, MultiploConfigSetor> = {
   },
 }
 
+// Cache local em memória de múltiplos carregados dinamicamente da coleção `setores`
+let cacheMultiplosDinamicos: Record<string, MultiploConfigSetor> = {}
+
+export function registrarMultiplosDinamicos(
+  lista: Array<{
+    nome: string
+    ev_ebitda: number
+    pl: number
+    pvp: number
+    ev_receita: number
+    ev_ebit: number
+    p_ebitda: number
+  }>,
+) {
+  if (!Array.isArray(lista)) return
+  for (const item of lista) {
+    if (!item?.nome) continue
+    cacheMultiplosDinamicos[item.nome.trim()] = {
+      setor: item.nome.trim(),
+      ev_ebitda: Number(item.ev_ebitda) || 6.0,
+      pl: Number(item.pl) || 9.5,
+      pvp: Number(item.pvp) || 1.7,
+      ev_receita: Number(item.ev_receita) || 1.0,
+      ev_ebit: Number(item.ev_ebit) || 8.0,
+      p_ebitda: Number(item.p_ebitda) || 5.0,
+    }
+  }
+}
+
 export function obterMultiplosPadraoSetor(segmento?: string | null): MultiploConfigSetor {
   if (!segmento) return MULTIPLOS_SETORIAIS_PADRAO['Serviços']
+  const key = segmento.trim()
+  if (cacheMultiplosDinamicos[key]) {
+    return cacheMultiplosDinamicos[key]
+  }
+  // Procura case-insensitive no cache
+  const lowerKey = key.toLowerCase()
+  for (const [k, v] of Object.entries(cacheMultiplosDinamicos)) {
+    if (k.toLowerCase() === lowerKey) return v
+  }
+  // Procura nos padrões estáticos
   return MULTIPLOS_SETORIAIS_PADRAO[segmento] || MULTIPLOS_SETORIAIS_PADRAO['Outros']
 }
 

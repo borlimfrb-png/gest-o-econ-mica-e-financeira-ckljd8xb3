@@ -87,6 +87,7 @@ import {
 } from '@/lib/valuationMultiplos'
 import { valuationMultiplosService } from '@/services/valuationMultiplosService'
 import { valuationHistoricoService } from '@/services/valuationHistoricoService'
+import { setoresService } from '@/services/setoresService'
 import type {
   ValuationMultiplosRecord,
   ValuationHistoricoRecord,
@@ -262,8 +263,19 @@ export default function IndicadoresValuation() {
   const [historicoDb, setHistoricoDb] = useState<ValuationHistoricoRecord[]>([])
   const [salvandoSnapshotHistorico, setSalvandoSnapshotHistorico] = useState<boolean>(false)
 
-  // Carregar dados das coleções balancos e dre
+  // Carregar dados das coleções balancos, dre e setores dinâmicos
   const loadData = async () => {
+    try {
+      // Pré-carrega setores ativos da base para alimentar o cache de múltiplos
+      const setoresList = await setoresService.getAll()
+      if (setoresList.length > 0) {
+        const { registrarMultiplosDinamicos } = await import('@/lib/valuationMultiplos')
+        registrarMultiplosDinamicos(setoresList)
+      }
+    } catch (e) {
+      console.warn('Erro ao pré-carregar setores dinâmicos:', e)
+    }
+
     if (!selectedEmpresaId) {
       setBalancos([])
       setDres([])

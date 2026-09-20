@@ -564,12 +564,68 @@ export const BENCHMARKS_SETORIAIS: Record<string, BenchmarkSetorValores> = {
   },
 }
 
+// Cache local em memória de benchmarks setoriais dinâmicos
+let cacheBenchmarksDinamicos: Record<string, BenchmarkSetorValores> = {}
+
+export function registrarBenchmarksDinamicos(
+  lista: Array<{
+    nome: string
+    descricao?: string
+    faixas_indicadores?: Record<string, any> | null
+  }>,
+) {
+  if (!Array.isArray(lista)) return
+  for (const item of lista) {
+    if (!item?.nome) continue
+    const faixas = item.faixas_indicadores || {}
+    const base = BENCHMARKS_SETORIAIS[item.nome.trim()] || BENCHMARKS_SETORIAIS['Outros']
+    cacheBenchmarksDinamicos[item.nome.trim()] = {
+      ...base,
+      setor: item.nome.trim(),
+      descricao: item.descricao || base.descricao,
+      margemLiquida: Number(faixas.margemLiquida ?? base.margemLiquida),
+      margemBruta: Number(faixas.margemBruta ?? base.margemBruta),
+      margemEbitda: Number(faixas.margemEbitda ?? base.margemEbitda),
+      margemOperacional: Number(faixas.margemOperacional ?? base.margemOperacional),
+      roe: Number(faixas.roe ?? base.roe),
+      roa: Number(faixas.roa ?? base.roa),
+      liquidezCorrente: Number(faixas.liquidezCorrente ?? base.liquidezCorrente),
+      liquidezSeca: Number(faixas.liquidezSeca ?? base.liquidezSeca),
+      liquidezImediata: Number(faixas.liquidezImediata ?? base.liquidezImediata),
+      liquidezGeral: Number(faixas.liquidezGeral ?? base.liquidezGeral),
+      endividamentoGeral: Number(faixas.endividamentoGeral ?? base.endividamentoGeral),
+      composicaoEndividamento: Number(
+        faixas.composicaoEndividamento ?? base.composicaoEndividamento,
+      ),
+      giroAtivo: Number(faixas.giroAtivo ?? base.giroAtivo),
+      coberturaJuros: Number(faixas.coberturaJuros ?? base.coberturaJuros),
+      pmr: Number(faixas.pmr ?? base.pmr),
+      pmp: Number(faixas.pmp ?? base.pmp),
+      pme: Number(faixas.pme ?? base.pme),
+    }
+  }
+}
+
 export function getBenchmarkParaSegmento(
   segmento?: string | null,
   customMap?: Record<string, BenchmarkSetorValores> | null,
 ): BenchmarkSetorValores {
   const map = customMap || BENCHMARKS_SETORIAIS
   if (!segmento) return map['Serviços'] || BENCHMARKS_SETORIAIS['Serviços']
+
+  const key = segmento.trim()
+  if (customMap && customMap[key]) return customMap[key]
+
+  if (cacheBenchmarksDinamicos[key]) {
+    return cacheBenchmarksDinamicos[key]
+  }
+
+  // Busca case-insensitive no cache
+  const lowerKey = key.toLowerCase()
+  for (const [k, v] of Object.entries(cacheBenchmarksDinamicos)) {
+    if (k.toLowerCase() === lowerKey) return v
+  }
+
   return map[segmento] || map['Outros'] || BENCHMARKS_SETORIAIS['Outros']
 }
 

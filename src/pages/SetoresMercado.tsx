@@ -49,19 +49,23 @@ import {
 } from 'recharts'
 import { useFilter } from '@/contexts/FilterContext'
 import { empresasService, balancosService, dreService } from '@/services/financeService'
-import type { EmpresaRecord, BalancoRecord, DreRecord, SetorEmpresa } from '@/types/finance'
+import type { EmpresaRecord, BalancoRecord, DreRecord, SetorRecord } from '@/types/finance'
 import { SETORES_PADRAO } from '@/types/finance'
 import {
   BENCHMARKS_SETORIAIS,
   extrairIndicadoresCompletos,
   type BenchmarkSetorValores,
   type IndicadoresConsolidadosEmpresa,
+  registrarBenchmarksDinamicos,
 } from '@/lib/benchmarks'
 import {
   MULTIPLOS_SETORIAIS_PADRAO,
   type MultiploConfigSetor,
   calcularMultiplosMercado,
+  registrarMultiplosDinamicos,
 } from '@/lib/valuationMultiplos'
+import { setoresService } from '@/services/setoresService'
+import { useRealtime } from '@/hooks/use-realtime'
 import { formatBrlMil, formatPercent } from '@/lib/financeCalculations'
 
 interface ResumoEmpresaSetor {
@@ -79,39 +83,104 @@ export default function SetoresMercado() {
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
+  const [setoresDb, setSetoresDb] = useState<SetorRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   // Setor ativo selecionado (default Serviços)
-  const [setorSelecionado, setSetorSelecionado] = useState<SetorEmpresa>('Serviços')
+  const [setorSelecionado, setSetorSelecionado] = useState<string>('Serviços')
   const [filtroPesquisa, setFiltroPesquisa] = useState('')
   const [tabAtiva, setTabAtiva] = useState<'visao_geral' | 'detalhes' | 'comparativo'>('detalhes')
 
-  useEffect(() => {
-    async function carregarDados() {
-      try {
-        setLoading(true)
-        const [empList, bList, dList] = await Promise.all([
-          empresasService.getAll(),
-          balancosService.getAll(),
-          dreService.getAll(),
-        ])
-        setEmpresas(empList)
-        setBalancos(bList)
-        setDres(dList)
-      } catch (err) {
-        console.error('Erro ao carregar dados setoriais:', err)
-      } finally {
-        setLoading(false)
+  const carregarDados = useCallback(async () => {
+    try {
+      setLoading(true)
+      const [empList, bList, dList, sList] = await Promise.all([
+        empresasService.getAll(),
+        balancosService.getAll(),
+        dreService.getAll(),
+        setoresService.getAll(),
+      ])
+      setEmpresas(empList)
+      setBalancos(bList)
+      setDres(dList)
+      setSetoresDb(sList)
+
+      // Registra no cache global de múltiplos e benchmarks
+      if (sList.length > 0) {
+        registrarMultiplosDinamicos(sList)
+        registrarBenchmarksDinamicos(sList)
       }
+    } catch (err) {
+      console.error('Erro ao carregar dados setoriais:', err)
+    } finally {
+      setLoading(false)
     }
-    carregarDados()
   }, [])
 
+  useEffect(() => {
+    carregarDados()
+  }, [carregarDados])
+
+  // Realtime updates
+  useRealtime<SetorRecord>('setores', () => {
+    carregarDados()
+  })
+
+  // Lista unificada de setores disponíveis (do banco, ou fallback para SETORES_PADRAO)
+  const listaNomesSetores = useMemo(() => {
+    if (setoresDb.length > 0) {
+      return setoresDb.filter((s) => s.ativo).map((s) => s.nome)
+    }
+    return SETORES_PADRAO
+  }, [setoresDb])
+
   // Informações de mercado do setor selecionado
-  const benchmarkSetor: BenchmarkSetorValores =
-    BENCHMARKS_SETORIAIS[setorSelecionado] || BENCHMARKS_SETORIAIS['Outros']
-  const multiplosSetor: MultiploConfigSetor =
-    MULTIPLOS_SETORIAIS_PADRAO[setorSelecionado] || MULTIPLOS_SETORIAIS_PADRAO['Outros']
+  const setorRecordAtual = useMemo(() => {
+    return setoresDb.find(
+      (s) => s.nome.trim().toLowerCase() === setorSelecionado.trim().toLowerCase(),
+    )
+  }, [setoresDb, setorSelecionado])
+
+  const benchmarkSetor: BenchmarkSetorValores = useMemo(() => {
+    if (setorRecordAtual) {
+      const faixas = setorRecordAtual.faixas_indicadores || {}
+      const fallback = BENCHMARKS_SETORIAIS[setorSelecionado] || BENCHMARKS_SETORIAIS['Outros']
+      return {
+        ...fallback,
+        setor: setorRecordAtual.nome,
+        descricao: setorRecordAtual.descricao || fallback.descricao,
+        margemLiquida: Number(faixas.margemLiquida ?? fallback.margemLiquida),
+        margemBruta: Number(faixas.margemBruta ?? fallback.margemBruta),
+        margemEbitda: Number(faixas.margemEbitda ?? fallback.margemEbitda),
+        roe: Number(faixas.roe ?? fallback.roe),
+        roa: Number(faixas.roa ?? fallback.roa),
+        liquidezCorrente: Number(faixas.liquidezCorrente ?? fallback.liquidezCorrente),
+        liquidezSeca: Number(faixas.liquidezSeca ?? fallback.liquidezSeca),
+        endividamentoGeral: Number(faixas.endividamentoGeral ?? fallback.endividamentoGeral),
+        giroAtivo: Number(faixas.giroAtivo ?? fallback.giroAtivo),
+        coberturaJuros: Number(faixas.coberturaJuros ?? fallback.coberturaJuros),
+        pmr: Number(faixas.pmr ?? fallback.pmr),
+        pmp: Number(faixas.pmp ?? fallback.pmp),
+        pme: Number(faixas.pme ?? fallback.pme),
+      }
+    }
+    return BENCHMARKS_SETORIAIS[setorSelecionado] || BENCHMARKS_SETORIAIS['Outros']
+  }, [setorRecordAtual, setorSelecionado])
+
+  const multiplosSetor: MultiploConfigSetor = useMemo(() => {
+    if (setorRecordAtual) {
+      return {
+        setor: setorRecordAtual.nome,
+        ev_ebitda: setorRecordAtual.ev_ebitda ?? 6.0,
+        pl: setorRecordAtual.pl ?? 9.5,
+        pvp: setorRecordAtual.pvp ?? 1.7,
+        ev_receita: setorRecordAtual.ev_receita ?? 1.0,
+        ev_ebit: setorRecordAtual.ev_ebit ?? 8.0,
+        p_ebitda: setorRecordAtual.p_ebitda ?? 5.0,
+      }
+    }
+    return MULTIPLOS_SETORIAIS_PADRAO[setorSelecionado] || MULTIPLOS_SETORIAIS_PADRAO['Outros']
+  }, [setorRecordAtual, setorSelecionado])
 
   // Empresas que pertencem ao setor selecionado
   const empresasDoSetor = useMemo(() => {
@@ -296,6 +365,50 @@ export default function SetoresMercado() {
 
   // Lista com contagem de empresas por setor para a visão geral
   const setoresComEstatisticas = useMemo(() => {
+    // Se temos setores cadastrados na base, usamos eles; caso contrário fallback para os 10 padrão
+    if (setoresDb.length > 0) {
+      return setoresDb
+        .map((rec) => {
+          const faixas = rec.faixas_indicadores || {}
+          const benchFallback = BENCHMARKS_SETORIAIS[rec.nome] || BENCHMARKS_SETORIAIS['Outros']
+          const bench: BenchmarkSetorValores = {
+            ...benchFallback,
+            setor: rec.nome,
+            descricao: rec.descricao || benchFallback.descricao,
+            margemLiquida: Number(faixas.margemLiquida ?? benchFallback.margemLiquida),
+            margemBruta: Number(faixas.margemBruta ?? benchFallback.margemBruta),
+            margemEbitda: Number(faixas.margemEbitda ?? benchFallback.margemEbitda),
+            roe: Number(faixas.roe ?? benchFallback.roe),
+            roa: Number(faixas.roa ?? benchFallback.roa),
+            liquidezCorrente: Number(faixas.liquidezCorrente ?? benchFallback.liquidezCorrente),
+          }
+          const mult: MultiploConfigSetor = {
+            setor: rec.nome,
+            ev_ebitda: rec.ev_ebitda ?? 6.0,
+            pl: rec.pl ?? 9.5,
+            pvp: rec.pvp ?? 1.7,
+            ev_receita: rec.ev_receita ?? 1.0,
+            ev_ebit: rec.ev_ebit ?? 8.0,
+            p_ebitda: rec.p_ebitda ?? 5.0,
+          }
+          const count = empresas.filter(
+            (e) => (e.setor || '').trim().toLowerCase() === rec.nome.toLowerCase(),
+          ).length
+          return {
+            setor: rec.nome,
+            ativo: rec.ativo,
+            bench,
+            mult,
+            count,
+          }
+        })
+        .filter((s) => {
+          if (!filtroPesquisa.trim()) return true
+          const q = filtroPesquisa.toLowerCase()
+          return s.setor.toLowerCase().includes(q) || s.bench.descricao.toLowerCase().includes(q)
+        })
+    }
+
     return SETORES_PADRAO.map((setor) => {
       const bench = BENCHMARKS_SETORIAIS[setor] || BENCHMARKS_SETORIAIS['Outros']
       const mult = MULTIPLOS_SETORIAIS_PADRAO[setor] || MULTIPLOS_SETORIAIS_PADRAO['Outros']
@@ -304,6 +417,7 @@ export default function SetoresMercado() {
       ).length
       return {
         setor,
+        ativo: true,
         bench,
         mult,
         count,
@@ -313,7 +427,7 @@ export default function SetoresMercado() {
       const q = filtroPesquisa.toLowerCase()
       return s.setor.toLowerCase().includes(q) || s.bench.descricao.toLowerCase().includes(q)
     })
-  }, [empresas, filtroPesquisa])
+  }, [setoresDb, empresas, filtroPesquisa])
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -349,8 +463,8 @@ export default function SetoresMercado() {
               <SelectTrigger className="h-8 text-xs font-bold w-44 bg-slate-50 border-slate-200 focus:bg-white">
                 <SelectValue placeholder="Escolha o setor" />
               </SelectTrigger>
-              <SelectContent>
-                {SETORES_PADRAO.map((s) => {
+              <SelectContent className="max-h-80">
+                {listaNomesSetores.map((s) => {
                   const qtd = empresas.filter(
                     (e) => (e.setor || '').trim().toLowerCase() === s.toLowerCase(),
                   ).length
@@ -367,12 +481,11 @@ export default function SetoresMercado() {
           <Button
             asChild
             size="sm"
-            variant="outline"
-            className="h-9 text-xs border-slate-200 hover:bg-slate-50 text-slate-700"
+            className="h-9 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold shadow-xs"
           >
-            <Link to="/empresas">
-              <Building2 className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-              Cadastrar Setor
+            <Link to="/planejamento/setores/cadastro">
+              <Layers className="w-3.5 h-3.5 mr-1.5" />
+              Cadastrar / Gerenciar Setores
             </Link>
           </Button>
         </div>
@@ -443,7 +556,7 @@ export default function SetoresMercado() {
             className="text-xs font-bold gap-1.5 px-4 py-2 rounded-lg data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-xs"
           >
             <Layers className="w-3.5 h-3.5 text-slate-600" />
-            Visão Geral de Todos os 10 Setores
+            Visão Geral de Todos os Setores ({setoresComEstatisticas.length})
           </TabsTrigger>
         </TabsList>
 
@@ -1192,8 +1305,8 @@ export default function SetoresMercado() {
                 Matriz Completa de Setores de Mercado
               </h3>
               <p className="text-xs text-slate-500">
-                Comparativo de múltiplos e parâmetros macroeconômicos entre todos os 10 setores
-                padronizados no sistema
+                Comparativo de múltiplos e parâmetros macroeconômicos entre todos os{' '}
+                {setoresComEstatisticas.length} setores cadastrados no sistema
               </p>
             </div>
 

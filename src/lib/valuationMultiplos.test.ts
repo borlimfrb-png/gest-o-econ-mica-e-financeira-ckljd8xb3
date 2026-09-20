@@ -20,6 +20,24 @@ describe('Valuation por Múltiplos de Mercado', () => {
     expect(padraoDesconhecido.ev_ebitda).toBe(6.0)
   })
 
+  it('permite registrar múltiplos dinâmicos vindos da coleção de setores', async () => {
+    const { registrarMultiplosDinamicos } = await import('./valuationMultiplos')
+    registrarMultiplosDinamicos([
+      {
+        nome: 'Farmacêutico e Cosméticos',
+        ev_ebitda: 7.8,
+        pl: 13.0,
+        pvp: 2.6,
+        ev_receita: 1.7,
+        ev_ebit: 10.2,
+        p_ebitda: 6.8,
+      },
+    ])
+    const padraoFarma = obterMultiplosPadraoSetor('Farmacêutico e Cosméticos')
+    expect(padraoFarma.ev_ebitda).toBe(7.8)
+    expect(padraoFarma.pl).toBe(13.0)
+  })
+
   it('calcula corretamente os múltiplos de mercado a partir de DRE e Balanço', () => {
     const balancoMock = {
       id: 'b1',
