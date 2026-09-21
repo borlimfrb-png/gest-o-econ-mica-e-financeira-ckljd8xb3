@@ -71,6 +71,7 @@ export function ModalConfiguracaoNfseNacional({
   const [serie, setSerie] = useState(serieAtual || '1')
   const [proximoNumero, setProximoNumero] = useState(proximoNumeroAtual || 1)
   const [ambiente, setAmbiente] = useState<'1' | '2'>('2')
+  const [versaoLayout, setVersaoLayout] = useState<'2.00' | '1.01'>('2.00')
   const [endpoint, setEndpoint] = useState('https://hom.nfse.fazenda.gov.br/portal')
   const [integrarLancamentos, setIntegrarLancamentos] = useState<boolean>(true)
 
@@ -113,6 +114,7 @@ export function ModalConfiguracaoNfseNacional({
       setProximoNumero(proximoNumeroAtual || 1)
       const config = servicoTransmissaoNfse.obterConfiguracoes(empresaId)
       setAmbiente(config.tipoAmbiente || '2')
+      setVersaoLayout(config.versaoLayout || '2.00')
       if (config.endpointCustomizado) {
         setEndpoint(config.endpointCustomizado)
       }
@@ -160,6 +162,7 @@ export function ModalConfiguracaoNfseNacional({
       tipoAmbiente: ambiente,
       endpointCustomizado: endpoint,
       habilitado: ambiente === '1',
+      versaoLayout,
     }
     servicoTransmissaoNfse.salvarConfiguracoes(config, empresaId)
     onSalvarSerieNumero(serie.trim(), num)
@@ -372,6 +375,65 @@ export function ModalConfiguracaoNfseNacional({
                   onCheckedChange={setIntegrarLancamentos}
                 />
               </div>
+            </div>
+
+            {/* Versão do Layout / Padrão Nacional */}
+            <div className="border border-indigo-200 dark:border-indigo-900 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">
+                    <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                    Versão do Layout / Padrão Nacional NFS-e
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Define a versão da estrutura do DPS (Declaração de Prestação de Serviços) e
+                    DANFSE oficial.
+                  </p>
+                </div>
+                <Badge className="bg-indigo-600 text-white font-semibold text-xs">
+                  {versaoLayout === '2.00' ? 'Padrão NFS-e Nacional 2.0' : 'Legado 1.01'}
+                </Badge>
+              </div>
+
+              <RadioGroup
+                value={versaoLayout}
+                onValueChange={(val: '2.00' | '1.01') => setVersaoLayout(val)}
+                className="space-y-2 pt-1"
+              >
+                <div className="flex items-start space-x-2 border bg-white dark:bg-slate-900 border-indigo-200 p-2.5 rounded-md hover:bg-indigo-50/30 transition">
+                  <RadioGroupItem value="2.00" id="layout-200" className="mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="layout-200" className="font-semibold cursor-pointer text-xs">
+                        Padrão NFS-e Nacional 2.0 (DPS 2.0 / Layout 2.0) — Vigente e Recomendado
+                      </Label>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                      >
+                        Ativo
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Layout 2.0 oficial da SEFIN/Receita Federal com alimentação automática do
+                      Código IBGE do município sede (cadastrado em Minha Empresa), tags cMunGerador,
+                      cMunIncid e DANFSE 2.0.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-2 border bg-white/70 dark:bg-slate-900/60 p-2.5 rounded-md hover:bg-muted/40 transition">
+                  <RadioGroupItem value="1.01" id="layout-101" className="mt-0.5" />
+                  <div className="space-y-0.5">
+                    <Label htmlFor="layout-101" className="font-medium cursor-pointer text-xs">
+                      Padrão Nacional Legado 1.01 (Transição)
+                    </Label>
+                    <p className="text-[11px] text-muted-foreground">
+                      Compatibilidade com emissões anteriores à atualização nacional de 2024/2025.
+                    </p>
+                  </div>
+                </div>
+              </RadioGroup>
             </div>
 
             {/* Numeração e Série */}

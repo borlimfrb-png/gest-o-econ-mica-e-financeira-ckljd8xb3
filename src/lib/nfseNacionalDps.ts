@@ -1,6 +1,6 @@
 /**
  * Modelagem e utilitários do Novo Padrão Nacional NFS-e (SEFIN / ADN / Receita Federal)
- * Conforme Nota Técnica Nacional v1.01 e regras do DPS (Declaração de Prestação de Serviços).
+ * Conforme Nota Técnica Nacional v2.00 (DPS 2.0 / Layout 2.0) e regras do DPS (Declaração de Prestação de Serviços).
  */
 
 export interface DpsPrestadorInput {
@@ -60,6 +60,8 @@ export interface DpsValoresInput {
   valorLiquido: number
 }
 
+export type VersaoLayoutNfse = '2.00' | '1.01'
+
 export interface GerarDpsNacionalOptions {
   tipoAmbiente: '1' | '2' // 1 - Produção, 2 - Homologação
   serie: string
@@ -72,6 +74,7 @@ export interface GerarDpsNacionalOptions {
   valores: DpsValoresInput
   discriminacaoGeral?: string
   versaoAplicativo?: string
+  versaoLayout?: VersaoLayoutNfse // '2.00' (Padrão Nacional 2.0) ou legado '1.01'
 }
 
 /**
@@ -110,9 +113,11 @@ export function mapearOpcaoSimplesNacional(regime?: string): '1' | '2' | '3' {
 }
 
 /**
- * Gera o payload JSON canônico do DPS Nacional v1.01
+ * Gera o payload JSON canônico do DPS Nacional v2.00 / v1.01
  */
 export function gerarPayloadDpsNacional(options: GerarDpsNacionalOptions) {
+  const versaoLayout: VersaoLayoutNfse = options.versaoLayout || '2.00'
+  const isV2 = versaoLayout === '2.00'
   const dataHoraEmissao = new Date().toISOString()
   const codMunPrestador = options.prestador.codigoMunicipio?.replace(/\D/g, '') || '3550308'
   const codMunPrestacao =
@@ -134,10 +139,17 @@ export function gerarPayloadDpsNacional(options: GerarDpsNacionalOptions) {
     vServ: Number(it.valorTotal || 0).toFixed(2),
     cTribNac: (it.codigoTributacaoNacional || '010701').replace(/\D/g, ''),
     vDescIncond: Number(it.desconto || 0).toFixed(2),
+    ...(isV2
+      ? {
+          cMunPrestacao: codMunPrestacao,
+          pAliq: Number(it.aliquotaIss ?? options.valores.aliquotaIss ?? 0).toFixed(2),
+        }
+      : {}),
   }))
 
   const payload = {
-    versao: '1.01',
+    versao: versaoLayout, // '2.00' no padrão nacional 2.0
+    padrao: isV2 ? 'NFS-e Nacional 2.0' : 'NFS-e Nacional 1.01',
     dps: {
       infDPS: {
         Id: dpsId,
@@ -149,11 +161,19 @@ export function gerarPayloadDpsNacional(options: GerarDpsNacionalOptions) {
         dCompet: options.competencia.slice(0, 10),
         tpEmit: '1', // 1=Prestador, 2=Tomador, 3=Intermediario
         cLocEmi: codMunPrestador,
+        ...(isV2
+          ? {
+              versaoModalidade: '2.0',
+              cMunGerador: codMunPrestador,
+            }
+          : {}),
         prest: {
           CNPJ: prestadorDoc,
           IM: options.prestador.inscricaoMunicipal || undefined,
           xNome: options.prestador.razaoSocial,
           xFant: options.prestador.nomeFantasia || undefined,
+          cMun: codMunPrestador,
+          UF: options.prestador.uf || 'MG',
           regTrib: {
             opSimpNac,
             regEspTrib: '0', // 0=Nenhum, 1=Ato Cooperado, 2=Estimativa, etc.
@@ -179,6 +199,7 @@ export function gerarPayloadDpsNacional(options: GerarDpsNacionalOptions) {
         serv: {
           locPrest: {
             cLocPrestacao: codMunPrestacao,
+            cMunIncid: codMunPrestacao,
           },
           cServ: {
             cTribNac: options.itens[0]?.codigoTributacaoNacional?.replace(/\D/g, '') || '010701',
@@ -224,17 +245,21 @@ export function gerarPayloadDpsNacional(options: GerarDpsNacionalOptions) {
 
   return {
     dpsId,
+    versao: versaoLayout,
     payload,
     xml: gerarXmlDpsNacional(payload),
   }
 }
 
 /**
- * Serializa o payload JSON do DPS Nacional v1.01 em XML conforme padrão SPED/ADN
+ * Serializa o payload JSON do DPS Nacional v2.00 / v1.01 em XML conforme padrão SPED/ADN
  */
 export function gerarXmlDpsNacional(payloadWrapper: any): string {
   const inf = payloadWrapper?.dps?.infDPS
   if (!inf) return ''
+
+  const versao = payloadWrapper.versao || '2.00'
+  const isV2 = versao === '2.00'
 
   const safeXml = (str?: string) =>
     (str || '')
@@ -244,9 +269,11 @@ export function gerarXmlDpsNacional(payloadWrapper: any): string {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&apos;')
 
-  const tomaDoc = inf.toma.CNPJ ? `<CNPJ>${inf.toma.CNPJ}</CNPJ>` : `<CPF>${inf.toma.CPF}</CPF>`
+  const tomaDoc = inf.toma?.CNPJ
+    ? `<CNPJ>${inf.toma.CNPJ}</CNPJ>`
+    : `<CPF>${inf.toma?.CPF || ''}</CPF>`
 
-  const itensXml = (inf.serv.itensServ || [])
+  const itensXml = (inf.serv?.itensServ || [])
     .map(
       (it: any) => `        <itemServ>
           <nItem>${it.nItem}</nItem>
@@ -255,12 +282,14 @@ export function gerarXmlDpsNacional(payloadWrapper: any): string {
           <vUnit>${it.vUnit}</vUnit>
           <vServ>${it.vServ}</vServ>
           <cTribNac>${it.cTribNac}</cTribNac>
+          ${isV2 && it.cMunPrestacao ? `<cMunPrestacao>${it.cMunPrestacao}</cMunPrestacao>` : ''}
+          ${isV2 && it.pAliq ? `<pAliq>${it.pAliq}</pAliq>` : ''}
         </itemServ>`,
     )
     .join('\n')
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="${payloadWrapper.versao || '1.01'}">
+<DPS xmlns="http://www.sped.fazenda.gov.br/nfse" versao="${versao}">
   <infDPS Id="${inf.Id}">
     <tpAmb>${inf.tpAmb}</tpAmb>
     <dhEmi>${inf.dhEmi}</dhEmi>
@@ -270,10 +299,12 @@ export function gerarXmlDpsNacional(payloadWrapper: any): string {
     <dCompet>${inf.dCompet}</dCompet>
     <tpEmit>${inf.tpEmit}</tpEmit>
     <cLocEmi>${inf.cLocEmi}</cLocEmi>
+    ${isV2 && inf.cMunGerador ? `<cMunGerador>${inf.cMunGerador}</cMunGerador>` : ''}
     <prest>
       <CNPJ>${inf.prest.CNPJ}</CNPJ>
       ${inf.prest.IM ? `<IM>${safeXml(inf.prest.IM)}</IM>` : ''}
       <xNome>${safeXml(inf.prest.xNome)}</xNome>
+      ${isV2 && inf.prest.cMun ? `<cMun>${inf.prest.cMun}</cMun>` : ''}
       <regTrib>
         <opSimpNac>${inf.prest.regTrib.opSimpNac}</opSimpNac>
         <regEspTrib>${inf.prest.regTrib.regEspTrib}</regEspTrib>
@@ -297,6 +328,7 @@ export function gerarXmlDpsNacional(payloadWrapper: any): string {
     <serv>
       <locPrest>
         <cLocPrestacao>${inf.serv.locPrest.cLocPrestacao}</cLocPrestacao>
+        ${isV2 && inf.serv.locPrest.cMunIncid ? `<cMunIncid>${inf.serv.locPrest.cMunIncid}</cMunIncid>` : ''}
       </locPrest>
       <cServ>
         <cTribNac>${inf.serv.cServ.cTribNac}</cTribNac>
@@ -339,7 +371,7 @@ ${itensXml}
 }
 
 /**
- * Validação semântica e estrutural das regras locais do DPS Nacional v1.01
+ * Validação semântica e estrutural das regras locais do DPS Nacional v2.00 / v1.01
  */
 export function validarDpsNacionalLocal(options: GerarDpsNacionalOptions): {
   valido: boolean
@@ -356,6 +388,12 @@ export function validarDpsNacionalLocal(options: GerarDpsNacionalOptions): {
   }
   if (!options.prestador.razaoSocial?.trim()) {
     erros.push('Razão Social do Prestador é obrigatória no DPS.')
+  }
+  if (
+    options.prestador.codigoMunicipio &&
+    options.prestador.codigoMunicipio.replace(/\D/g, '').length !== 7
+  ) {
+    erros.push('Código IBGE do município sede (Minha Empresa) deve ter 7 dígitos.')
   }
 
   // 2. Tomador
@@ -396,6 +434,11 @@ export function validarDpsNacionalLocal(options: GerarDpsNacionalOptions): {
   }
 
   // Avisos
+  if (!options.prestador.codigoMunicipio) {
+    avisos.push(
+      'Código IBGE do município sede não cadastrado em "Minha Empresa". O DPS utilizará código padrão contingencial.',
+    )
+  }
   if (!options.prestador.inscricaoMunicipal) {
     avisos.push('Inscrição Municipal do prestador não informada. Pode ser exigida pelo município.')
   }

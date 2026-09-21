@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-20T21:51:34.603Z",
+  "generatedAt": "2026-09-21T14:15:19.360Z",
   "collections": [
     {
       "name": "users",
@@ -1648,6 +1648,12 @@
         {
           "name": "notificacoes_vencimento",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "codigo_ibge",
+          "type": "text",
           "required": false,
           "system": false
         }

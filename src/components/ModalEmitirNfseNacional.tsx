@@ -35,6 +35,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import {
   EmpresaRecord,
   NfseTomadorRecord,
@@ -76,6 +77,7 @@ export function ModalEmitirNfseNacional({
 }: ModalEmitirNfseNacionalProps) {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { minhaEmpresa } = useMinhaEmpresa()
 
   // Controle de estados
   const [loading, setLoading] = useState(false)
@@ -131,6 +133,12 @@ export function ModalEmitirNfseNacional({
     if (open) {
       setSerie(seriePadrao || '1')
       setNumeroDps(proximoNumeroPadrao || 1)
+
+      // Se Minha Empresa possui Código IBGE cadastrado, inicializa o município de prestação com ele
+      const ibgeMinhaEmpresa = (minhaEmpresa?.codigo_ibge || '').replace(/\D/g, '')
+      if (ibgeMinhaEmpresa.length === 7 && !notaParaSubstituir) {
+        setMunicipioPrestacao(ibgeMinhaEmpresa)
+      }
 
       if (notaParaSubstituir) {
         // Pré-preencher com dados da nota original
@@ -329,18 +337,33 @@ export function ModalEmitirNfseNacional({
     }
 
     // 1. Montar payload do DPS Nacional
+    const configTransmissao = servicoTransmissaoNfse.obterConfiguracoes(empresaId)
+    const versaoLayoutAtiva = configTransmissao.versaoLayout || '2.00'
+
+    // Código IBGE do prestador: prioriza Minha Empresa (consultoria sede), fallback para município da prestação
+    const codIbgeMinhaEmpresa = (minhaEmpresa?.codigo_ibge || '').replace(/\D/g, '')
+    const codMunPrestadorFinal =
+      codIbgeMinhaEmpresa.length === 7 ? codIbgeMinhaEmpresa : municipioPrestacao
+
     const optionsDps: GerarDpsNacionalOptions = {
       tipoAmbiente: '2', // Homologação / Simulação Nacional
+      versaoLayout: versaoLayoutAtiva,
       serie,
       numeroDps,
       competencia,
       municipioPrestacao,
       prestador: {
-        cnpj: prestadorAtual?.cnpj || '00.000.000/0001-00',
-        razaoSocial: prestadorAtual?.nome || 'Borlim Consultoria Financeira',
-        inscricaoMunicipal: '12345678',
-        regimeTributario: prestadorAtual?.regime_tributario || 'Simples Nacional',
-        codigoMunicipio: municipioPrestacao,
+        cnpj: prestadorAtual?.cnpj || minhaEmpresa?.cnpj || '00.000.000/0001-00',
+        razaoSocial:
+          prestadorAtual?.nome || minhaEmpresa?.razao_social || 'Borlim Consultoria Financeira',
+        nomeFantasia: minhaEmpresa?.nome_fantasia,
+        inscricaoMunicipal: minhaEmpresa?.inscricao_municipal || '12345678',
+        regimeTributario:
+          prestadorAtual?.regime_tributario ||
+          minhaEmpresa?.regime_tributario ||
+          'Simples Nacional',
+        codigoMunicipio: codMunPrestadorFinal,
+        uf: minhaEmpresa?.estado || 'MG',
       },
       tomador: {
         tipoPessoa: tomadorAtual.tipo_pessoa || 'PJ',
@@ -402,7 +425,6 @@ export function ModalEmitirNfseNacional({
       const { dpsId, payload: dpsPayload } = gerarPayloadDpsNacional(optionsDps)
 
       // 4. Camada de transmissão desacoplada (Modo Homologação Nacional)
-      const configTransmissao = servicoTransmissaoNfse.obterConfiguracoes(empresaId)
       const retornoTransmissao = await servicoTransmissaoNfse.transmitirDps(
         dpsPayload,
         configTransmissao,
@@ -510,26 +532,31 @@ export function ModalEmitirNfseNacional({
                   <FileCheck2 className="w-5 h-5 text-primary" />
                   {notaParaSubstituir
                     ? `Reemissão Corrigida de NFS-e (Substituição da Nota nº ${notaParaSubstituir.numero})`
-                    : 'Nova Emissão NFS-e Nacional (Padrão DPS Nacional v1.01)'}
+                    : 'Nova Emissão NFS-e Nacional (DPS 2.0 / Layout 2.0)'}
                 </DialogTitle>
                 <DialogDescription>
                   {notaParaSubstituir
                     ? `Todos os dados da nota original foram carregados com novo sequencial de DPS. A nota original nº ${notaParaSubstituir.numero} será marcada como Substituída.`
-                    : 'Declaração de Prestação de Serviços (DPS) em lote único com itens detalhados e tributação unificada.'}
+                    : 'Declaração de Prestação de Serviços (DPS 2.0) conforme padrão nacional da Receita Federal com integração do IBGE da sua empresa.'}
                 </DialogDescription>
               </div>
-              <Badge
-                variant="outline"
-                className={
-                  notaParaSubstituir
-                    ? 'border-amber-500 bg-amber-50 text-amber-800 text-xs'
-                    : 'border-primary/40 bg-primary/5 text-primary text-xs'
-                }
-              >
-                {notaParaSubstituir
-                  ? 'Modo Substituição / Reemissão'
-                  : 'Homologação Nacional Ativa'}
-              </Badge>
+              <div className="flex items-center gap-1.5">
+                <Badge className="bg-indigo-600 text-white text-[11px] font-semibold">
+                  Padrão NFS-e Nacional 2.0
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={
+                    notaParaSubstituir
+                      ? 'border-amber-500 bg-amber-50 text-amber-800 text-xs'
+                      : 'border-primary/40 bg-primary/5 text-primary text-xs'
+                  }
+                >
+                  {notaParaSubstituir
+                    ? 'Modo Substituição / Reemissão'
+                    : 'Homologação Nacional Ativa'}
+                </Badge>
+              </div>
             </div>
           </DialogHeader>
 
@@ -892,8 +919,8 @@ export function ModalEmitirNfseNacional({
                   (ISS: {formatBrlMoeda(valorIss)})
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  Geração em modo homologação nacional (layout DPS v1.01) com chave de acesso de 50
-                  dígitos.
+                  Geração em modo homologação nacional (Padrão NFS-e Nacional 2.0 / DPS 2.0) com
+                  chave de acesso de 50 dígitos e código IBGE integrado.
                 </p>
               </div>
 

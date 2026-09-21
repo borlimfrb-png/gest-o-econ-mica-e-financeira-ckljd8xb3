@@ -228,7 +228,7 @@ export function ModalCadastroTomador({
               : 'Novo Tomador de Serviços (NFS-e Nacional)'}
           </DialogTitle>
           <DialogDescription>
-            Cadastro estruturado do tomador conforme exigências do layout DPS Nacional v1.01.
+            Cadastro estruturado do tomador conforme exigências do layout DPS Nacional 2.0.
           </DialogDescription>
         </DialogHeader>
 

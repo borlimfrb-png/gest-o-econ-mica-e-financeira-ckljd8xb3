@@ -39,6 +39,7 @@ import {
   ShieldCheck,
   Sparkles,
   HelpCircle,
+  Loader2,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -119,6 +120,7 @@ export interface MinhaEmpresaFormData {
   bairro: string
   cidade: string
   estado: UfEmpresa | ''
+  codigo_ibge: string
   pais: string
 
   // Seção 3 — Contato
@@ -163,6 +165,7 @@ const INITIAL_FORM: MinhaEmpresaFormData = {
   bairro: '',
   cidade: '',
   estado: '',
+  codigo_ibge: '',
   pais: 'Brasil',
 
   telefone_comercial: '',
@@ -257,6 +260,8 @@ export default function MinhaEmpresa() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [searchingCep, setSearchingCep] = useState(false)
+  const [consultandoIbge, setConsultandoIbge] = useState(false)
+  const [ibgeMunicipioNome, setIbgeMunicipioNome] = useState<string | null>(null)
   const [empresaId, setEmpresaId] = useState<string | null>(null)
   const [formData, setFormData] = useState<MinhaEmpresaFormData>(INITIAL_FORM)
   const [errors, setErrors] = useState<FormErrors>({})
@@ -294,6 +299,7 @@ export default function MinhaEmpresa() {
           bairro: data.bairro || '',
           cidade: data.cidade || '',
           estado: (data.estado as UfEmpresa) || '',
+          codigo_ibge: (data.codigo_ibge || '').replace(/\D/g, '').slice(0, 7),
           pais: data.pais || 'Brasil',
 
           telefone_comercial: data.telefone_comercial ? maskPhone(data.telefone_comercial) : '',
@@ -319,6 +325,10 @@ export default function MinhaEmpresa() {
 
         if (data.logo) {
           setLogoPreview(pb.files.getURL(data, data.logo))
+        }
+
+        if (data.codigo_ibge && data.codigo_ibge.replace(/\D/g, '').length === 7) {
+          consultarIbgeApi(data.codigo_ibge, true)
         }
       } else {
         setIsSaved(false)
@@ -349,6 +359,59 @@ export default function MinhaEmpresa() {
     }
   }
 
+  // Consulta de município na API pública do IBGE
+  const consultarIbgeApi = async (codigo: string, silencioso: boolean = false) => {
+    const codLimpo = (codigo || '').replace(/\D/g, '')
+    if (codLimpo.length !== 7) {
+      if (!silencioso) {
+        toast({
+          variant: 'destructive',
+          title: 'Código IBGE inválido',
+          description:
+            'O código IBGE do município deve conter exatamente 7 dígitos numéricos (ex: 3136702).',
+        })
+      }
+      return
+    }
+
+    setConsultandoIbge(true)
+    try {
+      const resp = await fetch(
+        `https://servicodados.ibge.gov.br/api/v1/localidades/municipios/${codLimpo}`,
+      )
+      if (!resp.ok) {
+        throw new Error('Município não localizado no IBGE')
+      }
+      const data = await resp.json()
+      if (data && data.nome) {
+        const uf =
+          data.microrregiao?.mesorregiao?.UF?.sigla ||
+          data['regiao-imediata']?.['regiao-intermediaria']?.UF?.sigla ||
+          ''
+        const descCompleta = uf ? `${data.nome}/${uf}` : data.nome
+        setIbgeMunicipioNome(descCompleta)
+        if (!silencioso) {
+          toast({
+            title: 'Município confirmado no IBGE',
+            description: `${descCompleta} (Código: ${codLimpo})`,
+          })
+        }
+      } else {
+        throw new Error('Código não retornado')
+      }
+    } catch (err: any) {
+      if (!silencioso) {
+        toast({
+          title: 'Consulta IBGE não confirmada',
+          description:
+            'Não foi possível confirmar o código via API pública do IBGE, mas você pode salvar normalmente caso o código esteja correto.',
+        })
+      }
+    } finally {
+      setConsultandoIbge(false)
+    }
+  }
+
   // Busca automática de CEP via ViaCEP
   const handleCepBlur = async () => {
     const rawCep = formData.cep.replace(/\D/g, '')
@@ -369,17 +432,24 @@ export default function MinhaEmpresa() {
         return
       }
 
+      const ibgeCep = data.ibge ? data.ibge.replace(/\D/g, '').slice(0, 7) : ''
       setFormData((prev) => ({
         ...prev,
         logradouro: data.logradouro || prev.logradouro,
         bairro: data.bairro || prev.bairro,
         cidade: data.localidade || prev.cidade,
         estado: (data.uf as UfEmpresa) || prev.estado,
+        codigo_ibge: ibgeCep || prev.codigo_ibge,
         complemento: data.complemento || prev.complemento,
       }))
 
+      if (ibgeCep) {
+        consultarIbgeApi(ibgeCep, true)
+      }
+
       if (errors.cidade) setErrors((prev) => ({ ...prev, cidade: undefined }))
       if (errors.estado) setErrors((prev) => ({ ...prev, estado: undefined }))
+      if (errors.codigo_ibge) setErrors((prev) => ({ ...prev, codigo_ibge: undefined }))
 
       toast({
         title: 'Endereço localizado!',
@@ -506,6 +576,13 @@ export default function MinhaEmpresa() {
       newErrors.contador_crc = 'Formato sugerido: UF-000000/O (ex: SP-123456/O)'
     }
 
+    // 8. Código IBGE (opcional, mas se preenchido deve conter 7 dígitos)
+    const rawIbge = formData.codigo_ibge.replace(/\D/g, '')
+    if (rawIbge && rawIbge.length !== 7) {
+      newErrors.codigo_ibge =
+        'O código IBGE deve conter exatamente 7 dígitos numéricos (ex: 3136702)'
+    }
+
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
@@ -556,6 +633,9 @@ export default function MinhaEmpresa() {
       if (formData.bairro) formDataToSend.append('bairro', formData.bairro.trim())
       if (formData.cidade) formDataToSend.append('cidade', formData.cidade.trim())
       if (formData.estado) formDataToSend.append('estado', formData.estado)
+      if (formData.codigo_ibge) {
+        formDataToSend.append('codigo_ibge', formData.codigo_ibge.replace(/\D/g, '').slice(0, 7))
+      }
       if (formData.pais) formDataToSend.append('pais', formData.pais.trim())
 
       // Seção 3
@@ -1038,6 +1118,58 @@ export default function MinhaEmpresa() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Código IBGE do Município */}
+              <div className="space-y-1.5 sm:col-span-1">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="codigo_ibge" className="text-xs font-semibold text-slate-700">
+                    Código IBGE (7 dígitos)
+                  </Label>
+                  {ibgeMunicipioNome && (
+                    <span
+                      className="text-[10px] text-emerald-700 font-medium truncate max-w-[130px]"
+                      title={ibgeMunicipioNome}
+                    >
+                      {ibgeMunicipioNome}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    id="codigo_ibge"
+                    placeholder="Ex: 3136702"
+                    maxLength={7}
+                    value={formData.codigo_ibge}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, '').slice(0, 7)
+                      setField('codigo_ibge', v)
+                      if (v.length !== 7) setIbgeMunicipioNome(null)
+                    }}
+                    className={`h-9 text-xs font-mono ${errors.codigo_ibge ? 'border-red-500' : ''}`}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => consultarIbgeApi(formData.codigo_ibge)}
+                    disabled={consultandoIbge}
+                    className="h-9 px-2 text-xs shrink-0"
+                    title="Buscar nome do município na API do IBGE"
+                  >
+                    {consultandoIbge ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Search className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+                </div>
+                {errors.codigo_ibge && (
+                  <p className="text-[11px] text-red-600 font-medium">{errors.codigo_ibge}</p>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  Alimenta automaticamente a emissão da NFS-e Nacional 2.0 (DPS).
+                </p>
               </div>
 
               {/* País */}

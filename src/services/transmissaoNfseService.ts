@@ -13,6 +13,7 @@ export interface CredenciaisNfseNacional {
   senhaCertificado?: string
   endpointCustomizado?: string
   habilitado: boolean
+  versaoLayout?: '2.00' | '1.01' // Padrão NFS-e Nacional 2.0 (DPS 2.0 / layout 2.0)
 }
 
 export interface RespostaTransmissaoDps {
@@ -52,6 +53,7 @@ export const servicoTransmissaoNfse = {
       tipoAmbiente: '2', // Modo Homologação por padrão
       habilitado: false,
       endpointCustomizado: 'https://hom.nfse.fazenda.gov.br/portal',
+      versaoLayout: '2.00',
     }
   },
 

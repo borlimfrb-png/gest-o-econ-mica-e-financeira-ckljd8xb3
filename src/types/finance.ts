@@ -483,6 +483,7 @@ export interface MinhaEmpresaRecord extends RecordModel {
   bairro?: string
   cidade?: string
   estado?: UfEmpresa
+  codigo_ibge?: string // Código IBGE do município com 7 dígitos (ex: 3136702 Ubá/MG)
   pais?: string
   // Seção 3 — Contato
   telefone_comercial?: string

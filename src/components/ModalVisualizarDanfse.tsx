@@ -114,13 +114,19 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
             <div>
               <DialogTitle className="flex items-center gap-2 text-lg">
                 <FileText className="w-5 h-5 text-primary" />
-                {isNacional ? 'DANFSE - Documento Auxiliar da NFS-e Nacional' : 'DANFSE Municipal'}
+                {isNacional
+                  ? 'DANFSE - Documento Auxiliar da NFS-e Nacional 2.0'
+                  : 'DANFSE Municipal'}
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Padrão Nacional Unificado (Decreto Federal / ADN - SEFIN Nacional)
+                Padrão Nacional Unificado — Layout 2.0 / DPS 2.0 (Decreto Federal / ADN - SEFIN
+                Nacional)
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <Badge className="bg-indigo-600 text-white font-semibold text-[11px]">
+                Padrão NFS-e Nacional 2.0
+              </Badge>
               {isHomologacao && (
                 <Badge
                   variant="outline"
@@ -206,11 +212,16 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
                 BR
               </div>
               <div>
-                <h3 className="font-bold text-sm tracking-wide uppercase">
-                  DANFSE - Documento Auxiliar da NFS-e Nacional
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm tracking-wide uppercase">
+                    DANFSE - Documento Auxiliar da NFS-e Nacional
+                  </h3>
+                  <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold">
+                    Layout 2.0
+                  </span>
+                </div>
                 <p className="text-[11px] text-muted-foreground font-medium">
-                  Nota Fiscal de Serviços Eletrônica Nacional
+                  Nota Fiscal de Serviços Eletrônica Nacional (DPS 2.0)
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   Emitida nos termos da Resolução CGSN e Convênio Nacional NFS-e
@@ -285,9 +296,11 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground block text-[10px]">Local da Prestação</span>
-              <span className="font-medium">
-                IBGE {nota.codigo_municipio_prestacao || '3550308'}
+              <span className="text-muted-foreground block text-[10px]">
+                Município da Prestação / Incidência
+              </span>
+              <span className="font-medium font-mono">
+                Cód. IBGE: {nota.codigo_municipio_prestacao || '3550308'}
               </span>
             </div>
             <div>
@@ -473,9 +486,12 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
                 Motivo do cancelamento: {nota.motivo_cancelamento} (em {nota.cancelada_em})
               </p>
             )}
+            <div className="text-[9px] text-muted-foreground pt-1 border-t border-foreground/10 flex justify-between">
+              <span>Padrão Nacional NFS-e — Versão 2.0 / Layout ADN</span>
+              <span>Chave IBGE Prestador: {nota.codigo_municipio_prestacao || '3550308'}</span>
+            </div>
           </div>
         </div>
-
         {/* RODAPÉ E AÇÕES */}
         <DialogFooter className="flex-col sm:flex-row items-center justify-between gap-2 pt-2 print:hidden">
           <div className="flex items-center gap-2">

@@ -1040,18 +1040,21 @@ export default function NotasFiscais() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-[#0B1F3A] dark:text-blue-200">
-                Novo Padrão Nacional NFS-e (Decreto Federal / Layout DPS v1.01)
+                Padrão Nacional NFS-e 2.0 (DPS 2.0 / Layout 2.0 SEFIN)
               </span>
+              <Badge className="bg-indigo-600 text-white text-[10px] font-semibold">
+                Padrão NFS-e Nacional 2.0
+              </Badge>
               <Badge
                 variant="outline"
                 className="text-[10px] border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950/40"
               >
-                Homologação Nacional Ativa
+                Modo Homologação / Simulação
               </Badge>
             </div>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Unificação das declarações municipais em Declaração de Prestação de Serviços (DPS) com
-              chave de acesso de 50 dígitos.
+              Layout 2.0 unificado com alimentação automática do Código IBGE de Minha Empresa,
+              controle de DPS e DANFSE oficial.
             </p>
           </div>
         </div>
