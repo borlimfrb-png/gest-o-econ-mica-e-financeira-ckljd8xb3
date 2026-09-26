@@ -827,7 +827,7 @@ export default function PlanoContas() {
                   <SelectTrigger id="pc-conta" className="h-9 text-xs bg-white">
                     <SelectValue placeholder="Selecione a conta" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-80">
                     {TIPOS_CONTA.map((tipo) => {
                       const lista = contasPorTipo.get(tipo) || []
                       if (lista.length === 0) return null
@@ -836,11 +836,23 @@ export default function PlanoContas() {
                           <SelectLabel className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                             {tipo}
                           </SelectLabel>
-                          {lista.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">
-                              {c.codigo || '—'} - {c.nome} ({c.tipo})
-                            </SelectItem>
-                          ))}
+                          {lista.map((c) => {
+                            const jaCadastrada = itens.some((item) => item.conta === c.id)
+                            return (
+                              <SelectItem key={c.id} value={c.id} className="text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <span>
+                                    {c.codigo || '—'} - {c.nome} ({c.tipo})
+                                  </span>
+                                  {jaCadastrada && (
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                      Cadastrada
+                                    </span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            )
+                          })}
                         </SelectGroup>
                       )
                     })}
@@ -937,13 +949,19 @@ export default function PlanoContas() {
           <CardHeader className="pb-3 border-b border-slate-100 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                  Itens do Plano ({itensFiltrados.length}
-                  {busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos'
-                    ? ` de ${itens.length}`
-                    : ''}
-                  )
-                </CardTitle>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                    Itens do Plano ({itensFiltrados.length}
+                    {busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos'
+                      ? ` de ${itens.length}`
+                      : ''}
+                    )
+                  </CardTitle>
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                    Amarelo = Cadastrada no Plano
+                  </span>
+                </div>
                 <CardDescription className="text-xs mt-0.5">
                   {itens.length === 0
                     ? 'Nenhum vínculo cadastrado ainda.'
@@ -995,11 +1013,23 @@ export default function PlanoContas() {
                           <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                             {tipo}
                           </SelectLabel>
-                          {lista.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">
-                              {c.codigo || '—'} - {c.nome}
-                            </SelectItem>
-                          ))}
+                          {lista.map((c) => {
+                            const jaCadastrada = itens.some((item) => item.conta === c.id)
+                            return (
+                              <SelectItem key={c.id} value={c.id} className="text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <span>
+                                    {c.codigo || '—'} - {c.nome}
+                                  </span>
+                                  {jaCadastrada && (
+                                    <span className="text-[9px] px-1 py-0 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                      Cadastrada
+                                    </span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            )
+                          })}
                         </SelectGroup>
                       )
                     })}
@@ -1096,12 +1126,27 @@ export default function PlanoContas() {
                       const conta = contaMap.get(i.conta)
                       const centro = centroMap.get(i.centro)
                       const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
+                      const isCadastrada = Boolean(i.id)
                       return (
-                        <tr key={i.id} className="hover:bg-slate-50/80 transition-colors align-top">
+                        <tr
+                          key={i.id}
+                          className={`transition-colors align-top ${
+                            isCadastrada
+                              ? 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-l-amber-500'
+                              : 'hover:bg-slate-50/80'
+                          }`}
+                        >
                           <td className="py-3 px-4">
-                            <span className="font-mono font-semibold text-blue-700 text-[11px]">
-                              {i.codigo || '—'}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-mono font-semibold text-blue-700 text-[11px]">
+                                {i.codigo || '—'}
+                              </span>
+                              {isCadastrada && (
+                                <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] px-1.5 py-0 font-bold hover:bg-amber-100 shadow-2xs">
+                                  Cadastrada
+                                </Badge>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {i.codigo_empresa ? (
@@ -1286,7 +1331,7 @@ export default function PlanoContas() {
                   <SelectTrigger id="edit-pc-conta" className="h-9 text-xs bg-white">
                     <SelectValue placeholder="Selecione a conta" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-80">
                     {TIPOS_CONTA.map((tipo) => {
                       const lista = contasPorTipo.get(tipo) || []
                       if (lista.length === 0) return null
@@ -1295,11 +1340,23 @@ export default function PlanoContas() {
                           <SelectLabel className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                             {tipo}
                           </SelectLabel>
-                          {lista.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">
-                              {c.codigo || '—'} - {c.nome} ({c.tipo})
-                            </SelectItem>
-                          ))}
+                          {lista.map((c) => {
+                            const jaCadastrada = itens.some((item) => item.conta === c.id)
+                            return (
+                              <SelectItem key={c.id} value={c.id} className="text-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <span>
+                                    {c.codigo || '—'} - {c.nome} ({c.tipo})
+                                  </span>
+                                  {jaCadastrada && (
+                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                      Cadastrada
+                                    </span>
+                                  )}
+                                </span>
+                              </SelectItem>
+                            )
+                          })}
                         </SelectGroup>
                       )
                     })}

@@ -418,18 +418,26 @@ export const ModalConsultarContas: React.FC<ModalConsultarContasProps> = ({
                     TIPO_BADGE_STYLE[c.tipo] || 'bg-slate-100 text-slate-700 border-slate-200'
 
                   return (
-                    <tr key={c.id} className="hover:bg-slate-50/80 transition-colors group">
+                    <tr
+                      key={c.id}
+                      className="bg-amber-50/60 hover:bg-amber-100/60 border-l-4 border-l-amber-500 transition-colors group"
+                    >
                       <td className="py-3 px-4 font-mono font-semibold text-slate-700">
-                        {c.codigo ? (
-                          <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px]">
-                            {c.codigo}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 italic">—</span>
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {c.codigo ? (
+                            <span className="inline-block px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 text-[11px]">
+                              {c.codigo}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 italic">—</span>
+                          )}
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] px-1 py-0 font-bold hover:bg-amber-100">
+                            Cadastrada
+                          </Badge>
+                        </div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                        <div className="font-semibold text-slate-900 flex items-center gap-1.5 flex-wrap">
                           <span>{c.nome}</span>
                           {stats.count > 0 && (
                             <span

@@ -288,9 +288,9 @@ export const ModalAssistenteSegmento: React.FC<ModalAssistenteSegmentoProps> = (
             <div className="flex items-center gap-2 flex-wrap">
               <Badge
                 variant="outline"
-                className="bg-white text-slate-700 border-slate-200 font-mono"
+                className="bg-amber-100 text-amber-900 border-amber-300 font-semibold font-mono"
               >
-                {planoAtualEmpresa.length} existente(s)
+                ● {planoAtualEmpresa.length} já cadastrada(s)
               </Badge>
               <Badge
                 variant="outline"
