@@ -25,6 +25,10 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ModalAuditoriaLancamentos } from '@/components/ModalAuditoriaLancamentos'
 import {
+  SeletorPlanoContaCombobox,
+  type SeletorPlanoContaComboboxRef,
+} from '@/components/SeletorPlanoContaCombobox'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -181,8 +185,8 @@ export default function Lancamentos() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
-  // Referência para focar no select de Plano de Contas após salvar
-  const planoContaTriggerRef = useRef<HTMLButtonElement>(null)
+  // Referência para focar no seletor de Plano de Contas após salvar
+  const planoContaTriggerRef = useRef<SeletorPlanoContaComboboxRef>(null)
 
   // Modal de edição de lançamento regular
   const [editOpen, setEditOpen] = useState(false)
@@ -1191,12 +1195,14 @@ export default function Lancamentos() {
                       </div>
                     )}
 
-                    {/* Select do Plano de Contas */}
+                    {/* Seletor Autocomplete Profissional do Plano de Contas */}
                     <div className="space-y-1.5">
                       <Label htmlFor="lan-plano" className="text-xs font-semibold text-slate-700">
                         Plano de Contas (Vínculo Conta → Centro) *
                       </Label>
-                      <Select
+                      <SeletorPlanoContaCombobox
+                        id="lan-plano"
+                        ref={planoContaTriggerRef}
                         value={selectedPlanoConta}
                         onValueChange={(val) => {
                           setSelectedPlanoConta(val)
@@ -1204,35 +1210,11 @@ export default function Lancamentos() {
                             setFormErrors((prev) => ({ ...prev, plano_conta: '' }))
                           }
                         }}
-                      >
-                        <SelectTrigger
-                          id="lan-plano"
-                          ref={planoContaTriggerRef}
-                          className="h-9 text-xs bg-white text-left truncate"
-                        >
-                          <SelectValue placeholder="Selecione o plano de contas (PC-xxx | Conta → Centro)" />
-                        </SelectTrigger>
-                        <SelectContent className="max-h-72">
-                          {planoContasOptions.length === 0 ? (
-                            <div className="p-3 text-center text-xs text-slate-500">
-                              Nenhum plano de contas cadastrado.
-                            </div>
-                          ) : (
-                            planoContasOptions.map((item) => (
-                              <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                                <span className="text-slate-800">
-                                  {formatPlanoContaLabel(item)}
-                                </span>
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                      {formErrors.plano_conta && (
-                        <p className="text-[11px] text-red-600 font-medium">
-                          {formErrors.plano_conta}
-                        </p>
-                      )}
+                        planoContas={planoContas}
+                        empresaAtivaId={empresaFixaId}
+                        error={formErrors.plano_conta}
+                        placeholder="Buscar por código (ex: 1.1, PC-001) ou nome..."
+                      />
                     </div>
 
                     {/* Input Valor (R$) */}
@@ -2296,24 +2278,20 @@ export default function Lancamentos() {
                 <Label htmlFor="edit-lan-plano" className="text-xs font-semibold text-slate-700">
                   Plano de Contas *
                 </Label>
-                <Select value={editPlanoConta} onValueChange={setEditPlanoConta}>
-                  <SelectTrigger
-                    id="edit-lan-plano"
-                    className="h-9 text-xs bg-white text-left truncate"
-                  >
-                    <SelectValue placeholder="Selecione o plano de contas (PC-xxx | Conta → Centro)" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {planoContasOptions.map((item) => (
-                      <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                        <span>{formatPlanoContaLabel(item)}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {editErrors.plano_conta && (
-                  <p className="text-[11px] text-red-600 font-medium">{editErrors.plano_conta}</p>
-                )}
+                <SeletorPlanoContaCombobox
+                  id="edit-lan-plano"
+                  value={editPlanoConta}
+                  onValueChange={(val) => {
+                    setEditPlanoConta(val)
+                    if (editErrors.plano_conta) {
+                      setEditErrors((prev) => ({ ...prev, plano_conta: '' }))
+                    }
+                  }}
+                  planoContas={planoContas}
+                  empresaAtivaId={editEmpresa}
+                  error={editErrors.plano_conta}
+                  placeholder="Buscar conta por código ou nome..."
+                />
               </div>
 
               {/* Valor */}
@@ -2429,24 +2407,20 @@ export default function Lancamentos() {
                 <Label htmlFor="modal-rec-plano" className="text-xs font-semibold text-slate-700">
                   Plano de Contas *
                 </Label>
-                <Select value={recPlanoConta} onValueChange={setRecPlanoConta}>
-                  <SelectTrigger
-                    id="modal-rec-plano"
-                    className="h-9 text-xs bg-white text-left truncate"
-                  >
-                    <SelectValue placeholder="Selecione o plano de contas (PC-xxx | Conta → Centro)" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {planoContasOptions.map((item) => (
-                      <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                        <span>{formatPlanoContaLabel(item)}</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {recErrors.plano_conta && (
-                  <p className="text-[11px] text-red-600 font-medium">{recErrors.plano_conta}</p>
-                )}
+                <SeletorPlanoContaCombobox
+                  id="modal-rec-plano"
+                  value={recPlanoConta}
+                  onValueChange={(val) => {
+                    setRecPlanoConta(val)
+                    if (recErrors.plano_conta) {
+                      setRecErrors((prev) => ({ ...prev, plano_conta: '' }))
+                    }
+                  }}
+                  planoContas={planoContas}
+                  empresaAtivaId={recEmpresa}
+                  error={recErrors.plano_conta}
+                  placeholder="Buscar conta por código ou nome..."
+                />
               </div>
 
               {/* Dia do Mês e Próximo previsto */}
