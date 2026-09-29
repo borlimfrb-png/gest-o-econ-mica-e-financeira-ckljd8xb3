@@ -25,6 +25,7 @@ import {
 import { Link } from 'react-router-dom'
 import { formatCnpj } from '@/lib/financeCalculations'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { SeletorPlanoContaCombobox } from '@/components/SeletorPlanoContaCombobox'
 import type {
   EmpresaRecord,
   MinhaEmpresaRecord,
@@ -73,6 +74,7 @@ export function ModalRelatorioContasCentrosA4({
 }: ModalRelatorioContasCentrosA4Props) {
   const [apenasComMovimentacao, setApenasComMovimentacao] = useState(false)
   const [filtroTipoConta, setFiltroTipoConta] = useState<string>('todos')
+  const [filtroContaEspecifica, setFiltroContaEspecifica] = useState<string>('')
 
   const dataEmissao = useMemo(() => {
     return new Date().toLocaleDateString('pt-BR', {
@@ -165,6 +167,10 @@ export function ModalRelatorioContasCentrosA4({
       list = list.filter((c) => c.tipo === filtroTipoConta)
     }
 
+    if (filtroContaEspecifica) {
+      list = list.filter((c) => c.id === filtroContaEspecifica)
+    }
+
     if (apenasComMovimentacao) {
       list = list.filter((c) => (totaisPorConta[c.id] || 0) > 0)
     }
@@ -176,7 +182,7 @@ export function ModalRelatorioContasCentrosA4({
       if (codA && codB) return codA.localeCompare(codB)
       return a.nome.localeCompare(b.nome)
     })
-  }, [contas, filtroTipoConta, apenasComMovimentacao, totaisPorConta])
+  }, [contas, filtroTipoConta, filtroContaEspecifica, apenasComMovimentacao, totaisPorConta])
 
   // Centros ordenados por tipo e nome
   const centrosOrdenados = useMemo(() => {
@@ -390,18 +396,33 @@ export function ModalRelatorioContasCentrosA4({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Filtros rápidos na barra de ações */}
             <div className="hidden sm:flex items-center gap-1.5 mr-2 bg-slate-100 p-1 rounded-lg text-xs">
+              <div className="w-48">
+                <SeletorPlanoContaCombobox
+                  id="filtro-relatorio-conta"
+                  value={filtroContaEspecifica}
+                  onValueChange={(val) => setFiltroContaEspecifica(val)}
+                  contas={contas}
+                  empresaAtivaId={selectedEmpresa?.id}
+                  allowClear
+                  emptyLabel="Todas as contas"
+                  clearValue=""
+                  placeholder="Todas as contas"
+                  className="h-7 min-h-[28px] text-[11px] py-0.5 bg-white"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={() => setApenasComMovimentacao((prev) => !prev)}
                 className={`px-2 py-1 rounded font-medium transition-colors text-[11px] flex items-center gap-1 ${
                   apenasComMovimentacao
                     ? 'bg-blue-600 text-white shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900 bg-transparent'
+                    : 'text-slate-600 hover:text-slate-900 bg-white border border-slate-200'
                 }`}
                 title="Filtrar apenas contas com saldo movimentado"
               >
                 <Filter className="w-3 h-3" />
-                Apenas com Movimento
+                Com Movimento
               </button>
             </div>
 

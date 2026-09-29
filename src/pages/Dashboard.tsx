@@ -55,6 +55,7 @@ import {
   formatCnpj,
 } from '@/lib/financeCalculations'
 import { analisarAlertasProativos } from '@/lib/alertasProativos'
+import { cn } from '@/lib/utils'
 import { useRealtime } from '@/hooks/use-realtime'
 import { AnimatedCounter } from '@/components/AnimatedCounter'
 import {
@@ -1012,9 +1013,12 @@ export default function Dashboard() {
     }
   }, [empresas, lancamentosFinanceiros])
 
-  // CURVA DE RECEBIMENTO PREVISTO (Próximos 6 meses a partir do mês atual)
-  const dadosCurvaRecebimento = useMemo(() => {
+  // PAINEL: FLUXO DE RECEBIMENTOS (Próximos 12 meses, Cards de status e Parcelas em aberto)
+  const painelFluxoRecebimentos = useMemo(() => {
     const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    const hojeStr = hoje.toISOString().slice(0, 10)
+    const mesAtualStr = hojeStr.slice(0, 7)
     const anoAtual = hoje.getFullYear()
     const mesAtual = hoje.getMonth() // 0-11
 
@@ -1033,14 +1037,6 @@ export default function Dashboard() {
       'Dez',
     ]
 
-    const mesesProximos6: {
-      key: string // YYYY-MM
-      label: string // Mês/Ano (ex: Jan/25 ou Jan/2025)
-      labelCompleto: string // Mês/Ano completo (ex: Janeiro/2025)
-      totalPrevisto: number
-      quantidade: number
-    }[] = []
-
     const nomesMesesCompletos = [
       'Janeiro',
       'Fevereiro',
@@ -1056,14 +1052,23 @@ export default function Dashboard() {
       'Dezembro',
     ]
 
-    for (let i = 0; i < 6; i++) {
+    // Previsão para os próximos 12 meses (incluindo o atual)
+    const mesesProximos12: {
+      key: string // YYYY-MM
+      label: string // Mês/Ano (ex: Jan/25)
+      labelCompleto: string // Mês/Ano completo (ex: Janeiro/2025)
+      totalPrevisto: number
+      quantidade: number
+    }[] = []
+
+    for (let i = 0; i < 12; i++) {
       const d = new Date(anoAtual, mesAtual + i, 1)
       const y = d.getFullYear()
       const m = d.getMonth()
       const key = `${y}-${String(m + 1).padStart(2, '0')}`
       const label = `${nomesMesesAbrev[m]}/${String(y).slice(2)}`
       const labelCompleto = `${nomesMesesCompletos[m]}/${y}`
-      mesesProximos6.push({
+      mesesProximos12.push({
         key,
         label,
         labelCompleto,
@@ -1072,39 +1077,144 @@ export default function Dashboard() {
       })
     }
 
-    const mapMeses = new Map<string, (typeof mesesProximos6)[0]>()
-    for (const mObj of mesesProximos6) {
+    const mapMeses = new Map<string, (typeof mesesProximos12)[0]>()
+    for (const mObj of mesesProximos12) {
       mapMeses.set(mObj.key, mObj)
     }
 
-    // Filtrar recebíveis: Pendentes e respeitando seletor de empresa
+    // Filtrar recebíveis respeitando empresa/grupo selecionado
     const recebiveisFiltrados = recebiveis.filter((r) => {
-      if (r.status !== 'Pendente') return false
-      if (selectedEmpresaId && r.empresa !== selectedEmpresaId) return false
+      if (selectedEmpresaId) {
+        if (selectedEmpresaId.startsWith('grupo-')) {
+          if (!grupoAtivo?.empresas?.includes(r.empresa)) return false
+        } else if (r.empresa !== selectedEmpresaId) {
+          return false
+        }
+      }
       return true
     })
 
-    for (const r of recebiveisFiltrados) {
-      const dStr = (r.vencimento || '').slice(0, 7)
-      const mesObj = mapMeses.get(dStr)
+    // Itens em aberto (não baixados/não quitados, status Pendente)
+    const recebiveisEmAberto = recebiveisFiltrados.filter((r) => r.status === 'Pendente')
+
+    let totalAReceber = 0
+    let totalVencendoMes = 0
+    let totalAtrasado = 0
+    let qtdAtrasada = 0
+    let qtdVencendoMes = 0
+
+    // Mapeamento de contratos e empresas para tabela
+    const contratosMap = new Map<string, ContratoRecord>()
+    for (const c of contratos) contratosMap.set(c.id, c)
+
+    const empresasLocalMap = new Map<string, EmpresaRecord>()
+    for (const emp of empresas) empresasLocalMap.set(emp.id, emp)
+
+    const parcelasEmAbertoDetalhadas: Array<{
+      recebivel: RecebivelRecord
+      contratoNumero: string
+      clienteNome: string
+      vencimentoStr: string
+      valor: number
+      isVencida: boolean
+      diasAtraso: number
+      venceNoMes: boolean
+    }> = []
+
+    for (const r of recebiveisEmAberto) {
+      const val = Number(r.valor) || 0
+      const vencYmd = (r.vencimento || '').slice(0, 10)
+      const mesVenc = vencYmd.slice(0, 7)
+
+      totalAReceber += val
+
+      const isVencida = Boolean(vencYmd && vencYmd < hojeStr)
+      let diasAtraso = 0
+      if (isVencida && vencYmd) {
+        const diffMs = hoje.getTime() - new Date(vencYmd).getTime()
+        diasAtraso = Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)))
+        totalAtrasado += val
+        qtdAtrasada += 1
+      }
+
+      const venceNoMes = mesVenc === mesAtualStr
+      if (venceNoMes) {
+        totalVencendoMes += val
+        qtdVencendoMes += 1
+      }
+
+      // Distribuição no gráfico de 12 meses (apenas parcelas não vencidas ou do mês em diante)
+      const mesObj = mapMeses.get(mesVenc)
       if (mesObj) {
-        const val = Number(r.valor) || 0
         mesObj.totalPrevisto += val
         mesObj.quantidade += 1
       }
+
+      // Dados para tabela detalhada
+      const contratoObj =
+        r.expand?.contrato || (r.contrato ? contratosMap.get(r.contrato) : undefined)
+      const empObj = r.expand?.empresa || empresasLocalMap.get(r.empresa)
+      const contratanteObj = contratoObj?.contratante
+        ? empresasLocalMap.get(contratoObj.contratante)
+        : undefined
+
+      const contratoNumero =
+        contratoObj?.numero || (r.contrato ? `Contrato #${r.contrato.slice(0, 6)}` : 'Direto')
+      const clienteNome = contratanteObj?.nome || empObj?.nome || 'Cliente'
+
+      parcelasEmAbertoDetalhadas.push({
+        recebivel: r,
+        contratoNumero,
+        clienteNome,
+        vencimentoStr: vencYmd,
+        valor: val,
+        isVencida,
+        diasAtraso,
+        venceNoMes,
+      })
     }
 
-    const totalPrevisto6Meses = mesesProximos6.reduce((acc, m) => acc + m.totalPrevisto, 0)
-    const totalTitulosPrevistos = mesesProximos6.reduce((acc, m) => acc + m.quantidade, 0)
-    const temDados = totalPrevisto6Meses > 0
+    // Ordenar parcelas em aberto por vencimento (mais antigas/vencidas primeiro)
+    parcelasEmAbertoDetalhadas.sort((a, b) => {
+      const va = a.vencimentoStr || '9999-99-99'
+      const vb = b.vencimentoStr || '9999-99-99'
+      return va.localeCompare(vb)
+    })
+
+    const totalPrevisto12Meses = mesesProximos12.reduce((acc, m) => acc + m.totalPrevisto, 0)
+    const totalTitulos12Meses = mesesProximos12.reduce((acc, m) => acc + m.quantidade, 0)
+    const temDadosGerais = recebiveisFiltrados.length > 0
+    const temDadosGrafico = totalPrevisto12Meses > 0
 
     return {
-      meses: mesesProximos6,
-      totalPrevisto6Meses,
-      totalTitulosPrevistos,
-      temDados,
+      meses: mesesProximos12,
+      totalAReceber,
+      totalVencendoMes,
+      totalAtrasado,
+      qtdAtrasada,
+      qtdVencendoMes,
+      totalEmAberto: recebiveisEmAberto.length,
+      totalPrevisto12Meses,
+      totalTitulos12Meses,
+      temDadosGerais,
+      temDadosGrafico,
+      parcelasEmAberto: parcelasEmAbertoDetalhadas,
     }
-  }, [recebiveis, selectedEmpresaId])
+  }, [recebiveis, contratos, empresas, selectedEmpresaId, grupoAtivo])
+
+  // CURVA DE RECEBIMENTO PREVISTO (Compatibilidade de referência)
+  const dadosCurvaRecebimento = useMemo(() => {
+    return {
+      meses: painelFluxoRecebimentos.meses.slice(0, 6),
+      totalPrevisto6Meses: painelFluxoRecebimentos.meses
+        .slice(0, 6)
+        .reduce((acc, m) => acc + m.totalPrevisto, 0),
+      totalTitulosPrevistos: painelFluxoRecebimentos.meses
+        .slice(0, 6)
+        .reduce((acc, m) => acc + m.quantidade, 0),
+      temDados: painelFluxoRecebimentos.temDadosGrafico,
+    }
+  }, [painelFluxoRecebimentos])
 
   // Distribuição de gastos por tipo de despesa (todos os lançamentos do usuário)
   const dataGastosPorTipo = useMemo(() => {
@@ -3712,15 +3822,23 @@ export default function Dashboard() {
       </Card>
 
       {/* ========================================================================= */}
-      {/* SEÇÃO: CURVA DE RECEBIMENTO PREVISTO (PRÓXIMOS 6 MESES - FINANCEIRO)     */}
+      {/* SEÇÃO: PAINEL FLUXO DE RECEBIMENTOS (PRÓXIMOS 12 MESES - RECEBÍVEIS)     */}
       {/* ========================================================================= */}
       <Card className="bg-white border-slate-200 shadow-2xs">
         <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
               <TrendingUp className="w-4 h-4 text-emerald-600" />
-              Curva de Recebimento Previsto
-              {selectedEmpresa && (
+              Painel: Fluxo de Recebimentos
+              {isGrupoAtivo && (
+                <Badge
+                  variant="outline"
+                  className="ml-1 bg-indigo-50 text-indigo-700 border-indigo-200 text-[11px] font-semibold"
+                >
+                  Grupo: {grupoAtivo?.nome || 'Consolidado'}
+                </Badge>
+              )}
+              {!isGrupoAtivo && selectedEmpresa && (
                 <Badge
                   variant="outline"
                   className="ml-1 bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold"
@@ -3730,143 +3848,327 @@ export default function Dashboard() {
               )}
             </CardTitle>
             <CardDescription className="text-xs mt-0.5">
-              Previsão de entrada mensal para os próximos 6 meses com base nas parcelas pendentes do
-              módulo financeiro.
+              Gestão de títulos a receber gerados pelos contratos de prestação de serviços com
+              previsão de 12 meses.
             </CardDescription>
           </div>
 
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="text-xs border-emerald-200 hover:bg-emerald-50 text-emerald-700 self-start sm:self-auto font-medium gap-1 shrink-0"
-          >
-            <Link to="/baixa-recebiveis">
-              Ver Títulos & Baixa <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-slate-200 hover:bg-slate-50 text-slate-700 font-medium gap-1 shrink-0"
+            >
+              <Link to="/contratos">
+                Contratos <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-emerald-200 hover:bg-emerald-50 text-emerald-700 font-medium gap-1 shrink-0"
+            >
+              <Link to="/baixa-recebiveis">
+                Baixa de Títulos <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+          </div>
         </CardHeader>
 
-        <CardContent className="pt-4 space-y-4">
-          {/* Card acima do gráfico com o total previsto para os próximos 6 meses */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <div className="p-3.5 rounded-xl bg-gradient-to-br from-emerald-50/80 to-teal-50/50 border border-emerald-200/80 flex items-center justify-between">
+        <CardContent className="pt-4 space-y-5">
+          {/* 3 CARDS OBRIGATÓRIOS: Total a Receber, Vencendo no Mês, Atrasado */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            {/* Card 1: Total a Receber (em aberto) */}
+            <div className="p-4 rounded-xl bg-gradient-to-br from-emerald-50/90 to-teal-50/40 border border-emerald-200/80 flex items-center justify-between shadow-xs">
               <div>
                 <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider block">
-                  Total Previsto (6 Meses)
+                  Total a Receber (Em Aberto)
                 </span>
                 <div className="text-2xl font-black text-emerald-950 tracking-tight mt-0.5">
                   <AnimatedCounter
-                    value={dadosCurvaRecebimento.totalPrevisto6Meses}
+                    value={painelFluxoRecebimentos.totalAReceber}
                     formatter={(v) => formatBrlMil(v)}
                   />
                 </div>
-                <p className="text-[11px] text-emerald-700 mt-0.5">
-                  {dadosCurvaRecebimento.totalTitulosPrevistos} parcela(s) pendente(s) no período
+                <p className="text-[11px] text-emerald-700 mt-1 font-medium">
+                  {painelFluxoRecebimentos.totalEmAberto} parcela(s) pendente(s)
                 </p>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                 <DollarSign className="w-6 h-6" />
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
+            {/* Card 2: Vencendo no Mês */}
+            <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50/90 to-sky-50/40 border border-blue-200/80 flex items-center justify-between shadow-xs">
               <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Escopo de Análise
+                <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider block">
+                  Vencendo no Mês
                 </span>
-                <div className="text-base font-bold text-[#0B1F3A] mt-1 truncate">
-                  {selectedEmpresa ? selectedEmpresa.nome : 'Todas as Empresas'}
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Sincronização em tempo real ativa
-                </p>
-              </div>
-              <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                <Building2 className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 sm:col-span-2 lg:col-span-1 flex items-center justify-between">
-              <div>
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
-                  Média Mensal Prevista
-                </span>
-                <div className="text-xl font-bold text-slate-800 tracking-tight mt-1">
+                <div className="text-2xl font-black text-blue-950 tracking-tight mt-0.5">
                   <AnimatedCounter
-                    value={dadosCurvaRecebimento.totalPrevisto6Meses / 6}
+                    value={painelFluxoRecebimentos.totalVencendoMes}
                     formatter={(v) => formatBrlMil(v)}
                   />
                 </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Projeção linear para os próximos 180 dias
+                <p className="text-[11px] text-blue-700 mt-1 font-medium">
+                  {painelFluxoRecebimentos.qtdVencendoMes} parcela(s) com vencimento este mês
                 </p>
               </div>
-              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                 <Calendar className="w-6 h-6" />
+              </div>
+            </div>
+
+            {/* Card 3: Atrasado (card vermelho quando > 0) */}
+            <div
+              className={cn(
+                'p-4 rounded-xl border flex items-center justify-between transition-colors shadow-xs',
+                painelFluxoRecebimentos.totalAtrasado > 0
+                  ? 'bg-gradient-to-br from-rose-50 to-red-100/60 border-red-300 text-red-950'
+                  : 'bg-slate-50 border-slate-200 text-slate-800',
+              )}
+            >
+              <div>
+                <span
+                  className={cn(
+                    'text-[11px] font-bold uppercase tracking-wider block',
+                    painelFluxoRecebimentos.totalAtrasado > 0 ? 'text-red-800' : 'text-slate-500',
+                  )}
+                >
+                  Atrasado (Vencido e Não Baixado)
+                </span>
+                <div
+                  className={cn(
+                    'text-2xl font-black tracking-tight mt-0.5',
+                    painelFluxoRecebimentos.totalAtrasado > 0 ? 'text-red-900' : 'text-slate-700',
+                  )}
+                >
+                  <AnimatedCounter
+                    value={painelFluxoRecebimentos.totalAtrasado}
+                    formatter={(v) => formatBrlMil(v)}
+                  />
+                </div>
+                <p
+                  className={cn(
+                    'text-[11px] mt-1 font-medium',
+                    painelFluxoRecebimentos.totalAtrasado > 0
+                      ? 'text-red-700 font-semibold'
+                      : 'text-slate-500',
+                  )}
+                >
+                  {painelFluxoRecebimentos.qtdAtrasada > 0
+                    ? `⚠️ ${painelFluxoRecebimentos.qtdAtrasada} título(s) em atraso!`
+                    : 'Nenhum título vencido pendente'}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  'w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs text-white',
+                  painelFluxoRecebimentos.totalAtrasado > 0 ? 'bg-red-600' : 'bg-slate-400',
+                )}
+              >
+                <AlertCircle className="w-6 h-6" />
               </div>
             </div>
           </div>
 
-          {/* Gráfico de Barras Recharts ou Estado Vazio */}
-          {!dadosCurvaRecebimento.temDados ? (
-            <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+          {/* Estado Vazio Geral: sem nenhum título para a empresa/grupo */}
+          {!painelFluxoRecebimentos.temDadosGerais ? (
+            <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50/70 rounded-xl border border-dashed border-slate-200">
               <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-3">
                 <TrendingUp className="w-6 h-6" />
               </div>
               <h3 className="text-sm font-bold text-[#0B1F3A]">
-                Nenhum recebimento previsto para os próximos meses
+                Nenhum título ou recebível encontrado
               </h3>
               <p className="text-xs text-slate-500 mt-1 max-w-sm mb-4">
-                Não constam parcelas com status "Pendente" com vencimento nos próximos 6 meses para
-                o filtro selecionado.
+                Você pode gerar automaticamente as parcelas e títulos a receber cadastrando um novo
+                contrato de prestação de serviços.
               </p>
               <Button
                 asChild
                 size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs gap-1.5"
               >
-                <Link to="/financeiro">Gerar Cronograma de Parcelas</Link>
+                <Link to="/contratos">
+                  <FileText className="w-3.5 h-3.5" /> Ir para Contratos e Gerar Títulos
+                </Link>
               </Button>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                <span>Evolução mensal da curva de caixa previsto</span>
-                <span>Valores em Reais (R$)</span>
+            <div className="space-y-6">
+              {/* Gráfico Recharts (Área / Barras) com Previsão de Entrada para os Próximos 12 Meses */}
+              <div className="space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs px-1">
+                  <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    Previsão de Entrada por Mês (Próximos 12 Meses)
+                  </span>
+                  <span className="text-slate-500 text-[11px]">
+                    Total projetado no período:{' '}
+                    <strong className="text-emerald-700 font-bold">
+                      {formatBrlMil(painelFluxoRecebimentos.totalPrevisto12Meses)}
+                    </strong>{' '}
+                    ({painelFluxoRecebimentos.totalTitulos12Meses} parcelas)
+                  </span>
+                </div>
+
+                <div className="h-72 w-full bg-slate-50/60 rounded-xl p-3 border border-slate-100">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart
+                      data={painelFluxoRecebimentos.meses}
+                      margin={{ top: 15, right: 15, left: 0, bottom: 10 }}
+                    >
+                      <defs>
+                        <linearGradient id="corRecebimentos" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 10, fill: '#64748B' }}
+                        tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                      />
+                      <RechartsTooltip
+                        formatter={(val: any) => [formatBrlMil(Number(val)), 'Previsão de Entrada']}
+                        labelFormatter={(_label, payload) => {
+                          if (payload && payload[0]) {
+                            return `Período: ${payload[0].payload.labelCompleto}`
+                          }
+                          return ''
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="totalPrevisto"
+                        name="Previsão de Recebimento"
+                        stroke="#059669"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#corRecebimentos)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
-              <div className="h-72 w-full bg-slate-50/50 rounded-xl p-3 border border-slate-100">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={dadosCurvaRecebimento.meses}
-                    margin={{ top: 15, right: 15, left: 0, bottom: 10 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fontSize: 11, fill: '#475569', fontWeight: 600 }}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: '#64748B' }}
-                      tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
-                    />
-                    <RechartsTooltip
-                      formatter={(val: any) => [formatBrlMil(Number(val)), 'Total Previsto']}
-                      labelFormatter={(_label, payload) => {
-                        if (payload && payload[0]) {
-                          return `Período: ${payload[0].payload.labelCompleto}`
-                        }
-                        return ''
-                      }}
-                    />
-                    <Bar
-                      dataKey="totalPrevisto"
-                      name="Recebimento Previsto (R$)"
-                      fill="#10B981"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
+
+              {/* Tabela de parcelas em aberto ordenada por vencimento */}
+              <div className="space-y-2 pt-1">
+                <div className="flex items-center justify-between px-1">
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5 text-blue-600" />
+                    Parcelas em Aberto ({painelFluxoRecebimentos.parcelasEmAberto.length})
+                  </h4>
+                  <span className="text-[11px] text-slate-500">
+                    Ordenado por data de vencimento
+                  </span>
+                </div>
+
+                {painelFluxoRecebimentos.parcelasEmAberto.length === 0 ? (
+                  <div className="py-6 text-center bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-500">
+                    Nenhuma parcela em aberto no momento. Todos os títulos constam como baixados!
+                  </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                    <div className="max-h-72 overflow-y-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 text-[11px] sticky top-0 z-10">
+                          <tr>
+                            <th className="py-2.5 px-3 font-semibold">Descrição / Parcela</th>
+                            <th className="py-2.5 px-3 font-semibold">Contrato / Cliente</th>
+                            <th className="py-2.5 px-3 font-semibold text-center">Vencimento</th>
+                            <th className="py-2.5 px-3 font-semibold text-right">Valor</th>
+                            <th className="py-2.5 px-3 font-semibold text-center">Situação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {painelFluxoRecebimentos.parcelasEmAberto.slice(0, 15).map((item) => (
+                            <tr
+                              key={item.recebivel.id}
+                              className={cn(
+                                'hover:bg-slate-50/80 transition-colors',
+                                item.isVencida && 'bg-rose-50/40',
+                              )}
+                            >
+                              <td className="py-2.5 px-3">
+                                <div className="font-semibold text-slate-900">
+                                  {item.recebivel.descricao || `Parcela ${item.recebivel.parcela}`}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  Parcela {item.recebivel.parcela}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3">
+                                <div className="font-medium text-slate-800 truncate max-w-[200px]">
+                                  {item.clienteNome}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {item.contratoNumero}
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <span className="font-mono text-xs font-medium text-slate-700">
+                                  {item.vencimentoStr
+                                    ? item.vencimentoStr.split('-').reverse().join('/')
+                                    : '—'}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-right">
+                                <span className="font-semibold text-slate-900 font-mono">
+                                  {formatBrlMil(item.valor)}
+                                </span>
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                {item.isVencida ? (
+                                  <Badge
+                                    variant="destructive"
+                                    className="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5"
+                                  >
+                                    Vencida há {item.diasAtraso}d
+                                  </Badge>
+                                ) : item.venceNoMes ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-semibold px-1.5 py-0.5"
+                                  >
+                                    Vence este mês
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-medium px-1.5 py-0.5"
+                                  >
+                                    A vencer
+                                  </Badge>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {painelFluxoRecebimentos.parcelasEmAberto.length > 15 && (
+                      <div className="py-2 px-3 bg-slate-50/90 border-t border-slate-100 text-center text-xs text-slate-500">
+                        Exibindo as primeiras 15 de{' '}
+                        {painelFluxoRecebimentos.parcelasEmAberto.length} parcelas em aberto.{' '}
+                        <Link
+                          to="/baixa-recebiveis"
+                          className="text-emerald-700 font-semibold hover:underline"
+                        >
+                          Ver todas e dar baixa →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -63,6 +63,7 @@ import {
   UploadCloud,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { SeletorPlanoContaCombobox } from '@/components/SeletorPlanoContaCombobox'
 import { ModalCopiarModeloPadrao } from '@/components/ModalCopiarModeloPadrao'
 import { ModalImportarPlanoContas } from '@/components/ModalImportarPlanoContas'
 import { ModalCompararPlanos } from '@/components/ModalCompararPlanos'
@@ -823,44 +824,16 @@ export default function PlanoContas() {
                 <Label htmlFor="pc-conta" className="text-xs font-semibold text-slate-700">
                   Conta *
                 </Label>
-                <Select value={form.conta} onValueChange={(val) => setField('conta', val)}>
-                  <SelectTrigger id="pc-conta" className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Selecione a conta" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-80">
-                    {TIPOS_CONTA.map((tipo) => {
-                      const lista = contasPorTipo.get(tipo) || []
-                      if (lista.length === 0) return null
-                      return (
-                        <SelectGroup key={tipo}>
-                          <SelectLabel className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                            {tipo}
-                          </SelectLabel>
-                          {lista.map((c) => {
-                            const jaCadastrada = itens.some((item) => item.conta === c.id)
-                            return (
-                              <SelectItem key={c.id} value={c.id} className="text-xs">
-                                <span className="flex items-center gap-1.5">
-                                  <span>
-                                    {c.codigo || '—'} - {c.nome} ({c.tipo})
-                                  </span>
-                                  {jaCadastrada && (
-                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                      Cadastrada
-                                    </span>
-                                  )}
-                                </span>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectGroup>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                {errors.conta && (
-                  <p className="text-[11px] text-red-600 font-medium">{errors.conta}</p>
-                )}
+                <SeletorPlanoContaCombobox
+                  id="pc-conta"
+                  value={form.conta}
+                  onValueChange={(val) => setField('conta', val)}
+                  contas={contas}
+                  empresaAtivaId={form.empresa || selectedEmpresaId}
+                  placeholder="Selecione a conta contábil..."
+                  error={errors.conta}
+                  className="h-9 min-h-[36px] text-xs py-1"
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -997,44 +970,18 @@ export default function PlanoContas() {
 
               {/* Filtro por Conta */}
               <div className="relative">
-                <Select value={filtroConta} onValueChange={setFiltroConta}>
-                  <SelectTrigger className="h-8 text-xs bg-white">
-                    <SelectValue placeholder="Todas as contas" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    <SelectItem value="todos" className="text-xs font-medium">
-                      Todas as contas
-                    </SelectItem>
-                    {TIPOS_CONTA.map((tipo) => {
-                      const lista = contasPorTipo.get(tipo) || []
-                      if (lista.length === 0) return null
-                      return (
-                        <SelectGroup key={tipo}>
-                          <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            {tipo}
-                          </SelectLabel>
-                          {lista.map((c) => {
-                            const jaCadastrada = itens.some((item) => item.conta === c.id)
-                            return (
-                              <SelectItem key={c.id} value={c.id} className="text-xs">
-                                <span className="flex items-center gap-1.5">
-                                  <span>
-                                    {c.codigo || '—'} - {c.nome}
-                                  </span>
-                                  {jaCadastrada && (
-                                    <span className="text-[9px] px-1 py-0 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                      Cadastrada
-                                    </span>
-                                  )}
-                                </span>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectGroup>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
+                <SeletorPlanoContaCombobox
+                  id="filtro-conta-barra"
+                  value={filtroConta === 'todos' ? '' : filtroConta}
+                  onValueChange={(val) => setFiltroConta(val || 'todos')}
+                  contas={contas}
+                  empresaAtivaId={selectedEmpresaId}
+                  allowClear
+                  emptyLabel="Todas as contas"
+                  clearValue="todos"
+                  placeholder="Todas as contas"
+                  className="h-8 min-h-[32px] text-xs py-1"
+                />
               </div>
 
               {/* Filtro por Centro */}
@@ -1327,44 +1274,16 @@ export default function PlanoContas() {
                 <Label htmlFor="edit-pc-conta" className="text-xs font-semibold text-slate-700">
                   Conta *
                 </Label>
-                <Select value={form.conta} onValueChange={(val) => setField('conta', val)}>
-                  <SelectTrigger id="edit-pc-conta" className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Selecione a conta" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-80">
-                    {TIPOS_CONTA.map((tipo) => {
-                      const lista = contasPorTipo.get(tipo) || []
-                      if (lista.length === 0) return null
-                      return (
-                        <SelectGroup key={tipo}>
-                          <SelectLabel className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                            {tipo}
-                          </SelectLabel>
-                          {lista.map((c) => {
-                            const jaCadastrada = itens.some((item) => item.conta === c.id)
-                            return (
-                              <SelectItem key={c.id} value={c.id} className="text-xs">
-                                <span className="flex items-center gap-1.5">
-                                  <span>
-                                    {c.codigo || '—'} - {c.nome} ({c.tipo})
-                                  </span>
-                                  {jaCadastrada && (
-                                    <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                                      Cadastrada
-                                    </span>
-                                  )}
-                                </span>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectGroup>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                {errors.conta && (
-                  <p className="text-[11px] text-red-600 font-medium">{errors.conta}</p>
-                )}
+                <SeletorPlanoContaCombobox
+                  id="edit-pc-conta"
+                  value={form.conta}
+                  onValueChange={(val) => setField('conta', val)}
+                  contas={contas}
+                  empresaAtivaId={form.empresa || selectedEmpresaId}
+                  placeholder="Selecione a conta contábil..."
+                  error={errors.conta}
+                  className="h-9 min-h-[36px] text-xs py-1"
+                />
               </div>
 
               <div className="space-y-1.5">

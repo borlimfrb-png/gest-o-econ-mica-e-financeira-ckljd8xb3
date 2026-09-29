@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Tag, CheckCircle2, Circle, BookOpen, SearchCheck, FileText } from 'lucide-react'
 import { ModalConsultarContas } from '@/components/ModalConsultarContas'
 import { ModalRelatorioContasCentrosA4 } from '@/components/ModalRelatorioContasCentrosA4'
+import { SeletorPlanoContaCombobox } from '@/components/SeletorPlanoContaCombobox'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
@@ -1518,27 +1519,18 @@ export default function Centros() {
                             Consultar Contas
                           </button>
                         </div>
-                        <Select
-                          value={lancForm.conta || 'nenhuma'}
-                          onValueChange={(val) =>
-                            setLancField('conta', val === 'nenhuma' ? '' : val)
-                          }
-                        >
-                          <SelectTrigger id="lanc-conta" className="h-9 text-xs bg-white">
-                            <SelectValue placeholder="Selecione (opcional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="nenhuma" className="text-xs">
-                              Nenhuma conta
-                            </SelectItem>
-                            {contasOrdenadas.map((c) => (
-                              <SelectItem key={c.id} value={c.id} className="text-xs">
-                                {c.codigo || '—'} - {c.nome}
-                                <span className="text-slate-400"> ({c.tipo})</span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SeletorPlanoContaCombobox
+                          id="lanc-conta"
+                          value={lancForm.conta}
+                          onValueChange={(val) => setLancField('conta', val)}
+                          contas={contasOrdenadas}
+                          empresaAtivaId={effectiveEmpresaId}
+                          allowClear
+                          emptyLabel="Nenhuma conta"
+                          clearValue=""
+                          placeholder="Selecione (opcional)"
+                          className="h-9 min-h-[36px] text-xs py-1"
+                        />
                         {contas.length === 0 ? (
                           <p className="text-[11px] text-slate-400">
                             Nenhuma conta cadastrada. Crie em "Contas".
@@ -2012,25 +2004,18 @@ export default function Centros() {
                 <Label htmlFor="edit-lanc-conta" className="text-xs font-semibold text-slate-700">
                   Conta
                 </Label>
-                <Select
-                  value={lancForm.conta || 'nenhuma'}
-                  onValueChange={(val) => setLancField('conta', val === 'nenhuma' ? '' : val)}
-                >
-                  <SelectTrigger id="edit-lanc-conta" className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Selecione (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nenhuma" className="text-xs">
-                      Nenhuma conta
-                    </SelectItem>
-                    {contasOrdenadas.map((c) => (
-                      <SelectItem key={c.id} value={c.id} className="text-xs">
-                        {c.codigo || '—'} - {c.nome}
-                        <span className="text-slate-400"> ({c.tipo})</span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SeletorPlanoContaCombobox
+                  id="edit-lanc-conta"
+                  value={lancForm.conta}
+                  onValueChange={(val) => setLancField('conta', val)}
+                  contas={contasOrdenadas}
+                  empresaAtivaId={effectiveEmpresaId}
+                  allowClear
+                  emptyLabel="Nenhuma conta"
+                  clearValue=""
+                  placeholder="Selecione (opcional)"
+                  className="h-9 min-h-[36px] text-xs py-1"
+                />
               </div>
               <div className="flex items-center gap-2 pt-1">
                 <Checkbox

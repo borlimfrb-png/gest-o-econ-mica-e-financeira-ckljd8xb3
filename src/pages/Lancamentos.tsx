@@ -1605,24 +1605,19 @@ export default function Lancamentos() {
                   <Label htmlFor="hist-plano" className="text-xs font-semibold text-slate-700">
                     Plano de Contas
                   </Label>
-                  <Select value={histPlanoContaFiltro} onValueChange={setHistPlanoContaFiltro}>
-                    <SelectTrigger
-                      id="hist-plano"
-                      className="h-9 text-xs bg-white truncate text-left"
-                    >
-                      <SelectValue placeholder="Todos os planos" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-64 max-w-[420px]">
-                      <SelectItem value="todos" className="text-xs font-semibold text-blue-700">
-                        Todos os Planos de Contas
-                      </SelectItem>
-                      {planoContasOptions.map((item) => (
-                        <SelectItem key={item.id} value={item.id} className="text-xs py-2">
-                          <span>{formatPlanoContaLabel(item)}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SeletorPlanoContaCombobox
+                    id="hist-plano"
+                    value={histPlanoContaFiltro === 'todos' ? '' : histPlanoContaFiltro}
+                    onValueChange={(val) => setHistPlanoContaFiltro(val || 'todos')}
+                    planoContas={planoContasOptions}
+                    empresaAtivaId={histEmpresaFiltro === 'todas' ? undefined : histEmpresaFiltro}
+                    lancamentosHistorico={todosLancamentos}
+                    allowClear
+                    emptyLabel="Todos os Planos de Contas"
+                    clearValue="todos"
+                    placeholder="Todos os Planos de Contas"
+                    className="h-9 min-h-[36px] text-xs py-1"
+                  />
                 </div>
 
                 {/* Data Início */}
