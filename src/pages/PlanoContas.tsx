@@ -71,6 +71,8 @@ import { ModalAssistenteSegmento } from '@/components/ModalAssistenteSegmento'
 import { ModalRelatorioContasSemCodigoA4 } from '@/components/ModalRelatorioContasSemCodigoA4'
 import { ModalEdicaoLoteCodigos } from '@/components/ModalEdicaoLoteCodigos'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
+import { useAuth } from '@/contexts/AuthContext'
+import { ModalCopiarPlanoEmpresas } from '@/components/ModalCopiarPlanoEmpresas'
 import { exportarPlanoContasExcel, exportarPlanoContasCsv } from '@/lib/exportacaoPlanoContas'
 import {
   DropdownMenu,
@@ -79,7 +81,15 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { FileSpreadsheet, GitCompare, Wand2, ChevronDown, FileText, Layers } from 'lucide-react'
+import {
+  FileSpreadsheet,
+  GitCompare,
+  Wand2,
+  ChevronDown,
+  FileText,
+  Layers,
+  FolderSync,
+} from 'lucide-react'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -120,6 +130,7 @@ const TIPO_CENTRO_BADGE: Record<TipoCentro, string> = {
 
 export default function PlanoContas() {
   const { toast } = useToast()
+  const { user, isAdmin } = useAuth()
   const { selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, empresas, selectedAno } =
     useFilter()
   const { minhaEmpresa } = useMinhaEmpresa()
@@ -157,6 +168,7 @@ export default function PlanoContas() {
   const [assistenteSegmentoOpen, setAssistenteSegmentoOpen] = useState(false)
   const [relatorioSemCodigoOpen, setRelatorioSemCodigoOpen] = useState(false)
   const [edicaoLoteCodigosOpen, setEdicaoLoteCodigosOpen] = useState(false)
+  const [copiarEntreEmpresasOpen, setCopiarEntreEmpresasOpen] = useState(false)
 
   // Filtros
   const [busca, setBusca] = useState('')
@@ -556,6 +568,26 @@ export default function PlanoContas() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          {/* Botão: Copiar Plano de Contas entre Empresas (Visível apenas para Administrador) */}
+          {isAdmin && (
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={() => setCopiarEntreEmpresasOpen(true)}
+              disabled={empresas.length < 2}
+              className="h-9 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-xs gap-1.5"
+              title={
+                empresas.length < 2
+                  ? 'É necessário ter ao menos 2 empresas cadastradas para copiar o plano de contas'
+                  : 'Copiar todas as contas da empresa de origem para a empresa de destino'
+              }
+            >
+              <FolderSync className="w-4 h-4 text-white" />
+              Copiar Plano de Contas
+            </Button>
+          )}
+
           {/* Botão: Edição em Lote de Códigos */}
           <Button
             type="button"
@@ -1456,6 +1488,17 @@ export default function PlanoContas() {
         centroMap={centroMap}
         onSuccess={loadData}
       />
+
+      {/* Modal: Copiar Plano de Contas entre Empresas (Admin) */}
+      {isAdmin && (
+        <ModalCopiarPlanoEmpresas
+          open={copiarEntreEmpresasOpen}
+          onOpenChange={setCopiarEntreEmpresasOpen}
+          empresas={empresas}
+          empresaDestinoPadraoId={selectedEmpresaId}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   )
 }
