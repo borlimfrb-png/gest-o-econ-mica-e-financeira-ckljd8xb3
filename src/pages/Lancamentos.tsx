@@ -1610,7 +1610,7 @@ export default function Lancamentos() {
                     value={histPlanoContaFiltro === 'todos' ? '' : histPlanoContaFiltro}
                     onValueChange={(val) => setHistPlanoContaFiltro(val || 'todos')}
                     planoContas={planoContasOptions}
-                    empresaAtivaId={histEmpresaFiltro === 'todas' ? undefined : histEmpresaFiltro}
+                    empresaAtivaId={histEmpresaId === 'todas' ? undefined : histEmpresaId}
                     lancamentosHistorico={todosLancamentos}
                     allowClear
                     emptyLabel="Todos os Planos de Contas"
