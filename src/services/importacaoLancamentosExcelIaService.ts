@@ -187,8 +187,45 @@ export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingSta
     formaPagamento: '',
   }
 
+  // Passada 1: Prioridade MÁXIMA para os cabeçalhos oficiais do modelo exportado
   for (const h of headers) {
     const c = clean(h)
+    // "Data do Lançamento"
+    if (!mapping.data && (c === 'datadolancamento' || c === 'datalancamento' || c === 'datalanc')) {
+      mapping.data = h
+    }
+    // "Código da Conta"
+    if (
+      !mapping.codigoConta &&
+      (c === 'codigodaconta' || c === 'codigoconta' || c === 'coddaconta')
+    ) {
+      mapping.codigoConta = h
+    }
+    // "Nome da Conta"
+    if (
+      !mapping.nomeConta &&
+      (c === 'nomedaconta' || c === 'nomeconta' || c === 'nomeda' || c === 'contanome')
+    ) {
+      mapping.nomeConta = h
+    }
+    // "Valor"
+    if (!mapping.valor && c === 'valor') {
+      mapping.valor = h
+    }
+  }
+
+  // Passada 2: Mapeamento heurístico padrão para outras colunas ou variações
+  for (const h of headers) {
+    if (
+      h === mapping.data ||
+      h === mapping.codigoConta ||
+      h === mapping.nomeConta ||
+      h === mapping.valor
+    ) {
+      continue
+    }
+    const c = clean(h)
+
     if (
       !mapping.data &&
       (c.includes('data') ||
@@ -198,6 +235,27 @@ export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingSta
         c.includes('pagamento'))
     ) {
       mapping.data = h
+    } else if (
+      !mapping.codigoConta &&
+      (c.includes('codconta') ||
+        c.includes('codigoconta') ||
+        c.includes('codempresa') ||
+        c.includes('codigoempresa') ||
+        c.includes('classificacao') ||
+        c.includes('reduzido') ||
+        c.includes('contared'))
+    ) {
+      mapping.codigoConta = h
+    } else if (
+      !mapping.nomeConta &&
+      (c.includes('nomeconta') ||
+        c.includes('nomedaconta') ||
+        c.includes('tituloconta') ||
+        c.includes('contacontabil') ||
+        (c.includes('conta') && !c.includes('banc') && !c.includes('corrente')) ||
+        c.includes('categoria'))
+    ) {
+      mapping.nomeConta = h
     } else if (
       !mapping.valor &&
       (c.includes('valor') ||
@@ -228,23 +286,6 @@ export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingSta
         c.includes('dc'))
     ) {
       mapping.tipo = h
-    } else if (
-      !mapping.codigoConta &&
-      (c.includes('codconta') ||
-        c.includes('codigoconta') ||
-        c.includes('reduzido') ||
-        c.includes('contared') ||
-        c.includes('classificacao'))
-    ) {
-      mapping.codigoConta = h
-    } else if (
-      !mapping.nomeConta &&
-      (c.includes('nomeconta') ||
-        c.includes('conta') ||
-        c.includes('tituloconta') ||
-        c.includes('categoria'))
-    ) {
-      mapping.nomeConta = h
     } else if (
       !mapping.centroCusto &&
       (c.includes('centro') ||
@@ -281,6 +322,8 @@ export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingSta
       (h) =>
         h !== mapping.data &&
         h !== mapping.valor &&
+        h !== mapping.codigoConta &&
+        h !== mapping.nomeConta &&
         !clean(h).includes('cod') &&
         !clean(h).includes('id'),
     )
@@ -483,26 +526,84 @@ export function processarLinhasPlanilha(options: {
       ? String(row[mapping.formaPagamento] || '').trim()
       : undefined
 
-    // 5. Match inteligente com Plano de Contas
-    const termoBuscaConta = nomeContaPlanilha || rawHist || ''
-    const matchRes = findBestPlanoContaMatch(
-      termoBuscaConta,
-      planoContas,
-      codigoContaPlanilha || rawHist,
-      mapeamentosAprendidos,
-    )
-
-    let planoContaObj = matchRes.match
+    // 5. Match inteligente com Plano de Contas:
+    // Ordem estrita de resolução pedida:
+    // a) Vincular primeiro pelo CÓDIGO informado na linha (código da empresa ou código estrutural da conta)
+    // b) Se o código não existir no plano, tentar pelo NOME da conta
+    // c) Se nenhum dos dois, cai no fluxo atual (histórico, memória de aprendizado, combobox)
+    let planoContaObj: PlanoContaRecord | undefined
     let matchConfidence: LancamentoExcelLinha['matchConfidence'] = 'nao_encontrado'
 
-    if (matchRes.type === 'aprendido') {
-      matchConfidence = 'memoria'
-    } else if (matchRes.type === 'codigo_empresa') {
-      matchConfidence = 'codigo_empresa'
-    } else if (matchRes.type === 'exact') {
-      matchConfidence = 'exato'
-    } else if (matchRes.type === 'contains' || matchRes.type === 'code') {
-      matchConfidence = 'similar'
+    const normalizarCode = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase()
+
+    if (codigoContaPlanilha) {
+      const codeClean = normalizarCode(codigoContaPlanilha)
+      // Tenta 1: codigo_empresa exato
+      planoContaObj = planoContas.find(
+        (pc) => pc.codigo_empresa && normalizarCode(pc.codigo_empresa) === codeClean,
+      )
+      if (planoContaObj) {
+        matchConfidence = 'codigo_empresa'
+      } else {
+        // Tenta 2: codigo estrutural da conta
+        planoContaObj = planoContas.find(
+          (pc) => pc.codigo && normalizarCode(pc.codigo) === codeClean,
+        )
+        if (planoContaObj) {
+          matchConfidence = 'exato'
+        }
+      }
+    }
+
+    // Se não encontrou por código, tenta pelo nome da conta
+    if (!planoContaObj && nomeContaPlanilha) {
+      const nomeClean = nomeContaPlanilha.trim().toLowerCase()
+      // Match exato pelo nome da conta ou descrição
+      planoContaObj = planoContas.find((pc) => {
+        const nConta = (pc.expand?.conta?.nome || '').trim().toLowerCase()
+        const nDesc = (pc.descricao || '').trim().toLowerCase()
+        return (nConta && nConta === nomeClean) || (nDesc && nDesc === nomeClean)
+      })
+      if (planoContaObj) {
+        matchConfidence = 'exato'
+      } else {
+        // Match parcial pelo nome da conta
+        planoContaObj = planoContas.find((pc) => {
+          const nConta = (pc.expand?.conta?.nome || '').trim().toLowerCase()
+          const nDesc = (pc.descricao || '').trim().toLowerCase()
+          return (
+            (nConta && (nConta.includes(nomeClean) || nomeClean.includes(nConta))) ||
+            (nDesc && (nDesc.includes(nomeClean) || nomeClean.includes(nDesc)))
+          )
+        })
+        if (planoContaObj) {
+          matchConfidence = 'similar'
+        }
+      }
+    }
+
+    // Se ainda não encontrou nem por código nem por nome, usa o motor heurístico com histórico/aprendizado
+    if (!planoContaObj) {
+      const termoBuscaConta = nomeContaPlanilha || rawHist || ''
+      const matchRes = findBestPlanoContaMatch(
+        termoBuscaConta,
+        planoContas,
+        codigoContaPlanilha || rawHist,
+        mapeamentosAprendidos,
+      )
+
+      if (matchRes.match) {
+        planoContaObj = matchRes.match
+        if (matchRes.type === 'aprendido') {
+          matchConfidence = 'memoria'
+        } else if (matchRes.type === 'codigo_empresa') {
+          matchConfidence = 'codigo_empresa'
+        } else if (matchRes.type === 'exact') {
+          matchConfidence = 'exato'
+        } else if (matchRes.type === 'contains' || matchRes.type === 'code') {
+          matchConfidence = 'similar'
+        }
+      }
     }
 
     // Se ainda não encontrou, tenta buscar na memória de fornecedores
@@ -653,72 +754,188 @@ export function processarLinhasPlanilha(options: {
   }
 }
 
+export interface OpcoesModeloExcelLancamentos {
+  planoContas?: PlanoContaRecord[]
+  nomeEmpresa?: string
+  ano?: number
+}
+
 /**
- * Cria modelo Excel de exemplo para download
+ * Cria modelo Excel com as 4 colunas essenciais pedidas:
+ * 1. "Data do Lançamento" (DD/MM/AAAA)
+ * 2. "Código da Conta" (código conforme Plano de Contas da empresa ativa)
+ * 3. "Nome da Conta" (nome cadastrado no Plano de Contas)
+ * 4. "Valor" (numérico monetário)
+ * Seguidas das colunas auxiliares (Histórico, Tipo, Centro de Custo, Documento, Forma de Pagamento)
+ * e uma aba dedicada de Instruções e Referência de Contas da empresa.
  */
-export function gerarPlanilhaModeloExcel(): void {
-  const data = [
-    {
-      Data: '15/01/2025',
-      Historico: 'Recebimento de Prestação de Serviços de Consultoria',
-      Valor: 12500.0,
-      Tipo: 'Receita',
-      'Conta Contabil': 'Receita de Prestação de Serviços',
-      'Codigo Conta': '3.1.01',
-      'Centro de Custo': 'Consultoria',
-      Documento: 'NF-1024',
-      'Forma de Pagamento': 'PIX',
-    },
-    {
-      Data: '20/01/2025',
-      Historico: 'Pagamento de Aluguel Escritório Central',
-      Valor: 3200.0,
-      Tipo: 'Despesa',
-      'Conta Contabil': 'Aluguéis e Condomínio',
-      'Codigo Conta': '4.1.02',
-      'Centro de Custo': 'Administrativo',
-      Documento: 'DOC-5541',
-      'Forma de Pagamento': 'Boleto',
-    },
-    {
-      Data: '05/02/2025',
-      Historico: 'Folha de Pagamento Salários Mensais',
-      Valor: 18450.0,
-      Tipo: 'Despesa',
-      'Conta Contabil': 'Salários e Ordenados',
-      'Codigo Conta': '4.1.01',
-      'Centro de Custo': 'Geral',
-      Documento: 'FOLHA-02',
-      'Forma de Pagamento': 'Transferência Bancária',
-    },
-    {
-      Data: '10/02/2025',
-      Historico: 'Venda de Produtos Linha Premium',
-      Valor: 28900.0,
-      Tipo: 'Receita',
-      'Conta Contabil': 'Receita Bruta de Vendas',
-      'Codigo Conta': '3.1.02',
-      'Centro de Custo': 'Comercial',
-      Documento: 'NFe-4081',
-      'Forma de Pagamento': 'Cartão de Crédito',
-    },
+export function gerarPlanilhaModeloExcel(opcoes?: OpcoesModeloExcelLancamentos): void {
+  const anoBase = opcoes?.ano || new Date().getFullYear()
+  const plano = opcoes?.planoContas || []
+
+  // Filtra contas de lançamento (analíticas / não totalizadoras) da empresa ativa
+  const contasLancamento = plano.filter((pc) => {
+    const cod = pc.codigo_empresa || pc.codigo || ''
+    const isTotalizadora =
+      pc.totalizadora === true ||
+      pc.tipo_conta === 'sintetica' ||
+      pc.natureza === 'totalizadora' ||
+      Boolean(pc.expand?.conta?.sintetica) ||
+      (cod.length <= 3 && !cod.includes('.'))
+    return !isTotalizadora
+  })
+
+  // Seleciona até 4 contas de exemplo reais (ou fallback caso plano vazio)
+  interface ContaExemplo {
+    codigo: string
+    nome: string
+    tipo: 'Receita' | 'Despesa'
+    historicoPadrao: string
+    valorPadrao: number
+    centroPadrao: string
+  }
+
+  const exemplos: ContaExemplo[] = []
+
+  if (contasLancamento.length > 0) {
+    for (const c of contasLancamento) {
+      if (exemplos.length >= 4) break
+      const nomeConta = c.expand?.conta?.nome || c.descricao || 'Conta Contábil'
+      const codigoConta = c.codigo_empresa || c.codigo || '1.01'
+      const tipoConta = (c.expand?.conta?.tipo as 'Receita' | 'Despesa') || 'Despesa'
+      exemplos.push({
+        codigo: codigoConta,
+        nome: nomeConta,
+        tipo: tipoConta,
+        historicoPadrao:
+          tipoConta === 'Receita' ? `Recebimento ref. ${nomeConta}` : `Pagamento ref. ${nomeConta}`,
+        valorPadrao: tipoConta === 'Receita' ? 12500.0 : 3450.0,
+        centroPadrao: tipoConta === 'Receita' ? 'Comercial' : 'Administrativo',
+      })
+    }
+  }
+
+  // Fallbacks caso não haja contas suficientes cadastradas
+  if (exemplos.length === 0) {
+    exemplos.push(
+      {
+        codigo: '3.1.01',
+        nome: 'Receita de Prestação de Serviços',
+        tipo: 'Receita',
+        historicoPadrao: 'Recebimento de Prestação de Serviços de Consultoria',
+        valorPadrao: 12500.0,
+        centroPadrao: 'Consultoria',
+      },
+      {
+        codigo: '4.1.02',
+        nome: 'Aluguéis e Condomínio',
+        tipo: 'Despesa',
+        historicoPadrao: 'Pagamento de Aluguel Escritório Central',
+        valorPadrao: 3200.0,
+        centroPadrao: 'Administrativo',
+      },
+      {
+        codigo: '4.1.01',
+        nome: 'Salários e Ordenados',
+        tipo: 'Despesa',
+        historicoPadrao: 'Folha de Pagamento Salários Mensais',
+        valorPadrao: 18450.0,
+        centroPadrao: 'Geral',
+      },
+      {
+        codigo: '3.1.02',
+        nome: 'Receita Bruta de Vendas',
+        tipo: 'Receita',
+        historicoPadrao: 'Venda de Produtos Linha Premium',
+        valorPadrao: 28900.0,
+        centroPadrao: 'Comercial',
+      },
+    )
+  }
+
+  const datasExemplo = [
+    `15/01/${anoBase}`,
+    `20/01/${anoBase}`,
+    `05/02/${anoBase}`,
+    `10/02/${anoBase}`,
   ]
 
+  // Monta linhas do modelo mantendo a ordem estrita pedida:
+  // 1: Data do Lançamento | 2: Código da Conta | 3: Nome da Conta | 4: Valor
+  // seguidos das colunas auxiliares
+  const data = exemplos.map((ex, idx) => ({
+    'Data do Lançamento': datasExemplo[idx % datasExemplo.length],
+    'Código da Conta': ex.codigo,
+    'Nome da Conta': ex.nome,
+    Valor: ex.valorPadrao,
+    Histórico: ex.historicoPadrao,
+    Tipo: ex.tipo,
+    'Centro de Custo': ex.centroPadrao,
+    Documento: `DOC-00${idx + 1}`,
+    'Forma de Pagamento': idx % 2 === 0 ? 'PIX' : 'Boleto Bancário',
+  }))
+
   const ws = XLSX.utils.json_to_sheet(data)
-  // Largura das colunas amigável
+  // Largura amigável das colunas
   ws['!cols'] = [
-    { wch: 12 },
-    { wch: 45 },
-    { wch: 14 },
-    { wch: 12 },
-    { wch: 32 },
-    { wch: 14 },
-    { wch: 18 },
-    { wch: 14 },
-    { wch: 22 },
+    { wch: 18 }, // Data do Lançamento
+    { wch: 18 }, // Código da Conta
+    { wch: 38 }, // Nome da Conta
+    { wch: 14 }, // Valor
+    { wch: 46 }, // Histórico
+    { wch: 12 }, // Tipo
+    { wch: 20 }, // Centro de Custo
+    { wch: 15 }, // Documento
+    { wch: 22 }, // Forma de Pagamento
   ]
 
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Lancamentos_Mensais')
-  XLSX.writeFile(wb, 'modelo_lancamentos_excel_ia.xlsx')
+  XLSX.utils.book_append_sheet(wb, ws, 'Modelo_Lancamentos')
+
+  // Aba 2: Instruções e referência do Plano de Contas
+  const instrucoes = [
+    {
+      INSTRUÇÃO:
+        '1. As 4 primeiras colunas são ESSENCIAIS: Data do Lançamento, Código da Conta, Nome da Conta e Valor.',
+    },
+    {
+      INSTRUÇÃO:
+        '2. O "Código da Conta" deve ser exatamente o mesmo cadastrado no Plano de Contas da empresa ativa no sistema.',
+    },
+    {
+      INSTRUÇÃO:
+        '3. Ao importar, o sistema busca primeiro pelo Código da Conta; se não encontrar, tenta pelo Nome da Conta.',
+    },
+    {
+      INSTRUÇÃO:
+        '4. A Data do Lançamento deve estar no formato DD/MM/AAAA e pertencer ao Ano e Período selecionados na tela de importação.',
+    },
+    { INSTRUÇÃO: '5. O Valor deve ser numérico (ex: 1500,00 ou 1500.00).' },
+    {
+      INSTRUÇÃO:
+        '6. As colunas Histórico, Tipo, Centro de Custo, Documento e Forma de Pagamento são opcionais.',
+    },
+  ]
+  const wsInstrucoes = XLSX.utils.json_to_sheet(instrucoes)
+  wsInstrucoes['!cols'] = [{ wch: 110 }]
+  XLSX.utils.book_append_sheet(wb, wsInstrucoes, 'Instruções')
+
+  // Se houver plano de contas da empresa, adiciona aba de referência rápida com as contas ativas
+  if (contasLancamento.length > 0) {
+    const contasRef = contasLancamento.map((c) => ({
+      'Código da Conta': c.codigo_empresa || c.codigo || '',
+      'Nome da Conta': c.expand?.conta?.nome || c.descricao || '',
+      Tipo: c.expand?.conta?.tipo || c.natureza || '',
+      'Código Estrutural': c.codigo || '',
+    }))
+    const wsRef = XLSX.utils.json_to_sheet(contasRef)
+    wsRef['!cols'] = [{ wch: 18 }, { wch: 40 }, { wch: 14 }, { wch: 18 }]
+    XLSX.utils.book_append_sheet(wb, wsRef, 'Contas_Disponiveis')
+  }
+
+  const nomeArquivo = opcoes?.nomeEmpresa
+    ? `modelo_lancamentos_${opcoes.nomeEmpresa.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${anoBase}.xlsx`
+    : `modelo_lancamentos_excel_${anoBase}.xlsx`
+
+  XLSX.writeFile(wb, nomeArquivo)
 }

@@ -15,13 +15,17 @@ routerAdd(
       }
 
       const prompt = `Você é um especialista em contabilidade e importação de planilhas financeiras (lançamentos de receitas e despesas).
-Analise o cabeçalho e as primeiras linhas de uma planilha Excel e determine o mapeamento de colunas para os seguintes campos do sistema:
-- "data": coluna que contém a data do lançamento (ex: Data, Dt, Competência, Vencimento, Pagamento)
+Analise o cabeçalho e as primeiras linhas de uma planilha Excel e determine o mapeamento de colunas para os seguintes campos do sistema.
+
+ATENÇÃO - PRIORIDADE MÁXIMA PARA O MODELO OFICIAL DO SISTEMA:
+- Se existir coluna "Data do Lançamento" (ou variação direta como "Data Lancamento", "Data"), MAPEIE OBRIGATORIAMENTE para o campo "data".
+- Se existir coluna "Código da Conta" (ou "Codigo Conta", "Código", "Cod Conta"), MAPEIE OBRIGATORIAMENTE para o campo "codigoConta".
+- Se existir coluna "Nome da Conta" (ou "Nome Conta", "Conta Contábil", "Descrição da Conta"), MAPEIE OBRIGATORIAMENTE para o campo "nomeConta".
+- Se existir coluna "Valor" (ou "Valor Líquido", "Total", "Quantia"), MAPEIE OBRIGATORIAMENTE para o campo "valor".
+
+Demais campos do sistema:
 - "historico": coluna com o histórico, descrição, cliente/fornecedor ou detalhe da operação
-- "valor": coluna de valor numérico/monetário
 - "tipo": coluna que indica se é Receita ou Despesa (ou Débito/Crédito, Entrada/Saída, R/D, C/D), ou deixe null se não houver
-- "codigoConta": coluna com o código da conta contábil (ex: 1.1.01, Conta Contábil, Código, Reduzido), ou null
-- "nomeConta": coluna com o nome/título da conta contábil, ou null
 - "centroCusto": coluna com o centro de custo ou unidade de negócio, ou null
 - "documento": coluna com número do documento, NF, comprovante, ou null
 - "formaPagamento": coluna com forma de pagamento (PIX, Boleto, Cartão, Transferência), ou null

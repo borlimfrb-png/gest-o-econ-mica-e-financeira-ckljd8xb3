@@ -800,13 +800,61 @@ export function ImportarLancamentosExcelIA({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={gerarPlanilhaModeloExcel}
-                  className="text-xs h-9 gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100 shadow-xs"
+                  onClick={() =>
+                    gerarPlanilhaModeloExcel({
+                      planoContas: planoContasEmpresa,
+                      nomeEmpresa: empresaSelecionada?.nome,
+                      ano: selectedAno,
+                    })
+                  }
+                  className="text-xs h-9 gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100 shadow-xs font-semibold"
                 >
                   <Download className="w-4 h-4 text-emerald-600" />
                   Baixar Modelo Excel (.xlsx)
                 </Button>
               </div>
+            </div>
+
+            {/* Banner explicativo do Modelo Excel Atualizado */}
+            <div className="mt-4 p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-xs text-emerald-950 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg shrink-0">
+                  <FileSpreadsheet className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="font-semibold text-emerald-900">
+                    Modelo com as 4 colunas essenciais do Plano de Contas:
+                  </p>
+                  <p className="text-emerald-800 text-[11px] mt-0.5">
+                    <strong>1. Data do Lançamento</strong> (DD/MM/AAAA) &bull;{' '}
+                    <strong>2. Código da Conta</strong> (do Plano de Contas) &bull;{' '}
+                    <strong>3. Nome da Conta</strong> &bull; <strong>4. Valor</strong>.
+                    {empresaSelecionada && (
+                      <span className="ml-1 text-emerald-700">
+                        O download já carrega códigos reais da empresa{' '}
+                        <strong>{empresaSelecionada.nome}</strong> para o ano{' '}
+                        <strong>{selectedAno}</strong>.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  gerarPlanilhaModeloExcel({
+                    planoContas: planoContasEmpresa,
+                    nomeEmpresa: empresaSelecionada?.nome,
+                    ano: selectedAno,
+                  })
+                }
+                className="shrink-0 bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs h-8 font-medium shadow-2xs"
+              >
+                <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                Exportar Modelo da Empresa
+              </Button>
             </div>
           </CardHeader>
 
@@ -867,11 +915,12 @@ export function ImportarLancamentosExcelIA({
               <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1">
                 <div className="flex items-center gap-2 font-semibold text-slate-900">
                   <Sparkles className="w-4 h-4 text-blue-600" />
-                  Mapeamento com IA
+                  Mapeamento com IA e Código
                 </div>
                 <p className="text-slate-500">
-                  A IA analisa cabeçalhos e amostras para associar Data, Histórico, Valor e Conta
-                  automaticamente.
+                  Reconhece automaticamente as colunas <strong>Data do Lançamento</strong>,{' '}
+                  <strong>Código da Conta</strong>, <strong>Nome da Conta</strong> e{' '}
+                  <strong>Valor</strong> com máxima prioridade.
                 </p>
               </div>
 
@@ -881,8 +930,9 @@ export function ImportarLancamentosExcelIA({
                   Filtragem Mês a Mês
                 </div>
                 <p className="text-slate-500">
-                  Importe apenas o período escolhido. Datas de outros anos ou fora dos meses
-                  selecionados são sinalizadas.
+                  Filtre por <strong>Ano</strong> ({selectedAno}) e <strong>Período</strong>{' '}
+                  (intervalo de meses ou seleção individual). Lançamentos fora do período são
+                  sinalizados.
                 </p>
               </div>
 
@@ -1082,8 +1132,14 @@ export function ImportarLancamentosExcelIA({
 
               {/* Código da Conta */}
               <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">
-                  Código da Conta Contábil
+                <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
+                  <span>Código da Conta</span>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                  >
+                    Prioridade 1
+                  </Badge>
                 </Label>
                 <Select
                   value={columnMapping.codigoConta || 'none'}
@@ -1108,13 +1164,19 @@ export function ImportarLancamentosExcelIA({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[10px] text-slate-500">Ex: Código, Reduzido, Classificação</p>
+                <p className="text-[10px] text-slate-500">Ex: Código da Conta, Código, Reduzido</p>
               </div>
 
               {/* Nome da Conta */}
               <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">
-                  Nome / Título da Conta
+                <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
+                  <span>Nome da Conta</span>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200"
+                  >
+                    Prioridade 2
+                  </Badge>
                 </Label>
                 <Select
                   value={columnMapping.nomeConta || 'none'}
@@ -1136,7 +1198,7 @@ export function ImportarLancamentosExcelIA({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[10px] text-slate-500">Ex: Conta, Categoria, Título</p>
+                <p className="text-[10px] text-slate-500">Ex: Nome da Conta, Conta Contábil</p>
               </div>
 
               {/* Centro de Custo */}
