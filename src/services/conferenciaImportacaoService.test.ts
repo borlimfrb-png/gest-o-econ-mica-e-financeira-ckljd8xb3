@@ -10,6 +10,11 @@ describe('conferenciaImportacaoService', () => {
   const planoContasMock: PlanoContaRecord[] = [
     {
       id: 'pc_1',
+      collectionId: 'plano_contas',
+      collectionName: 'plano_contas',
+      user: 'u1',
+      conta: 'conta_1',
+      centro: 'centro_1',
       codigo: '4.1.01',
       codigo_empresa: '101',
       descricao: 'Aluguel Escritório',
@@ -19,16 +24,24 @@ describe('conferenciaImportacaoService', () => {
       expand: {
         conta: {
           id: 'conta_1',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u1',
           nome: 'Aluguel',
           tipo: 'Despesa',
           classificacao_dre: 'Despesa Fixa',
           created: '',
           updated: '',
-        },
+        } as any,
       },
     },
     {
       id: 'pc_2',
+      collectionId: 'plano_contas',
+      collectionName: 'plano_contas',
+      user: 'u1',
+      conta: 'conta_2',
+      centro: 'centro_1',
       codigo: '4.1.02',
       codigo_empresa: '102',
       descricao: 'Energia Elétrica',
@@ -38,12 +51,15 @@ describe('conferenciaImportacaoService', () => {
       expand: {
         conta: {
           id: 'conta_2',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u1',
           nome: 'Energia Elétrica',
           tipo: 'Despesa',
           classificacao_dre: undefined, // Sem DRE
           created: '',
           updated: '',
-        },
+        } as any,
       },
     },
   ]
@@ -82,6 +98,8 @@ describe('conferenciaImportacaoService', () => {
     const gravados: LancamentoRecord[] = [
       {
         id: 'rec_1',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
         empresa: 'emp_1',
         plano_conta: 'pc_1',
         data: '2025-01-28',
@@ -93,6 +111,8 @@ describe('conferenciaImportacaoService', () => {
       },
       {
         id: 'rec_2',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
         empresa: 'emp_1',
         plano_conta: 'pc_1',
         data: '2025-02-28',
@@ -132,6 +152,8 @@ describe('conferenciaImportacaoService', () => {
     const gravados: LancamentoRecord[] = [
       {
         id: 'rec_1',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
         empresa: 'emp_1',
         plano_conta: 'pc_1',
         data: '2025-01-28',

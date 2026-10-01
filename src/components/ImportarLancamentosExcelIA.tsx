@@ -37,7 +37,19 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { SeletorPlanoContaCombobox } from '@/components/SeletorPlanoContaCombobox'
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
-import { lancamentosService, memoriaFornecedoresService } from '@/services/financeService'
+import { PainelConferenciaImportacao } from '@/components/PainelConferenciaImportacao'
+import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
+import {
+  conciliarImportacaoExcel,
+  extrairLinhasPendentesParaReimportacao,
+  type ItemContaConferencia,
+  type ResumoConferenciaImportacao,
+} from '@/services/conferenciaImportacaoService'
+import {
+  lancamentosService,
+  memoriaFornecedoresService,
+  contasService,
+} from '@/services/financeService'
 import { planoContasMapeamentosService } from '@/services/planoContasMapeamentosService'
 import {
   extrairLinhasExcel,
@@ -158,9 +170,9 @@ export function ImportarLancamentosExcelIA({
   const [quickTargetRowId, setQuickTargetRowId] = useState<string | null>(null)
 
   // 8. Gravação / Importação Final
-  const [step, setStep] = useState<'upload' | 'mapeamento' | 'previsualizacao' | 'sucesso'>(
-    'upload',
-  )
+  const [step, setStep] = useState<
+    'upload' | 'mapeamento' | 'previsualizacao' | 'sucesso' | 'conferencia'
+  >('upload')
   const [isImporting, setIsImporting] = useState<boolean>(false)
   const [importProgress, setImportProgress] = useState<number>(0)
   const [importSummary, setImportSummary] = useState<{
@@ -168,6 +180,26 @@ export function ImportarLancamentosExcelIA({
     totalPulados: number
     totalErros: number
     errosList: string[]
+  } | null>(null)
+
+  // 9. Painel de Conferência de Importação & Reimportação de Pendências
+  const [itensConferencia, setItensConferencia] = useState<ItemContaConferencia[]>([])
+  const [resumoConferencia, setResumoConferencia] = useState<ResumoConferenciaImportacao | null>(
+    null,
+  )
+  const [isReimporting, setIsReimporting] = useState<boolean>(false)
+  const [reimportProgress, setReimportProgress] = useState<number>(0)
+  const [modalDreLoteOpen, setModalDreLoteOpen] = useState<boolean>(false)
+  const [preFilteredDreIds, setPreFilteredDreIds] = useState<string[]>([])
+  const [todasContasParaDre, setTodasContasParaDre] = useState<any[]>([])
+
+  // Metadados da última planilha para reabertura de conferência na sessão
+  const [ultimaImportacaoContexto, setUltimaImportacaoContexto] = useState<{
+    arquivoNome: string
+    linhas: LancamentoExcelLinha[]
+    ano: number
+    empresaId: string
+    isMatriz: boolean
   } | null>(null)
 
   // Drag and drop
@@ -585,6 +617,42 @@ export function ImportarLancamentosExcelIA({
         errosList,
       })
 
+      const isMatriz =
+        columnMapping.formato === 'matriz_mensal' ||
+        (columnMapping.colunasMesesMatriz &&
+          Object.keys(columnMapping.colunasMesesMatriz).length > 0)
+
+      // Salva o contexto desta importação para permitir conferência a qualquer momento
+      setUltimaImportacaoContexto({
+        arquivoNome: file?.name || 'Planilha',
+        linhas: [...linhas],
+        ano: selectedAno,
+        empresaId: selectedEmpresaId,
+        isMatriz,
+      })
+
+      // Recarrega lançamentos atualizados do período para conferência imediata
+      try {
+        const lancsAtualizados = await lancamentosService.getAll({
+          empresaId: selectedEmpresaId,
+          dataInicio: `${selectedAno}-01-01`,
+          dataFim: `${selectedAno}-12-31`,
+          expandRelations: false,
+        })
+        setLancamentosAnoExistentes(lancsAtualizados)
+
+        const { itens, resumo: resConf } = conciliarImportacaoExcel({
+          linhasPlanilha: linhas,
+          lancamentosGravados: lancsAtualizados,
+          planoContas: planoContasEmpresa,
+          isMatriz,
+        })
+        setItensConferencia(itens)
+        setResumoConferencia(resConf)
+      } catch {
+        // não bloqueia
+      }
+
       setStep('sucesso')
 
       toast({
@@ -605,6 +673,283 @@ export function ImportarLancamentosExcelIA({
     } finally {
       setIsImporting(false)
     }
+  }
+
+  // Carrega lista de contas para o Modal de Classificação DRE em Lote
+  const carregarContasParaDre = async () => {
+    try {
+      const todas = await contasService.getAll({
+        empresaId: selectedEmpresaId,
+      })
+      setTodasContasParaDre(todas)
+    } catch {
+      // fallback com expand de plano de contas
+      const contasFromPlano = planoContasEmpresa.map((p) => p.expand?.conta).filter(Boolean)
+      setTodasContasParaDre(contasFromPlano)
+    }
+  }
+
+  // Abre a tela de conferência usando os dados atuais ou a última importação
+  const handleAbrirConferencia = async () => {
+    const linhasParaConferir = linhas.length > 0 ? linhas : ultimaImportacaoContexto?.linhas || []
+
+    if (linhasParaConferir.length === 0) {
+      toast({
+        title: 'Nenhuma importação para conferir',
+        description:
+          'Faça o upload de uma planilha ou conclua uma importação para visualizar a conferência.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      // Busca lançamentos atualizados do período da conferência
+      const lancsAtualizados = await lancamentosService.getAll({
+        empresaId: selectedEmpresaId,
+        dataInicio: `${selectedAno}-01-01`,
+        dataFim: `${selectedAno}-12-31`,
+        expandRelations: false,
+      })
+      setLancamentosAnoExistentes(lancsAtualizados)
+
+      const isMatriz =
+        ultimaImportacaoContexto?.isMatriz ??
+        (columnMapping.formato === 'matriz_mensal' ||
+          (columnMapping.colunasMesesMatriz &&
+            Object.keys(columnMapping.colunasMesesMatriz).length > 0))
+
+      const { itens, resumo: resConf } = conciliarImportacaoExcel({
+        linhasPlanilha: linhasParaConferir,
+        lancamentosGravados: lancsAtualizados,
+        planoContas: planoContasEmpresa,
+        isMatriz,
+      })
+
+      setItensConferencia(itens)
+      setResumoConferencia(resConf)
+      setStep('conferencia')
+    } catch (err: unknown) {
+      const error = err as Error
+      toast({
+        title: 'Erro ao abrir conferência',
+        description: error.message || 'Falha ao conciliar os registros gravados.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Vincula um item de conta da conferência a um Plano de Contas
+  const handleVincularContaItemConferencia = async (itemContaId: string, planoContaId: string) => {
+    const pc = planoContasEmpresa.find((p) => p.id === planoContaId)
+    const pcNome = pc?.expand?.conta?.nome || pc?.descricao || ''
+    const pcCodigo = pc?.codigo || ''
+    const classifDre = pc?.expand?.conta?.classificacao_dre || (pc as any)?.classificacao_dre
+
+    // 1. Atualiza nos itens de conferência
+    const itemAlvo = itensConferencia.find((it) => it.id === itemContaId)
+    const novasLinhasExcelNoItem = (itemAlvo?.linhasExcel || []).map((l) => ({
+      ...l,
+      planoContaId: planoContaId || undefined,
+      planoContaNome: pcNome || undefined,
+      planoContaCodigo: pcCodigo || undefined,
+      planoContaObj: pc,
+    }))
+
+    // 2. Atualiza no estado principal de `linhas` também
+    setLinhas((prev) =>
+      prev.map((l) => {
+        const pertence =
+          novasLinhasExcelNoItem.some((nl) => nl.id === l.id) ||
+          (itemAlvo?.codigoPlanilha && l.codigoContaPlanilha === itemAlvo.codigoPlanilha) ||
+          (itemAlvo?.nomeContaPlanilha && l.nomeContaPlanilha === itemAlvo.nomeContaPlanilha)
+
+        if (!pertence) return l
+
+        return {
+          ...l,
+          planoContaId: planoContaId || undefined,
+          planoContaNome: pcNome || undefined,
+          planoContaCodigo: pcCodigo || undefined,
+          planoContaObj: pc,
+          status: l.status === 'alerta' || l.status === 'valido' ? 'valido' : l.status,
+          errosOuAlertas: l.errosOuAlertas.filter(
+            (e) => !e.toLowerCase().includes('conta contábil'),
+          ),
+        }
+      }),
+    )
+
+    // 3. Atualiza na lista de itensConferencia e recalcula resumo
+    const novosItens = itensConferencia.map((it) => {
+      if (it.id !== itemContaId) return it
+      return {
+        ...it,
+        planoContaId: planoContaId || undefined,
+        planoContaNome: pcNome || undefined,
+        planoContaCodigo: pcCodigo || undefined,
+        classificacaoDre: classifDre || undefined,
+        linhasExcel: novasLinhasExcelNoItem,
+      }
+    })
+    setItensConferencia(novosItens)
+
+    // Salva mapeamento aprendido se houver código da empresa
+    if (itemAlvo?.codigoPlanilha && selectedEmpresaId && planoContaId) {
+      try {
+        await planoContasMapeamentosService.salvarOuAtualizar({
+          empresa: selectedEmpresaId,
+          codigo_empresa: itemAlvo.codigoPlanilha,
+          plano_conta: planoContaId,
+        })
+      } catch {
+        /* não-bloqueante */
+      }
+    }
+
+    toast({
+      title: 'Vínculo atualizado',
+      description: `Conta vinculada a "${pcNome}". Você já pode reimportar as pendências.`,
+    })
+  }
+
+  // Executa reimportação SOMENTE das pendências
+  const handleReimportarPendencias = async () => {
+    if (!selectedEmpresaId) {
+      toast({
+        title: 'Selecione uma empresa',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const { linhasProntasParaGravar, linhasAindaBloqueadas } =
+      extrairLinhasPendentesParaReimportacao({
+        itensConferencia,
+        lancamentosJaGravados: lancamentosAnoExistentes,
+      })
+
+    if (linhasProntasParaGravar.length === 0) {
+      toast({
+        title: 'Nenhuma pendência pronta para gravar',
+        description:
+          linhasAindaBloqueadas.length > 0
+            ? 'Vincule as contas contábeis pendentes na tabela abaixo antes de reimportar.'
+            : 'Todos os lançamentos já estão importados!',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setIsReimporting(true)
+    setReimportProgress(0)
+
+    let totalGravados = 0
+    let totalErros = 0
+    const errosList: string[] = []
+    const total = linhasProntasParaGravar.length
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const item = linhasProntasParaGravar[i]
+        try {
+          const histComplemento = [
+            item.historico,
+            item.documentoPlanilha ? `(Doc: ${item.documentoPlanilha})` : null,
+            item.formaPagamentoPlanilha ? `[${item.formaPagamentoPlanilha}]` : null,
+          ]
+            .filter(Boolean)
+            .join(' ')
+
+          await lancamentosService.create({
+            empresa: selectedEmpresaId,
+            plano_conta: item.planoContaId!,
+            data: item.dataIso,
+            valor: item.valor,
+            historico:
+              histComplemento ||
+              `Reimportado Excel - ${ultimaImportacaoContexto?.arquivoNome || file?.name || 'Planilha'}`,
+          })
+
+          totalGravados++
+
+          if (item.historico) {
+            memoriaFornecedoresService
+              .registrarOuAtualizarVinculo({
+                fornecedor_padrao: item.historico,
+                termo_busca: item.historico,
+                plano_conta: item.planoContaId!,
+                empresa: selectedEmpresaId,
+                categoria_sugerida: item.planoContaNome,
+              })
+              .catch(() => {})
+          }
+        } catch (err: unknown) {
+          totalErros++
+          const error = err as Error
+          errosList.push(`Linha ${item.linhaPlanilha} (${item.historico}): ${error.message}`)
+        }
+
+        setReimportProgress(Math.round(((i + 1) / total) * 100))
+      }
+
+      // Recarrega os lançamentos gravados atualizados do banco
+      const lancsAtualizados = await lancamentosService.getAll({
+        empresaId: selectedEmpresaId,
+        dataInicio: `${selectedAno}-01-01`,
+        dataFim: `${selectedAno}-12-31`,
+        expandRelations: false,
+      })
+      setLancamentosAnoExistentes(lancsAtualizados)
+
+      // Reexecuta conciliação em tempo real
+      const linhasParaConciliar =
+        linhas.length > 0 ? linhas : ultimaImportacaoContexto?.linhas || []
+      const isMatriz =
+        ultimaImportacaoContexto?.isMatriz ??
+        (columnMapping.formato === 'matriz_mensal' ||
+          (columnMapping.colunasMesesMatriz &&
+            Object.keys(columnMapping.colunasMesesMatriz).length > 0))
+
+      const { itens: novosItens, resumo: novoResumoConf } = conciliarImportacaoExcel({
+        linhasPlanilha: linhasParaConciliar,
+        lancamentosGravados: lancsAtualizados,
+        planoContas: planoContasEmpresa,
+        isMatriz,
+      })
+
+      setItensConferencia(novosItens)
+      setResumoConferencia(novoResumoConf)
+
+      toast({
+        title: 'Reimportação concluída! 🎉',
+        description: `${totalGravados} pendência(s) foram gravadas com sucesso no banco.`,
+      })
+
+      if (onReloadCatalogs) {
+        onReloadCatalogs().catch(() => {})
+      }
+    } catch (err: unknown) {
+      const error = err as Error
+      toast({
+        title: 'Erro na reimportação',
+        description: error.message || 'Falha ao reimportar pendências.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsReimporting(false)
+    }
+  }
+
+  // Abre Modal de Classificação DRE em Lote
+  const handleAbrirAjusteDreLote = async (contasIds?: string[]) => {
+    await carregarContasParaDre()
+    if (contasIds && contasIds.length > 0) {
+      setPreFilteredDreIds(contasIds)
+    } else {
+      setPreFilteredDreIds([])
+    }
+    setModalDreLoteOpen(true)
   }
 
   // Reiniciar fluxo para nova importação
@@ -830,6 +1175,19 @@ export function ImportarLancamentosExcelIA({
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {/* Botão Secundário para reabrir Conferência da Última Importação */}
+                {(ultimaImportacaoContexto || linhas.length > 0) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAbrirConferencia}
+                    className="text-xs h-9 gap-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 shadow-xs font-semibold"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-amber-600" />
+                    Conferir Última Importação
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="default"
@@ -2439,6 +2797,13 @@ export function ImportarLancamentosExcelIA({
 
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
               <Button
+                onClick={handleAbrirConferencia}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-10 px-6 font-semibold gap-2 shadow-md animate-pulse"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Conferir Importação (Planilha vs. Gravados)
+              </Button>
+              <Button
                 variant="outline"
                 onClick={handleReset}
                 className="text-xs h-10 px-5 text-slate-700 bg-white"
@@ -2449,14 +2814,129 @@ export function ImportarLancamentosExcelIA({
                 onClick={() => {
                   window.location.href = '/lancamentos'
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-10 px-6 font-semibold gap-2 shadow-sm"
+                variant="outline"
+                className="border-slate-300 text-slate-700 text-xs h-10 px-5 font-semibold gap-2 shadow-xs"
               >
-                Ver Módulo de Lançamentos
+                Ver Lançamentos
                 <ExternalLink className="w-4 h-4" />
               </Button>
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ETAPA 5: CONFERÊNCIA DE IMPORTAÇÃO & REIMPORTAÇÃO DE PENDÊNCIAS          */}
+      {/* ========================================================================= */}
+      {step === 'conferencia' && resumoConferencia && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+            <div>
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <FileSpreadsheet className="w-5 h-5 text-blue-600" />
+                Conferência de Importação:{' '}
+                {ultimaImportacaoContexto?.arquivoNome || file?.name || 'Planilha'}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Exercício contábil <strong>{selectedAno}</strong> &bull; Empresa{' '}
+                <strong>{empresaSelecionada?.nome}</strong>
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setStep('upload')}
+                className="text-xs h-9 bg-white text-slate-700 border-slate-300"
+              >
+                Nova Importação
+              </Button>
+              {importSummary && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStep('sucesso')}
+                  className="text-xs h-9 bg-white text-slate-700 border-slate-300"
+                >
+                  Voltar ao Resumo
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <PainelConferenciaImportacao
+            itens={itensConferencia}
+            resumo={resumoConferencia}
+            planoContas={planoContasEmpresa}
+            empresaId={selectedEmpresaId}
+            ano={selectedAno}
+            isReimporting={isReimporting}
+            reimportProgress={reimportProgress}
+            linhasProntasCount={
+              extrairLinhasPendentesParaReimportacao({
+                itensConferencia,
+                lancamentosJaGravados: lancamentosAnoExistentes,
+              }).linhasProntasParaGravar.length
+            }
+            linhasBloqueadasCount={
+              extrairLinhasPendentesParaReimportacao({
+                itensConferencia,
+                lancamentosJaGravados: lancamentosAnoExistentes,
+              }).linhasAindaBloqueadas.length
+            }
+            onVincularContaItem={handleVincularContaItemConferencia}
+            onReimportarPendencias={handleReimportarPendencias}
+            onAbrirAjusteDreLote={handleAbrirAjusteDreLote}
+            onVoltarParaResumo={importSummary ? () => setStep('sucesso') : undefined}
+            onAbrirCadastroNovaConta={(nomeSugerido, itemContaId) => {
+              setQuickCandidateName(nomeSugerido)
+              setQuickTargetRowId(itemContaId)
+              setModalQuickOpen(true)
+            }}
+          />
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL DE CLASSIFICAÇÃO DRE EM LOTE                                        */}
+      {/* ========================================================================= */}
+      {modalDreLoteOpen && (
+        <ModalClassificacaoDreLote
+          open={modalDreLoteOpen}
+          onOpenChange={setModalDreLoteOpen}
+          contas={todasContasParaDre}
+          preFilteredIds={preFilteredDreIds}
+          onSuccess={async () => {
+            if (onReloadCatalogs) {
+              await onReloadCatalogs().catch(() => {})
+            }
+            // Recarrega conferência para refletir a nova classificação
+            const lancsAtualizados = await lancamentosService.getAll({
+              empresaId: selectedEmpresaId,
+              dataInicio: `${selectedAno}-01-01`,
+              dataFim: `${selectedAno}-12-31`,
+              expandRelations: false,
+            })
+            setLancamentosAnoExistentes(lancsAtualizados)
+
+            const linhasParaConciliar =
+              linhas.length > 0 ? linhas : ultimaImportacaoContexto?.linhas || []
+            const isMatriz =
+              ultimaImportacaoContexto?.isMatriz ??
+              (columnMapping.formato === 'matriz_mensal' ||
+                (columnMapping.colunasMesesMatriz &&
+                  Object.keys(columnMapping.colunasMesesMatriz).length > 0))
+
+            const { itens: novosItens, resumo: novoResumoConf } = conciliarImportacaoExcel({
+              linhasPlanilha: linhasParaConciliar,
+              lancamentosGravados: lancsAtualizados,
+              planoContas: planoContasEmpresa,
+              isMatriz,
+            })
+            setItensConferencia(novosItens)
+            setResumoConferencia(novoResumoConf)
+          }}
+        />
       )}
 
       {/* ========================================================================= */}
