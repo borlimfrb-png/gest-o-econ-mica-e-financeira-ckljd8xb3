@@ -185,7 +185,7 @@ export function ModalClassificacaoDreLote({
                     value="selecionadas"
                     className="text-xs font-semibold text-indigo-700"
                   >
-                    Contas da Importação ({preFilteredIds.length})
+                    Contas Selecionadas / Não Classificadas ({preFilteredIds.length})
                   </SelectItem>
                 )}
                 <SelectItem value="todas" className="text-xs">

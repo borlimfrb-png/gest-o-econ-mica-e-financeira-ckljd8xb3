@@ -125,6 +125,12 @@ export default function DreGerencial() {
 
   // Modal para corrigir classificações
   const [modalClassificacaoOpen, setModalClassificacaoOpen] = useState(false)
+  const [modalPreFilteredIds, setModalPreFilteredIds] = useState<string[] | undefined>(undefined)
+
+  const abrirClassificacaoLote = (preIds?: string[]) => {
+    setModalPreFilteredIds(preIds && preIds.length > 0 ? preIds : undefined)
+    setModalClassificacaoOpen(true)
+  }
 
   // Carregar dados
   const carregarDados = async () => {
@@ -199,12 +205,14 @@ export default function DreGerencial() {
     carregarDados()
   })
 
-  // Listener para evento de atualização cadastral no mesmo navegador
+  // Listener para evento de atualização cadastral no mesmo navegador (aceita ambos os nomes para resiliência)
   useEffect(() => {
     const handleRecarregar = () => carregarDados()
     window.addEventListener('dre-contas-atualizadas', handleRecarregar)
+    window.addEventListener('dre-contas-atualizado', handleRecarregar)
     return () => {
       window.removeEventListener('dre-contas-atualizadas', handleRecarregar)
+      window.removeEventListener('dre-contas-atualizado', handleRecarregar)
     }
   }, [])
 
@@ -436,7 +444,7 @@ export default function DreGerencial() {
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setModalClassificacaoOpen(true)}
+            onClick={() => abrirClassificacaoLote()}
             className="h-8 text-xs font-semibold border-slate-200 hover:bg-slate-50 text-slate-700 gap-1.5"
             title="Classificar contas contábeis para a DRE"
           >
@@ -1210,6 +1218,19 @@ export default function DreGerencial() {
                             <Badge className="ml-auto text-[10px] bg-amber-200 text-amber-900 border-amber-400">
                               {matriz.naoClassificados.contas.length} conta(s) pendente(s)
                             </Badge>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirClassificacaoLote(
+                                  matriz.naoClassificados.contas.map((c) => c.id),
+                                )
+                              }}
+                              className="h-6 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-semibold px-2 py-0.5 ml-2 gap-1 shadow-2xs"
+                            >
+                              Classificar Todas ({matriz.naoClassificados.contas.length})
+                            </Button>
                           </button>
                         </td>
 
@@ -1247,8 +1268,8 @@ export default function DreGerencial() {
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => setModalClassificacaoOpen(true)}
-                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1"
+                                  onClick={() => abrirClassificacaoLote([conta.id])}
+                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1 font-semibold"
                                 >
                                   Classificar
                                 </Button>
@@ -1609,6 +1630,19 @@ export default function DreGerencial() {
                             )}
                             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                             <span>{comparativo.naoClassificados.titulo}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                abrirClassificacaoLote(
+                                  comparativo.naoClassificados.contas.map((c) => c.id),
+                                )
+                              }}
+                              className="h-6 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-semibold px-2 py-0.5 ml-2 gap-1 shadow-2xs"
+                            >
+                              Classificar Todas ({comparativo.naoClassificados.contas.length})
+                            </Button>
                           </button>
                         </td>
 
@@ -1644,7 +1678,18 @@ export default function DreGerencial() {
                             className="hover:bg-amber-50/30 text-slate-700 transition-colors text-[11px]"
                           >
                             <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                              <span className="truncate font-medium">{conta.nome}</span>
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate font-medium">{conta.nome}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => abrirClassificacaoLote([conta.id])}
+                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1 font-semibold"
+                                >
+                                  Classificar
+                                </Button>
+                              </div>
                             </td>
                             <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600">
                               {formatBrl(conta.valorPeriodo1)}
@@ -1693,11 +1738,16 @@ export default function DreGerencial() {
       {/* Modal de Classificação de Contas */}
       <ModalClassificacaoDreLote
         open={modalClassificacaoOpen}
-        onOpenChange={setModalClassificacaoOpen}
+        onOpenChange={(aberto) => {
+          setModalClassificacaoOpen(aberto)
+          if (!aberto) setModalPreFilteredIds(undefined)
+        }}
         contas={contas}
+        preFilteredIds={modalPreFilteredIds}
         onSuccess={() => {
           carregarDados()
           window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+          window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
         }}
       />
     </div>
