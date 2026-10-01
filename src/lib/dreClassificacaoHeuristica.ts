@@ -57,6 +57,8 @@ export function sugerirClassificacaoDre(
     'bancari',
     'multa bancaria',
     'variacao cambial passiva',
+    'encargos financeir',
+    'taxas',
   ]
   if (keywordsDespesaFin.some((k) => texto.includes(k))) {
     return 'Despesa Financeira'
@@ -103,14 +105,16 @@ export function sugerirClassificacaoDre(
     'folha',
     'pro-labore',
     'pro labore',
+    'prolabore',
     'encargos',
+    'inss',
     'fgts',
-    'inss folha',
     'energia',
     'luz',
     'agua',
     'telefone',
     'internet',
+    'telecom',
     'contabilidade',
     'contador',
     'honorario',
@@ -120,6 +124,14 @@ export function sugerirClassificacaoDre(
     'manutencao',
     'software',
     'sistema',
+    'marketing',
+    'propaganda',
+    'publicidade',
+    'anuncio',
+    'viagem',
+    'viagens',
+    'hospedagem',
+    'combustivel',
     'depreciacao',
     'administrativ',
     'condominio',
@@ -142,6 +154,8 @@ export function sugerirClassificacaoDre(
     'prestacao de servico',
     'mensalidade',
     'honorario recebido',
+    'consultoria',
+    'assessoria',
   ]
   if (keywordsReceita.some((k) => texto.includes(k))) {
     return 'Receita'

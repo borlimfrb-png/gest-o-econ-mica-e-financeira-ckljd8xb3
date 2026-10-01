@@ -188,7 +188,7 @@ export default function DreGerencial() {
     carregarDados()
   }, [selectedEmpresaId, isGrupoAtivo, grupoAtivo])
 
-  // Realtime para atualizar a DRE quando novos lançamentos ou contas forem cadastrados
+  // Realtime para atualizar a DRE quando novos lançamentos ou contas forem cadastrados/editados
   useRealtime<LancamentoRecord>('lancamentos', () => {
     carregarDados()
   })
@@ -198,6 +198,15 @@ export default function DreGerencial() {
   useRealtime<PlanoContaRecord>('plano_contas', () => {
     carregarDados()
   })
+
+  // Listener para evento de atualização cadastral no mesmo navegador
+  useEffect(() => {
+    const handleRecarregar = () => carregarDados()
+    window.addEventListener('dre-contas-atualizadas', handleRecarregar)
+    return () => {
+      window.removeEventListener('dre-contas-atualizadas', handleRecarregar)
+    }
+  }, [])
 
   // Tratar alteração na quantidade de meses com validação do limite de 12
   const handleQtdMesesChange = (novaQtd: number) => {
@@ -1686,7 +1695,10 @@ export default function DreGerencial() {
         open={modalClassificacaoOpen}
         onOpenChange={setModalClassificacaoOpen}
         contas={contas}
-        onSuccess={carregarDados}
+        onSuccess={() => {
+          carregarDados()
+          window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+        }}
       />
     </div>
   )

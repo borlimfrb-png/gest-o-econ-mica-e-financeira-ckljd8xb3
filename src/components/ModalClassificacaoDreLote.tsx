@@ -29,6 +29,7 @@ interface ModalClassificacaoDreLoteProps {
   onOpenChange: (open: boolean) => void
   contas: ContaRecord[]
   onSuccess: () => void
+  preFilteredIds?: string[]
 }
 
 const BADGE_DRE_COLOR: Record<ClassificacaoDre, string> = {
@@ -44,6 +45,7 @@ export function ModalClassificacaoDreLote({
   onOpenChange,
   contas,
   onSuccess,
+  preFilteredIds,
 }: ModalClassificacaoDreLoteProps) {
   const { toast } = useToast()
   const [salvando, setSalvando] = useState(false)
@@ -64,11 +66,19 @@ export function ModalClassificacaoDreLote({
         }
       }
       setClassificacoes(mapa)
+      if (preFilteredIds && preFilteredIds.length > 0) {
+        setFiltroTipo('selecionadas')
+      } else {
+        setFiltroTipo('todas')
+      }
     }
-  }, [open, contas])
+  }, [open, contas, preFilteredIds])
 
   const contasExibidas = React.useMemo(() => {
     return contas.filter((c) => {
+      if (filtroTipo === 'selecionadas' && preFilteredIds && preFilteredIds.length > 0) {
+        return preFilteredIds.includes(c.id)
+      }
       if (filtroTipo === 'sem_classificacao') {
         return !classificacoes[c.id]
       }
@@ -77,7 +87,7 @@ export function ModalClassificacaoDreLote({
       }
       return true
     })
-  }, [contas, filtroTipo, classificacoes])
+  }, [contas, filtroTipo, classificacoes, preFilteredIds])
 
   const aplicarHeuristicaGeral = () => {
     const mapa = { ...classificacoes }
@@ -170,6 +180,14 @@ export function ModalClassificacaoDreLote({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {preFilteredIds && preFilteredIds.length > 0 && (
+                  <SelectItem
+                    value="selecionadas"
+                    className="text-xs font-semibold text-indigo-700"
+                  >
+                    Contas da Importação ({preFilteredIds.length})
+                  </SelectItem>
+                )}
                 <SelectItem value="todas" className="text-xs">
                   Todas as contas ({contas.length})
                 </SelectItem>
