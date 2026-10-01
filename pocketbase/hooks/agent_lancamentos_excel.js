@@ -56,6 +56,33 @@ Não inclua crases markdown adicionais fora do JSON.`
 
       let aiResult
       try {
+        // Limpa os cabeçalhos e amostras para remover placeholders de células vazias como __EMPTY
+        const sanitizedHeaders = headers.map((h, idx) => {
+          const s = String(h || '').trim()
+          if (/^_{1,2}EMPTY(_\d+)?$/i.test(s)) {
+            return `Coluna_${idx + 1}`
+          }
+          return s
+        })
+
+        const sanitizedSamples = sampleRows.map((row) => {
+          const cleanRow = {}
+          for (const k in row) {
+            const val = row[k]
+            const kClean = /^_{1,2}EMPTY(_\d+)?$/i.test(k) ? `Coluna` : k
+            cleanRow[kClean] =
+              typeof val === 'string' && /^_{1,2}EMPTY(_\d+)?$/i.test(val) ? '' : val
+          }
+          return cleanRow
+        })
+
+        const promptWithSanitized = prompt
+          .replace(JSON.stringify(headers), JSON.stringify(sanitizedHeaders))
+          .replace(
+            JSON.stringify(sampleRows.slice(0, 5)),
+            JSON.stringify(sanitizedSamples.slice(0, 5)),
+          )
+
         const reply = $ai.chat({
           model: 'fast',
           messages: [
@@ -66,11 +93,10 @@ Não inclua crases markdown adicionais fora do JSON.`
             },
             {
               role: 'user',
-              content: prompt,
+              content: promptWithSanitized,
             },
           ],
         })
-
         const content = reply?.choices?.[0]?.message?.content || '{}'
         const cleaned = content
           .replace(/```json/gi, '')

@@ -45,6 +45,9 @@ import {
   analisarColunasComIA,
   processarLinhasPlanilha,
   gerarPlanilhaModeloExcel,
+  colIndexToExcelLetter,
+  formatarNomeColunaExcel,
+  sanitizarValorCelula,
   NOMES_MESES_EXTENSO,
   type ColumnMappingState,
   type LancamentoExcelLinha,
@@ -1027,6 +1030,21 @@ export function ImportarLancamentosExcelIA({
                     Obrigatório
                   </Badge>
                 </Label>
+                {columnMapping.data && (
+                  <div className="text-[11px] font-medium text-blue-800 bg-blue-50/70 border border-blue-200/60 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.data))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.data,
+                        fileHeaders.indexOf(columnMapping.data),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.data}
                   onValueChange={(val) => setColumnMapping((prev) => ({ ...prev, data: val }))}
@@ -1035,11 +1053,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectValue placeholder="Selecione a coluna" />
                   </SelectTrigger>
                   <SelectContent>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Data, Competência, Vencimento</p>
@@ -1056,6 +1082,21 @@ export function ImportarLancamentosExcelIA({
                     Obrigatório
                   </Badge>
                 </Label>
+                {columnMapping.valor && (
+                  <div className="text-[11px] font-medium text-blue-800 bg-blue-50/70 border border-blue-200/60 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.valor))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.valor,
+                        fileHeaders.indexOf(columnMapping.valor),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.valor}
                   onValueChange={(val) => setColumnMapping((prev) => ({ ...prev, valor: val }))}
@@ -1064,11 +1105,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectValue placeholder="Selecione a coluna" />
                   </SelectTrigger>
                   <SelectContent>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Valor, Total, Montante</p>
@@ -1079,6 +1128,21 @@ export function ImportarLancamentosExcelIA({
                 <Label className="text-xs font-semibold text-slate-900">
                   Coluna de Histórico / Descrição
                 </Label>
+                {columnMapping.historico && (
+                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.historico))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.historico,
+                        fileHeaders.indexOf(columnMapping.historico),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.historico || 'none'}
                   onValueChange={(val) =>
@@ -1092,11 +1156,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Não mapear)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Histórico, Descrição, Detalhe</p>
@@ -1107,6 +1179,21 @@ export function ImportarLancamentosExcelIA({
                 <Label className="text-xs font-semibold text-slate-900">
                   Coluna de Tipo (Receita/Despesa)
                 </Label>
+                {columnMapping.tipo && (
+                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.tipo))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.tipo,
+                        fileHeaders.indexOf(columnMapping.tipo),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.tipo || 'none'}
                   onValueChange={(val) =>
@@ -1120,11 +1207,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Detectar automaticamente)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Tipo, Natureza, D/C</p>
@@ -1141,6 +1236,21 @@ export function ImportarLancamentosExcelIA({
                     Prioridade 1
                   </Badge>
                 </Label>
+                {columnMapping.codigoConta && (
+                  <div className="text-[11px] font-medium text-emerald-800 bg-emerald-50/70 border border-emerald-200/60 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.codigoConta))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.codigoConta,
+                        fileHeaders.indexOf(columnMapping.codigoConta),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.codigoConta || 'none'}
                   onValueChange={(val) =>
@@ -1157,11 +1267,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Não mapear)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Código da Conta, Código, Reduzido</p>
@@ -1178,6 +1296,21 @@ export function ImportarLancamentosExcelIA({
                     Prioridade 2
                   </Badge>
                 </Label>
+                {columnMapping.nomeConta && (
+                  <div className="text-[11px] font-medium text-indigo-800 bg-indigo-50/70 border border-indigo-200/60 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.nomeConta))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.nomeConta,
+                        fileHeaders.indexOf(columnMapping.nomeConta),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.nomeConta || 'none'}
                   onValueChange={(val) =>
@@ -1191,11 +1324,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Não mapear)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Nome da Conta, Conta Contábil</p>
@@ -1204,6 +1345,21 @@ export function ImportarLancamentosExcelIA({
               {/* Centro de Custo */}
               <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
                 <Label className="text-xs font-semibold text-slate-900">Centro de Custo</Label>
+                {columnMapping.centroCusto && (
+                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.centroCusto))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.centroCusto,
+                        fileHeaders.indexOf(columnMapping.centroCusto),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.centroCusto || 'none'}
                   onValueChange={(val) =>
@@ -1220,11 +1376,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Não mapear)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Centro de Custo, Unidade</p>
@@ -1235,6 +1399,21 @@ export function ImportarLancamentosExcelIA({
                 <Label className="text-xs font-semibold text-slate-900">
                   Número do Documento / NF
                 </Label>
+                {columnMapping.documento && (
+                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.documento))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.documento,
+                        fileHeaders.indexOf(columnMapping.documento),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.documento || 'none'}
                   onValueChange={(val) =>
@@ -1248,11 +1427,19 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Não mapear)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: Documento, NF, Comprovante</p>
@@ -1261,6 +1448,22 @@ export function ImportarLancamentosExcelIA({
               {/* Forma de Pagamento */}
               <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
                 <Label className="text-xs font-semibold text-slate-900">Forma de Pagamento</Label>
+                {columnMapping.formaPagamento && (
+                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                    <span>
+                      Coluna{' '}
+                      {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.formaPagamento))}
+                    </span>
+                    <span className="text-slate-600 truncate max-w-[150px]">
+                      &ldquo;
+                      {formatarNomeColunaExcel(
+                        columnMapping.formaPagamento,
+                        fileHeaders.indexOf(columnMapping.formaPagamento),
+                      )}
+                      &rdquo;
+                    </span>
+                  </div>
+                )}
                 <Select
                   value={columnMapping.formaPagamento || 'none'}
                   onValueChange={(val) =>
@@ -1277,16 +1480,127 @@ export function ImportarLancamentosExcelIA({
                     <SelectItem value="none" className="text-xs">
                       (Não mapear)
                     </SelectItem>
-                    {fileHeaders.map((h) => (
-                      <SelectItem key={h} value={h} className="text-xs">
-                        {h}
-                      </SelectItem>
-                    ))}
+                    {fileHeaders.map((h, idx) => {
+                      const colLetra = colIndexToExcelLetter(idx)
+                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                      return (
+                        <SelectItem key={h} value={h} className="text-xs">
+                          <span className="font-bold text-blue-700 mr-1 font-mono">
+                            Coluna {colLetra}
+                          </span>
+                          <span className="text-slate-400 mx-1">—</span>
+                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                        </SelectItem>
+                      )
+                    })}
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-slate-500">Ex: PIX, Boleto, Cartão</p>
               </div>
             </div>
+
+            {/* PREVIEW DA PLANILHA ORIGINAL COM LETRAS DAS COLUNAS (A, B, C...) E NÚMEROS DE LINHAS (1, 2, 3...) */}
+            {rawRows.length > 0 && fileHeaders.length > 0 && (
+              <div className="space-y-2.5 pt-2 border-t border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      Visualização da Planilha Original (Linhas e Colunas Excel)
+                    </span>
+                    <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-600">
+                      Primeiras {Math.min(rawRows.length, 5)} de {rawRows.length} linhas
+                    </Badge>
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    Linha 1 = Cabeçalho da planilha · Células vazias exibidas como &ldquo;—&rdquo;
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-xs max-h-[260px]">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      {/* Linha das Letras das Colunas Excel (A, B, C, D...) */}
+                      <tr className="bg-slate-200/80 text-slate-600 font-mono text-[11px] border-b border-slate-200">
+                        <th className="p-2 w-12 text-center bg-slate-300/80 font-bold border-r border-slate-300">
+                          #
+                        </th>
+                        {fileHeaders.map((h, idx) => (
+                          <th
+                            key={`col_letter_${idx}`}
+                            className="p-2 text-center font-bold tracking-wider border-r border-slate-200 min-w-[140px]"
+                          >
+                            Coluna {colIndexToExcelLetter(idx)}
+                          </th>
+                        ))}
+                      </tr>
+                      {/* Linha 1 do Excel: Cabeçalho detectado */}
+                      <tr className="bg-slate-100 text-slate-800 font-semibold border-b border-slate-200 text-xs">
+                        <td className="p-2 text-center font-mono font-bold text-slate-500 bg-slate-200/60 border-r border-slate-300">
+                          1
+                        </td>
+                        {fileHeaders.map((h, idx) => {
+                          const nomeExibicao = formatarNomeColunaExcel(h, idx)
+                          const isVazio = !h || /^_{1,2}EMPTY(_\d+)?$/i.test(String(h).trim())
+                          return (
+                            <td
+                              key={`header_row_${idx}`}
+                              className="p-2 border-r border-slate-200 text-slate-900"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-[10px] font-bold text-blue-600 bg-blue-50 px-1 py-0.5 rounded">
+                                  {colIndexToExcelLetter(idx)}
+                                </span>
+                                {isVazio ? (
+                                  <span className="text-slate-400 italic font-normal">
+                                    — (vazio)
+                                  </span>
+                                ) : (
+                                  <span className="font-medium text-slate-800 truncate">
+                                    {nomeExibicao}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {rawRows.slice(0, 5).map((row, rIdx) => {
+                        const numeroLinhaExcel = rIdx + 2 // Linha 1 foi o cabeçalho
+                        return (
+                          <tr
+                            key={`sample_row_${rIdx}`}
+                            className="hover:bg-slate-50 transition-colors"
+                          >
+                            <td className="p-2 text-center font-mono font-semibold text-slate-500 bg-slate-100/60 border-r border-slate-200">
+                              {numeroLinhaExcel}
+                            </td>
+                            {fileHeaders.map((h, cIdx) => {
+                              const valorCru = row[h]
+                              const valorLimpo = sanitizarValorCelula(valorCru)
+                              return (
+                                <td
+                                  key={`sample_cell_${rIdx}_${cIdx}`}
+                                  className="p-2 border-r border-slate-100 text-slate-700 truncate max-w-[200px]"
+                                >
+                                  {valorLimpo !== '' ? (
+                                    <span>{valorLimpo}</span>
+                                  ) : (
+                                    <span className="text-slate-300 italic select-none">—</span>
+                                  )}
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div className="pt-2 flex justify-end gap-3">
               <Button
@@ -1606,7 +1920,11 @@ export function ImportarLancamentosExcelIA({
                           </td>
 
                           {/* Linha */}
-                          <td className="p-3 font-mono text-slate-400">#{l.linhaPlanilha}</td>
+                          <td className="p-3 font-mono text-slate-500 font-medium">
+                            <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-mono">
+                              Linha {l.linhaPlanilha}
+                            </span>
+                          </td>
 
                           {/* Data */}
                           <td className="p-3 font-medium whitespace-nowrap">

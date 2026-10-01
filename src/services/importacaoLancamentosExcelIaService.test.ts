@@ -3,6 +3,9 @@ import {
   sugerirMapeamentoHeuristico,
   processarLinhasPlanilha,
   gerarPlanilhaModeloExcel,
+  colIndexToExcelLetter,
+  formatarNomeColunaExcel,
+  sanitizarValorCelula,
 } from './importacaoLancamentosExcelIaService'
 import type { PlanoContaRecord } from '@/types/finance'
 import * as XLSX from 'xlsx'
@@ -201,6 +204,36 @@ describe('importacaoLancamentosExcelIaService', () => {
       expect(res.resumo.totalForaPeriodo).toBe(2)
       expect(res.linhas[0].status).toBe('fora_periodo')
       expect(res.linhas[1].status).toBe('fora_periodo')
+    })
+  })
+
+  describe('colIndexToExcelLetter e utilitários de coluna', () => {
+    it('deve converter índices numéricos para letras estilo Excel corretamente', () => {
+      expect(colIndexToExcelLetter(0)).toBe('A')
+      expect(colIndexToExcelLetter(1)).toBe('B')
+      expect(colIndexToExcelLetter(25)).toBe('Z')
+      expect(colIndexToExcelLetter(26)).toBe('AA')
+      expect(colIndexToExcelLetter(27)).toBe('AB')
+      expect(colIndexToExcelLetter(51)).toBe('AZ')
+      expect(colIndexToExcelLetter(52)).toBe('BA')
+    })
+
+    it('deve formatar cabeçalhos cru __EMPTY ou vazios amigavelmente', () => {
+      expect(formatarNomeColunaExcel('__EMPTY', 0)).toBe('Coluna A (Sem cabeçalho)')
+      expect(formatarNomeColunaExcel('__EMPTY_1', 1)).toBe('Coluna B (Sem cabeçalho)')
+      expect(formatarNomeColunaExcel('__EMPTY_2', 2)).toBe('Coluna C (Sem cabeçalho)')
+      expect(formatarNomeColunaExcel('_EMPTY_', 3)).toBe('Coluna D (Sem cabeçalho)')
+      expect(formatarNomeColunaExcel('', 0)).toBe('Coluna A (Sem cabeçalho)')
+      expect(formatarNomeColunaExcel('Data do Lançamento', 0)).toBe('Data do Lançamento')
+    })
+
+    it('deve sanitizar valores de célula removendo strings cruas de EMPTY', () => {
+      expect(sanitizarValorCelula('__EMPTY')).toBe('')
+      expect(sanitizarValorCelula('__EMPTY_1')).toBe('')
+      expect(sanitizarValorCelula('_EMPTY_')).toBe('')
+      expect(sanitizarValorCelula(null)).toBe('')
+      expect(sanitizarValorCelula(undefined)).toBe('')
+      expect(sanitizarValorCelula('Pagamento Fornecedor')).toBe('Pagamento Fornecedor')
     })
   })
 

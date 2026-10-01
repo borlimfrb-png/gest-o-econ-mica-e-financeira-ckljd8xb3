@@ -16,6 +16,53 @@ export interface ColumnMappingState {
   formaPagamento: string
 }
 
+/**
+ * Converte índice numérico de coluna base 0 para letra no formato Excel (0 -> A, 1 -> B, 25 -> Z, 26 -> AA, etc.)
+ */
+export function colIndexToExcelLetter(colIdx: number): string {
+  if (isNaN(colIdx) || colIdx < 0) return 'A'
+  let letter = ''
+  let n = colIdx
+  while (n >= 0) {
+    letter = String.fromCharCode((n % 26) + 65) + letter
+    n = Math.floor(n / 26) - 1
+  }
+  return letter
+}
+
+/**
+ * Normaliza rótulo de cabeçalho detectado pelo parser XLSX.
+ * Células vazias na primeira linha viram __EMPTY, __EMPTY_1, etc.
+ * Converte essas ocorrências para um rótulo legível estilo Excel.
+ */
+export function formatarNomeColunaExcel(header: string, index?: number): string {
+  if (!header) {
+    const letra = typeof index === 'number' && index >= 0 ? colIndexToExcelLetter(index) : '?'
+    return `Coluna ${letra} (Sem cabeçalho)`
+  }
+
+  const trimmed = String(header).trim()
+  // Verifica se é placeholder de coluna vazia do sheet_to_json (__EMPTY, __EMPTY_1, _EMPTY_, etc)
+  if (/^_{1,2}EMPTY(_\d+)?$/i.test(trimmed)) {
+    const matchNum = trimmed.match(/\d+$/)
+    const colIdx = matchNum ? parseInt(matchNum[0], 10) : typeof index === 'number' ? index : 0
+    const letra = colIndexToExcelLetter(colIdx)
+    return `Coluna ${letra} (Sem cabeçalho)`
+  }
+
+  return trimmed
+}
+
+/**
+ * Limpa valores de amostra ou de células prevenindo a exibição crua de __EMPTY__ ou strings vazias
+ */
+export function sanitizarValorCelula(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  const s = String(val).trim()
+  if (/^_{1,2}EMPTY(_\d+)?$/i.test(s)) return ''
+  return s
+}
+
 export interface LancamentoExcelLinha {
   id: string
   linhaPlanilha: number
@@ -160,7 +207,20 @@ export async function extrairLinhasExcel(file: File): Promise<{
     throw new Error('Nenhuma linha de dados encontrada na planilha.')
   }
 
-  const headers = Object.keys(rows[0] || {})
+  // Descobre cabeçalhos reais a partir da linha de cabeçalho da planilha
+  const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1')
+  const headersFromSheet: string[] = []
+  for (let C = range.s.c; C <= range.e.c; ++C) {
+    const cellAddress = XLSX.utils.encode_cell({ r: range.s.r, c: C })
+    const cell = sheet[cellAddress]
+    const headerVal = cell ? String(cell.v ?? cell.w ?? '').trim() : ''
+    headersFromSheet.push(headerVal)
+  }
+
+  // Coleta chaves presentes nos objetos de linha (respeitando a ordem do sheet)
+  const rawHeaders = Object.keys(rows[0] || {})
+  const headers = rawHeaders.length > 0 ? rawHeaders : headersFromSheet
+
   return { headers, rawRows: rows }
 }
 
@@ -465,15 +525,11 @@ export function processarLinhasPlanilha(options: {
     }
 
     // 3. Histórico / Descrição
-    const rawHist = mapping.historico ? String(row[mapping.historico] || '').trim() : ''
+    const rawHist = mapping.historico ? sanitizarValorCelula(row[mapping.historico]) : ''
 
     // 4. Tipo (Receita / Despesa)
     let tipoFinal: 'Receita' | 'Despesa' = 'Despesa'
-    const rawTipo = mapping.tipo
-      ? String(row[mapping.tipo] || '')
-          .trim()
-          .toLowerCase()
-      : ''
+    const rawTipo = mapping.tipo ? sanitizarValorCelula(row[mapping.tipo]).toLowerCase() : ''
 
     if (rawTipo) {
       if (
@@ -510,21 +566,20 @@ export function processarLinhasPlanilha(options: {
     }
 
     // Campos adicionais
-    const codigoContaPlanilha = mapping.codigoConta
-      ? String(row[mapping.codigoConta] || '').trim()
-      : undefined
-    const nomeContaPlanilha = mapping.nomeConta
-      ? String(row[mapping.nomeConta] || '').trim()
-      : undefined
-    const centroCustoPlanilha = mapping.centroCusto
-      ? String(row[mapping.centroCusto] || '').trim()
-      : undefined
-    const documentoPlanilha = mapping.documento
-      ? String(row[mapping.documento] || '').trim()
-      : undefined
-    const formaPagamentoPlanilha = mapping.formaPagamento
-      ? String(row[mapping.formaPagamento] || '').trim()
-      : undefined
+    const rawCodConta = mapping.codigoConta ? sanitizarValorCelula(row[mapping.codigoConta]) : ''
+    const codigoContaPlanilha = rawCodConta || undefined
+
+    const rawNomeConta = mapping.nomeConta ? sanitizarValorCelula(row[mapping.nomeConta]) : ''
+    const nomeContaPlanilha = rawNomeConta || undefined
+
+    const rawCentro = mapping.centroCusto ? sanitizarValorCelula(row[mapping.centroCusto]) : ''
+    const centroCustoPlanilha = rawCentro || undefined
+
+    const rawDoc = mapping.documento ? sanitizarValorCelula(row[mapping.documento]) : ''
+    const documentoPlanilha = rawDoc || undefined
+
+    const rawForma = mapping.formaPagamento ? sanitizarValorCelula(row[mapping.formaPagamento]) : ''
+    const formaPagamentoPlanilha = rawForma || undefined
 
     // 5. Match inteligente com Plano de Contas:
     // Ordem estrita de resolução pedida:
