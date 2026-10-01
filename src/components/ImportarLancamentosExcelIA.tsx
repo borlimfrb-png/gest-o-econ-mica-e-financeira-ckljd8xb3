@@ -1214,9 +1214,11 @@ export function ImportarLancamentosExcelIA({
                     <div className="p-3.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 flex flex-col justify-center">
                       <span className="font-semibold text-slate-900 mb-1">Regra de Conversão:</span>
                       <p className="text-[11px] text-slate-600 leading-relaxed">
-  Cada linha com valor preenchido em qualquer mês gera um lançamento contábil de <strong>Despesa</strong>.
-  Células em branco ou com &ldquo;—&rdquo; são ignoradas. O período selecionado no filtro do ano {selectedAno} será rigorosamente respeitado.
-</p>
+                        Cada linha com valor preenchido em qualquer mês gera um lançamento contábil
+                        de <strong>Despesa</strong>. Células em branco ou com &ldquo;—&rdquo; são
+                        ignoradas. O período selecionado no filtro do ano {selectedAno} será
+                        rigorosamente respeitado.
+                      </p>
                     </div>
                   </div>
 

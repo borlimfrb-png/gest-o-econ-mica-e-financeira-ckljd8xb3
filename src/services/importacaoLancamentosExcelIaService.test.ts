@@ -260,18 +260,59 @@ describe('importacaoLancamentosExcelIaService', () => {
           },
         },
       } as unknown as PlanoContaRecord,
+      {
+        id: 'pc_energia',
+        empresa: 'emp-1',
+        codigo: '4.1.02',
+        codigo_empresa: 'ENERG-01',
+        descricao: 'Energia Elétrica',
+        tipo_conta: 'analitica',
+        expand: {
+          conta: {
+            id: 'c-energ',
+            nome: 'Energia Elétrica',
+            codigo: '4.1.02',
+            tipo: 'Despesa',
+          },
+        },
+      } as unknown as PlanoContaRecord,
     ]
 
-    it('deve calcular corretamente o último dia do mês para anos normais e bissextos', () => {
+    it('deve calcular corretamente o último dia do mês para anos normais e bissextos (28/02 vs 29/02)', () => {
       // 2027 não é bissexto: fev = 28
       expect(getUltimoDiaDoMes(2027, 1)).toBe(31)
       expect(getUltimoDiaDoMes(2027, 2)).toBe(28)
+      expect(getUltimoDiaDoMes(2027, 3)).toBe(31)
       expect(getUltimoDiaDoMes(2027, 4)).toBe(30)
+      expect(getUltimoDiaDoMes(2027, 5)).toBe(31)
+      expect(getUltimoDiaDoMes(2027, 6)).toBe(30)
+      expect(getUltimoDiaDoMes(2027, 7)).toBe(31)
+      expect(getUltimoDiaDoMes(2027, 8)).toBe(31)
+      expect(getUltimoDiaDoMes(2027, 9)).toBe(30)
+      expect(getUltimoDiaDoMes(2027, 10)).toBe(31)
+      expect(getUltimoDiaDoMes(2027, 11)).toBe(30)
+      expect(getUltimoDiaDoMes(2027, 12)).toBe(31)
       expect(formatarUltimoDiaDoMes(2027, 2)).toBe('28/02/2027')
 
-      // 2028 é bissexto: fev = 29
+      // 2024 e 2028 são bissextos: fev = 29
+      expect(getUltimoDiaDoMes(2024, 2)).toBe(29)
+      expect(formatarUltimoDiaDoMes(2024, 2)).toBe('29/02/2024')
       expect(getUltimoDiaDoMes(2028, 2)).toBe(29)
       expect(formatarUltimoDiaDoMes(2028, 2)).toBe('29/02/2028')
+
+      // Ano centenário não bissexto (2100) vs ano quadricentenário bissexto (2000)
+      expect(getUltimoDiaDoMes(2100, 2)).toBe(28)
+      expect(getUltimoDiaDoMes(2000, 2)).toBe(29)
+    })
+
+    it('deve gerar rótulos com 29/02 em ano bissexto (ex: 2024 e 2028)', () => {
+      const rotulos2024 = getRotulosColunasMatrizMensal(2024)
+      expect(rotulos2024[2]).toBe('29/02/2024')
+      expect(rotulos2024[1]).toBe('31/01/2024')
+      expect(rotulos2024[12]).toBe('31/12/2024')
+
+      const rotulos2028 = getRotulosColunasMatrizMensal(2028)
+      expect(rotulos2028[2]).toBe('29/02/2028')
     })
 
     it('deve gerar os 12 rótulos de meses com dia/mês + ano selecionado', () => {
@@ -385,6 +426,103 @@ describe('importacaoLancamentosExcelIaService', () => {
       expect(mai).toBeDefined()
       expect(mai?.dataStr).toBe('31/05/2027')
       expect(mai?.valor).toBe(2600)
+    })
+
+    it('deve desdobrar ano bissexto (2024) gerando 29/02/2024 no lançamento de fevereiro', () => {
+      const headers2024 = ['Conta', '31/01/2024', '29/02/2024', '31/03/2024']
+      const mapping = sugerirMapeamentoHeuristico(headers2024, 2024)
+
+      const rawRows = [
+        {
+          Conta: 'ENERG-01 - Energia Elétrica',
+          '31/01/2024': 850.5,
+          '29/02/2024': '920,00',
+          '31/03/2024': 0, // valor zero ignorado
+        },
+      ]
+
+      const resultado = processarLinhasPlanilha({
+        rawRows,
+        mapping,
+        planoContas: mockPlanoContasLocal,
+        anoSelecionado: 2024,
+        mesInicial: 1,
+        mesFinal: 12,
+      })
+
+      expect(resultado.linhas.length).toBe(2)
+      const fev = resultado.linhas.find((l) => l.mes === 2)
+      expect(fev).toBeDefined()
+      expect(fev?.dataStr).toBe('29/02/2024')
+      expect(fev?.dataIso).toBe('2024-02-29')
+      expect(fev?.valor).toBe(920)
+      expect(fev?.planoContaId).toBe('pc_energia')
+      expect(fev?.matchConfidence).toBe('codigo_empresa')
+    })
+
+    it('deve ignorar corretamente células vazias, hífens, traços, zeros ou nulas', () => {
+      const headers = ['Conta', '31/01/2027', '28/02/2027', '31/03/2027', '30/04/2027']
+      const mapping = sugerirMapeamentoHeuristico(headers, 2027)
+
+      const rawRows = [
+        {
+          Conta: '4.1.01 - Aluguel Comercial',
+          '31/01/2027': '—',
+          '28/02/2027': '-',
+          '31/03/2027': '0,00',
+          '30/04/2027': null,
+        },
+      ]
+
+      const resultado = processarLinhasPlanilha({
+        rawRows,
+        mapping,
+        planoContas: mockPlanoContasLocal,
+        anoSelecionado: 2027,
+        mesInicial: 1,
+        mesFinal: 12,
+      })
+
+      expect(resultado.linhas.length).toBe(0)
+      expect(resultado.resumo.totalValidos).toBe(0)
+    })
+
+    it('deve respeitar a seleção de meses individuais via mesesHabilitados', () => {
+      const headers = ['Conta', '31/01/2027', '28/02/2027', '31/03/2027', '30/04/2027']
+      const mapping = sugerirMapeamentoHeuristico(headers, 2027)
+
+      const rawRows = [
+        {
+          Conta: '4.1.01 - Aluguel Comercial',
+          '31/01/2027': 1000,
+          '28/02/2027': 1000,
+          '31/03/2027': 1000,
+          '30/04/2027': 1000,
+        },
+      ]
+
+      // Apenas meses 1 e 3 habilitados
+      const resultado = processarLinhasPlanilha({
+        rawRows,
+        mapping,
+        planoContas: mockPlanoContasLocal,
+        anoSelecionado: 2027,
+        mesInicial: 1,
+        mesFinal: 12,
+        mesesHabilitados: new Set([1, 3]),
+      })
+
+      const jan = resultado.linhas.find((l) => l.mes === 1)
+      const fev = resultado.linhas.find((l) => l.mes === 2)
+      const mar = resultado.linhas.find((l) => l.mes === 3)
+      const abr = resultado.linhas.find((l) => l.mes === 4)
+
+      expect(jan?.status).toBe('valido')
+      expect(fev?.status).toBe('fora_periodo')
+      expect(mar?.status).toBe('valido')
+      expect(abr?.status).toBe('fora_periodo')
+      expect(resultado.resumo.totalNoPeriodo).toBe(2)
+      expect(resultado.resumo.totalForaPeriodo).toBe(2)
     })
 
     it('deve marcar lançamentos como fora do período se o mês selecionado não englobar', () => {
