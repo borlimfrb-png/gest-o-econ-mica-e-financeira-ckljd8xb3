@@ -71,11 +71,16 @@ const GRUPOS_POR_TIPO: Record<TipoConta, string[]> = {
   Despesa: ['Despesas Operacionais', 'Despesas Financeiras', 'Outras Despesas'],
 }
 
+import type { ClassificacaoDre } from '@/types/finance'
+import { CLASSIFICACOES_DRE } from '@/types/finance'
+import { sugerirClassificacaoDre } from '@/lib/dreClassificacaoHeuristica'
+
 interface ContaFormData {
   nome: string
   tipo: TipoConta
   grupo: string
   descricao: string
+  classificacao_dre: ClassificacaoDre | ''
 }
 
 const EMPTY_FORM: ContaFormData = {
@@ -83,6 +88,7 @@ const EMPTY_FORM: ContaFormData = {
   tipo: 'Ativo',
   grupo: '',
   descricao: '',
+  classificacao_dre: '',
 }
 
 type FormErrors = Partial<Record<keyof ContaFormData | 'general', string>>
@@ -278,6 +284,10 @@ export default function Contas() {
         tipo: form.tipo,
         grupo: form.grupo,
         descricao: form.descricao,
+        classificacao_dre:
+          form.classificacao_dre ||
+          sugerirClassificacaoDre(form.nome, form.tipo, form.grupo) ||
+          undefined,
         empresa: effectiveEmpresaId || undefined,
       })
       toast({
@@ -303,6 +313,7 @@ export default function Contas() {
       tipo: c.tipo,
       grupo: c.grupo || '',
       descricao: c.descricao || '',
+      classificacao_dre: c.classificacao_dre || '',
     })
     setErrors({})
     setEditOpen(true)
@@ -318,6 +329,7 @@ export default function Contas() {
         tipo: form.tipo,
         grupo: form.grupo,
         descricao: form.descricao,
+        classificacao_dre: (form.classificacao_dre as ClassificacaoDre) || undefined,
       })
       toast({ title: 'Conta atualizada', description: 'As alterações foram salvas.' })
       setEditOpen(false)
@@ -517,6 +529,44 @@ export default function Contas() {
                   </div>
                   <div className="space-y-1.5">
                     <Label
+                      htmlFor="conta-classificacao-dre"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      Classificação DRE Gerencial
+                    </Label>
+                    <Select
+                      value={form.classificacao_dre || 'automatica'}
+                      onValueChange={(val) =>
+                        setField(
+                          'classificacao_dre',
+                          val === 'automatica' ? '' : (val as ClassificacaoDre),
+                        )
+                      }
+                    >
+                      <SelectTrigger id="conta-classificacao-dre" className="h-9 text-xs bg-white">
+                        <SelectValue placeholder="Automática por heurística" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem
+                          value="automatica"
+                          className="text-xs text-blue-700 font-medium"
+                        >
+                          ✨ Automática (identificar por palavras-chave)
+                        </SelectItem>
+                        {CLASSIFICACOES_DRE.map((clf) => (
+                          <SelectItem key={clf} value={clf} className="text-xs">
+                            {clf}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-slate-400">
+                      Determina onde a conta soma/subtrai na DRE (Receita, Despesas
+                      Variáveis/Fixas/Financeiras).
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
                       htmlFor="conta-descricao"
                       className="text-xs font-semibold text-slate-700"
                     >
@@ -614,7 +664,8 @@ export default function Contas() {
                           <th className="py-3 px-4">Código</th>
                           <th className="py-3 px-4">Nome</th>
                           <th className="py-3 px-4">Tipo</th>
-                          <th className="py-3 px-4">Grupo</th>
+                          <th className="py-3 px-4">Grupo DRE</th>
+                          <th className="py-3 px-4">Grupo Contábil</th>
                           <th className="py-3 px-4 text-right">Ações</th>
                         </tr>
                       </thead>
@@ -649,6 +700,19 @@ export default function Contas() {
                               >
                                 {c.tipo}
                               </Badge>
+                            </td>
+                            <td className="py-3 px-4">
+                              {c.classificacao_dre ? (
+                                <Badge className="text-[10px] font-semibold px-2 py-0.5 border bg-emerald-50 text-emerald-800 border-emerald-200">
+                                  {c.classificacao_dre}
+                                </Badge>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">
+                                  {sugerirClassificacaoDre(c.nome, c.tipo, c.grupo) ||
+                                    'Não classificada'}{' '}
+                                  (auto)
+                                </span>
+                              )}
                             </td>
                             <td className="py-3 px-4 text-slate-700">
                               {c.grupo ? c.grupo : <span className="text-slate-400 italic">—</span>}
@@ -989,6 +1053,34 @@ export default function Contas() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-conta-classificacao-dre"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Classificação DRE Gerencial
+                </Label>
+                <Select
+                  value={form.classificacao_dre || 'nenhum'}
+                  onValueChange={(val) =>
+                    setField('classificacao_dre', val === 'nenhum' ? '' : (val as ClassificacaoDre))
+                  }
+                >
+                  <SelectTrigger id="edit-conta-classificacao-dre" className="h-9 text-xs bg-white">
+                    <SelectValue placeholder="Selecione a classificação DRE" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nenhum" className="text-xs text-slate-400">
+                      (Nenhum / usar heurística automática)
+                    </SelectItem>
+                    {CLASSIFICACOES_DRE.map((clf) => (
+                      <SelectItem key={clf} value={clf} className="text-xs">
+                        {clf}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label

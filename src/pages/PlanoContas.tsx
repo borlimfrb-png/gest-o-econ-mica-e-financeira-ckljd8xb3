@@ -89,7 +89,9 @@ import {
   FileText,
   Layers,
   FolderSync,
+  Tag,
 } from 'lucide-react'
+import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -169,6 +171,7 @@ export default function PlanoContas() {
   const [relatorioSemCodigoOpen, setRelatorioSemCodigoOpen] = useState(false)
   const [edicaoLoteCodigosOpen, setEdicaoLoteCodigosOpen] = useState(false)
   const [copiarEntreEmpresasOpen, setCopiarEntreEmpresasOpen] = useState(false)
+  const [classificacaoDreOpen, setClassificacaoDreOpen] = useState(false)
 
   // Filtros
   const [busca, setBusca] = useState('')
@@ -600,6 +603,20 @@ export default function PlanoContas() {
           >
             <Layers className="w-4 h-4 text-blue-600" />
             Edição em Lote de Códigos
+          </Button>
+
+          {/* Botão: Classificação DRE Gerencial */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setClassificacaoDreOpen(true)}
+            disabled={contas.length === 0}
+            className="h-9 text-xs font-semibold border-emerald-300 text-emerald-800 hover:bg-emerald-50 hover:text-emerald-900 shadow-2xs gap-1.5"
+            title="Classificar contas contábeis para a DRE Gerencial (Receitas, Despesas Fixas, Variáveis, Financeiras)"
+          >
+            <Tag className="w-4 h-4 text-emerald-600" />
+            Classificação DRE
           </Button>
 
           {/* Botão: Relatório — Contas sem Código */}
@@ -1499,6 +1516,14 @@ export default function PlanoContas() {
           onSuccess={loadData}
         />
       )}
+
+      {/* Modal: Classificação DRE Gerencial de Contas */}
+      <ModalClassificacaoDreLote
+        open={classificacaoDreOpen}
+        onOpenChange={setClassificacaoDreOpen}
+        contas={contas}
+        onSuccess={loadData}
+      />
     </div>
   )
 }

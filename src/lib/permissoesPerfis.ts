@@ -12,6 +12,7 @@ export type ModuloSistema =
   | 'minha_empresa'
   | 'admin_usuarios'
   | 'lancamentos'
+  | 'gerencial_dre'
   | 'financeiro'
   | 'baixa_recebiveis'
   | 'contratos'
@@ -58,6 +59,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'minha_empresa',
       'admin_usuarios',
       'lancamentos',
+      'gerencial_dre',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -90,6 +92,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'plano_contas',
       'minha_empresa',
       'lancamentos',
+      'gerencial_dre',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -115,6 +118,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     modulosPermitidos: [
       'dashboard',
       'lancamentos',
+      'gerencial_dre',
       'financeiro',
       'baixa_recebiveis',
       'contratos',

@@ -942,6 +942,7 @@ export const contasService = {
     descricao?: string
     grupo?: string
     empresa?: string
+    classificacao_dre?: ContaRecord['classificacao_dre']
   }): Promise<ContaRecord> {
     return await pb.collection('contas').create<ContaRecord>({
       nome: data.nome.trim(),
@@ -949,18 +950,23 @@ export const contasService = {
       descricao: data.descricao?.trim() || undefined,
       grupo: data.grupo?.trim() || undefined,
       empresa: data.empresa || undefined,
+      classificacao_dre: data.classificacao_dre || undefined,
       user: currentUserId(),
     } as any)
   },
 
   async update(
     id: string,
-    data: Partial<Pick<ContaRecord, 'nome' | 'tipo' | 'descricao' | 'grupo' | 'empresa'>>,
+    data: Partial<
+      Pick<ContaRecord, 'nome' | 'tipo' | 'descricao' | 'grupo' | 'empresa' | 'classificacao_dre'>
+    >,
   ): Promise<ContaRecord> {
     const payload: Record<string, unknown> = { ...data }
     if (data.nome !== undefined) payload.nome = data.nome.trim()
     if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
     if (data.grupo !== undefined) payload.grupo = data.grupo.trim() || undefined
+    if (data.classificacao_dre !== undefined)
+      payload.classificacao_dre = data.classificacao_dre || null
     return await pb.collection('contas').update<ContaRecord>(id, payload)
   },
 

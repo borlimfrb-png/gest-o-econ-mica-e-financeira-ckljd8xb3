@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T13:55:27.873Z",
+  "generatedAt": "2026-10-01T19:45:34.324Z",
   "collections": [
     {
       "name": "users",
@@ -892,6 +892,19 @@
           "required": false,
           "system": false,
           "collectionRef": "empresas"
+        },
+        {
+          "name": "classificacao_dre",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Receita",
+            "Despesa Variável",
+            "Despesa Fixa",
+            "Despesa Financeira",
+            "Receita Financeira"
+          ]
         }
       ],
       "indexes": [

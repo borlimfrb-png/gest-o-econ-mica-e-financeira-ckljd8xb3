@@ -223,12 +223,28 @@ export interface TipoDespesaRecord extends RecordModel {
 
 export type TipoConta = 'Ativo' | 'Passivo' | 'Patrimônio Líquido' | 'Receita' | 'Despesa'
 
+export type ClassificacaoDre =
+  | 'Receita'
+  | 'Despesa Variável'
+  | 'Despesa Fixa'
+  | 'Despesa Financeira'
+  | 'Receita Financeira'
+
+export const CLASSIFICACOES_DRE: ClassificacaoDre[] = [
+  'Receita',
+  'Despesa Variável',
+  'Despesa Fixa',
+  'Despesa Financeira',
+  'Receita Financeira',
+]
+
 export interface ContaRecord extends RecordModel {
   codigo?: string
   nome: string
   descricao?: string
   tipo: TipoConta
   grupo?: string
+  classificacao_dre?: ClassificacaoDre
   user: string
   empresa?: string
   expand?: {
