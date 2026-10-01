@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
-import { contasService, lancamentosService } from '@/services/financeService'
-import type { ContaRecord, LancamentoRecord } from '@/types/finance'
+import { useRealtime } from '@/hooks/use-realtime'
+import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
+import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { gerarListaMeses, type ClassificacaoDre } from '@/lib/dreGerencialTypes'
 import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
 import { exportarDreGerencialExcel, exportarDreGerencialCsv } from '@/lib/dreGerencialExport'
@@ -72,16 +73,26 @@ function formatBrl(val: number | undefined | null): string {
 
 export default function DreGerencial() {
   const { toast } = useToast()
-  const { selectedEmpresaId, selectedEmpresa, empresas, selectedAno } = useFilter()
+  const { selectedEmpresaId, selectedEmpresa, empresas, selectedAno, isGrupoAtivo, grupoAtivo } =
+    useFilter()
 
   // Estados de dados
   const [loading, setLoading] = useState(true)
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
+  const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
 
   // Filtros de período (máximo 12 meses)
   const currentYear = selectedAno || new Date().getFullYear()
   const [anoInicial, setAnoInicial] = useState<number>(currentYear)
+
+  // Sincroniza o ano inicial se o selectedAno mudar externamente (ex.: seletor global)
+  useEffect(() => {
+    if (selectedAno) {
+      setAnoInicial(selectedAno)
+    }
+  }, [selectedAno])
+
   const [mesInicial, setMesInicial] = useState<number>(1)
   const [qtdMeses, setQtdMeses] = useState<number>(12)
   const [avisoLimiteMeses, setAvisoLimiteMeses] = useState(false)
@@ -103,12 +114,48 @@ export default function DreGerencial() {
   const carregarDados = async () => {
     try {
       setLoading(true)
-      const [contasList, lancamentosList] = await Promise.all([
-        contasService.getAll(selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined),
-        lancamentosService.getAll(selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined),
+
+      // Identifica quais empresas devem ser consultadas
+      // Se for grupo empresarial selecionado ("grupo-..."), busca lançamentos das empresas do grupo
+      let lancsPromise: Promise<LancamentoRecord[]>
+      let contasPromise: Promise<ContaRecord[]>
+      let planosPromise: Promise<PlanoContaRecord[]>
+
+      if (isGrupoAtivo && grupoAtivo && grupoAtivo.empresas && grupoAtivo.empresas.length > 0) {
+        // Carrega lançamentos e cadastros de todas as empresas do grupo
+        const empIds = new Set(grupoAtivo.empresas)
+        lancsPromise = lancamentosService
+          .getAll({ expandRelations: true })
+          .then((list) => list.filter((l) => empIds.has(l.empresa)))
+        contasPromise = contasService
+          .getAll()
+          .then((list) => list.filter((c) => !c.empresa || empIds.has(c.empresa)))
+        planosPromise = planoContasService
+          .getAll()
+          .then((list) => list.filter((p) => !p.empresa || empIds.has(p.empresa)))
+      } else if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
+        lancsPromise = lancamentosService.getAll({
+          empresaId: selectedEmpresaId,
+          expandRelations: true,
+        })
+        contasPromise = contasService.getAll({ empresaId: selectedEmpresaId })
+        planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
+      } else {
+        // Sem filtro ou consolidado geral
+        lancsPromise = lancamentosService.getAll({ expandRelations: true })
+        contasPromise = contasService.getAll()
+        planosPromise = planoContasService.getAll()
+      }
+
+      const [contasList, lancamentosList, planosList] = await Promise.all([
+        contasPromise,
+        lancsPromise,
+        planosPromise,
       ])
+
       setContas(contasList)
       setLancamentos(lancamentosList)
+      setPlanoContas(planosList)
     } catch (err: any) {
       console.error('Erro ao carregar dados da DRE:', err)
       toast({
@@ -123,7 +170,18 @@ export default function DreGerencial() {
 
   useEffect(() => {
     carregarDados()
-  }, [selectedEmpresaId])
+  }, [selectedEmpresaId, isGrupoAtivo, grupoAtivo])
+
+  // Realtime para atualizar a DRE quando novos lançamentos ou contas forem cadastrados
+  useRealtime<LancamentoRecord>('lancamentos', () => {
+    carregarDados()
+  })
+  useRealtime<ContaRecord>('contas', () => {
+    carregarDados()
+  })
+  useRealtime<PlanoContaRecord>('plano_contas', () => {
+    carregarDados()
+  })
 
   // Tratar alteração na quantidade de meses com validação do limite de 12
   const handleQtdMesesChange = (novaQtd: number) => {
@@ -151,8 +209,8 @@ export default function DreGerencial() {
 
   // Cálculo da matriz da DRE
   const matriz = useMemo(() => {
-    return calcularDreGerencialMatriz(lancamentos, contas, meses)
-  }, [lancamentos, contas, meses])
+    return calcularDreGerencialMatriz(lancamentos, contas, meses, planoContas)
+  }, [lancamentos, contas, meses, planoContas])
 
   const toggleGrupo = (chave: string) => {
     setGruposExpandidos((prev) => ({
@@ -561,22 +619,25 @@ export default function DreGerencial() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
+            <div className="overflow-x-auto w-full max-w-full">
+              <table
+                className="text-xs border-collapse w-full"
+                style={{ minWidth: `${Math.max(800, 260 + meses.length * 105 + 130)}px` }}
+              >
                 <thead>
                   <tr className="bg-slate-100/90 text-[#0B1F3A] border-b border-slate-200 font-bold text-left">
-                    <th className="py-3 px-4 min-w-[280px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                    <th className="py-3 px-4 w-[260px] min-w-[220px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
                       Estrutura de Contas / Grupos
                     </th>
                     {meses.map((m) => (
                       <th
                         key={m.chave}
-                        className="py-3 px-3 min-w-[110px] text-right border-r border-slate-200 font-semibold"
+                        className="py-3 px-2 min-w-[105px] text-right border-r border-slate-200 font-semibold whitespace-nowrap"
                       >
                         {m.rotuloCurto}
                       </th>
                     ))}
-                    <th className="py-3 px-4 min-w-[130px] text-right bg-slate-200/80 font-bold text-[#0B1F3A]">
+                    <th className="py-3 px-4 min-w-[130px] text-right bg-slate-200/80 font-bold text-[#0B1F3A] whitespace-nowrap">
                       Total Período
                     </th>
                   </tr>
@@ -623,7 +684,7 @@ export default function DreGerencial() {
                             return (
                               <td
                                 key={m.chave}
-                                className="py-2.5 px-3 text-right font-semibold border-r border-slate-200"
+                                className="py-2.5 px-2 text-right font-semibold border-r border-slate-200 whitespace-nowrap"
                               >
                                 {val !== 0 ? (
                                   formatBrl(val)
@@ -662,7 +723,7 @@ export default function DreGerencial() {
                                 return (
                                   <td
                                     key={m.chave}
-                                    className="py-2 px-3 text-right border-r border-slate-100 text-slate-600"
+                                    className="py-2 px-2 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap"
                                   >
                                     {val !== 0 ? (
                                       formatBrl(val)
@@ -730,7 +791,7 @@ export default function DreGerencial() {
                       return (
                         <td
                           key={m.chave}
-                          className={`py-3.5 px-3 text-right font-extrabold border-r border-slate-300 ${
+                          className={`py-3.5 px-2 text-right font-extrabold border-r border-slate-300 whitespace-nowrap ${
                             isMesPositivo ? 'text-emerald-800' : 'text-rose-800'
                           }`}
                         >
@@ -761,7 +822,7 @@ export default function DreGerencial() {
                       return (
                         <td
                           key={m.chave}
-                          className="py-2.5 px-3 text-right border-r border-slate-200 font-semibold"
+                          className="py-2.5 px-2 text-right border-r border-slate-200 font-semibold whitespace-nowrap"
                         >
                           {mg !== null && mg !== undefined ? (
                             <span
@@ -824,7 +885,7 @@ export default function DreGerencial() {
                           return (
                             <td
                               key={m.chave}
-                              className="py-3 px-3 text-right font-semibold border-r border-slate-200 text-amber-900"
+                              className="py-3 px-2 text-right font-semibold border-r border-slate-200 text-amber-900 whitespace-nowrap"
                             >
                               {val !== 0 ? (
                                 formatBrl(val)
@@ -866,7 +927,7 @@ export default function DreGerencial() {
                               return (
                                 <td
                                   key={m.chave}
-                                  className="py-2 px-3 text-right border-r border-slate-100 text-slate-600"
+                                  className="py-2 px-2 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap"
                                 >
                                   {val !== 0 ? (
                                     formatBrl(val)

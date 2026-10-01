@@ -1,4 +1,4 @@
-import type { ContaRecord, LancamentoRecord } from '@/types/finance'
+import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { obterClassificacaoDreConta } from './dreClassificacaoHeuristica'
 import {
   GRUPOS_DRE_ORDEM,
@@ -12,7 +12,9 @@ import {
 } from './dreGerencialTypes'
 
 /**
- * Calcula a matriz completa da DRE Gerencial a partir dos lançamentos rápidos e contas cadastradas.
+ * Calcula a matriz completa da DRE Gerencial a partir dos lançamentos rápidos,
+ * contas cadastradas e opcionalmente lista de plano_contas (caso o expand do lançamento
+ * não venha populado).
  *
  * Estrutura:
  * 1. Receitas (+)
@@ -29,6 +31,7 @@ export function calcularDreGerencialMatriz(
   lancamentos: LancamentoRecord[],
   contas: ContaRecord[],
   meses: MesItem[],
+  planoContas?: PlanoContaRecord[],
 ): DreMatrizResultado {
   const chavesMesesValidos = new Set(meses.map((m) => m.chave))
 
@@ -38,17 +41,57 @@ export function calcularDreGerencialMatriz(
     contaMap.set(c.id, c)
   }
 
+  // Mapa de plano_contas por ID para fallback caso o expand não venha preenchido
+  const planoContasMap = new Map<string, PlanoContaRecord>()
+  if (planoContas) {
+    for (const p of planoContas) {
+      planoContasMap.set(p.id, p)
+    }
+  }
+
   // Agrupamento de lançamentos por conta e por mês (chave YYYY-MM)
   // map: contaId -> mesChave -> soma dos valores
   const somaPorContaMes = new Map<string, Map<string, number>>()
 
   for (const lanc of lancamentos) {
+    // Ignora lançamentos estornados se houver flag
+    if (lanc.estornado) continue
     if (!lanc.data) continue
+
     // Extrai ano-mês da data 'YYYY-MM-DD'
     const mesChave = lanc.data.slice(0, 7)
     if (!chavesMesesValidos.has(mesChave)) continue
 
-    const contaId = lanc.conta || '__sem_conta__'
+    // Resolve o ID da Conta Contábil:
+    // 1. Diretamente de expand.plano_conta.expand.conta.id
+    // 2. De expand.plano_conta.conta (string id da conta)
+    // 3. Do mapa planoContasMap usando lanc.plano_conta
+    // 4. Se o lançamento tiver um campo legada .conta
+    // 5. Fallback para __sem_conta__
+    const expandPlanoConta = lanc.expand?.plano_conta
+    const planoDoMapa = lanc.plano_conta ? planoContasMap.get(lanc.plano_conta) : undefined
+
+    let contaId: string | null = null
+    let contaExpandida: ContaRecord | undefined =
+      expandPlanoConta?.expand?.conta || planoDoMapa?.expand?.conta
+
+    if (contaExpandida?.id) {
+      contaId = contaExpandida.id
+      if (!contaMap.has(contaId)) {
+        contaMap.set(contaId, contaExpandida)
+      }
+    } else if (expandPlanoConta?.conta) {
+      contaId = expandPlanoConta.conta
+    } else if (planoDoMapa?.conta) {
+      contaId = planoDoMapa.conta
+    } else if ((lanc as any).conta) {
+      contaId = (lanc as any).conta
+    }
+
+    if (!contaId) {
+      contaId = '__sem_conta__'
+    }
+
     const valor = Number(lanc.valor) || 0
 
     let mapaMeses = somaPorContaMes.get(contaId)
