@@ -291,13 +291,13 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
     ],
   },
 
-  // 3.1. Gerencial (Novo menu com submenu DRE)
+  // 3.1. Gerencial (Menu com DRE e Fluxo de Caixa)
   {
     id: 'gerencial',
     label: 'Gerencial',
     icon: BarChart3,
     tipo: 'dropdown',
-    subtitulo: 'Demonstrações Gerenciais & DRE',
+    subtitulo: 'Demonstrações Gerenciais & Fluxo de Caixa',
     itens: [
       {
         id: 'gerencial-dre',
@@ -318,6 +318,28 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
           'despesas variáveis',
           'lucro',
           'prejuízo',
+          'comparativo',
+        ],
+      },
+      {
+        id: 'gerencial-fluxo-caixa',
+        name: 'Fluxo de Caixa (DRE)',
+        path: '/gerencial/fluxo-caixa',
+        icon: Coins,
+        descricao:
+          'Demonstração do fluxo de caixa estruturado por grupos DRE: operacional, financeiro e acumulado',
+        modulo: 'gerencial_fluxo_caixa',
+        badge: 'Novo',
+        badgeVariant: 'blue',
+        palavrasChave: [
+          'fluxo de caixa',
+          'fluxo de caixa dre',
+          'geração operacional',
+          'geração financeira',
+          'entradas operacionais',
+          'saídas operacionais',
+          'acumulado',
+          'tesouraria',
         ],
       },
     ],

@@ -1,0 +1,277 @@
+import * as XLSX from 'xlsx'
+import type { FluxoCaixaDreResultado } from './fluxoCaixaDreCalculo'
+import type { EmpresaRecord } from '@/types/finance'
+import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
+
+/**
+ * Exporta o Fluxo de Caixa por grupo DRE para arquivo Excel (.xlsx)
+ */
+export function exportarFluxoCaixaDreExcel(
+  fluxo: FluxoCaixaDreResultado,
+  empresa?: EmpresaRecord | null,
+) {
+  const nomeEmpresa = empresa?.nome || 'Empresa'
+  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
+  const dataHoje = new Date().toISOString().slice(0, 10)
+  const fileName = `fluxo-caixa-dre-${safeEmpresa}-${dataHoje}.xlsx`
+
+  const rows: Array<Record<string, any>> = []
+
+  const adicionarLinha = (
+    titulo: string,
+    tipo: string,
+    valoresPorMes: Record<string, number>,
+    total: number,
+  ) => {
+    const linha: Record<string, any> = {
+      Estrutura: titulo,
+      Tipo: tipo,
+    }
+    for (const m of fluxo.meses) {
+      linha[m.rotuloCurto] = valoresPorMes[m.chave] || 0
+    }
+    linha['Total do Período'] = total
+    rows.push(linha)
+  }
+
+  // 1. Entradas Operacionais
+  adicionarLinha(
+    fluxo.entradasOperacionais.titulo,
+    'Grupo (Entrada)',
+    fluxo.entradasOperacionais.valoresPorMes,
+    fluxo.entradasOperacionais.totalPeriodo,
+  )
+  for (const c of fluxo.contasEntradasOperacionais) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Operacional', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 2. Saídas Operacionais
+  adicionarLinha(
+    fluxo.saidasOperacionais.titulo,
+    'Grupo (Saída)',
+    fluxo.saidasOperacionais.valoresPorMes,
+    fluxo.saidasOperacionais.totalPeriodo,
+  )
+  for (const c of fluxo.contasSaidasOperacionais) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Operacional', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 3. = Geração Operacional
+  adicionarLinha(
+    fluxo.geracaoOperacional.titulo,
+    'Subtotal',
+    fluxo.geracaoOperacional.valoresPorMes,
+    fluxo.geracaoOperacional.totalPeriodo,
+  )
+
+  rows.push({ Estrutura: '', Tipo: '' })
+
+  // 4. Entradas Financeiras
+  adicionarLinha(
+    fluxo.entradasFinanceiras.titulo,
+    'Grupo (Entrada)',
+    fluxo.entradasFinanceiras.valoresPorMes,
+    fluxo.entradasFinanceiras.totalPeriodo,
+  )
+  for (const c of fluxo.contasEntradasFinanceiras) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Financeira', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 5. Saídas Financeiras
+  adicionarLinha(
+    fluxo.saidasFinanceiras.titulo,
+    'Grupo (Saída)',
+    fluxo.saidasFinanceiras.valoresPorMes,
+    fluxo.saidasFinanceiras.totalPeriodo,
+  )
+  for (const c of fluxo.contasSaidasFinanceiras) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Financeira', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 6. = Geração Financeira
+  adicionarLinha(
+    fluxo.geracaoFinanceira.titulo,
+    'Subtotal',
+    fluxo.geracaoFinanceira.valoresPorMes,
+    fluxo.geracaoFinanceira.totalPeriodo,
+  )
+
+  rows.push({ Estrutura: '', Tipo: '' })
+
+  // 7. = Fluxo de Caixa Total
+  adicionarLinha(
+    fluxo.fluxoCaixaTotal.titulo,
+    'Resultado Total',
+    fluxo.fluxoCaixaTotal.valoresPorMes,
+    fluxo.fluxoCaixaTotal.totalPeriodo,
+  )
+
+  // 8. Saldo Acumulado
+  adicionarLinha(
+    fluxo.saldoAcumulado.titulo,
+    'Saldo Acumulado',
+    fluxo.saldoAcumulado.valoresPorMes,
+    fluxo.saldoAcumulado.saldoFinal,
+  )
+
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.json_to_sheet(rows)
+
+  const cols = [
+    { wch: 48 }, // Estrutura
+    { wch: 18 }, // Tipo
+  ]
+  for (let i = 0; i < fluxo.meses.length; i++) {
+    cols.push({ wch: 16 })
+  }
+  cols.push({ wch: 20 })
+  ws['!cols'] = cols
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Fluxo de Caixa DRE')
+  XLSX.writeFile(wb, fileName)
+}
+
+/**
+ * Exporta o Fluxo de Caixa por grupo DRE para arquivo CSV delimitado por ponto e vírgula
+ */
+export function exportarFluxoCaixaDreCsv(
+  fluxo: FluxoCaixaDreResultado,
+  empresa?: EmpresaRecord | null,
+) {
+  const nomeEmpresa = empresa?.nome || 'Empresa'
+  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
+  const dataHoje = new Date().toISOString().slice(0, 10)
+  const fileName = `fluxo-caixa-dre-${safeEmpresa}-${dataHoje}.csv`
+
+  const escapeCsv = (val: any): string => {
+    if (val === null || val === undefined) return ''
+    const s = String(val)
+    if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const formatMoedaCsv = (v: number | undefined | null) => {
+    if (v === undefined || v === null) return '0,00'
+    return v.toFixed(2).replace('.', ',')
+  }
+
+  const colunas = [
+    'Estrutura',
+    'Tipo',
+    ...fluxo.meses.map((m) => m.rotuloCurto),
+    'Total do Período',
+  ]
+  const linhas: string[] = [colunas.map(escapeCsv).join(';')]
+
+  const pushLinha = (
+    titulo: string,
+    tipo: string,
+    valoresPorMes: Record<string, number>,
+    total: number,
+  ) => {
+    linhas.push(
+      [
+        titulo,
+        tipo,
+        ...fluxo.meses.map((m) => formatMoedaCsv(valoresPorMes[m.chave])),
+        formatMoedaCsv(total),
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+  }
+
+  // 1. Entradas Operacionais
+  pushLinha(
+    fluxo.entradasOperacionais.titulo,
+    'Entrada',
+    fluxo.entradasOperacionais.valoresPorMes,
+    fluxo.entradasOperacionais.totalPeriodo,
+  )
+  for (const c of fluxo.contasEntradasOperacionais) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 2. Saídas Operacionais
+  pushLinha(
+    fluxo.saidasOperacionais.titulo,
+    'Saída',
+    fluxo.saidasOperacionais.valoresPorMes,
+    fluxo.saidasOperacionais.totalPeriodo,
+  )
+  for (const c of fluxo.contasSaidasOperacionais) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 3. = Geração Operacional
+  pushLinha(
+    fluxo.geracaoOperacional.titulo,
+    'Subtotal',
+    fluxo.geracaoOperacional.valoresPorMes,
+    fluxo.geracaoOperacional.totalPeriodo,
+  )
+
+  // 4. Entradas Financeiras
+  pushLinha(
+    fluxo.entradasFinanceiras.titulo,
+    'Entrada',
+    fluxo.entradasFinanceiras.valoresPorMes,
+    fluxo.entradasFinanceiras.totalPeriodo,
+  )
+  for (const c of fluxo.contasEntradasFinanceiras) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 5. Saídas Financeiras
+  pushLinha(
+    fluxo.saidasFinanceiras.titulo,
+    'Saída',
+    fluxo.saidasFinanceiras.valoresPorMes,
+    fluxo.saidasFinanceiras.totalPeriodo,
+  )
+  for (const c of fluxo.contasSaidasFinanceiras) {
+    const cod = c.codigo ? `[${c.codigo}] ` : ''
+    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+  }
+
+  // 6. = Geração Financeira
+  pushLinha(
+    fluxo.geracaoFinanceira.titulo,
+    'Subtotal',
+    fluxo.geracaoFinanceira.valoresPorMes,
+    fluxo.geracaoFinanceira.totalPeriodo,
+  )
+
+  // 7. = Fluxo de Caixa Total
+  pushLinha(
+    fluxo.fluxoCaixaTotal.titulo,
+    'Resultado Total',
+    fluxo.fluxoCaixaTotal.valoresPorMes,
+    fluxo.fluxoCaixaTotal.totalPeriodo,
+  )
+
+  // 8. Saldo Acumulado
+  pushLinha(
+    fluxo.saldoAcumulado.titulo,
+    'Saldo Acumulado',
+    fluxo.saldoAcumulado.valoresPorMes,
+    fluxo.saldoAcumulado.saldoFinal,
+  )
+
+  const csvContent = '\uFEFF' + linhas.join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.setAttribute('download', fileName)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(link.href)
+}

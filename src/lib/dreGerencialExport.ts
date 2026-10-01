@@ -1,7 +1,215 @@
 import * as XLSX from 'xlsx'
-import type { DreMatrizResultado } from './dreGerencialTypes'
+import type { DreMatrizResultado, DreComparativoResultado } from './dreGerencialTypes'
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
+
+/**
+ * Exporta a matriz comparativa da DRE Gerencial para arquivo Excel (.xlsx)
+ */
+export function exportarDreComparativoExcel(
+  comparativo: DreComparativoResultado,
+  empresa?: EmpresaRecord | null,
+) {
+  const nomeEmpresa = empresa?.nome || 'Empresa'
+  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
+  const dataHoje = new Date().toISOString().slice(0, 10)
+  const fileName = `dre-comparativo-${safeEmpresa}-${dataHoje}.xlsx`
+
+  const colP1 = `Período 1 (${comparativo.periodo1Descricao})`
+  const colP2 = `Período 2 (${comparativo.periodo2Descricao})`
+
+  const rows: Array<Record<string, any>> = []
+
+  const formatPct = (val: number | null) => {
+    if (val === null || val === undefined) return '—'
+    return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+  }
+
+  for (const grupo of comparativo.grupos) {
+    rows.push({
+      Estrutura: grupo.titulo,
+      Tipo: 'Grupo',
+      [colP1]: grupo.valorPeriodo1,
+      [colP2]: grupo.valorPeriodo2,
+      'Variação (R$)': grupo.diferenca,
+      'Variação (%)': formatPct(grupo.percentual),
+      Impacto: grupo.favoravel ? 'Favorável' : 'Desfavorável',
+    })
+
+    for (const conta of grupo.contas) {
+      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      rows.push({
+        Estrutura: `    ${codStr}${conta.nome}`,
+        Tipo: 'Conta',
+        [colP1]: conta.valorPeriodo1,
+        [colP2]: conta.valorPeriodo2,
+        'Variação (R$)': conta.diferenca,
+        'Variação (%)': formatPct(conta.percentual),
+        Impacto: conta.favoravel ? 'Favorável' : 'Desfavorável',
+      })
+    }
+  }
+
+  rows.push({ Estrutura: '', Tipo: '' })
+
+  // Lucro/Prejuízo
+  const lp = comparativo.lucroPrejuizo
+  rows.push({
+    Estrutura: lp.titulo,
+    Tipo: 'Resultado',
+    [colP1]: lp.valorPeriodo1,
+    [colP2]: lp.valorPeriodo2,
+    'Variação (R$)': lp.diferenca,
+    'Variação (%)': formatPct(lp.percentual),
+    Impacto: lp.favoravel ? 'Favorável' : 'Desfavorável',
+  })
+
+  // Margem Líquida
+  const mg = comparativo.margemLiquida
+  rows.push({
+    Estrutura: 'Margem Líquida (%)',
+    Tipo: 'Indicador',
+    [colP1]: mg.margemPeriodo1 !== null ? `${mg.margemPeriodo1.toFixed(2)}%` : '—',
+    [colP2]: mg.margemPeriodo2 !== null ? `${mg.margemPeriodo2.toFixed(2)}%` : '—',
+    'Variação (R$)': mg.diferencaPontos !== null ? `${mg.diferencaPontos.toFixed(2)} p.p.` : '—',
+    'Variação (%)': '—',
+    Impacto: mg.favoravel ? 'Favorável' : 'Desfavorável',
+  })
+
+  if (comparativo.naoClassificados.contas.length > 0) {
+    const nc = comparativo.naoClassificados
+    rows.push({ Estrutura: '', Tipo: '' })
+    rows.push({
+      Estrutura: nc.titulo,
+      Tipo: 'Não Classificado',
+      [colP1]: nc.valorPeriodo1,
+      [colP2]: nc.valorPeriodo2,
+      'Variação (R$)': nc.diferenca,
+      'Variação (%)': formatPct(nc.percentual),
+      Impacto: nc.favoravel ? 'Favorável' : 'Desfavorável',
+    })
+    for (const conta of nc.contas) {
+      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      rows.push({
+        Estrutura: `    ${codStr}${conta.nome}`,
+        Tipo: 'Conta Não Classificada',
+        [colP1]: conta.valorPeriodo1,
+        [colP2]: conta.valorPeriodo2,
+        'Variação (R$)': conta.diferenca,
+        'Variação (%)': formatPct(conta.percentual),
+        Impacto: conta.favoravel ? 'Favorável' : 'Desfavorável',
+      })
+    }
+  }
+
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.json_to_sheet(rows)
+  ws['!cols'] = [
+    { wch: 44 }, // Estrutura
+    { wch: 14 }, // Tipo
+    { wch: 22 }, // P1
+    { wch: 22 }, // P2
+    { wch: 18 }, // Var R$
+    { wch: 16 }, // Var %
+    { wch: 16 }, // Impacto
+  ]
+  XLSX.utils.book_append_sheet(wb, ws, 'DRE Comparativa')
+  XLSX.writeFile(wb, fileName)
+}
+
+/**
+ * Exporta o comparativo da DRE em formato CSV delimitado por ponto e vírgula com UTF-8 BOM
+ */
+export function exportarDreComparativoCsv(
+  comparativo: DreComparativoResultado,
+  empresa?: EmpresaRecord | null,
+) {
+  const nomeEmpresa = empresa?.nome || 'Empresa'
+  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
+  const dataHoje = new Date().toISOString().slice(0, 10)
+  const fileName = `dre-comparativo-${safeEmpresa}-${dataHoje}.csv`
+
+  const escapeCsv = (val: any): string => {
+    if (val === null || val === undefined) return ''
+    const s = String(val)
+    if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const formatMoedaCsv = (v: number | undefined | null) => {
+    if (v === undefined || v === null) return '0,00'
+    return v.toFixed(2).replace('.', ',')
+  }
+
+  const formatPctCsv = (val: number | null) => {
+    if (val === null || val === undefined) return '—'
+    return `${val >= 0 ? '+' : ''}${val.toFixed(2).replace('.', ',')}%`
+  }
+
+  const colP1 = `Período 1 (${comparativo.periodo1Descricao})`
+  const colP2 = `Período 2 (${comparativo.periodo2Descricao})`
+
+  const colunas = ['Estrutura', 'Tipo', colP1, colP2, 'Variação (R$)', 'Variação (%)', 'Impacto']
+  const linhas: string[] = [colunas.map(escapeCsv).join(';')]
+
+  for (const grupo of comparativo.grupos) {
+    linhas.push(
+      [
+        grupo.titulo,
+        'Grupo',
+        formatMoedaCsv(grupo.valorPeriodo1),
+        formatMoedaCsv(grupo.valorPeriodo2),
+        formatMoedaCsv(grupo.diferenca),
+        formatPctCsv(grupo.percentual),
+        grupo.favoravel ? 'Favorável' : 'Desfavorável',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    for (const conta of grupo.contas) {
+      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      linhas.push(
+        [
+          `  ${codStr}${conta.nome}`,
+          'Conta',
+          formatMoedaCsv(conta.valorPeriodo1),
+          formatMoedaCsv(conta.valorPeriodo2),
+          formatMoedaCsv(conta.diferenca),
+          formatPctCsv(conta.percentual),
+          conta.favoravel ? 'Favorável' : 'Desfavorável',
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+  }
+
+  const lp = comparativo.lucroPrejuizo
+  linhas.push(
+    [
+      lp.titulo,
+      'Resultado',
+      formatMoedaCsv(lp.valorPeriodo1),
+      formatMoedaCsv(lp.valorPeriodo2),
+      formatMoedaCsv(lp.diferenca),
+      formatPctCsv(lp.percentual),
+      lp.favoravel ? 'Favorável' : 'Desfavorável',
+    ]
+      .map(escapeCsv)
+      .join(';'),
+  )
+
+  const csvContent = '\uFEFF' + linhas.join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.setAttribute('download', fileName)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(link.href)
+}
 
 /**
  * Exporta a matriz da DRE Gerencial para arquivo Excel (.xlsx) com layout de linhas e colunas mensais

@@ -13,6 +13,7 @@ export type ModuloSistema =
   | 'admin_usuarios'
   | 'lancamentos'
   | 'gerencial_dre'
+  | 'gerencial_fluxo_caixa'
   | 'financeiro'
   | 'baixa_recebiveis'
   | 'contratos'
@@ -60,6 +61,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'admin_usuarios',
       'lancamentos',
       'gerencial_dre',
+      'gerencial_fluxo_caixa',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -93,6 +95,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'minha_empresa',
       'lancamentos',
       'gerencial_dre',
+      'gerencial_fluxo_caixa',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -119,6 +122,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'dashboard',
       'lancamentos',
       'gerencial_dre',
+      'gerencial_fluxo_caixa',
       'financeiro',
       'baixa_recebiveis',
       'contratos',

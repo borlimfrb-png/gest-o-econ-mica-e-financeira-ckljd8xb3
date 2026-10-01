@@ -6,8 +6,13 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { gerarListaMeses, type ClassificacaoDre } from '@/lib/dreGerencialTypes'
-import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
-import { exportarDreGerencialExcel, exportarDreGerencialCsv } from '@/lib/dreGerencialExport'
+import { calcularDreGerencialMatriz, calcularComparativoDre } from '@/lib/dreGerencialCalculo'
+import {
+  exportarDreGerencialExcel,
+  exportarDreGerencialCsv,
+  exportarDreComparativoExcel,
+  exportarDreComparativoCsv,
+} from '@/lib/dreGerencialExport'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -82,7 +87,10 @@ export default function DreGerencial() {
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
 
-  // Filtros de período (máximo 12 meses)
+  // Modo de visualização: 'unico' ou 'comparativo'
+  const [modoVisualizacao, setModoVisualizacao] = useState<'unico' | 'comparativo'>('unico')
+
+  // Filtros de período 1 (base) - máximo 12 meses
   const currentYear = selectedAno || new Date().getFullYear()
   const [anoInicial, setAnoInicial] = useState<number>(currentYear)
 
@@ -90,12 +98,20 @@ export default function DreGerencial() {
   useEffect(() => {
     if (selectedAno) {
       setAnoInicial(selectedAno)
+      // Ajusta período 2 para o ano imediatamente anterior se ainda não configurado
+      setAnoPeriodo2(selectedAno - 1)
     }
   }, [selectedAno])
 
   const [mesInicial, setMesInicial] = useState<number>(1)
   const [qtdMeses, setQtdMeses] = useState<number>(12)
   const [avisoLimiteMeses, setAvisoLimiteMeses] = useState(false)
+
+  // Filtros de período 2 (comparativo) - ex.: ano anterior ou período customizado até 12 meses
+  const [anoPeriodo2, setAnoPeriodo2] = useState<number>(currentYear - 1)
+  const [mesInicialPeriodo2, setMesInicialPeriodo2] = useState<number>(1)
+  const [qtdMesesPeriodo2, setQtdMesesPeriodo2] = useState<number>(12)
+  const [avisoLimiteMeses2, setAvisoLimiteMeses2] = useState(false)
 
   // Controle de grupos expandidos (drill-down por grupo)
   const [gruposExpandidos, setGruposExpandidos] = useState<Record<string, boolean>>({
@@ -202,15 +218,61 @@ export default function DreGerencial() {
     }
   }
 
-  // Lista de colunas de meses geradas
+  const handleQtdMesesPeriodo2Change = (novaQtd: number) => {
+    if (novaQtd > 12) {
+      setQtdMesesPeriodo2(12)
+      setAvisoLimiteMeses2(true)
+      toast({
+        variant: 'destructive',
+        title: 'Limite de 12 meses',
+        description: 'O período 2 também possui o limite máximo de 12 meses.',
+      })
+    } else if (novaQtd < 1) {
+      setQtdMesesPeriodo2(1)
+      setAvisoLimiteMeses2(false)
+    } else {
+      setQtdMesesPeriodo2(novaQtd)
+      setAvisoLimiteMeses2(false)
+    }
+  }
+
+  // Lista de colunas de meses geradas para período 1
   const meses = useMemo(() => {
     return gerarListaMeses(anoInicial, mesInicial, qtdMeses)
   }, [anoInicial, mesInicial, qtdMeses])
 
-  // Cálculo da matriz da DRE
+  // Lista de colunas de meses geradas para período 2 (comparativo)
+  const mesesPeriodo2 = useMemo(() => {
+    return gerarListaMeses(anoPeriodo2, mesInicialPeriodo2, qtdMesesPeriodo2)
+  }, [anoPeriodo2, mesInicialPeriodo2, qtdMesesPeriodo2])
+
+  // Cálculo da matriz da DRE período 1
   const matriz = useMemo(() => {
     return calcularDreGerencialMatriz(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
+
+  // Cálculo da matriz da DRE período 2
+  const matrizPeriodo2 = useMemo(() => {
+    return calcularDreGerencialMatriz(lancamentos, contas, mesesPeriodo2, planoContas)
+  }, [lancamentos, contas, mesesPeriodo2, planoContas])
+
+  // Descrições textuais dos períodos
+  const p1Descricao = useMemo(() => {
+    if (meses.length === 0) return ''
+    return `${meses[0].rotuloCurto} a ${meses[meses.length - 1].rotuloCurto}`
+  }, [meses])
+
+  const p2Descricao = useMemo(() => {
+    if (mesesPeriodo2.length === 0) return ''
+    return `${mesesPeriodo2[0].rotuloCurto} a ${mesesPeriodo2[mesesPeriodo2.length - 1].rotuloCurto}`
+  }, [mesesPeriodo2])
+
+  // Comparativo consolidado entre Período 2 (base comparada) vs Período 1 (referência)
+  // Período 1: ex. Ano Anterior, Período 2: ex. Ano Atual (para variação P2 - P1)
+  // De acordo com o padrão contábil comparativo: Base (P1) -> Comparado (P2)
+  const comparativo = useMemo(() => {
+    return calcularComparativoDre(matrizPeriodo2, matriz, p2Descricao, p1Descricao)
+  }, [matrizPeriodo2, matriz, p2Descricao, p1Descricao])
 
   const toggleGrupo = (chave: string) => {
     setGruposExpandidos((prev) => ({
@@ -247,11 +309,19 @@ export default function DreGerencial() {
 
   const handleExportarExcel = () => {
     try {
-      exportarDreGerencialExcel(matriz, selectedEmpresa)
-      toast({
-        title: 'DRE Exportada com sucesso',
-        description: 'Planilha Excel gerada com a matriz da DRE Gerencial.',
-      })
+      if (modoVisualizacao === 'comparativo') {
+        exportarDreComparativoExcel(comparativo, selectedEmpresa)
+        toast({
+          title: 'DRE Comparativa Exportada',
+          description: 'Planilha Excel gerada com a comparação dos 2 períodos e variações.',
+        })
+      } else {
+        exportarDreGerencialExcel(matriz, selectedEmpresa)
+        toast({
+          title: 'DRE Exportada com sucesso',
+          description: 'Planilha Excel gerada com a matriz da DRE Gerencial.',
+        })
+      }
     } catch (e: any) {
       toast({
         variant: 'destructive',
@@ -263,11 +333,19 @@ export default function DreGerencial() {
 
   const handleExportarCsv = () => {
     try {
-      exportarDreGerencialCsv(matriz, selectedEmpresa)
-      toast({
-        title: 'DRE Exportada com sucesso',
-        description: 'Arquivo CSV gerado com separador padrão brasileiro (;).',
-      })
+      if (modoVisualizacao === 'comparativo') {
+        exportarDreComparativoCsv(comparativo, selectedEmpresa)
+        toast({
+          title: 'DRE Comparativa Exportada',
+          description: 'Arquivo CSV com dados comparativos e variações gerado.',
+        })
+      } else {
+        exportarDreGerencialCsv(matriz, selectedEmpresa)
+        toast({
+          title: 'DRE Exportada com sucesso',
+          description: 'Arquivo CSV gerado com separador padrão brasileiro (;).',
+        })
+      }
     } catch (e: any) {
       toast({
         variant: 'destructive',
@@ -311,8 +389,40 @@ export default function DreGerencial() {
           </div>
         </div>
 
-        {/* Botões de Ações e Exportação */}
+        {/* Toggle de Modo: Período único vs Comparativo e Ações */}
         <div className="flex items-center gap-2 flex-wrap print:hidden">
+          {/* Toggle de Modo */}
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setModoVisualizacao('unico')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                modoVisualizacao === 'unico'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Período Único
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoVisualizacao('comparativo')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                modoVisualizacao === 'comparativo'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>Comparativo</span>
+              <Badge
+                variant="secondary"
+                className="text-[9px] px-1 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200"
+              >
+                2 Períodos
+              </Badge>
+            </button>
+          </div>
+
           <Button
             type="button"
             variant="outline"
@@ -411,15 +521,20 @@ export default function DreGerencial() {
             </div>
 
             {/* Seletores de Período */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-slate-400" />
-                <span className="text-xs text-slate-600 font-medium">Início:</span>
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 flex-wrap">
+              {/* Bloco Período 1 (ou Período Principal) */}
+              <div className="flex items-center gap-2 bg-slate-50/80 p-1.5 rounded-lg border border-slate-200/80">
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-[11px] font-bold text-slate-700 uppercase">
+                    {modoVisualizacao === 'comparativo' ? 'Período Atual:' : 'Início:'}
+                  </span>
+                </div>
                 <Select
                   value={String(mesInicial)}
                   onValueChange={(val) => setMesInicial(Number(val))}
                 >
-                  <SelectTrigger className="h-8 text-xs bg-white w-28">
+                  <SelectTrigger className="h-7 text-xs bg-white w-24">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -435,26 +550,71 @@ export default function DreGerencial() {
                   type="number"
                   value={anoInicial}
                   onChange={(e) => setAnoInicial(Number(e.target.value) || currentYear)}
-                  className="h-8 w-20 text-xs font-semibold"
+                  className="h-7 w-18 text-xs font-semibold"
                   min={2000}
                   max={2100}
                 />
-              </div>
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-slate-600 font-medium">Qtd Meses:</span>
+                <span className="text-[11px] text-slate-500 font-medium">Meses:</span>
                 <Input
                   type="number"
                   min={1}
                   max={12}
                   value={qtdMeses}
                   onChange={(e) => handleQtdMesesChange(Number(e.target.value))}
-                  className="h-8 w-16 text-xs text-center font-bold"
+                  className="h-7 w-12 text-xs text-center font-bold"
+                  title="Quantidade de meses (máx 12)"
                 />
-                <span className="text-[11px] text-slate-400">(máx 12)</span>
               </div>
 
-              <div className="flex items-center gap-1.5 ml-auto lg:ml-2">
+              {/* Bloco Período 2 (Aparece apenas quando comparativo ativo) */}
+              {modoVisualizacao === 'comparativo' && (
+                <div className="flex items-center gap-2 bg-purple-50/70 p-1.5 rounded-lg border border-purple-200/80">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-purple-600" />
+                    <span className="text-[11px] font-bold text-purple-900 uppercase">
+                      Período Comparado:
+                    </span>
+                  </div>
+                  <Select
+                    value={String(mesInicialPeriodo2)}
+                    onValueChange={(val) => setMesInicialPeriodo2(Number(val))}
+                  >
+                    <SelectTrigger className="h-7 text-xs bg-white w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MESES_OPCOES.map((m) => (
+                        <SelectItem key={m.valor} value={String(m.valor)} className="text-xs">
+                          {m.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    type="number"
+                    value={anoPeriodo2}
+                    onChange={(e) => setAnoPeriodo2(Number(e.target.value) || currentYear - 1)}
+                    className="h-7 w-18 text-xs font-semibold"
+                    min={2000}
+                    max={2100}
+                  />
+
+                  <span className="text-[11px] text-slate-500 font-medium">Meses:</span>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={qtdMesesPeriodo2}
+                    onChange={(e) => handleQtdMesesPeriodo2Change(Number(e.target.value))}
+                    className="h-7 w-12 text-xs text-center font-bold"
+                    title="Quantidade de meses do período 2 (máx 12)"
+                  />
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5 ml-auto">
                 <Button
                   type="button"
                   variant="ghost"
@@ -478,107 +638,256 @@ export default function DreGerencial() {
             </div>
           </div>
 
-          {avisoLimiteMeses && (
+          {(avisoLimiteMeses || avisoLimiteMeses2) && (
             <div className="mt-3 flex items-center gap-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg">
               <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
-              <span>O período foi ajustado automaticamente para o limite máximo de 12 meses.</span>
+              <span>
+                O período foi ajustado automaticamente para o limite máximo de 12 meses por período.
+              </span>
             </div>
           )}
         </CardContent>
       </Card>
 
       {/* Cards de Resumo Gerencial */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 print:grid-cols-3">
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              1. Receitas
-            </p>
-            <p className="text-base font-bold text-emerald-700 mt-1 truncate">
-              {formatBrl(totalReceitas)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              2. Desp. Variáveis
-            </p>
-            <p className="text-base font-bold text-amber-700 mt-1 truncate">
-              {formatBrl(totalDespesasVar)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              3. Desp. Fixas
-            </p>
-            <p className="text-base font-bold text-rose-700 mt-1 truncate">
-              {formatBrl(totalDespesasFix)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              4. Desp. Financeiras
-            </p>
-            <p className="text-base font-bold text-purple-700 mt-1 truncate">
-              {formatBrl(totalDespesasFin)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              5. Rec. Financeiras
-            </p>
-            <p className="text-base font-bold text-sky-700 mt-1 truncate">
-              {formatBrl(totalReceitasFin)}
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* Lucro ou Prejuízo com Destaque Visual */}
-        <Card
-          className={`border shadow-xs ${
-            isLucro
-              ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
-              : 'bg-rose-50/70 border-rose-300 text-rose-950'
-          }`}
-        >
-          <CardContent className="py-3 px-4">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-wider">
-                {isLucro ? 'Lucro do Período' : 'Prejuízo do Período'}
+      {modoVisualizacao === 'unico' ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 print:grid-cols-3">
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                1. Receitas
               </p>
-              {isLucro ? (
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
-              ) : (
-                <TrendingDown className="w-4 h-4 text-rose-600" />
-              )}
-            </div>
-            <p
-              className={`text-base font-extrabold mt-1 truncate ${
-                isLucro ? 'text-emerald-700' : 'text-rose-700'
-              }`}
-            >
-              {formatBrl(lucroTotal)}
-            </p>
-            <p className="text-[10px] font-semibold opacity-80 mt-0.5">
-              Margem Líquida:{' '}
-              {matriz.margemLiquidaTotal !== null
-                ? `${matriz.margemLiquidaTotal.toFixed(1)}%`
-                : '—'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+              <p className="text-base font-bold text-emerald-700 mt-1 truncate">
+                {formatBrl(totalReceitas)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                2. Desp. Variáveis
+              </p>
+              <p className="text-base font-bold text-amber-700 mt-1 truncate">
+                {formatBrl(totalDespesasVar)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                3. Desp. Fixas
+              </p>
+              <p className="text-base font-bold text-rose-700 mt-1 truncate">
+                {formatBrl(totalDespesasFix)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                4. Desp. Financeiras
+              </p>
+              <p className="text-base font-bold text-purple-700 mt-1 truncate">
+                {formatBrl(totalDespesasFin)}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                5. Rec. Financeiras
+              </p>
+              <p className="text-base font-bold text-sky-700 mt-1 truncate">
+                {formatBrl(totalReceitasFin)}
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Lucro ou Prejuízo com Destaque Visual */}
+          <Card
+            className={`border shadow-xs ${
+              isLucro
+                ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
+                : 'bg-rose-50/70 border-rose-300 text-rose-950'
+            }`}
+          >
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-wider">
+                  {isLucro ? 'Lucro do Período' : 'Prejuízo do Período'}
+                </p>
+                {isLucro ? (
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                ) : (
+                  <TrendingDown className="w-4 h-4 text-rose-600" />
+                )}
+              </div>
+              <p
+                className={`text-base font-extrabold mt-1 truncate ${
+                  isLucro ? 'text-emerald-700' : 'text-rose-700'
+                }`}
+              >
+                {formatBrl(lucroTotal)}
+              </p>
+              <p className="text-[10px] font-semibold opacity-80 mt-0.5">
+                Margem Líquida:{' '}
+                {matriz.margemLiquidaTotal !== null
+                  ? `${matriz.margemLiquidaTotal.toFixed(1)}%`
+                  : '—'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        /* Cards do Comparativo Consolidado */
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 print:grid-cols-3">
+          {/* Card Período Anterior/Comparado */}
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">
+                  Período Comparado ({p2Descricao})
+                </span>
+                <Badge variant="outline" className="text-[10px]">
+                  Ref
+                </Badge>
+              </div>
+              <div className="mt-2 space-y-1">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-600">Lucro / Prejuízo:</span>
+                  <span
+                    className={`text-sm font-bold ${
+                      matrizPeriodo2.lucroPrejuizo.totalPeriodo >= 0
+                        ? 'text-emerald-700'
+                        : 'text-rose-700'
+                    }`}
+                  >
+                    {formatBrl(matrizPeriodo2.lucroPrejuizo.totalPeriodo)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-600">Margem Líquida:</span>
+                  <span className="text-xs font-semibold text-slate-800">
+                    {matrizPeriodo2.margemLiquidaTotal !== null
+                      ? `${matrizPeriodo2.margemLiquidaTotal.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline text-[11px] text-slate-500">
+                  <span>Receitas Totais:</span>
+                  <span>{formatBrl(matrizPeriodo2.totalReceitasPeriodo)}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card Período Atual */}
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between text-slate-500">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">
+                  Período Atual ({p1Descricao})
+                </span>
+                <Badge variant="default" className="text-[10px] bg-blue-600">
+                  Atual
+                </Badge>
+              </div>
+              <div className="mt-2 space-y-1">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-600">Lucro / Prejuízo:</span>
+                  <span
+                    className={`text-sm font-bold ${
+                      matriz.lucroPrejuizo.totalPeriodo >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {formatBrl(matriz.lucroPrejuizo.totalPeriodo)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-600">Margem Líquida:</span>
+                  <span className="text-xs font-semibold text-slate-800">
+                    {matriz.margemLiquidaTotal !== null
+                      ? `${matriz.margemLiquidaTotal.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline text-[11px] text-slate-500">
+                  <span>Receitas Totais:</span>
+                  <span>{formatBrl(matriz.totalReceitasPeriodo)}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card Variação Consolidada */}
+          <Card
+            className={`border shadow-xs ${
+              comparativo.lucroPrejuizo.favoravel
+                ? 'bg-emerald-50/70 border-emerald-300'
+                : 'bg-rose-50/70 border-rose-300'
+            }`}
+          >
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
+                  Variação Consolidada (Atual vs Ref)
+                </span>
+                {comparativo.lucroPrejuizo.favoravel ? (
+                  <Badge className="bg-emerald-600 text-white text-[10px]">Favorável</Badge>
+                ) : (
+                  <Badge className="bg-rose-600 text-white text-[10px]">Desfavorável</Badge>
+                )}
+              </div>
+              <div className="mt-2 space-y-1">
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-700 font-medium">Variação do Lucro:</span>
+                  <span
+                    className={`text-sm font-extrabold ${
+                      comparativo.lucroPrejuizo.favoravel ? 'text-emerald-800' : 'text-rose-800'
+                    }`}
+                  >
+                    {comparativo.lucroPrejuizo.diferenca >= 0 ? '+' : ''}
+                    {formatBrl(comparativo.lucroPrejuizo.diferenca)}
+                    {comparativo.lucroPrejuizo.percentual !== null && (
+                      <span className="text-xs ml-1 font-semibold">
+                        ({comparativo.lucroPrejuizo.percentual >= 0 ? '+' : ''}
+                        {comparativo.lucroPrejuizo.percentual.toFixed(1)}%)
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span className="text-xs text-slate-700 font-medium">Dif. Margem Líquida:</span>
+                  <span
+                    className={`text-xs font-bold ${
+                      comparativo.margemLiquida.favoravel ? 'text-emerald-800' : 'text-rose-800'
+                    }`}
+                  >
+                    {comparativo.margemLiquida.diferencaPontos !== null
+                      ? `${comparativo.margemLiquida.diferencaPontos >= 0 ? '+' : ''}${comparativo.margemLiquida.diferencaPontos.toFixed(1)} p.p.`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-baseline text-[11px] text-slate-600">
+                  <span>Var. Receitas:</span>
+                  <span
+                    className={`font-semibold ${
+                      comparativo.grupos[0]?.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {comparativo.grupos[0]?.diferenca >= 0 ? '+' : ''}
+                    {formatBrl(comparativo.grupos[0]?.diferenca)}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Cabeçalho para impressão */}
       <div className="hidden print:block mb-4 border-b border-slate-300 pb-2">
@@ -586,27 +895,41 @@ export default function DreGerencial() {
           DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE GERENCIAL)
         </h2>
         <p className="text-xs text-slate-600">
-          Empresa: {selectedEmpresa ? selectedEmpresa.nome : 'Consolidado'} · Período:{' '}
-          {meses[0]?.rotuloCurto} a {meses[meses.length - 1]?.rotuloCurto} ({meses.length} meses)
+          Empresa: {selectedEmpresa ? selectedEmpresa.nome : 'Consolidado'} ·{' '}
+          {modoVisualizacao === 'comparativo'
+            ? `Comparativo: ${p1Descricao} (Atual) vs ${p2Descricao} (Comparado)`
+            : `Período: ${meses[0]?.rotuloCurto} a ${meses[meses.length - 1]?.rotuloCurto} (${meses.length} meses)`}
         </p>
       </div>
 
-      {/* ================= TABELA MATRICIAL DA DRE ================= */}
+      {/* ================= TABELA MATRICIAL OU COMPARATIVA DA DRE ================= */}
       <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
         <CardHeader className="py-3 px-5 border-b border-slate-100 bg-slate-50/50 flex flex-row items-center justify-between">
           <div>
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-blue-600" />
-              Matriz Gerencial de Resultados ({meses.length} meses)
+              {modoVisualizacao === 'comparativo'
+                ? 'DRE Comparativa entre Períodos (Lado a Lado)'
+                : `Matriz Gerencial de Resultados (${meses.length} meses)`}
             </CardTitle>
             <CardDescription className="text-xs">
-              Estrutura: Receitas (1) – Despesas Variáveis (2) – Despesas Fixas (3) – Despesas
-              Financeiras (4) + Receitas Financeiras (5) = Lucro/Prejuízo (6).
+              {modoVisualizacao === 'comparativo'
+                ? `Análise lado a lado de ${p1Descricao} (Atual) vs ${p2Descricao} (Comparado) com variação absoluta (R$) e percentual (%).`
+                : 'Estrutura: Receitas (1) – Despesas Variáveis (2) – Despesas Fixas (3) – Despesas Financeiras (4) + Receitas Financeiras (5) = Lucro/Prejuízo (6).'}
             </CardDescription>
           </div>
           <div className="text-xs text-slate-500 font-medium">
-            Período: <strong className="text-slate-800">{meses[0]?.rotuloCurto}</strong> até{' '}
-            <strong className="text-slate-800">{meses[meses.length - 1]?.rotuloCurto}</strong>
+            {modoVisualizacao === 'comparativo' ? (
+              <span>
+                Comparando: <strong className="text-blue-700">{p1Descricao}</strong> vs{' '}
+                <strong className="text-purple-700">{p2Descricao}</strong>
+              </span>
+            ) : (
+              <span>
+                Período: <strong className="text-slate-800">{meses[0]?.rotuloCurto}</strong> até{' '}
+                <strong className="text-slate-800">{meses[meses.length - 1]?.rotuloCurto}</strong>
+              </span>
+            )}
           </div>
         </CardHeader>
 
@@ -618,7 +941,8 @@ export default function DreGerencial() {
                 Calculando DRE a partir dos lançamentos rápidos...
               </p>
             </div>
-          ) : (
+          ) : modoVisualizacao === 'unico' ? (
+            /* TABELA PERÍODO ÚNICO (Matriz mês a mês) */
             <div className="overflow-x-auto w-full max-w-full">
               <table
                 className="text-xs border-collapse w-full"
@@ -645,7 +969,7 @@ export default function DreGerencial() {
 
                 <tbody className="divide-y divide-slate-100">
                   {/* Grupos 1 a 5 da DRE */}
-                  {matriz.grupos.map((grupo, idx) => {
+                  {matriz.grupos.map((grupo) => {
                     const isExpandido = !!gruposExpandidos[grupo.classificacao]
                     const corFundo =
                       grupo.classificacao === 'Receita'
@@ -940,6 +1264,393 @@ export default function DreGerencial() {
 
                             <td className="py-2 px-4 text-right font-semibold bg-slate-50/50 text-slate-800">
                               {formatBrl(conta.totalPeriodo)}
+                            </td>
+                          </tr>
+                        ))}
+                    </React.Fragment>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* TABELA COMPARATIVA LADO A LADO */
+            <div className="overflow-x-auto w-full max-w-full">
+              <table className="text-xs border-collapse w-full min-w-[760px]">
+                <thead>
+                  <tr className="bg-slate-100 text-[#0B1F3A] border-b border-slate-200 font-bold text-left">
+                    <th className="py-3 px-4 w-[280px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                      Estrutura de Contas / Grupos
+                    </th>
+                    <th className="py-3 px-3 text-right border-r border-slate-200 whitespace-nowrap min-w-[125px] bg-purple-50/60 text-purple-950 font-bold">
+                      Período Comparado ({p2Descricao})
+                    </th>
+                    <th className="py-3 px-3 text-right border-r border-slate-200 whitespace-nowrap min-w-[125px] bg-blue-50/60 text-blue-950 font-bold">
+                      Período Atual ({p1Descricao})
+                    </th>
+                    <th className="py-3 px-3 text-right border-r border-slate-200 whitespace-nowrap min-w-[110px] font-bold">
+                      Variação (R$)
+                    </th>
+                    <th className="py-3 px-3 text-right border-r border-slate-200 whitespace-nowrap min-w-[95px] font-bold">
+                      Variação (%)
+                    </th>
+                    <th className="py-3 px-3 text-center whitespace-nowrap min-w-[95px] font-bold">
+                      Impacto
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-100">
+                  {comparativo.grupos.map((grupo) => {
+                    const isExpandido = !!gruposExpandidos[grupo.classificacao]
+                    const corFundo =
+                      grupo.classificacao === 'Receita'
+                        ? 'bg-emerald-50/40 text-emerald-950 font-bold'
+                        : grupo.classificacao === 'Receita Financeira'
+                          ? 'bg-sky-50/40 text-sky-950 font-bold'
+                          : 'bg-slate-50/80 text-slate-900 font-bold'
+
+                    return (
+                      <React.Fragment key={grupo.classificacao}>
+                        {/* Linha Grupo Master */}
+                        <tr className={`${corFundo} hover:bg-slate-100/80 transition-colors`}>
+                          <td className="py-2.5 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-200">
+                            <button
+                              type="button"
+                              onClick={() => toggleGrupo(grupo.classificacao)}
+                              className="flex items-center gap-2 text-left w-full font-bold focus:outline-none"
+                            >
+                              {isExpandido ? (
+                                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                              )}
+                              <span>{grupo.titulo}</span>
+                              <Badge
+                                variant="outline"
+                                className="ml-auto text-[10px] font-normal opacity-70"
+                              >
+                                {grupo.contas.length} conta(s)
+                              </Badge>
+                            </button>
+                          </td>
+
+                          {/* Período 1 (Comparado / Ref) */}
+                          <td className="py-2.5 px-3 text-right font-semibold border-r border-slate-200 whitespace-nowrap bg-purple-50/30 text-purple-950">
+                            {formatBrl(grupo.valorPeriodo1)}
+                          </td>
+
+                          {/* Período 2 (Atual) */}
+                          <td className="py-2.5 px-3 text-right font-semibold border-r border-slate-200 whitespace-nowrap bg-blue-50/30 text-blue-950">
+                            {formatBrl(grupo.valorPeriodo2)}
+                          </td>
+
+                          {/* Variação R$ */}
+                          <td
+                            className={`py-2.5 px-3 text-right font-bold border-r border-slate-200 whitespace-nowrap ${
+                              grupo.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {grupo.diferenca >= 0 ? '+' : ''}
+                            {formatBrl(grupo.diferenca)}
+                          </td>
+
+                          {/* Variação % */}
+                          <td
+                            className={`py-2.5 px-3 text-right font-bold border-r border-slate-200 whitespace-nowrap ${
+                              grupo.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                            }`}
+                          >
+                            {grupo.percentual !== null ? (
+                              <span>
+                                {grupo.percentual >= 0 ? '+' : ''}
+                                {grupo.percentual.toFixed(1)}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-normal">—</span>
+                            )}
+                          </td>
+
+                          {/* Tag de Impacto */}
+                          <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                            <Badge
+                              className={`text-[10px] font-bold ${
+                                grupo.favoravel
+                                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : 'bg-rose-100 text-rose-800 border-rose-300'
+                              }`}
+                            >
+                              {grupo.favoravel ? 'Favorável' : 'Desfavorável'}
+                            </Badge>
+                          </td>
+                        </tr>
+
+                        {/* Contas do Grupo no comparativo */}
+                        {isExpandido &&
+                          grupo.contas.map((conta) => (
+                            <tr
+                              key={conta.id}
+                              className="hover:bg-blue-50/30 text-slate-700 transition-colors text-[11px]"
+                            >
+                              <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
+                                <div className="flex items-center gap-2 truncate">
+                                  {conta.codigo && (
+                                    <span className="font-mono text-[10px] text-blue-600 font-semibold shrink-0">
+                                      {conta.codigo}
+                                    </span>
+                                  )}
+                                  <span className="truncate font-medium">{conta.nome}</span>
+                                </div>
+                              </td>
+
+                              <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap">
+                                {formatBrl(conta.valorPeriodo1)}
+                              </td>
+
+                              <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap">
+                                {formatBrl(conta.valorPeriodo2)}
+                              </td>
+
+                              <td
+                                className={`py-2 px-3 text-right border-r border-slate-100 font-medium whitespace-nowrap ${
+                                  conta.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                                }`}
+                              >
+                                {conta.diferenca >= 0 ? '+' : ''}
+                                {formatBrl(conta.diferenca)}
+                              </td>
+
+                              <td
+                                className={`py-2 px-3 text-right border-r border-slate-100 font-medium whitespace-nowrap ${
+                                  conta.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                                }`}
+                              >
+                                {conta.percentual !== null ? (
+                                  <span>
+                                    {conta.percentual >= 0 ? '+' : ''}
+                                    {conta.percentual.toFixed(1)}%
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 font-normal">—</span>
+                                )}
+                              </td>
+
+                              <td className="py-2 px-3 text-center whitespace-nowrap text-[10px]">
+                                <span
+                                  className={`inline-block px-1.5 py-0.5 rounded ${
+                                    conta.favoravel
+                                      ? 'text-emerald-700 bg-emerald-50'
+                                      : 'text-rose-700 bg-rose-50'
+                                  }`}
+                                >
+                                  {conta.favoravel ? '✓ Fav' : '✗ Desfav'}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+
+                        {isExpandido && grupo.contas.length === 0 && (
+                          <tr className="bg-white text-[11px] text-slate-400 italic">
+                            <td colSpan={6} className="py-2 pl-9 pr-4 sticky left-0 bg-white">
+                              Nenhuma conta vinculada com movimentação nos períodos selecionados.
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  })}
+
+                  {/* ================= LINHA COMPARATIVA: LUCRO OU PREJUÍZO ================= */}
+                  <tr
+                    className={`border-t-2 font-extrabold text-xs ${
+                      comparativo.lucroPrejuizo.favoravel
+                        ? 'bg-emerald-100/70 text-emerald-950 border-emerald-400'
+                        : 'bg-rose-100/70 text-rose-950 border-rose-400'
+                    }`}
+                  >
+                    <td className="py-3.5 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-wider font-extrabold flex items-center gap-2">
+                          {comparativo.lucroPrejuizo.valorPeriodo2 >= 0 ? (
+                            <TrendingUp className="w-4 h-4 text-emerald-700" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-rose-700" />
+                          )}
+                          {comparativo.lucroPrejuizo.titulo}
+                        </span>
+                        <Badge
+                          className={`text-[10px] font-bold ${
+                            comparativo.lucroPrejuizo.valorPeriodo2 >= 0
+                              ? 'bg-emerald-200 text-emerald-900 border-emerald-400'
+                              : 'bg-rose-200 text-rose-900 border-rose-400'
+                          }`}
+                        >
+                          {comparativo.lucroPrejuizo.valorPeriodo2 >= 0
+                            ? 'LUCRO LÍQUIDO'
+                            : 'PREJUÍZO'}
+                        </Badge>
+                      </div>
+                    </td>
+
+                    <td className="py-3.5 px-3 text-right font-extrabold border-r border-slate-300 whitespace-nowrap bg-purple-100/50">
+                      {formatBrl(comparativo.lucroPrejuizo.valorPeriodo1)}
+                    </td>
+
+                    <td className="py-3.5 px-3 text-right font-extrabold border-r border-slate-300 whitespace-nowrap bg-blue-100/50">
+                      {formatBrl(comparativo.lucroPrejuizo.valorPeriodo2)}
+                    </td>
+
+                    <td
+                      className={`py-3.5 px-3 text-right font-black border-r border-slate-300 whitespace-nowrap ${
+                        comparativo.lucroPrejuizo.favoravel ? 'text-emerald-900' : 'text-rose-900'
+                      }`}
+                    >
+                      {comparativo.lucroPrejuizo.diferenca >= 0 ? '+' : ''}
+                      {formatBrl(comparativo.lucroPrejuizo.diferenca)}
+                    </td>
+
+                    <td
+                      className={`py-3.5 px-3 text-right font-black border-r border-slate-300 whitespace-nowrap ${
+                        comparativo.lucroPrejuizo.favoravel ? 'text-emerald-900' : 'text-rose-900'
+                      }`}
+                    >
+                      {comparativo.lucroPrejuizo.percentual !== null ? (
+                        <span>
+                          {comparativo.lucroPrejuizo.percentual >= 0 ? '+' : ''}
+                          {comparativo.lucroPrejuizo.percentual.toFixed(1)}%
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+
+                    <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                      <Badge
+                        className={`text-[10px] font-bold ${
+                          comparativo.lucroPrejuizo.favoravel
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-rose-600 text-white'
+                        }`}
+                      >
+                        {comparativo.lucroPrejuizo.favoravel ? 'Favorável' : 'Desfavorável'}
+                      </Badge>
+                    </td>
+                  </tr>
+
+                  {/* ================= MARGEM LÍQUIDA (%) COMPARATIVA ================= */}
+                  <tr className="bg-slate-50/90 text-slate-700 font-semibold text-[11px] border-b border-slate-200">
+                    <td className="py-2.5 px-4 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">
+                      <span className="font-semibold text-slate-800">
+                        Margem Líquida (% s/ Receitas)
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right border-r border-slate-200 font-semibold whitespace-nowrap">
+                      {comparativo.margemLiquida.margemPeriodo1 !== null
+                        ? `${comparativo.margemLiquida.margemPeriodo1.toFixed(1)}%`
+                        : '—'}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right border-r border-slate-200 font-semibold whitespace-nowrap">
+                      {comparativo.margemLiquida.margemPeriodo2 !== null
+                        ? `${comparativo.margemLiquida.margemPeriodo2.toFixed(1)}%`
+                        : '—'}
+                    </td>
+
+                    <td
+                      className={`py-2.5 px-3 text-right border-r border-slate-200 font-bold whitespace-nowrap ${
+                        comparativo.margemLiquida.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
+                    >
+                      {comparativo.margemLiquida.diferencaPontos !== null
+                        ? `${comparativo.margemLiquida.diferencaPontos >= 0 ? '+' : ''}${comparativo.margemLiquida.diferencaPontos.toFixed(1)} p.p.`
+                        : '—'}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right border-r border-slate-200 text-slate-400">
+                      —
+                    </td>
+
+                    <td className="py-2.5 px-3 text-center whitespace-nowrap text-[10px]">
+                      <span
+                        className={`inline-block px-1.5 py-0.5 rounded font-semibold ${
+                          comparativo.margemLiquida.favoravel
+                            ? 'text-emerald-700 bg-emerald-50'
+                            : 'text-rose-700 bg-rose-50'
+                        }`}
+                      >
+                        {comparativo.margemLiquida.favoravel ? '✓ Melhora' : '✗ Queda'}
+                      </span>
+                    </td>
+                  </tr>
+
+                  {/* Não Classificados se houver */}
+                  {comparativo.naoClassificados.contas.length > 0 && (
+                    <React.Fragment>
+                      <tr className="bg-amber-50/70 text-amber-950 font-bold border-t-2 border-amber-300">
+                        <td className="py-3 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-200">
+                          <button
+                            type="button"
+                            onClick={() => toggleGrupo('naoClassificados')}
+                            className="flex items-center gap-2 text-left w-full font-bold focus:outline-none"
+                          >
+                            {gruposExpandidos.naoClassificados ? (
+                              <ChevronDown className="w-4 h-4 text-amber-600 shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-amber-600 shrink-0" />
+                            )}
+                            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>{comparativo.naoClassificados.titulo}</span>
+                          </button>
+                        </td>
+
+                        <td className="py-3 px-3 text-right border-r border-slate-200 font-semibold text-amber-900">
+                          {formatBrl(comparativo.naoClassificados.valorPeriodo1)}
+                        </td>
+
+                        <td className="py-3 px-3 text-right border-r border-slate-200 font-semibold text-amber-900">
+                          {formatBrl(comparativo.naoClassificados.valorPeriodo2)}
+                        </td>
+
+                        <td className="py-3 px-3 text-right border-r border-slate-200 font-bold text-amber-900">
+                          {formatBrl(comparativo.naoClassificados.diferenca)}
+                        </td>
+
+                        <td className="py-3 px-3 text-right border-r border-slate-200 font-bold text-amber-900">
+                          {comparativo.naoClassificados.percentual !== null
+                            ? `${comparativo.naoClassificados.percentual.toFixed(1)}%`
+                            : '—'}
+                        </td>
+
+                        <td className="py-3 px-3 text-center">
+                          <Badge className="bg-amber-200 text-amber-900 border-amber-400 text-[10px]">
+                            Pendente
+                          </Badge>
+                        </td>
+                      </tr>
+
+                      {gruposExpandidos.naoClassificados &&
+                        comparativo.naoClassificados.contas.map((conta) => (
+                          <tr
+                            key={conta.id}
+                            className="hover:bg-amber-50/30 text-slate-700 transition-colors text-[11px]"
+                          >
+                            <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
+                              <span className="truncate font-medium">{conta.nome}</span>
+                            </td>
+                            <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600">
+                              {formatBrl(conta.valorPeriodo1)}
+                            </td>
+                            <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600">
+                              {formatBrl(conta.valorPeriodo2)}
+                            </td>
+                            <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600">
+                              {formatBrl(conta.diferenca)}
+                            </td>
+                            <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600">
+                              {conta.percentual !== null ? `${conta.percentual.toFixed(1)}%` : '—'}
+                            </td>
+                            <td className="py-2 px-3 text-center text-[10px] text-amber-700">
+                              Requer ajuste
                             </td>
                           </tr>
                         ))}

@@ -5,6 +5,9 @@ import {
   TITULOS_GRUPOS_DRE,
   SINAL_MULTIPLICADOR_GRUPO,
   type DreMatrizResultado,
+  type DreComparativoResultado,
+  type GrupoComparativoItem,
+  type ContaComparativoItem,
   type GrupoMatrizItem,
   type ContaMatrizItem,
   type MesItem,
@@ -229,5 +232,214 @@ export function calcularDreGerencialMatriz(
     margemLiquidaPorMes,
     margemLiquidaTotal,
     totalReceitasPeriodo,
+  }
+}
+
+/**
+ * Calcula a variação percentual segura entre dois valores.
+ * Retorna null se base for 0 e destino também for 0, ou se base for 0.
+ */
+export function calcularVariacaoPercentual(v1: number, v2: number): number | null {
+  if (v1 === 0) {
+    if (v2 === 0) return 0
+    return null // base zero, não há percentual finito significativo
+  }
+  return ((v2 - v1) / Math.abs(v1)) * 100
+}
+
+/**
+ * Determina se a variação é favorável economicamente.
+ * Para Receitas e Lucro: Aumento (v2 >= v1) é favorável.
+ * Para Despesas: Aumento (v2 > v1) é desfavorável (gasto maior). Queda (v2 <= v1) é favorável.
+ */
+export function isVariacaoFavoravel(
+  classificacaoOuTipo: ClassificacaoDre | 'Lucro' | 'NaoClassificado',
+  v1: number,
+  v2: number,
+): boolean {
+  const diferenca = v2 - v1
+  if (
+    classificacaoOuTipo === 'Receita' ||
+    classificacaoOuTipo === 'Receita Financeira' ||
+    classificacaoOuTipo === 'Lucro'
+  ) {
+    return diferenca >= 0
+  }
+  // Para despesas e não-classificados (custos pendentes)
+  return diferenca <= 0
+}
+
+/**
+ * Compara duas matrizes DRE de períodos distintos e produz a análise comparativa
+ * com variações em R$ e % e flags de favorabilidade.
+ */
+export function calcularComparativoDre(
+  matriz1: DreMatrizResultado,
+  matriz2: DreMatrizResultado,
+  periodo1Descricao: string,
+  periodo2Descricao: string,
+): DreComparativoResultado {
+  // Mapa de grupos por classificação da matriz 1 e matriz 2
+  const grupos1Map = new Map<ClassificacaoDre, GrupoMatrizItem>()
+  for (const g of matriz1.grupos) grupos1Map.set(g.classificacao, g)
+
+  const grupos2Map = new Map<ClassificacaoDre, GrupoMatrizItem>()
+  for (const g of matriz2.grupos) grupos2Map.set(g.classificacao, g)
+
+  const gruposComparativo: GrupoComparativoItem[] = []
+
+  for (const clf of GRUPOS_DRE_ORDEM) {
+    const g1 = grupos1Map.get(clf)
+    const g2 = grupos2Map.get(clf)
+
+    const val1 = g1 ? g1.totalPeriodo : 0
+    const val2 = g2 ? g2.totalPeriodo : 0
+    const diferenca = val2 - val1
+    const percentual = calcularVariacaoPercentual(val1, val2)
+    const favoravel = isVariacaoFavoravel(clf, val1, val2)
+
+    // Agrupa contas individuais presentes em qualquer um dos períodos
+    const contasIds = new Set<string>()
+    const contas1Map = new Map<string, ContaMatrizItem>()
+    const contas2Map = new Map<string, ContaMatrizItem>()
+
+    if (g1) {
+      for (const c of g1.contas) {
+        contasIds.add(c.id)
+        contas1Map.set(c.id, c)
+      }
+    }
+    if (g2) {
+      for (const c of g2.contas) {
+        contasIds.add(c.id)
+        contas2Map.set(c.id, c)
+      }
+    }
+
+    const contasComparativo: ContaComparativoItem[] = []
+    for (const id of contasIds) {
+      const c1 = contas1Map.get(id)
+      const c2 = contas2Map.get(id)
+      const ref = c2 || c1!
+      const cv1 = c1 ? c1.totalPeriodo : 0
+      const cv2 = c2 ? c2.totalPeriodo : 0
+      const cDiff = cv2 - cv1
+      const cPct = calcularVariacaoPercentual(cv1, cv2)
+      const cFav = isVariacaoFavoravel(clf, cv1, cv2)
+
+      contasComparativo.push({
+        id,
+        nome: ref.nome,
+        codigo: ref.codigo,
+        tipo: ref.tipo,
+        grupo: ref.grupo,
+        classificacao: clf,
+        valorPeriodo1: cv1,
+        valorPeriodo2: cv2,
+        diferenca: cDiff,
+        percentual: cPct,
+        favoravel: cFav,
+      })
+    }
+
+    contasComparativo.sort((a, b) => a.nome.localeCompare(b.nome))
+
+    gruposComparativo.push({
+      classificacao: clf,
+      titulo: TITULOS_GRUPOS_DRE[clf],
+      sinal: SINAL_MULTIPLICADOR_GRUPO[clf],
+      valorPeriodo1: val1,
+      valorPeriodo2: val2,
+      diferenca,
+      percentual,
+      favoravel,
+      contas: contasComparativo,
+    })
+  }
+
+  // Lucro ou Prejuízo
+  const lp1 = matriz1.lucroPrejuizo.totalPeriodo
+  const lp2 = matriz2.lucroPrejuizo.totalPeriodo
+  const lpDiff = lp2 - lp1
+  const lpPct = calcularVariacaoPercentual(lp1, lp2)
+  const lpFav = isVariacaoFavoravel('Lucro', lp1, lp2)
+
+  // Margem Líquida
+  const mg1 = matriz1.margemLiquidaTotal
+  const mg2 = matriz2.margemLiquidaTotal
+  const mgDiff = mg1 !== null && mg2 !== null ? mg2 - mg1 : null
+  const mgFav = mgDiff !== null ? mgDiff >= 0 : true
+
+  // Não Classificados
+  const nc1 = matriz1.naoClassificados.totalPeriodo
+  const nc2 = matriz2.naoClassificados.totalPeriodo
+  const ncDiff = nc2 - nc1
+  const ncPct = calcularVariacaoPercentual(nc1, nc2)
+  const ncFav = isVariacaoFavoravel('NaoClassificado', nc1, nc2)
+
+  const ncContasIds = new Set<string>()
+  const nc1Map = new Map<string, ContaMatrizItem>()
+  const nc2Map = new Map<string, ContaMatrizItem>()
+  for (const c of matriz1.naoClassificados.contas) {
+    ncContasIds.add(c.id)
+    nc1Map.set(c.id, c)
+  }
+  for (const c of matriz2.naoClassificados.contas) {
+    ncContasIds.add(c.id)
+    nc2Map.set(c.id, c)
+  }
+
+  const ncContas: ContaComparativoItem[] = []
+  for (const id of ncContasIds) {
+    const c1 = nc1Map.get(id)
+    const c2 = nc2Map.get(id)
+    const ref = c2 || c1!
+    const cv1 = c1 ? c1.totalPeriodo : 0
+    const cv2 = c2 ? c2.totalPeriodo : 0
+    ncContas.push({
+      id,
+      nome: ref.nome,
+      codigo: ref.codigo,
+      tipo: ref.tipo,
+      grupo: ref.grupo,
+      classificacao: 'NaoClassificado',
+      valorPeriodo1: cv1,
+      valorPeriodo2: cv2,
+      diferenca: cv2 - cv1,
+      percentual: calcularVariacaoPercentual(cv1, cv2),
+      favoravel: isVariacaoFavoravel('NaoClassificado', cv1, cv2),
+    })
+  }
+  ncContas.sort((a, b) => a.nome.localeCompare(b.nome))
+
+  return {
+    periodo1Descricao,
+    periodo2Descricao,
+    matriz1,
+    matriz2,
+    grupos: gruposComparativo,
+    lucroPrejuizo: {
+      titulo: '= Lucro ou Prejuízo (Resultado)',
+      valorPeriodo1: lp1,
+      valorPeriodo2: lp2,
+      diferenca: lpDiff,
+      percentual: lpPct,
+      favoravel: lpFav,
+    },
+    margemLiquida: {
+      margemPeriodo1: mg1,
+      margemPeriodo2: mg2,
+      diferencaPontos: mgDiff,
+      favoravel: mgFav,
+    },
+    naoClassificados: {
+      titulo: 'Não Classificados (Requer classificação no Plano de Contas)',
+      valorPeriodo1: nc1,
+      valorPeriodo2: nc2,
+      diferenca: ncDiff,
+      percentual: ncPct,
+      favoravel: ncFav,
+      contas: ncContas,
+    },
   }
 }

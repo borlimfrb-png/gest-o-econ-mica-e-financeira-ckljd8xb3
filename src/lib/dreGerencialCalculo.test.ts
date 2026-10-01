@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { gerarListaMeses } from './dreGerencialTypes'
-import { calcularDreGerencialMatriz } from './dreGerencialCalculo'
+import {
+  calcularDreGerencialMatriz,
+  calcularComparativoDre,
+  isVariacaoFavoravel,
+  calcularVariacaoPercentual,
+} from './dreGerencialCalculo'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 
 describe('DRE Gerencial - Cálculos e Geração de Matriz', () => {
@@ -352,5 +357,189 @@ describe('DRE Gerencial - Cálculos e Geração de Matriz', () => {
     expect(despFixa?.valoresPorMes['2023-01']).toBe(1500)
     expect(despFixa?.contas).toHaveLength(1)
     expect(matriz.naoClassificados.contas).toHaveLength(0)
+  })
+
+  it('calcula comparativo entre dois períodos identificando variações e favorabilidade', () => {
+    const mesesP1 = gerarListaMeses(2023, 1, 12)
+    const mesesP2 = gerarListaMeses(2024, 1, 12)
+
+    const contasMock: ContaRecord[] = [
+      {
+        id: 'c-rec',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        nome: 'Receita Vendas',
+        tipo: 'Receita',
+        classificacao_dre: 'Receita',
+        created: '',
+      },
+      {
+        id: 'c-desp',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        nome: 'Despesa Administrativa',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+    ]
+
+    const lancamentosP1: LancamentoRecord[] = [
+      {
+        id: 'l-p1-rec',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'emp-1',
+        plano_conta: 'pc-rec',
+        data: '2023-01-10 12:00:00.000Z',
+        valor: 100000,
+        user: 'u-1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'pc-rec',
+            collectionId: 'plano_contas',
+            collectionName: 'plano_contas',
+            user: 'u-1',
+            codigo: 'PC-1',
+            conta: 'c-rec',
+            centro: 'cc-1',
+            created: '',
+            expand: { conta: contasMock[0] },
+          },
+        },
+      },
+      {
+        id: 'l-p1-desp',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'emp-1',
+        plano_conta: 'pc-desp',
+        data: '2023-01-15 12:00:00.000Z',
+        valor: 30000,
+        user: 'u-1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'pc-desp',
+            collectionId: 'plano_contas',
+            collectionName: 'plano_contas',
+            user: 'u-1',
+            codigo: 'PC-2',
+            conta: 'c-desp',
+            centro: 'cc-1',
+            created: '',
+            expand: { conta: contasMock[1] },
+          },
+        },
+      },
+    ]
+
+    const lancamentosP2: LancamentoRecord[] = [
+      {
+        id: 'l-p2-rec',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'emp-1',
+        plano_conta: 'pc-rec',
+        data: '2024-01-10 12:00:00.000Z',
+        valor: 150000, // aumento de 50% em receita (favorável)
+        user: 'u-1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'pc-rec',
+            collectionId: 'plano_contas',
+            collectionName: 'plano_contas',
+            user: 'u-1',
+            codigo: 'PC-1',
+            conta: 'c-rec',
+            centro: 'cc-1',
+            created: '',
+            expand: { conta: contasMock[0] },
+          },
+        },
+      },
+      {
+        id: 'l-p2-desp',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'emp-1',
+        plano_conta: 'pc-desp',
+        data: '2024-01-15 12:00:00.000Z',
+        valor: 45000, // aumento de despesa (desfavorável)
+        user: 'u-1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'pc-desp',
+            collectionId: 'plano_contas',
+            collectionName: 'plano_contas',
+            user: 'u-1',
+            codigo: 'PC-2',
+            conta: 'c-desp',
+            centro: 'cc-1',
+            created: '',
+            expand: { conta: contasMock[1] },
+          },
+        },
+      },
+    ]
+
+    const m1 = calcularDreGerencialMatriz(lancamentosP1, contasMock, mesesP1)
+    const m2 = calcularDreGerencialMatriz(lancamentosP2, contasMock, mesesP2)
+
+    const comparativo = calcularComparativoDre(m1, m2, '2023 (P1)', '2024 (P2)')
+
+    // Grupo Receita
+    const gReceita = comparativo.grupos.find((g) => g.classificacao === 'Receita')!
+    expect(gReceita.valorPeriodo1).toBe(100000)
+    expect(gReceita.valorPeriodo2).toBe(150000)
+    expect(gReceita.diferenca).toBe(50000)
+    expect(gReceita.percentual).toBe(50)
+    expect(gReceita.favoravel).toBe(true) // aumento de receita é favorável
+
+    // Grupo Despesa Fixa
+    const gDespFix = comparativo.grupos.find((g) => g.classificacao === 'Despesa Fixa')!
+    expect(gDespFix.valorPeriodo1).toBe(30000)
+    expect(gDespFix.valorPeriodo2).toBe(45000)
+    expect(gDespFix.diferenca).toBe(15000)
+    expect(gDespFix.percentual).toBe(50)
+    expect(gDespFix.favoravel).toBe(false) // aumento de despesa é desfavorável
+
+    // Lucro: P1 = 70.000, P2 = 105.000
+    expect(comparativo.lucroPrejuizo.valorPeriodo1).toBe(70000)
+    expect(comparativo.lucroPrejuizo.valorPeriodo2).toBe(105000)
+    expect(comparativo.lucroPrejuizo.diferenca).toBe(35000)
+    expect(comparativo.lucroPrejuizo.percentual).toBe(50)
+    expect(comparativo.lucroPrejuizo.favoravel).toBe(true) // aumento de lucro é favorável
+
+    // Margem líquida constante em 70% (70k/100k e 105k/150k)
+    expect(comparativo.margemLiquida.margemPeriodo1).toBeCloseTo(70, 1)
+    expect(comparativo.margemLiquida.margemPeriodo2).toBeCloseTo(70, 1)
+    expect(comparativo.margemLiquida.diferencaPontos).toBeCloseTo(0, 1)
+  })
+
+  it('lida com base zero na variação percentual', () => {
+    expect(calcularVariacaoPercentual(0, 100)).toBeNull()
+    expect(calcularVariacaoPercentual(0, 0)).toBe(0)
+    expect(calcularVariacaoPercentual(100, 200)).toBe(100)
+    expect(calcularVariacaoPercentual(200, 100)).toBe(-50)
+  })
+
+  it('avalia favorabilidade corretamente para receitas e despesas', () => {
+    // Receita: subiu = favorável, caiu = desfavorável
+    expect(isVariacaoFavoravel('Receita', 100, 120)).toBe(true)
+    expect(isVariacaoFavoravel('Receita', 120, 100)).toBe(false)
+
+    // Despesa Fixa: subiu = desfavorável, caiu = favorável
+    expect(isVariacaoFavoravel('Despesa Fixa', 50, 70)).toBe(false)
+    expect(isVariacaoFavoravel('Despesa Fixa', 70, 50)).toBe(true)
+
+    // Despesa Variável: subiu = desfavorável, caiu = favorável
+    expect(isVariacaoFavoravel('Despesa Variável', 10, 20)).toBe(false)
+    expect(isVariacaoFavoravel('Despesa Variável', 20, 10)).toBe(true)
   })
 })

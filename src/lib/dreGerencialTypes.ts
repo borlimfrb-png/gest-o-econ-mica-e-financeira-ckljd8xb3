@@ -73,6 +73,71 @@ export interface DreMatrizResultado {
   totalReceitasPeriodo: number
 }
 
+export interface VariacaoValor {
+  valorPeriodo1: number
+  valorPeriodo2: number
+  diferenca: number // Periodo2 - Periodo1
+  percentual: number | null // ((Periodo2 - Periodo1) / |Periodo1|) * 100
+  favoravel: boolean // verde quando favorável, vermelho quando desfavorável
+}
+
+export interface ContaComparativoItem {
+  id: string
+  nome: string
+  codigo?: string
+  tipo?: string
+  grupo?: string
+  classificacao: ClassificacaoDre | 'NaoClassificado'
+  valorPeriodo1: number
+  valorPeriodo2: number
+  diferenca: number
+  percentual: number | null
+  favoravel: boolean
+}
+
+export interface GrupoComparativoItem {
+  classificacao: ClassificacaoDre
+  titulo: string
+  sinal: number
+  valorPeriodo1: number
+  valorPeriodo2: number
+  diferenca: number
+  percentual: number | null
+  favoravel: boolean
+  contas: ContaComparativoItem[]
+}
+
+export interface DreComparativoResultado {
+  periodo1Descricao: string
+  periodo2Descricao: string
+  matriz1: DreMatrizResultado
+  matriz2: DreMatrizResultado
+  grupos: GrupoComparativoItem[]
+  lucroPrejuizo: {
+    titulo: string
+    valorPeriodo1: number
+    valorPeriodo2: number
+    diferenca: number
+    percentual: number | null
+    favoravel: boolean
+  }
+  margemLiquida: {
+    margemPeriodo1: number | null
+    margemPeriodo2: number | null
+    diferencaPontos: number | null
+    favoravel: boolean
+  }
+  naoClassificados: {
+    titulo: string
+    valorPeriodo1: number
+    valorPeriodo2: number
+    diferenca: number
+    percentual: number | null
+    favoravel: boolean
+    contas: ContaComparativoItem[]
+  }
+}
+
 const NOMES_MESES_ABREV = [
   'Jan',
   'Fev',
