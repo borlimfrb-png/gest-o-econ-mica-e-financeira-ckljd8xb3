@@ -45,6 +45,8 @@ import {
   analisarColunasComIA,
   processarLinhasPlanilha,
   gerarPlanilhaModeloExcel,
+  gerarPlanilhaModeloMatrizMensalExcel,
+  getRotulosColunasMatrizMensal,
   colIndexToExcelLetter,
   formatarNomeColunaExcel,
   sanitizarValorCelula,
@@ -261,13 +263,20 @@ export function ImportarLancamentosExcelIA({
       setFileHeaders(headers)
       setRawRows(rows)
 
-      // Sugestão inicial por regras locais rápidas
-      const heur = sugerirMapeamentoHeuristico(headers)
+      // Sugestão inicial por regras locais rápidas (passando ano selecionado)
+      const heur = sugerirMapeamentoHeuristico(headers, selectedAno)
       setColumnMapping(heur)
+
+      // Se já for matriz mensal, define nota imediata
+      if (heur.formato === 'matriz_mensal') {
+        setAiAnalysisNotes(
+          `Formato Matriz Mensal detectado automaticamente: Coluna A = Conta das despesas; Colunas B a M = Meses com último dia para o ano ${selectedAno}.`,
+        )
+      }
 
       // Análise automática por IA em segundo plano
       setIsAnalyzingAi(true)
-      analisarColunasComIA(headers, rows)
+      analisarColunasComIA(headers, rows, selectedAno)
         .then((aiRes) => {
           if (aiRes.mapping) {
             setColumnMapping((prev) => ({
@@ -279,8 +288,14 @@ export function ImportarLancamentosExcelIA({
             setAiAnalysisNotes(aiRes.observacoes)
           }
           toast({
-            title: 'Mapeamento detectado com IA ✨',
-            description: 'Revise o mapeamento das colunas sugerido pela inteligência artificial.',
+            title:
+              aiRes.mapping?.formato === 'matriz_mensal'
+                ? 'Matriz Mensal Detectada com IA ✨'
+                : 'Mapeamento detectado com IA ✨',
+            description:
+              aiRes.mapping?.formato === 'matriz_mensal'
+                ? 'Planilha matriz mês a mês identificada e mapeada como padrão.'
+                : 'Revise o mapeamento das colunas sugerido pela inteligência artificial.',
           })
         })
         .catch(() => {
@@ -305,13 +320,29 @@ export function ImportarLancamentosExcelIA({
 
   // Avança do Mapeamento para a Pré-visualização
   const handleConfirmarMapeamento = () => {
-    if (!columnMapping.data || !columnMapping.valor) {
-      toast({
-        title: 'Mapeamento incompleto',
-        description: 'É obrigatório selecionar as colunas de Data e de Valor da planilha.',
-        variant: 'destructive',
-      })
-      return
+    const isMatriz =
+      columnMapping.formato === 'matriz_mensal' ||
+      (columnMapping.colunasMesesMatriz && Object.keys(columnMapping.colunasMesesMatriz).length > 0)
+
+    if (isMatriz) {
+      const colConta = columnMapping.colunaContaMatriz || columnMapping.codigoConta
+      if (!colConta) {
+        toast({
+          title: 'Mapeamento incompleto',
+          description: 'É obrigatório definir a Coluna A de Conta das despesas.',
+          variant: 'destructive',
+        })
+        return
+      }
+    } else {
+      if (!columnMapping.data || !columnMapping.valor) {
+        toast({
+          title: 'Mapeamento incompleto',
+          description: 'É obrigatório selecionar as colunas de Data e de Valor da planilha.',
+          variant: 'destructive',
+        })
+        return
+      }
     }
 
     setMappingConfirmed(true)
@@ -798,7 +829,23 @@ export function ImportarLancamentosExcelIA({
                 </CardDescription>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="default"
+                  size="sm"
+                  onClick={() =>
+                    gerarPlanilhaModeloMatrizMensalExcel({
+                      planoContas: planoContasEmpresa,
+                      nomeEmpresa: empresaSelecionada?.nome,
+                      ano: selectedAno,
+                    })
+                  }
+                  className="text-xs h-9 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs font-semibold"
+                >
+                  <Download className="w-4 h-4 text-emerald-100" />
+                  Baixar Modelo Matriz Mensal (Padrão {selectedAno})
+                </Button>
                 <Button
                   type="button"
                   variant="outline"
@@ -808,37 +855,43 @@ export function ImportarLancamentosExcelIA({
                       planoContas: planoContasEmpresa,
                       nomeEmpresa: empresaSelecionada?.nome,
                       ano: selectedAno,
+                      tipoModelo: 'colunas',
                     })
                   }
-                  className="text-xs h-9 gap-1.5 border-emerald-300 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100 shadow-xs font-semibold"
+                  className="text-xs h-9 gap-1.5 border-slate-300 text-slate-700 bg-white hover:bg-slate-50 shadow-xs font-medium"
                 >
-                  <Download className="w-4 h-4 text-emerald-600" />
-                  Baixar Modelo Excel (.xlsx)
+                  <Download className="w-4 h-4 text-slate-500" />
+                  Modelo Tradicional (Colunar)
                 </Button>
               </div>
             </div>
 
-            {/* Banner explicativo do Modelo Excel Atualizado */}
-            <div className="mt-4 p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-xs text-emerald-950 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex items-start sm:items-center gap-2.5">
-                <div className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg shrink-0">
-                  <FileSpreadsheet className="w-4 h-4" />
+            {/* Banner explicativo do Modelo Matriz Mensal e do Modelo Colunar */}
+            <div className="mt-4 p-4 rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50/70 border border-emerald-200 text-xs text-emerald-950 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="p-2 bg-emerald-600 text-white rounded-lg shrink-0 shadow-xs">
+                  <Sparkles className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="font-semibold text-emerald-900">
-                    Modelo com as 4 colunas essenciais do Plano de Contas:
-                  </p>
-                  <p className="text-emerald-800 text-[11px] mt-0.5">
-                    <strong>1. Data do Lançamento</strong> (DD/MM/AAAA) &bull;{' '}
-                    <strong>2. Código da Conta</strong> (do Plano de Contas) &bull;{' '}
-                    <strong>3. Nome da Conta</strong> &bull; <strong>4. Valor</strong>.
-                    {empresaSelecionada && (
-                      <span className="ml-1 text-emerald-700">
-                        O download já carrega códigos reais da empresa{' '}
-                        <strong>{empresaSelecionada.nome}</strong> para o ano{' '}
-                        <strong>{selectedAno}</strong>.
-                      </span>
-                    )}
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-emerald-900 text-[13px]">
+                      Formato Padrão Suportado: Matriz Mensal (Despesas Mês a Mês)
+                    </p>
+                    <Badge className="bg-emerald-600 text-white text-[10px] uppercase tracking-wider font-semibold">
+                      Novo Padrão
+                    </Badge>
+                  </div>
+                  <p className="text-emerald-800 text-[11px] mt-1 leading-relaxed">
+                    <strong>Coluna A:</strong> Conta das despesas &bull;{' '}
+                    <strong>Colunas B a M:</strong> meses com cabeçalho no último dia do mês + ano{' '}
+                    (ex.:{' '}
+                    <span className="font-mono font-medium text-emerald-900">
+                      {getRotulosColunasMatrizMensal(selectedAno)[1]},{' '}
+                      {getRotulosColunasMatrizMensal(selectedAno)[2]}...{' '}
+                      {getRotulosColunasMatrizMensal(selectedAno)[12]}
+                    </span>
+                    ). Células vazias são ignoradas e células com valor viram lançamentos de
+                    despesa.
                   </p>
                 </div>
               </div>
@@ -847,16 +900,16 @@ export function ImportarLancamentosExcelIA({
                 variant="outline"
                 size="sm"
                 onClick={() =>
-                  gerarPlanilhaModeloExcel({
+                  gerarPlanilhaModeloMatrizMensalExcel({
                     planoContas: planoContasEmpresa,
                     nomeEmpresa: empresaSelecionada?.nome,
                     ano: selectedAno,
                   })
                 }
-                className="shrink-0 bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-100 text-xs h-8 font-medium shadow-2xs"
+                className="shrink-0 bg-white border-emerald-300 text-emerald-800 hover:bg-emerald-50 text-xs h-8 font-semibold shadow-2xs"
               >
                 <Download className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                Exportar Modelo da Empresa
+                Exportar Modelo Matriz ({selectedAno})
               </Button>
             </div>
           </CardHeader>
@@ -1018,486 +1071,722 @@ export function ImportarLancamentosExcelIA({
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Data */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span>Coluna de Data *</span>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
-                  >
-                    Obrigatório
-                  </Badge>
-                </Label>
-                {columnMapping.data && (
-                  <div className="text-[11px] font-medium text-blue-800 bg-blue-50/70 border border-blue-200/60 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.data))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.data,
-                        fileHeaders.indexOf(columnMapping.data),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.data}
-                  onValueChange={(val) => setColumnMapping((prev) => ({ ...prev, data: val }))}
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Selecione a coluna" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Data, Competência, Vencimento</p>
-              </div>
-
-              {/* Valor */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span>Coluna de Valor *</span>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
-                  >
-                    Obrigatório
-                  </Badge>
-                </Label>
-                {columnMapping.valor && (
-                  <div className="text-[11px] font-medium text-blue-800 bg-blue-50/70 border border-blue-200/60 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.valor))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.valor,
-                        fileHeaders.indexOf(columnMapping.valor),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.valor}
-                  onValueChange={(val) => setColumnMapping((prev) => ({ ...prev, valor: val }))}
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Selecione a coluna" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Valor, Total, Montante</p>
-              </div>
-
-              {/* Histórico / Descrição */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">
-                  Coluna de Histórico / Descrição
-                </Label>
-                {columnMapping.historico && (
-                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.historico))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.historico,
-                        fileHeaders.indexOf(columnMapping.historico),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.historico || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({ ...prev, historico: val === 'none' ? '' : val }))
+            {/* Seletor do Formato de Planilha: Matriz Mensal (Padrão) vs Colunar Tradicional */}
+            <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">Formato da Planilha:</span>
+                <Badge
+                  variant={columnMapping.formato === 'matriz_mensal' ? 'default' : 'outline'}
+                  className={
+                    columnMapping.formato === 'matriz_mensal'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-white text-slate-700'
                   }
                 >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Nenhuma / Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Não mapear)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Histórico, Descrição, Detalhe</p>
+                  {columnMapping.formato === 'matriz_mensal'
+                    ? 'Matriz Mensal (Padrão: Col A = Conta, Col B..M = Meses)'
+                    : 'Colunar Tradicional (1 linha = 1 lançamento)'}
+                </Badge>
               </div>
-
-              {/* Tipo (Receita / Despesa) */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">
-                  Coluna de Tipo (Receita/Despesa)
-                </Label>
-                {columnMapping.tipo && (
-                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.tipo))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.tipo,
-                        fileHeaders.indexOf(columnMapping.tipo),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.tipo || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({ ...prev, tipo: val === 'none' ? '' : val }))
-                  }
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant={columnMapping.formato === 'matriz_mensal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    const heur = sugerirMapeamentoHeuristico(fileHeaders, selectedAno)
+                    // Força modo matriz se usuário clicar
+                    const colunasMeses = heur.colunasMesesMatriz || {}
+                    if (fileHeaders.length >= 13) {
+                      for (let m = 1; m <= 12; m++) {
+                        if (!colunasMeses[m] && fileHeaders[m]) colunasMeses[m] = fileHeaders[m]
+                      }
+                    }
+                    setColumnMapping({
+                      formato: 'matriz_mensal',
+                      data: '',
+                      valor: '',
+                      historico: '',
+                      tipo: 'Despesa',
+                      codigoConta: fileHeaders[0] || '',
+                      nomeConta: fileHeaders[0] || '',
+                      centroCusto: '',
+                      documento: '',
+                      formaPagamento: '',
+                      colunaContaMatriz: fileHeaders[0] || '',
+                      colunasMesesMatriz: colunasMeses,
+                    })
+                  }}
+                  className={`text-xs h-8 ${columnMapping.formato === 'matriz_mensal' ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}`}
                 >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Opcional (Detectado por valor/conta)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Detectar automaticamente)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Tipo, Natureza, D/C</p>
-              </div>
-
-              {/* Código da Conta */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span>Código da Conta</span>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
-                  >
-                    Prioridade 1
-                  </Badge>
-                </Label>
-                {columnMapping.codigoConta && (
-                  <div className="text-[11px] font-medium text-emerald-800 bg-emerald-50/70 border border-emerald-200/60 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.codigoConta))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.codigoConta,
-                        fileHeaders.indexOf(columnMapping.codigoConta),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.codigoConta || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({
-                      ...prev,
-                      codigoConta: val === 'none' ? '' : val,
-                    }))
-                  }
+                  Usar Matriz Mensal
+                </Button>
+                <Button
+                  type="button"
+                  variant={columnMapping.formato !== 'matriz_mensal' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setColumnMapping({
+                      formato: 'padrao_colunas',
+                      data: fileHeaders[0] || '',
+                      valor: fileHeaders[1] || '',
+                      historico: '',
+                      tipo: '',
+                      codigoConta: '',
+                      nomeConta: '',
+                      centroCusto: '',
+                      documento: '',
+                      formaPagamento: '',
+                      colunaContaMatriz: undefined,
+                      colunasMesesMatriz: undefined,
+                    })
+                  }}
+                  className="text-xs h-8"
                 >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Nenhuma / Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Não mapear)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Código da Conta, Código, Reduzido</p>
-              </div>
-
-              {/* Nome da Conta */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
-                  <span>Nome da Conta</span>
-                  <Badge
-                    variant="outline"
-                    className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200"
-                  >
-                    Prioridade 2
-                  </Badge>
-                </Label>
-                {columnMapping.nomeConta && (
-                  <div className="text-[11px] font-medium text-indigo-800 bg-indigo-50/70 border border-indigo-200/60 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.nomeConta))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.nomeConta,
-                        fileHeaders.indexOf(columnMapping.nomeConta),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.nomeConta || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({ ...prev, nomeConta: val === 'none' ? '' : val }))
-                  }
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Nenhuma / Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Não mapear)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Nome da Conta, Conta Contábil</p>
-              </div>
-
-              {/* Centro de Custo */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">Centro de Custo</Label>
-                {columnMapping.centroCusto && (
-                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.centroCusto))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.centroCusto,
-                        fileHeaders.indexOf(columnMapping.centroCusto),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.centroCusto || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({
-                      ...prev,
-                      centroCusto: val === 'none' ? '' : val,
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Nenhuma / Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Não mapear)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Centro de Custo, Unidade</p>
-              </div>
-
-              {/* Documento / NF */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">
-                  Número do Documento / NF
-                </Label>
-                {columnMapping.documento && (
-                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.documento))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.documento,
-                        fileHeaders.indexOf(columnMapping.documento),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.documento || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({ ...prev, documento: val === 'none' ? '' : val }))
-                  }
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Nenhuma / Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Não mapear)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: Documento, NF, Comprovante</p>
-              </div>
-
-              {/* Forma de Pagamento */}
-              <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
-                <Label className="text-xs font-semibold text-slate-900">Forma de Pagamento</Label>
-                {columnMapping.formaPagamento && (
-                  <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
-                    <span>
-                      Coluna{' '}
-                      {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.formaPagamento))}
-                    </span>
-                    <span className="text-slate-600 truncate max-w-[150px]">
-                      &ldquo;
-                      {formatarNomeColunaExcel(
-                        columnMapping.formaPagamento,
-                        fileHeaders.indexOf(columnMapping.formaPagamento),
-                      )}
-                      &rdquo;
-                    </span>
-                  </div>
-                )}
-                <Select
-                  value={columnMapping.formaPagamento || 'none'}
-                  onValueChange={(val) =>
-                    setColumnMapping((prev) => ({
-                      ...prev,
-                      formaPagamento: val === 'none' ? '' : val,
-                    }))
-                  }
-                >
-                  <SelectTrigger className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Nenhuma / Opcional" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none" className="text-xs">
-                      (Não mapear)
-                    </SelectItem>
-                    {fileHeaders.map((h, idx) => {
-                      const colLetra = colIndexToExcelLetter(idx)
-                      const nomeFormatado = formatarNomeColunaExcel(h, idx)
-                      return (
-                        <SelectItem key={h} value={h} className="text-xs">
-                          <span className="font-bold text-blue-700 mr-1 font-mono">
-                            Coluna {colLetra}
-                          </span>
-                          <span className="text-slate-400 mx-1">—</span>
-                          <span>&ldquo;{nomeFormatado}&rdquo;</span>
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-                <p className="text-[10px] text-slate-500">Ex: PIX, Boleto, Cartão</p>
+                  Usar Colunas Tradicionais
+                </Button>
               </div>
             </div>
+
+            {/* SE FOR FORMATO MATRIZ MENSAL: Exibe o mapeamento padrão Coluna A = Conta e Colunas B..M = Meses */}
+            {columnMapping.formato === 'matriz_mensal' ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl border-2 border-emerald-300 bg-emerald-50/40 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-emerald-200">
+                    <div>
+                      <h4 className="text-sm font-bold text-emerald-950 flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-emerald-600" />
+                        Mapeamento Padrão da Matriz Mensal (Ano {selectedAno})
+                      </h4>
+                      <p className="text-xs text-emerald-800 mt-0.5">
+                        Coluna A define a Conta de Despesa. Cada coluna subsequente representa um
+                        mês com lançamento no último dia do mês para o ano {selectedAno}.
+                      </p>
+                    </div>
+                    <Badge className="bg-emerald-600 text-white text-[11px] font-mono px-2.5 py-1">
+                      12 meses com último dia / {selectedAno}
+                    </Badge>
+                  </div>
+
+                  {/* Coluna A: Conta das Despesas */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 p-3.5 rounded-xl border border-emerald-300 bg-white shadow-2xs">
+                      <Label className="text-xs font-bold text-emerald-950 flex items-center justify-between">
+                        <span>Coluna A — Conta das despesas *</span>
+                        <Badge className="bg-emerald-600 text-white text-[10px]">Obrigatório</Badge>
+                      </Label>
+                      <Select
+                        value={
+                          columnMapping.colunaContaMatriz ||
+                          columnMapping.codigoConta ||
+                          fileHeaders[0]
+                        }
+                        onValueChange={(val) =>
+                          setColumnMapping((prev) => ({
+                            ...prev,
+                            colunaContaMatriz: val,
+                            codigoConta: val,
+                            nomeConta: val,
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-9 text-xs bg-emerald-50/30 border-emerald-300">
+                          <SelectValue placeholder="Selecione a coluna da conta" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fileHeaders.map((h, idx) => (
+                            <SelectItem key={h} value={h} className="text-xs">
+                              <span className="font-bold text-emerald-700 mr-1 font-mono">
+                                Coluna {colIndexToExcelLetter(idx)}
+                              </span>
+                              <span className="text-slate-400 mx-1">—</span>
+                              <span>&ldquo;{formatarNomeColunaExcel(h, idx)}&rdquo;</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-emerald-800 leading-snug">
+                        Identifica a conta contábil por código ou nome (ex: &ldquo;4.1.01 -
+                        Aluguel&rdquo;).
+                      </p>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 flex flex-col justify-center">
+                      <span className="font-semibold text-slate-900 mb-1">Regra de Conversão:</span>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+  Cada linha com valor preenchido em qualquer mês gera um lançamento contábil de <strong>Despesa</strong>.
+  Células em branco ou com &ldquo;—&rdquo; são ignoradas. O período selecionado no filtro do ano {selectedAno} será rigorosamente respeitado.
+</p>
+                    </div>
+                  </div>
+
+                  {/* Grade dos 12 Meses (Colunas B a M) */}
+                  <div>
+                    <h5 className="text-xs font-bold text-emerald-900 mb-2 flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                      Mapeamento das Colunas de Cada Mês (Último dia + Ano {selectedAno}):
+                    </h5>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((mes) => {
+                        const rotuloPadrao = getRotulosColunasMatrizMensal(selectedAno)[mes]
+                        const colAssociada =
+                          columnMapping.colunasMesesMatriz?.[mes] || fileHeaders[mes] || ''
+                        const colIdx = fileHeaders.indexOf(colAssociada)
+                        const letraExcel =
+                          colIdx >= 0 ? colIndexToExcelLetter(colIdx) : colIndexToExcelLetter(mes)
+
+                        return (
+                          <div
+                            key={`col_matriz_mes_${mes}`}
+                            className="p-2.5 rounded-lg border border-emerald-200 bg-white space-y-1 shadow-2xs"
+                          >
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-emerald-900 font-mono">
+                                Coluna {letraExcel}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 bg-emerald-50 text-emerald-700 border-emerald-300 font-mono"
+                              >
+                                {rotuloPadrao}
+                              </Badge>
+                            </div>
+                            <Select
+                              value={colAssociada || 'none'}
+                              onValueChange={(val) => {
+                                setColumnMapping((prev) => {
+                                  const novoMeses = { ...(prev.colunasMesesMatriz || {}) }
+                                  if (val === 'none') {
+                                    delete novoMeses[mes]
+                                  } else {
+                                    novoMeses[mes] = val
+                                  }
+                                  return { ...prev, colunasMesesMatriz: novoMeses }
+                                })
+                              }}
+                            >
+                              <SelectTrigger className="h-7 text-[11px] bg-slate-50 border-slate-200">
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none" className="text-xs">
+                                  (Ignorar mês)
+                                </SelectItem>
+                                {fileHeaders.map((h, idx) => (
+                                  <SelectItem key={h} value={h} className="text-xs">
+                                    <span className="font-bold text-emerald-700 mr-1 font-mono">
+                                      {colIndexToExcelLetter(idx)}
+                                    </span>
+                                    <span>{formatarNomeColunaExcel(h, idx)}</span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-slate-500 truncate">
+                              {NOMES_MESES_EXTENSO[mes - 1]}
+                            </p>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Data */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
+                    <span>Coluna de Data *</span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      Obrigatório
+                    </Badge>
+                  </Label>
+                  {columnMapping.data && (
+                    <div className="text-[11px] font-medium text-blue-800 bg-blue-50/70 border border-blue-200/60 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.data))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.data,
+                          fileHeaders.indexOf(columnMapping.data),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.data}
+                    onValueChange={(val) => setColumnMapping((prev) => ({ ...prev, data: val }))}
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Selecione a coluna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Data, Competência, Vencimento</p>
+                </div>
+
+                {/* Valor */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
+                    <span>Coluna de Valor *</span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-blue-50 text-blue-700 border-blue-200"
+                    >
+                      Obrigatório
+                    </Badge>
+                  </Label>
+                  {columnMapping.valor && (
+                    <div className="text-[11px] font-medium text-blue-800 bg-blue-50/70 border border-blue-200/60 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.valor))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.valor,
+                          fileHeaders.indexOf(columnMapping.valor),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.valor}
+                    onValueChange={(val) => setColumnMapping((prev) => ({ ...prev, valor: val }))}
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Selecione a coluna" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Valor, Total, Montante</p>
+                </div>
+
+                {/* Histórico / Descrição */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900">
+                    Coluna de Histórico / Descrição
+                  </Label>
+                  {columnMapping.historico && (
+                    <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.historico))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.historico,
+                          fileHeaders.indexOf(columnMapping.historico),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.historico || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({
+                        ...prev,
+                        historico: val === 'none' ? '' : val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Nenhuma / Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Não mapear)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Histórico, Descrição, Detalhe</p>
+                </div>
+
+                {/* Tipo (Receita / Despesa) */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900">
+                    Coluna de Tipo (Receita/Despesa)
+                  </Label>
+                  {columnMapping.tipo && (
+                    <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.tipo))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.tipo,
+                          fileHeaders.indexOf(columnMapping.tipo),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.tipo || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({ ...prev, tipo: val === 'none' ? '' : val }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Opcional (Detectado por valor/conta)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Detectar automaticamente)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Tipo, Natureza, D/C</p>
+                </div>
+
+                {/* Código da Conta */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
+                    <span>Código da Conta</span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                    >
+                      Prioridade 1
+                    </Badge>
+                  </Label>
+                  {columnMapping.codigoConta && (
+                    <div className="text-[11px] font-medium text-emerald-800 bg-emerald-50/70 border border-emerald-200/60 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna{' '}
+                        {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.codigoConta))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.codigoConta,
+                          fileHeaders.indexOf(columnMapping.codigoConta),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.codigoConta || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({
+                        ...prev,
+                        codigoConta: val === 'none' ? '' : val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Nenhuma / Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Não mapear)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">
+                    Ex: Código da Conta, Código, Reduzido
+                  </p>
+                </div>
+
+                {/* Nome da Conta */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900 flex items-center justify-between">
+                    <span>Nome da Conta</span>
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200"
+                    >
+                      Prioridade 2
+                    </Badge>
+                  </Label>
+                  {columnMapping.nomeConta && (
+                    <div className="text-[11px] font-medium text-indigo-800 bg-indigo-50/70 border border-indigo-200/60 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.nomeConta))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.nomeConta,
+                          fileHeaders.indexOf(columnMapping.nomeConta),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.nomeConta || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({
+                        ...prev,
+                        nomeConta: val === 'none' ? '' : val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Nenhuma / Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Não mapear)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Nome da Conta, Conta Contábil</p>
+                </div>
+
+                {/* Centro de Custo */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900">Centro de Custo</Label>
+                  {columnMapping.centroCusto && (
+                    <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna{' '}
+                        {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.centroCusto))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.centroCusto,
+                          fileHeaders.indexOf(columnMapping.centroCusto),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.centroCusto || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({
+                        ...prev,
+                        centroCusto: val === 'none' ? '' : val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Nenhuma / Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Não mapear)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Centro de Custo, Unidade</p>
+                </div>
+
+                {/* Documento / NF */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900">
+                    Número do Documento / NF
+                  </Label>
+                  {columnMapping.documento && (
+                    <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.documento))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.documento,
+                          fileHeaders.indexOf(columnMapping.documento),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.documento || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({
+                        ...prev,
+                        documento: val === 'none' ? '' : val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Nenhuma / Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Não mapear)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: Documento, NF, Comprovante</p>
+                </div>
+
+                {/* Forma de Pagamento */}
+                <div className="space-y-1.5 p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <Label className="text-xs font-semibold text-slate-900">Forma de Pagamento</Label>
+                  {columnMapping.formaPagamento && (
+                    <div className="text-[11px] font-medium text-slate-700 bg-slate-100/80 border border-slate-200 px-2 py-1 rounded flex items-center justify-between">
+                      <span>
+                        Coluna{' '}
+                        {colIndexToExcelLetter(fileHeaders.indexOf(columnMapping.formaPagamento))}
+                      </span>
+                      <span className="text-slate-600 truncate max-w-[150px]">
+                        &ldquo;
+                        {formatarNomeColunaExcel(
+                          columnMapping.formaPagamento,
+                          fileHeaders.indexOf(columnMapping.formaPagamento),
+                        )}
+                        &rdquo;
+                      </span>
+                    </div>
+                  )}
+                  <Select
+                    value={columnMapping.formaPagamento || 'none'}
+                    onValueChange={(val) =>
+                      setColumnMapping((prev) => ({
+                        ...prev,
+                        formaPagamento: val === 'none' ? '' : val,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-xs bg-white">
+                      <SelectValue placeholder="Nenhuma / Opcional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="text-xs">
+                        (Não mapear)
+                      </SelectItem>
+                      {fileHeaders.map((h, idx) => {
+                        const colLetra = colIndexToExcelLetter(idx)
+                        const nomeFormatado = formatarNomeColunaExcel(h, idx)
+                        return (
+                          <SelectItem key={h} value={h} className="text-xs">
+                            <span className="font-bold text-blue-700 mr-1 font-mono">
+                              Coluna {colLetra}
+                            </span>
+                            <span className="text-slate-400 mx-1">—</span>
+                            <span>&ldquo;{nomeFormatado}&rdquo;</span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500">Ex: PIX, Boleto, Cartão</p>
+                </div>
+              </div>
+            )}
 
             {/* PREVIEW DA PLANILHA ORIGINAL COM LETRAS DAS COLUNAS (A, B, C...) E NÚMEROS DE LINHAS (1, 2, 3...) */}
             {rawRows.length > 0 && fileHeaders.length > 0 && (

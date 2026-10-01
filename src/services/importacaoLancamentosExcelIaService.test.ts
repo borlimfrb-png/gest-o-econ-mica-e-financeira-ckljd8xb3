@@ -3,9 +3,15 @@ import {
   sugerirMapeamentoHeuristico,
   processarLinhasPlanilha,
   gerarPlanilhaModeloExcel,
+  gerarPlanilhaModeloMatrizMensalExcel,
   colIndexToExcelLetter,
   formatarNomeColunaExcel,
   sanitizarValorCelula,
+  getUltimoDiaDoMes,
+  formatarUltimoDiaDoMes,
+  getRotulosColunasMatrizMensal,
+  identificarMesDaColuna,
+  detectarFormatoMatrizMensal,
 } from './importacaoLancamentosExcelIaService'
 import type { PlanoContaRecord } from '@/types/finance'
 import * as XLSX from 'xlsx'
@@ -234,6 +240,216 @@ describe('importacaoLancamentosExcelIaService', () => {
       expect(sanitizarValorCelula(null)).toBe('')
       expect(sanitizarValorCelula(undefined)).toBe('')
       expect(sanitizarValorCelula('Pagamento Fornecedor')).toBe('Pagamento Fornecedor')
+    })
+  })
+
+  describe('Matriz Mensal (Padrão: Coluna A = Contas, Colunas B..M = Último dia do mês)', () => {
+    const mockPlanoContasLocal: PlanoContaRecord[] = [
+      {
+        id: 'pc_aluguel',
+        empresa: 'emp-1',
+        codigo: '4.1.01',
+        descricao: 'Aluguel Comercial',
+        tipo_conta: 'analitica',
+        expand: {
+          conta: {
+            id: 'c-alug',
+            nome: 'Aluguel Comercial',
+            codigo: '4.1.01',
+            tipo: 'Despesa',
+          },
+        },
+      } as unknown as PlanoContaRecord,
+    ]
+
+    it('deve calcular corretamente o último dia do mês para anos normais e bissextos', () => {
+      // 2027 não é bissexto: fev = 28
+      expect(getUltimoDiaDoMes(2027, 1)).toBe(31)
+      expect(getUltimoDiaDoMes(2027, 2)).toBe(28)
+      expect(getUltimoDiaDoMes(2027, 4)).toBe(30)
+      expect(formatarUltimoDiaDoMes(2027, 2)).toBe('28/02/2027')
+
+      // 2028 é bissexto: fev = 29
+      expect(getUltimoDiaDoMes(2028, 2)).toBe(29)
+      expect(formatarUltimoDiaDoMes(2028, 2)).toBe('29/02/2028')
+    })
+
+    it('deve gerar os 12 rótulos de meses com dia/mês + ano selecionado', () => {
+      const rotulos2027 = getRotulosColunasMatrizMensal(2027)
+      expect(rotulos2027[1]).toBe('31/01/2027')
+      expect(rotulos2027[2]).toBe('28/02/2027')
+      expect(rotulos2027[3]).toBe('31/03/2027')
+      expect(rotulos2027[4]).toBe('30/04/2027')
+      expect(rotulos2027[5]).toBe('31/05/2027')
+      expect(rotulos2027[6]).toBe('30/06/2027')
+      expect(rotulos2027[7]).toBe('31/07/2027')
+      expect(rotulos2027[8]).toBe('31/08/2027')
+      expect(rotulos2027[9]).toBe('30/09/2027')
+      expect(rotulos2027[10]).toBe('31/10/2027')
+      expect(rotulos2027[11]).toBe('30/11/2027')
+      expect(rotulos2027[12]).toBe('31/12/2027')
+    })
+
+    it('deve identificar o mês da coluna com variações razoáveis', () => {
+      expect(identificarMesDaColuna('31/01', 2027)).toBe(1)
+      expect(identificarMesDaColuna('28/02/2027', 2027)).toBe(2)
+      expect(identificarMesDaColuna('31-03-2027', 2027)).toBe(3)
+      expect(identificarMesDaColuna('jan', 2027)).toBe(1)
+      expect(identificarMesDaColuna('fevereiro', 2027)).toBe(2)
+      expect(identificarMesDaColuna('dez', 2027)).toBe(12)
+    })
+
+    it('deve detectar o formato matriz mensal com Coluna A e colunas de meses', () => {
+      const headers = [
+        'Conta das despesas',
+        '31/01/2027',
+        '28/02/2027',
+        '31/03/2027',
+        '30/04/2027',
+        '31/05/2027',
+        '30/06/2027',
+        '31/07/2027',
+        '31/08/2027',
+        '30/09/2027',
+        '31/10/2027',
+        '30/11/2027',
+        '31/12/2027',
+      ]
+      const check = detectarFormatoMatrizMensal(headers, 2027)
+      expect(check.isMatriz).toBe(true)
+      expect(check.colunaConta).toBe('Conta das despesas')
+      expect(check.colunasMeses[1]).toBe('31/01/2027')
+      expect(check.colunasMeses[12]).toBe('31/12/2027')
+
+      const mapping = sugerirMapeamentoHeuristico(headers, 2027)
+      expect(mapping.formato).toBe('matriz_mensal')
+      expect(mapping.colunaContaMatriz).toBe('Conta das despesas')
+      expect(mapping.colunasMesesMatriz?.[1]).toBe('31/01/2027')
+    })
+
+    it('deve desdobrar cada linha da matriz mensal em até 12 lançamentos com último dia do mês', () => {
+      const headers = [
+        'Conta das despesas',
+        '31/01/2027',
+        '28/02/2027',
+        '31/03/2027',
+        '30/04/2027',
+        '31/05/2027',
+        '30/06/2027',
+        '31/07/2027',
+        '31/08/2027',
+        '30/09/2027',
+        '31/10/2027',
+        '30/11/2027',
+        '31/12/2027',
+      ]
+      const mapping = sugerirMapeamentoHeuristico(headers, 2027)
+
+      const rawRows = [
+        {
+          'Conta das despesas': '4.1.01 - Aluguel Comercial',
+          '31/01/2027': 2500,
+          '28/02/2027': '2.500,00',
+          '31/03/2027': '—', // célula vazia/traço ignorada
+          '30/04/2027': '', // vazia ignorada
+          '31/05/2027': 2600,
+        },
+      ]
+
+      const resultado = processarLinhasPlanilha({
+        rawRows,
+        mapping,
+        planoContas: mockPlanoContasLocal,
+        anoSelecionado: 2027,
+        mesInicial: 1,
+        mesFinal: 12,
+      })
+
+      // Linhas geradas: jan (2500), fev (2500), mai (2600) -> 3 lançamentos
+      expect(resultado.linhas.length).toBe(3)
+
+      const jan = resultado.linhas.find((l) => l.mes === 1)
+      expect(jan).toBeDefined()
+      expect(jan?.dataStr).toBe('31/01/2027')
+      expect(jan?.dataIso).toBe('2027-01-31')
+      expect(jan?.valor).toBe(2500)
+      expect(jan?.tipo).toBe('Despesa')
+      expect(jan?.planoContaId).toBe('pc_aluguel')
+
+      const fev = resultado.linhas.find((l) => l.mes === 2)
+      expect(fev).toBeDefined()
+      expect(fev?.dataStr).toBe('28/02/2027')
+      expect(fev?.valor).toBe(2500)
+
+      const mai = resultado.linhas.find((l) => l.mes === 5)
+      expect(mai).toBeDefined()
+      expect(mai?.dataStr).toBe('31/05/2027')
+      expect(mai?.valor).toBe(2600)
+    })
+
+    it('deve marcar lançamentos como fora do período se o mês selecionado não englobar', () => {
+      const headers = ['Conta', '31/01/2027', '28/02/2027', '31/03/2027', '30/04/2027']
+      const mapping = sugerirMapeamentoHeuristico(headers, 2027)
+
+      const rawRows = [
+        {
+          Conta: '4.1.01 - Aluguel Comercial',
+          '31/01/2027': 1000,
+          '28/02/2027': 1000,
+          '31/03/2027': 1000,
+        },
+      ]
+
+      // Apenas mês 1 (Janeiro) selecionado
+      const resultado = processarLinhasPlanilha({
+        rawRows,
+        mapping,
+        planoContas: mockPlanoContasLocal,
+        anoSelecionado: 2027,
+        mesInicial: 1,
+        mesFinal: 1,
+      })
+
+      const jan = resultado.linhas.find((l) => l.mes === 1)
+      const fev = resultado.linhas.find((l) => l.mes === 2)
+      const mar = resultado.linhas.find((l) => l.mes === 3)
+
+      expect(jan?.status).toBe('valido')
+      expect(fev?.status).toBe('fora_periodo')
+      expect(mar?.status).toBe('fora_periodo')
+      expect(resultado.resumo.totalForaPeriodo).toBe(2)
+      expect(resultado.resumo.totalNoPeriodo).toBe(1)
+    })
+
+    it('deve gerar planilha no formato modelo matriz mensal com sucesso', () => {
+      const writeFileSpy = vi.spyOn(XLSX, 'writeFile').mockImplementation(() => {})
+
+      gerarPlanilhaModeloMatrizMensalExcel({
+        ano: 2027,
+        nomeEmpresa: 'Minha Empresa',
+        planoContas: mockPlanoContasLocal,
+      })
+
+      expect(writeFileSpy).toHaveBeenCalled()
+      const callArgs = writeFileSpy.mock.calls[0]
+      const workbook = callArgs[0] as XLSX.WorkBook
+      const fileName = callArgs[1]
+
+      expect(fileName).toContain('modelo_matriz_despesas_minha_empresa_2027.xlsx')
+      expect(workbook.SheetNames).toContain('Matriz_Despesas_2027')
+      expect(workbook.SheetNames).toContain('Instruções')
+
+      const sheetData = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+        workbook.Sheets['Matriz_Despesas_2027'],
+      )
+      expect(sheetData.length).toBeGreaterThan(0)
+      const firstRow = sheetData[0]
+      expect(firstRow).toHaveProperty('Conta das despesas')
+      expect(firstRow).toHaveProperty('31/01/2027')
+      expect(firstRow).toHaveProperty('28/02/2027')
+      expect(firstRow).toHaveProperty('31/12/2027')
+
+      writeFileSpy.mockRestore()
     })
   })
 

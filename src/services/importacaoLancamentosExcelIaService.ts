@@ -4,7 +4,10 @@ import { parseBrlNumber } from '@/lib/pdfParser'
 import { findBestPlanoContaMatch } from '@/lib/pdfMatching'
 import type { EmpresaRecord, PlanoContaRecord, MemoriaFornecedorRecord } from '@/types/finance'
 
+export type FormatoPlanilhaExcel = 'padrao_colunas' | 'matriz_mensal'
+
 export interface ColumnMappingState {
+  formato?: FormatoPlanilhaExcel
   data: string
   historico: string
   valor: string
@@ -14,6 +17,149 @@ export interface ColumnMappingState {
   centroCusto: string
   documento: string
   formaPagamento: string
+  // No formato matriz mensal:
+  // Coluna A = conta de despesa
+  colunaContaMatriz?: string
+  // Mapeamento dos 12 meses: mês 1..12 -> nome da coluna
+  colunasMesesMatriz?: { [mes: number]: string }
+}
+
+/**
+ * Retorna o último dia de um mês específico para determinado ano (considerando anos bissextos)
+ */
+export function getUltimoDiaDoMes(ano: number, mes: number): number {
+  return new Date(ano, mes, 0).getDate()
+}
+
+/**
+ * Retorna a data no formato DD/MM/AAAA para o último dia do mês e ano informados
+ */
+export function formatarUltimoDiaDoMes(ano: number, mes: number): string {
+  const ultimoDia = getUltimoDiaDoMes(ano, mes)
+  const diaPad = String(ultimoDia).padStart(2, '0')
+  const mesPad = String(mes).padStart(2, '0')
+  return `${diaPad}/${mesPad}/${ano}`
+}
+
+/**
+ * Retorna os rótulos canônicos das 12 colunas mensais com o último dia do mês + ano escolhido
+ * Ex para 2027: { 1: "31/01/2027", 2: "28/02/2027", 3: "31/03/2027", ..., 12: "31/12/2027" }
+ * Para 2028: mês 2 é 29/02/2028
+ */
+export function getRotulosColunasMatrizMensal(ano: number): { [mes: number]: string } {
+  const rotulos: { [mes: number]: string } = {}
+  for (let mes = 1; mes <= 12; mes++) {
+    rotulos[mes] = formatarUltimoDiaDoMes(ano, mes)
+  }
+  return rotulos
+}
+
+/**
+ * Identifica se uma coluna corresponde a determinado mês (1 a 12),
+ * reconhecendo DD/MM, DD/MM/AAAA, DD-MM, nome do mês ("jan", "janeiro") etc.
+ */
+export function identificarMesDaColuna(colHeader: string, anoEsperado?: number): number | null {
+  if (!colHeader) return null
+  const s = String(colHeader).trim()
+  if (!s || /^_{1,2}EMPTY(_\d+)?$/i.test(s)) return null
+
+  const clean = s
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+
+  // 1. Tenta padrão de data DD/MM ou DD/MM/AAAA ou DD-MM-AAAA
+  const dataMatch = clean.match(/^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?/)
+  if (dataMatch) {
+    const dia = parseInt(dataMatch[1], 10)
+    const mes = parseInt(dataMatch[2], 10)
+    const anoStr = dataMatch[3]
+    if (mes >= 1 && mes <= 12 && dia >= 1 && dia <= 31) {
+      if (anoStr && anoEsperado) {
+        let anoNum = parseInt(anoStr, 10)
+        if (anoNum < 100) anoNum += 2000
+        // Se ano informado bater ou se for compatível
+        if (anoNum === anoEsperado) return mes
+      }
+      return mes
+    }
+  }
+
+  // 2. Tenta padrão YYYY-MM ou YYYY-MM-DD
+  const isoMatch = clean.match(/^(\d{4})[/\-.](\d{1,2})(?:[/\-.](\d{1,2}))?/)
+  if (isoMatch) {
+    const anoNum = parseInt(isoMatch[1], 10)
+    const mes = parseInt(isoMatch[2], 10)
+    if (mes >= 1 && mes <= 12) {
+      if (!anoEsperado || anoNum === anoEsperado) return mes
+    }
+  }
+
+  // 3. Tenta nomes de meses ("jan", "janeiro", "mês 1", "01/jan", etc)
+  const mesesAbrev = [
+    'jan',
+    'fev',
+    'mar',
+    'abr',
+    'mai',
+    'jun',
+    'jul',
+    'ago',
+    'set',
+    'out',
+    'nov',
+    'dez',
+  ]
+  for (let m = 0; m < 12; m++) {
+    const abrev = mesesAbrev[m]
+    const extenso = NOMES_MESES_EXTENSO[m].toLowerCase()
+    if (
+      clean === abrev ||
+      clean === extenso ||
+      clean.startsWith(`${abrev}/`) ||
+      clean.startsWith(`${abrev} `) ||
+      clean.includes(abrev)
+    ) {
+      return m + 1
+    }
+  }
+
+  return null
+}
+
+/**
+ * Detecta se os cabeçalhos da planilha configuram o formato Matriz Mensal:
+ * Coluna A = conta de despesas (código ou nome de conta)
+ * Colunas subsequentes = meses (31/01, 28/02... ou nomes dos meses)
+ */
+export function detectarFormatoMatrizMensal(
+  headers: string[],
+  anoSelecionado?: number,
+): { isMatriz: boolean; colunaConta: string; colunasMeses: { [mes: number]: string } } {
+  if (!headers || headers.length < 3) {
+    return { isMatriz: false, colunaConta: '', colunasMeses: {} }
+  }
+
+  const colunasMeses: { [mes: number]: string } = {}
+  let mesesEncontrados = 0
+
+  // Verifica as colunas a partir do índice 1 (Coluna B em diante)
+  headers.forEach((h, idx) => {
+    if (idx === 0) return // Coluna A é reservada para a Conta
+    const mes = identificarMesDaColuna(h, anoSelecionado)
+    if (mes !== null && !colunasMeses[mes]) {
+      colunasMeses[mes] = h
+      mesesEncontrados++
+    }
+  })
+
+  // Se encontrou pelo menos 3 meses identificáveis entre as colunas, qualifica como matriz mensal
+  // (geralmente serão 12, mas suportamos planilhas com trimestres/semestres ou 12 meses)
+  const isMatriz = mesesEncontrados >= 3
+  const colunaConta = headers[0] || ''
+
+  return { isMatriz, colunaConta, colunasMeses }
 }
 
 /**
@@ -227,7 +373,10 @@ export async function extrairLinhasExcel(file: File): Promise<{
 /**
  * Heurística preliminar rápida de detecção de colunas
  */
-export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingState {
+export function sugerirMapeamentoHeuristico(
+  headers: string[],
+  anoSelecionado?: number,
+): ColumnMappingState {
   const clean = (s: string) =>
     s
       .toLowerCase()
@@ -235,7 +384,40 @@ export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingSta
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]/g, '')
 
+  // 1. Checa se é o formato PADRÃO "Matriz Mensal":
+  // Coluna A = Conta de despesa, Colunas B..M = Meses (31/01, 28/02, 31/03, ..., 31/12)
+  const matrizCheck = detectarFormatoMatrizMensal(headers, anoSelecionado)
+  if (matrizCheck.isMatriz) {
+    const colunasMeses = matrizCheck.colunasMeses
+
+    // Se algumas colunas não foram identificadas mas estão na ordem sequencial das colunas B..M
+    // completa o mapeamento posicional das 12 colunas se houver ao menos 13 colunas
+    if (headers.length >= 13) {
+      for (let m = 1; m <= 12; m++) {
+        if (!colunasMeses[m] && headers[m]) {
+          colunasMeses[m] = headers[m]
+        }
+      }
+    }
+
+    return {
+      formato: 'matriz_mensal',
+      data: '',
+      historico: '',
+      valor: '',
+      tipo: 'Despesa',
+      codigoConta: matrizCheck.colunaConta,
+      nomeConta: matrizCheck.colunaConta,
+      centroCusto: '',
+      documento: '',
+      formaPagamento: '',
+      colunaContaMatriz: matrizCheck.colunaConta,
+      colunasMesesMatriz: colunasMeses,
+    }
+  }
+
   const mapping: ColumnMappingState = {
+    formato: 'padrao_colunas',
     data: '',
     historico: '',
     valor: '',
@@ -399,7 +581,19 @@ export function sugerirMapeamentoHeuristico(headers: string[]): ColumnMappingSta
 export async function analisarColunasComIA(
   headers: string[],
   sampleRows: Array<Record<string, unknown>>,
+  anoSelecionado?: number,
 ): Promise<{ mapping: Partial<ColumnMappingState>; confianca: number; observacoes?: string }> {
+  // 1. Verificação preliminar local imediata: se casar com a matriz mensal, adota imediatamente
+  const matrizCheck = detectarFormatoMatrizMensal(headers, anoSelecionado)
+  if (matrizCheck.isMatriz) {
+    const heur = sugerirMapeamentoHeuristico(headers, anoSelecionado)
+    return {
+      mapping: heur,
+      confianca: 0.98,
+      observacoes: `Planilha no formato matriz mensal detectada automaticamente (Coluna A = Contas de Despesas, Colunas B..M = Meses com último dia).`,
+    }
+  }
+
   try {
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''
     const token = pb.authStore.token
@@ -416,6 +610,7 @@ export async function analisarColunasComIA(
       body: JSON.stringify({
         headers,
         sampleRows: sampleRows.slice(0, 10),
+        anoSelecionado,
       }),
     })
 
@@ -427,7 +622,7 @@ export async function analisarColunasComIA(
     return data
   } catch (err) {
     console.warn('[analisarColunasComIA] Fallback heurístico aplicado:', err)
-    const heur = sugerirMapeamentoHeuristico(headers)
+    const heur = sugerirMapeamentoHeuristico(headers, anoSelecionado)
     return {
       mapping: heur,
       confianca: 0.7,
@@ -503,96 +698,42 @@ export function processarLinhasPlanilha(options: {
   let valorTotalDespesas = 0
   const mesesDetectados: { [mes: number]: { count: number; valor: number } } = {}
 
-  rawRows.forEach((row, idx) => {
-    totalLidos++
-    const linhaPlanilha = idx + 2 // Linha 1 é cabeçalho
-
-    // 1. Data
-    const rawData = mapping.data ? row[mapping.data] : ''
-    const dataParsed = normalizarDataExcel(rawData)
-
-    // 2. Valor
-    const rawValor = mapping.valor ? row[mapping.valor] : ''
-    let valorNum = 0
-    let valorNegativoDetectado = false
-
-    if (typeof rawValor === 'number') {
-      valorNegativoDetectado = rawValor < 0
-      valorNum = Math.abs(rawValor)
-    } else if (typeof rawValor === 'string' && rawValor.trim()) {
-      valorNegativoDetectado = rawValor.includes('-') || /^\(.*\)$/.test(rawValor.trim())
-      valorNum = Math.abs(parseBrlNumber(rawValor))
+  // Função auxiliar de resolução de conta a partir de string (código ou nome de conta)
+  const resolverContaContabil = (
+    contaStr: string,
+    historicoFallback?: string,
+  ): {
+    planoContaObj?: PlanoContaRecord
+    matchConfidence: LancamentoExcelLinha['matchConfidence']
+    codigoDetectado?: string
+    nomeDetectado?: string
+  } => {
+    if (!contaStr && !historicoFallback) {
+      return { matchConfidence: 'nao_encontrado' }
     }
-
-    // 3. Histórico / Descrição
-    const rawHist = mapping.historico ? sanitizarValorCelula(row[mapping.historico]) : ''
-
-    // 4. Tipo (Receita / Despesa)
-    let tipoFinal: 'Receita' | 'Despesa' = 'Despesa'
-    const rawTipo = mapping.tipo ? sanitizarValorCelula(row[mapping.tipo]).toLowerCase() : ''
-
-    if (rawTipo) {
-      if (
-        rawTipo.includes('rec') ||
-        rawTipo.includes('ent') ||
-        rawTipo.includes('cred') ||
-        rawTipo === 'c' ||
-        rawTipo === 'r'
-      ) {
-        tipoFinal = 'Receita'
-      } else if (
-        rawTipo.includes('desp') ||
-        rawTipo.includes('sai') ||
-        rawTipo.includes('deb') ||
-        rawTipo === 'd'
-      ) {
-        tipoFinal = 'Despesa'
-      }
-    } else if (valorNegativoDetectado) {
-      // Se valor na planilha era negativo, geralmente indica saída / despesa
-      tipoFinal = 'Despesa'
-    } else {
-      // Tenta inferir pelo histórico
-      const histLower = rawHist.toLowerCase()
-      if (
-        histLower.includes('venda') ||
-        histLower.includes('faturamento') ||
-        histLower.includes('receita') ||
-        histLower.includes('recebimento') ||
-        histLower.includes('servico prestado')
-      ) {
-        tipoFinal = 'Receita'
-      }
-    }
-
-    // Campos adicionais
-    const rawCodConta = mapping.codigoConta ? sanitizarValorCelula(row[mapping.codigoConta]) : ''
-    const codigoContaPlanilha = rawCodConta || undefined
-
-    const rawNomeConta = mapping.nomeConta ? sanitizarValorCelula(row[mapping.nomeConta]) : ''
-    const nomeContaPlanilha = rawNomeConta || undefined
-
-    const rawCentro = mapping.centroCusto ? sanitizarValorCelula(row[mapping.centroCusto]) : ''
-    const centroCustoPlanilha = rawCentro || undefined
-
-    const rawDoc = mapping.documento ? sanitizarValorCelula(row[mapping.documento]) : ''
-    const documentoPlanilha = rawDoc || undefined
-
-    const rawForma = mapping.formaPagamento ? sanitizarValorCelula(row[mapping.formaPagamento]) : ''
-    const formaPagamentoPlanilha = rawForma || undefined
-
-    // 5. Match inteligente com Plano de Contas:
-    // Ordem estrita de resolução pedida:
-    // a) Vincular primeiro pelo CÓDIGO informado na linha (código da empresa ou código estrutural da conta)
-    // b) Se o código não existir no plano, tentar pelo NOME da conta
-    // c) Se nenhum dos dois, cai no fluxo atual (histórico, memória de aprendizado, combobox)
-    let planoContaObj: PlanoContaRecord | undefined
-    let matchConfidence: LancamentoExcelLinha['matchConfidence'] = 'nao_encontrado'
 
     const normalizarCode = (s: string) => s.trim().replace(/\s+/g, '').toLowerCase()
+    let planoContaObj: PlanoContaRecord | undefined
+    let matchConfidence: LancamentoExcelLinha['matchConfidence'] = 'nao_encontrado'
+    let codigoDetectado: string | undefined
+    let nomeDetectado: string | undefined
 
-    if (codigoContaPlanilha) {
-      const codeClean = normalizarCode(codigoContaPlanilha)
+    const trimmed = (contaStr || '').trim()
+
+    // Se o valor de conta tem separador de código e nome (ex: "4.1.01 - Aluguel" ou "4.1.01 Aluguel")
+    const matchCodENome = trimmed.match(/^([0-9A-Za-z.\-_/]+)\s*[-–—:]\s*(.+)$/)
+    if (matchCodENome) {
+      codigoDetectado = matchCodENome[1].trim()
+      nomeDetectado = matchCodENome[2].trim()
+    } else if (/^[0-9]+(?:\.[0-9]+)+$/.test(trimmed) || /^[A-Z0-9_-]{2,10}$/i.test(trimmed)) {
+      codigoDetectado = trimmed
+    } else {
+      nomeDetectado = trimmed
+    }
+
+    // a) Vincular primeiro pelo CÓDIGO
+    if (codigoDetectado) {
+      const codeClean = normalizarCode(codigoDetectado)
       // Tenta 1: codigo_empresa exato
       planoContaObj = planoContas.find(
         (pc) => pc.codigo_empresa && normalizarCode(pc.codigo_empresa) === codeClean,
@@ -610,25 +751,25 @@ export function processarLinhasPlanilha(options: {
       }
     }
 
-    // Se não encontrou por código, tenta pelo nome da conta
-    if (!planoContaObj && nomeContaPlanilha) {
-      const nomeClean = nomeContaPlanilha.trim().toLowerCase()
-      // Match exato pelo nome da conta ou descrição
+    // b) Se o código não existir no plano, tentar pelo NOME da conta
+    if (!planoContaObj && (nomeDetectado || trimmed)) {
+      const nomeParaBusca = (nomeDetectado || trimmed).toLowerCase()
+      // Match exato
       planoContaObj = planoContas.find((pc) => {
         const nConta = (pc.expand?.conta?.nome || '').trim().toLowerCase()
         const nDesc = (pc.descricao || '').trim().toLowerCase()
-        return (nConta && nConta === nomeClean) || (nDesc && nDesc === nomeClean)
+        return (nConta && nConta === nomeParaBusca) || (nDesc && nDesc === nomeParaBusca)
       })
       if (planoContaObj) {
         matchConfidence = 'exato'
       } else {
-        // Match parcial pelo nome da conta
+        // Match parcial/similar
         planoContaObj = planoContas.find((pc) => {
           const nConta = (pc.expand?.conta?.nome || '').trim().toLowerCase()
           const nDesc = (pc.descricao || '').trim().toLowerCase()
           return (
-            (nConta && (nConta.includes(nomeClean) || nomeClean.includes(nConta))) ||
-            (nDesc && (nDesc.includes(nomeClean) || nomeClean.includes(nDesc)))
+            (nConta && (nConta.includes(nomeParaBusca) || nomeParaBusca.includes(nConta))) ||
+            (nDesc && (nDesc.includes(nomeParaBusca) || nomeParaBusca.includes(nDesc)))
           )
         })
         if (planoContaObj) {
@@ -637,13 +778,13 @@ export function processarLinhasPlanilha(options: {
       }
     }
 
-    // Se ainda não encontrou nem por código nem por nome, usa o motor heurístico com histórico/aprendizado
+    // c) Vínculo inteligente existente (motor heurístico com aprendizado)
     if (!planoContaObj) {
-      const termoBuscaConta = nomeContaPlanilha || rawHist || ''
+      const termoBusca = nomeDetectado || trimmed || historicoFallback || ''
       const matchRes = findBestPlanoContaMatch(
-        termoBuscaConta,
+        termoBusca,
         planoContas,
-        codigoContaPlanilha || rawHist,
+        codigoDetectado || trimmed,
         mapeamentosAprendidos,
       )
 
@@ -661,12 +802,12 @@ export function processarLinhasPlanilha(options: {
       }
     }
 
-    // Se ainda não encontrou, tenta buscar na memória de fornecedores
-    if (!planoContaObj && memoriasFornecedores && memoriasFornecedores.length > 0 && rawHist) {
-      const histClean = rawHist.toLowerCase()
+    // d) Memória de fornecedores
+    if (!planoContaObj && memoriasFornecedores && memoriasFornecedores.length > 0) {
+      const textoParaMem = (trimmed || historicoFallback || '').toLowerCase()
       const mem = memoriasFornecedores.find((m) => {
         const termo = (m.termo_busca || m.fornecedor_padrao || '').toLowerCase().trim()
-        return termo && (histClean.includes(termo) || termo.includes(histClean))
+        return termo && (textoParaMem.includes(termo) || termo.includes(textoParaMem))
       })
 
       if (mem && mem.plano_conta) {
@@ -678,118 +819,369 @@ export function processarLinhasPlanilha(options: {
       }
     }
 
-    // Se o plano encontrado tem tipo e ainda não determinamos claramente o tipo
-    if (planoContaObj?.expand?.conta?.tipo) {
-      const tipoConta = planoContaObj.expand.conta.tipo
-      if (tipoConta === 'Receita') tipoFinal = 'Receita'
-      if (tipoConta === 'Despesa') tipoFinal = 'Despesa'
-    }
-
-    // 6. Validação e Status
-    const errosOuAlertas: string[] = []
-    let status: LancamentoExcelLinha['status'] = 'valido'
-
-    if (!dataParsed) {
-      errosOuAlertas.push('Data inválida ou não informada')
-      status = 'erro'
-    } else if (dataParsed.ano !== anoSelecionado) {
-      errosOuAlertas.push(`Ano ${dataParsed.ano} difere do ano selecionado (${anoSelecionado})`)
-      status = 'fora_periodo'
-    } else {
-      const estaNoPeriodo = mesesHabilitados
-        ? mesesHabilitados.has(dataParsed.mes)
-        : dataParsed.mes >= minMes && dataParsed.mes <= maxMes
-
-      if (!estaNoPeriodo) {
-        errosOuAlertas.push(
-          `Mês de ${NOMES_MESES_EXTENSO[dataParsed.mes - 1]} (${dataParsed.mes}) fora do período (${minMes} a ${maxMes})`,
-        )
-        status = 'fora_periodo'
-      }
-    }
-
-    if (valorNum <= 0) {
-      errosOuAlertas.push('Valor zerado ou não identificado')
-      if (status !== 'fora_periodo') status = 'erro'
-    }
-
-    if (!planoContaObj) {
-      errosOuAlertas.push('Conta contábil não localizada no Plano de Contas')
-      if (status === 'valido') status = 'alerta'
-    }
-
-    // Checagem de duplicidade
-    let isDuplicadoExistente = false
-    if (dataParsed && valorNum > 0 && status !== 'erro' && status !== 'fora_periodo') {
-      const chaveSimples = `${dataParsed.iso}|${valorNum.toFixed(2)}|${rawHist.toLowerCase().trim()}`
-      if (existingSet.has(chaveSimples)) {
-        isDuplicadoExistente = true
-        errosOuAlertas.push('Lançamento com mesma data, valor e histórico já existe no sistema')
-        status = 'duplicado'
-      }
-    }
-
-    // Atualiza contadores
-    if (status === 'fora_periodo') {
-      totalForaPeriodo++
-    } else {
-      totalNoPeriodo++
-
-      if (dataParsed) {
-        if (!mesesDetectados[dataParsed.mes]) {
-          mesesDetectados[dataParsed.mes] = { count: 0, valor: 0 }
-        }
-        mesesDetectados[dataParsed.mes].count++
-        mesesDetectados[dataParsed.mes].valor += valorNum
-      }
-
-      if (tipoFinal === 'Receita') {
-        totalReceitas++
-        valorTotalReceitas += valorNum
-      } else {
-        totalDespesas++
-        valorTotalDespesas += valorNum
-      }
-
-      if (status === 'valido') {
-        totalValidos++
-      } else if (status === 'alerta' || status === 'erro') {
-        totalComProblema++
-      } else if (status === 'duplicado') {
-        totalDuplicados++
-      }
-    }
-
-    // Linhas válidas ou com alerta são marcadas para importação por padrão; erros e duplicados começam desmarcados
-    const selecionadoPadrao = status === 'valido' || status === 'alerta'
-
-    linhas.push({
-      id: `linha_${idx}_${Math.random().toString(36).substring(2, 7)}`,
-      linhaPlanilha,
-      dataStr: dataParsed?.display || String(rawData || 'Data inválida'),
-      dataIso: dataParsed?.iso || '',
-      ano: dataParsed?.ano || 0,
-      mes: dataParsed?.mes || 0,
-      historico: rawHist || `Lançamento linha ${linhaPlanilha}`,
-      valor: valorNum,
-      tipo: tipoFinal,
-      codigoContaPlanilha,
-      nomeContaPlanilha,
-      centroCustoPlanilha,
-      documentoPlanilha,
-      formaPagamentoPlanilha,
-      planoContaId: planoContaObj?.id,
-      planoContaCodigo: planoContaObj?.codigo,
-      planoContaNome: planoContaObj?.expand?.conta?.nome || planoContaObj?.descricao,
-      planoContaTipo: planoContaObj?.expand?.conta?.tipo,
+    return {
       planoContaObj,
       matchConfidence,
-      status,
-      errosOuAlertas,
-      selecionado: selecionadoPadrao,
-      isDuplicadoExistente,
+      codigoDetectado,
+      nomeDetectado: nomeDetectado || trimmed,
+    }
+  }
+
+  // Identifica se estamos processando no formato MATRIZ MENSAL
+  const isFormatoMatriz =
+    mapping.formato === 'matriz_mensal' ||
+    (mapping.colunasMesesMatriz && Object.keys(mapping.colunasMesesMatriz).length > 0)
+
+  if (isFormatoMatriz) {
+    // =========================================================================
+    // FLUXO MATRIZ MENSAL:
+    // Cada linha da planilha = Uma conta de despesa
+    // Colunas B a M = Meses do ano com último dia (31/01, 28/02... + ano escolhido)
+    // Desdobra cada linha em até 12 lançamentos (apenas meses com valor preenchido)
+    // =========================================================================
+    const colunasMeses = mapping.colunasMesesMatriz || {}
+    const colConta = mapping.colunaContaMatriz || mapping.codigoConta || mapping.nomeConta || ''
+
+    rawRows.forEach((row, idx) => {
+      totalLidos++
+      const linhaPlanilha = idx + 2 // Linha 1 = Cabeçalho
+
+      const contaBruta = colConta ? sanitizarValorCelula(row[colConta]) : ''
+      // Se a linha inteira estiver vazia na coluna de conta, ignora linha em branco
+      if (!contaBruta) return
+
+      const { planoContaObj, matchConfidence, codigoDetectado, nomeDetectado } =
+        resolverContaContabil(contaBruta)
+
+      // Percorre os 12 meses
+      for (let mes = 1; mes <= 12; mes++) {
+        const nomeColunaMes = colunasMeses[mes]
+        if (!nomeColunaMes) continue
+
+        const rawValor = row[nomeColunaMes]
+        if (rawValor === undefined || rawValor === null || rawValor === '') continue
+
+        let valorNum = 0
+        if (typeof rawValor === 'number') {
+          valorNum = Math.abs(rawValor)
+        } else if (typeof rawValor === 'string') {
+          const s = rawValor.trim()
+          // Células com "—", "-", "0", vazias etc. são ignoradas
+          if (
+            !s ||
+            s === '—' ||
+            s === '-' ||
+            s === '–' ||
+            s === '0,00' ||
+            s === '0.00' ||
+            s === '0'
+          ) {
+            continue
+          }
+          valorNum = Math.abs(parseBrlNumber(s))
+        }
+
+        if (valorNum <= 0) continue
+
+        // Data do lançamento: Último dia do mês do ano selecionado (ex: 31/01/2027)
+        const ultimoDia = getUltimoDiaDoMes(anoSelecionado, mes)
+        const diaPad = String(ultimoDia).padStart(2, '0')
+        const mesPad = String(mes).padStart(2, '0')
+        const dataIso = `${anoSelecionado}-${mesPad}-${diaPad}`
+        const dataStr = `${diaPad}/${mesPad}/${anoSelecionado}`
+
+        // Histórico descritivo
+        const nomeFinalConta =
+          planoContaObj?.expand?.conta?.nome ||
+          planoContaObj?.descricao ||
+          nomeDetectado ||
+          contaBruta
+        const historicoLanc = `${nomeFinalConta} - ${NOMES_MESES_EXTENSO[mes - 1]}/${anoSelecionado}`
+
+        // Validação e Status
+        const errosOuAlertas: string[] = []
+        let status: LancamentoExcelLinha['status'] = 'valido'
+
+        const estaNoPeriodo = mesesHabilitados
+          ? mesesHabilitados.has(mes)
+          : mes >= minMes && mes <= maxMes
+
+        if (!estaNoPeriodo) {
+          errosOuAlertas.push(
+            `Mês de ${NOMES_MESES_EXTENSO[mes - 1]} (${mes}) fora do período (${minMes} a ${maxMes})`,
+          )
+          status = 'fora_periodo'
+        }
+
+        if (!planoContaObj) {
+          errosOuAlertas.push('Conta contábil não localizada no Plano de Contas')
+          if (status === 'valido') status = 'alerta'
+        }
+
+        // Checagem de duplicidade
+        let isDuplicadoExistente = false
+        if (status !== 'fora_periodo') {
+          const chaveSimples = `${dataIso}|${valorNum.toFixed(2)}|${historicoLanc.toLowerCase().trim()}`
+          if (existingSet.has(chaveSimples)) {
+            isDuplicadoExistente = true
+            errosOuAlertas.push('Lançamento com mesma data, valor e histórico já existe no sistema')
+            status = 'duplicado'
+          }
+        }
+
+        // Atualiza contadores
+        if (status === 'fora_periodo') {
+          totalForaPeriodo++
+        } else {
+          totalNoPeriodo++
+
+          if (!mesesDetectados[mes]) {
+            mesesDetectados[mes] = { count: 0, valor: 0 }
+          }
+          mesesDetectados[mes].count++
+          mesesDetectados[mes].valor += valorNum
+
+          // Matriz de despesas é padrão Despesa
+          totalDespesas++
+          valorTotalDespesas += valorNum
+
+          if (status === 'valido') {
+            totalValidos++
+          } else if (status === 'alerta') {
+            totalComProblema++
+          } else if (status === 'duplicado') {
+            totalDuplicados++
+          }
+        }
+
+        const selecionadoPadrao = status === 'valido' || status === 'alerta'
+
+        linhas.push({
+          id: `linha_${idx}_m${mes}_${Math.random().toString(36).substring(2, 7)}`,
+          linhaPlanilha,
+          dataStr,
+          dataIso,
+          ano: anoSelecionado,
+          mes,
+          historico: historicoLanc,
+          valor: valorNum,
+          tipo: 'Despesa',
+          codigoContaPlanilha: codigoDetectado,
+          nomeContaPlanilha: nomeDetectado || contaBruta,
+          planoContaId: planoContaObj?.id,
+          planoContaCodigo: planoContaObj?.codigo,
+          planoContaNome: planoContaObj?.expand?.conta?.nome || planoContaObj?.descricao,
+          planoContaTipo: planoContaObj?.expand?.conta?.tipo || 'Despesa',
+          planoContaObj,
+          matchConfidence,
+          status,
+          errosOuAlertas,
+          selecionado: selecionadoPadrao,
+          isDuplicadoExistente,
+        })
+      }
     })
-  })
+  } else {
+    // =========================================================================
+    // FLUXO ANTERIOR (COLUNAR / UMA LINHA POR LANÇAMENTO)
+    // =========================================================================
+    rawRows.forEach((row, idx) => {
+      totalLidos++
+      const linhaPlanilha = idx + 2 // Linha 1 é cabeçalho
+
+      // 1. Data
+      const rawData = mapping.data ? row[mapping.data] : ''
+      const dataParsed = normalizarDataExcel(rawData)
+
+      // 2. Valor
+      const rawValor = mapping.valor ? row[mapping.valor] : ''
+      let valorNum = 0
+      let valorNegativoDetectado = false
+
+      if (typeof rawValor === 'number') {
+        valorNegativoDetectado = rawValor < 0
+        valorNum = Math.abs(rawValor)
+      } else if (typeof rawValor === 'string' && rawValor.trim()) {
+        valorNegativoDetectado = rawValor.includes('-') || /^\(.*\)$/.test(rawValor.trim())
+        valorNum = Math.abs(parseBrlNumber(rawValor))
+      }
+
+      // 3. Histórico / Descrição
+      const rawHist = mapping.historico ? sanitizarValorCelula(row[mapping.historico]) : ''
+
+      // 4. Tipo (Receita / Despesa)
+      let tipoFinal: 'Receita' | 'Despesa' = 'Despesa'
+      const rawTipo = mapping.tipo ? sanitizarValorCelula(row[mapping.tipo]).toLowerCase() : ''
+
+      if (rawTipo) {
+        if (
+          rawTipo.includes('rec') ||
+          rawTipo.includes('ent') ||
+          rawTipo.includes('cred') ||
+          rawTipo === 'c' ||
+          rawTipo === 'r'
+        ) {
+          tipoFinal = 'Receita'
+        } else if (
+          rawTipo.includes('desp') ||
+          rawTipo.includes('sai') ||
+          rawTipo.includes('deb') ||
+          rawTipo === 'd'
+        ) {
+          tipoFinal = 'Despesa'
+        }
+      } else if (valorNegativoDetectado) {
+        // Se valor na planilha era negativo, geralmente indica saída / despesa
+        tipoFinal = 'Despesa'
+      } else {
+        // Tenta inferir pelo histórico
+        const histLower = rawHist.toLowerCase()
+        if (
+          histLower.includes('venda') ||
+          histLower.includes('faturamento') ||
+          histLower.includes('receita') ||
+          histLower.includes('recebimento') ||
+          histLower.includes('servico prestado')
+        ) {
+          tipoFinal = 'Receita'
+        }
+      }
+
+      // Campos adicionais
+      const rawCodConta = mapping.codigoConta ? sanitizarValorCelula(row[mapping.codigoConta]) : ''
+      const codigoContaPlanilha = rawCodConta || undefined
+
+      const rawNomeConta = mapping.nomeConta ? sanitizarValorCelula(row[mapping.nomeConta]) : ''
+      const nomeContaPlanilha = rawNomeConta || undefined
+
+      const rawCentro = mapping.centroCusto ? sanitizarValorCelula(row[mapping.centroCusto]) : ''
+      const centroCustoPlanilha = rawCentro || undefined
+
+      const rawDoc = mapping.documento ? sanitizarValorCelula(row[mapping.documento]) : ''
+      const documentoPlanilha = rawDoc || undefined
+
+      const rawForma = mapping.formaPagamento
+        ? sanitizarValorCelula(row[mapping.formaPagamento])
+        : ''
+      const formaPagamentoPlanilha = rawForma || undefined
+
+      // 5. Match inteligente com Plano de Contas usando a função unificada
+      const contaParaResolver = codigoContaPlanilha || nomeContaPlanilha || ''
+      const { planoContaObj, matchConfidence } = resolverContaContabil(contaParaResolver, rawHist)
+
+      // Se o plano encontrado tem tipo e ainda não determinamos claramente o tipo
+      if (planoContaObj?.expand?.conta?.tipo) {
+        const tipoConta = planoContaObj.expand.conta.tipo
+        if (tipoConta === 'Receita') tipoFinal = 'Receita'
+        if (tipoConta === 'Despesa') tipoFinal = 'Despesa'
+      }
+
+      // 6. Validação e Status
+      const errosOuAlertas: string[] = []
+      let status: LancamentoExcelLinha['status'] = 'valido'
+
+      if (!dataParsed) {
+        errosOuAlertas.push('Data inválida ou não informada')
+        status = 'erro'
+      } else if (dataParsed.ano !== anoSelecionado) {
+        errosOuAlertas.push(`Ano ${dataParsed.ano} difere do ano selecionado (${anoSelecionado})`)
+        status = 'fora_periodo'
+      } else {
+        const estaNoPeriodo = mesesHabilitados
+          ? mesesHabilitados.has(dataParsed.mes)
+          : dataParsed.mes >= minMes && dataParsed.mes <= maxMes
+
+        if (!estaNoPeriodo) {
+          errosOuAlertas.push(
+            `Mês de ${NOMES_MESES_EXTENSO[dataParsed.mes - 1]} (${dataParsed.mes}) fora do período (${minMes} a ${maxMes})`,
+          )
+          status = 'fora_periodo'
+        }
+      }
+
+      if (valorNum <= 0) {
+        errosOuAlertas.push('Valor zerado ou não identificado')
+        if (status !== 'fora_periodo') status = 'erro'
+      }
+
+      if (!planoContaObj) {
+        errosOuAlertas.push('Conta contábil não localizada no Plano de Contas')
+        if (status === 'valido') status = 'alerta'
+      }
+
+      // Checagem de duplicidade
+      let isDuplicadoExistente = false
+      if (dataParsed && valorNum > 0 && status !== 'erro' && status !== 'fora_periodo') {
+        const chaveSimples = `${dataParsed.iso}|${valorNum.toFixed(2)}|${rawHist.toLowerCase().trim()}`
+        if (existingSet.has(chaveSimples)) {
+          isDuplicadoExistente = true
+          errosOuAlertas.push('Lançamento com mesma data, valor e histórico já existe no sistema')
+          status = 'duplicado'
+        }
+      }
+
+      // Atualiza contadores
+      if (status === 'fora_periodo') {
+        totalForaPeriodo++
+      } else {
+        totalNoPeriodo++
+
+        if (dataParsed) {
+          if (!mesesDetectados[dataParsed.mes]) {
+            mesesDetectados[dataParsed.mes] = { count: 0, valor: 0 }
+          }
+          mesesDetectados[dataParsed.mes].count++
+          mesesDetectados[dataParsed.mes].valor += valorNum
+        }
+
+        if (tipoFinal === 'Receita') {
+          totalReceitas++
+          valorTotalReceitas += valorNum
+        } else {
+          totalDespesas++
+          valorTotalDespesas += valorNum
+        }
+
+        if (status === 'valido') {
+          totalValidos++
+        } else if (status === 'alerta' || status === 'erro') {
+          totalComProblema++
+        } else if (status === 'duplicado') {
+          totalDuplicados++
+        }
+      }
+
+      // Linhas válidas ou com alerta são marcadas para importação por padrão; erros e duplicados começam desmarcados
+      const selecionadoPadrao = status === 'valido' || status === 'alerta'
+
+      linhas.push({
+        id: `linha_${idx}_${Math.random().toString(36).substring(2, 7)}`,
+        linhaPlanilha,
+        dataStr: dataParsed?.display || String(rawData || 'Data inválida'),
+        dataIso: dataParsed?.iso || '',
+        ano: dataParsed?.ano || 0,
+        mes: dataParsed?.mes || 0,
+        historico: rawHist || `Lançamento linha ${linhaPlanilha}`,
+        valor: valorNum,
+        tipo: tipoFinal,
+        codigoContaPlanilha,
+        nomeContaPlanilha,
+        centroCustoPlanilha,
+        documentoPlanilha,
+        formaPagamentoPlanilha,
+        planoContaId: planoContaObj?.id,
+        planoContaCodigo: planoContaObj?.codigo,
+        planoContaNome: planoContaObj?.expand?.conta?.nome || planoContaObj?.descricao,
+        planoContaTipo: planoContaObj?.expand?.conta?.tipo,
+        planoContaObj,
+        matchConfidence,
+        status,
+        errosOuAlertas,
+        selecionado: selecionadoPadrao,
+        isDuplicadoExistente,
+      })
+    })
+  }
 
   return {
     linhas,
@@ -813,10 +1205,145 @@ export interface OpcoesModeloExcelLancamentos {
   planoContas?: PlanoContaRecord[]
   nomeEmpresa?: string
   ano?: number
+  tipoModelo?: 'matriz_mensal' | 'colunas'
 }
 
 /**
- * Cria modelo Excel com as 4 colunas essenciais pedidas:
+ * Cria modelo Excel no formato MATRIZ MENSAL PADRÃO:
+ * Coluna A = Conta das despesas
+ * Coluna B = 31/01/ANO
+ * Coluna C = 28/02/ANO (ou 29/02 se bissexto)
+ * Coluna D = 31/03/ANO
+ * Coluna E = 30/04/ANO
+ * Coluna F = 31/05/ANO
+ * Coluna G = 30/06/ANO
+ * Coluna H = 31/07/ANO
+ * Coluna I = 31/08/ANO
+ * Coluna J = 30/09/ANO
+ * Coluna K = 31/10/ANO
+ * Coluna L = 30/11/ANO
+ * Coluna M = 31/12/ANO
+ */
+export function gerarPlanilhaModeloMatrizMensalExcel(opcoes?: OpcoesModeloExcelLancamentos): void {
+  const anoBase = opcoes?.ano || new Date().getFullYear()
+  const plano = opcoes?.planoContas || []
+
+  // Filtra contas de despesas da empresa ativa
+  const contasDespesas = plano.filter((pc) => {
+    const isDespesa =
+      pc.expand?.conta?.tipo === 'Despesa' ||
+      pc.natureza === 'Despesa' ||
+      (pc.codigo && pc.codigo.startsWith('4')) ||
+      (pc.descricao || '').toLowerCase().includes('despes')
+    const isTotalizadora =
+      pc.totalizadora === true || pc.tipo_conta === 'sintetica' || pc.natureza === 'totalizadora'
+    return isDespesa && !isTotalizadora
+  })
+
+  // Lista de contas para exemplificar a matriz
+  const listaContas =
+    contasDespesas.length > 0
+      ? contasDespesas.slice(0, 8).map((c) => {
+          const cod = c.codigo_empresa || c.codigo || ''
+          const nome = c.expand?.conta?.nome || c.descricao || 'Despesa Operacional'
+          return cod ? `${cod} - ${nome}` : nome
+        })
+      : [
+          '4.1.01 - Salários e Ordenados',
+          '4.1.02 - Aluguéis e Condomínio',
+          '4.1.03 - Energia Elétrica e Água',
+          '4.1.04 - Internet, Telefonia e Software',
+          '4.1.05 - Material de Escritório e Limpeza',
+          '4.1.06 - Honorários Contábeis e Advocatícios',
+          '4.1.07 - Manutenção e Conservação',
+          '4.1.08 - Tarifas Bancárias e Meios de Pagamento',
+        ]
+
+  // Monta os nomes exatos das 12 colunas de meses para o ano escolhido
+  const rotulosMeses = getRotulosColunasMatrizMensal(anoBase)
+
+  const rows = listaContas.map((conta, idx) => {
+    const rowObj: Record<string, unknown> = {
+      'Conta das despesas': conta,
+    }
+    // Valores de exemplo variados para os meses
+    const baseVal = 1200 + idx * 450
+    for (let mes = 1; mes <= 12; mes++) {
+      const colHeader = rotulosMeses[mes]
+      // Simula alguns meses vazios para demonstrar
+      if (idx === 2 && mes > 6) {
+        rowObj[colHeader] = ''
+      } else {
+        const valMes = baseVal + ((mes * 37) % 250)
+        rowObj[colHeader] = Number(valMes.toFixed(2))
+      }
+    }
+    return rowObj
+  })
+
+  const ws = XLSX.utils.json_to_sheet(rows)
+  ws['!cols'] = [
+    { wch: 44 }, // Coluna A: Conta das despesas
+    { wch: 14 }, // Coluna B: 31/01
+    { wch: 14 }, // Coluna C: 28/02
+    { wch: 14 }, // Coluna D: 31/03
+    { wch: 14 }, // Coluna E: 30/04
+    { wch: 14 }, // Coluna F: 31/05
+    { wch: 14 }, // Coluna G: 30/06
+    { wch: 14 }, // Coluna H: 31/07
+    { wch: 14 }, // Coluna I: 31/08
+    { wch: 14 }, // Coluna J: 30/09
+    { wch: 14 }, // Coluna K: 31/10
+    { wch: 14 }, // Coluna L: 30/11
+    { wch: 14 }, // Coluna M: 31/12
+  ]
+
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, `Matriz_Despesas_${anoBase}`)
+
+  // Aba 2: Instruções da Matriz
+  const instrucoes = [
+    {
+      INSTRUÇÃO: `1. Coluna A ("Conta das despesas"): preencha com o código e/ou nome da conta contábil cadastrada na empresa.`,
+    },
+    {
+      INSTRUÇÃO: `2. Colunas B a M (de ${rotulosMeses[1]} a ${rotulosMeses[12]}): preencha com o valor monetário de cada mês para aquela conta.`,
+    },
+    {
+      INSTRUÇÃO: `3. Células sem lançamento no mês podem ficar em branco (vazias) ou com "—". Elas serão ignoradas no processamento.`,
+    },
+    {
+      INSTRUÇÃO: `4. Cada célula preenchida gera um lançamento contábil de Despesa com data no último dia do mês do ano ${anoBase}.`,
+    },
+    {
+      INSTRUÇÃO: `5. O sistema faz a correspondência automática da conta pelo código primeiro e depois pelo nome.`,
+    },
+  ]
+  const wsInstrucoes = XLSX.utils.json_to_sheet(instrucoes)
+  wsInstrucoes['!cols'] = [{ wch: 120 }]
+  XLSX.utils.book_append_sheet(wb, wsInstrucoes, 'Instruções')
+
+  // Aba 3: Contas da empresa disponíveis
+  if (contasDespesas.length > 0) {
+    const contasRef = contasDespesas.map((c) => ({
+      'Código da Conta': c.codigo_empresa || c.codigo || '',
+      'Nome da Conta': c.expand?.conta?.nome || c.descricao || '',
+      'Código Estrutural': c.codigo || '',
+    }))
+    const wsRef = XLSX.utils.json_to_sheet(contasRef)
+    wsRef['!cols'] = [{ wch: 20 }, { wch: 46 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, wsRef, 'Contas_Despesas_Ativas')
+  }
+
+  const nomeArquivo = opcoes?.nomeEmpresa
+    ? `modelo_matriz_despesas_${opcoes.nomeEmpresa.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${anoBase}.xlsx`
+    : `modelo_matriz_despesas_${anoBase}.xlsx`
+
+  XLSX.writeFile(wb, nomeArquivo)
+}
+
+/**
+ * Cria modelo Excel com as 4 colunas essenciais pedidas (formato colunar tradicional):
  * 1. "Data do Lançamento" (DD/MM/AAAA)
  * 2. "Código da Conta" (código conforme Plano de Contas da empresa ativa)
  * 3. "Nome da Conta" (nome cadastrado no Plano de Contas)
@@ -825,6 +1352,10 @@ export interface OpcoesModeloExcelLancamentos {
  * e uma aba dedicada de Instruções e Referência de Contas da empresa.
  */
 export function gerarPlanilhaModeloExcel(opcoes?: OpcoesModeloExcelLancamentos): void {
+  // Se o tipo pedido for explicitamente matriz mensal, redireciona
+  if (opcoes?.tipoModelo === 'matriz_mensal') {
+    return gerarPlanilhaModeloMatrizMensalExcel(opcoes)
+  }
   const anoBase = opcoes?.ano || new Date().getFullYear()
   const plano = opcoes?.planoContas || []
 
