@@ -1412,7 +1412,7 @@ export default function Layout() {
             GESTÃO ECONÔMICA E FINANCEIRA · Consultoria de Alta Performance
           </span>
           <span className="text-slate-400 font-mono text-[10px]">
-            v0.0.209 · &copy; {new Date().getFullYear()} Todos os direitos reservados.
+            v0.0.211 · &copy; {new Date().getFullYear()} Todos os direitos reservados.
           </span>
         </footer>
       </div>

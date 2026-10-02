@@ -15,6 +15,11 @@ import {
 } from '@/lib/dreGerencialExport'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
+import { ModalImportarDreGerencial } from '@/components/ModalImportarDreGerencial'
+import {
+  gerarPreviewImportacaoDre,
+  type PreviewImportacaoDreResultado,
+} from '@/services/dreImportacaoService'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +55,7 @@ import {
   RefreshCw,
   FolderOpen,
   Folder,
+  Database,
 } from 'lucide-react'
 
 const MESES_OPCOES = [
@@ -128,9 +134,56 @@ export default function DreGerencial() {
   const [modalClassificacaoOpen, setModalClassificacaoOpen] = useState(false)
   const [modalPreFilteredIds, setModalPreFilteredIds] = useState<string[] | undefined>(undefined)
 
+  // Modal para importar DRE Gerencial para DRE do Sistema
+  const [modalImportarOpen, setModalImportarOpen] = useState(false)
+  const [previewImportacao, setPreviewImportacao] = useState<PreviewImportacaoDreResultado | null>(
+    null,
+  )
+  const [gerandoPreview, setGerandoPreview] = useState(false)
+
   const abrirClassificacaoLote = (preIds?: string[]) => {
     setModalPreFilteredIds(preIds && preIds.length > 0 ? preIds : undefined)
     setModalClassificacaoOpen(true)
+  }
+
+  // Ação de importar para DRE do sistema (período único ou período específico no comparativo)
+  const handleAbrirImportacao = async (opcoes?: { periodoAlvo?: 'atual' | 'comparado' }) => {
+    const alvo = opcoes?.periodoAlvo || 'atual'
+    try {
+      setGerandoPreview(true)
+      const empId = selectedEmpresaId || selectedEmpresa?.id || ''
+      const empNome = selectedEmpresa?.nome || 'Todas as empresas (Consolidado)'
+
+      // Se for período comparado, usa a matriz e meses do período 2
+      const matrizAlvo = alvo === 'comparado' ? matrizPeriodo2 : matriz
+      const mesesAlvo = alvo === 'comparado' ? mesesPeriodo2 : meses
+
+      const preview = await gerarPreviewImportacaoDre({
+        empresaId: empId,
+        empresaNome:
+          alvo === 'comparado'
+            ? `${empNome} — Período Comparado (${p2Descricao})`
+            : modoVisualizacao === 'comparativo'
+              ? `${empNome} — Período Atual (${p1Descricao})`
+              : empNome,
+        isGrupo: isGrupoAtivo,
+        empresasMembros: grupoAtivo?.expand?.empresas || undefined,
+        matriz: matrizAlvo,
+        mesesAlvo,
+      })
+
+      setPreviewImportacao(preview)
+      setModalImportarOpen(true)
+    } catch (err: any) {
+      console.error('Erro ao gerar preview de importação da DRE:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao preparar importação',
+        description: err?.message || 'Falha ao processar dados para importação.',
+      })
+    } finally {
+      setGerandoPreview(false)
+    }
   }
 
   // Carregar dados
@@ -439,6 +492,23 @@ export default function DreGerencial() {
               </Badge>
             </button>
           </div>
+
+          {/* Botão de Importar para DRE do Sistema */}
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => handleAbrirImportacao({ periodoAlvo: 'atual' })}
+            disabled={loading || gerandoPreview || matriz.meses.length === 0}
+            className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-xs"
+            title="Importar o resultado da DRE Gerencial para alimentar a DRE e os indicadores do sistema"
+          >
+            {gerandoPreview ? (
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Database className="w-3.5 h-3.5" />
+            )}
+            Importar para DRE do Sistema
+          </Button>
 
           <Button
             type="button"
@@ -765,13 +835,27 @@ export default function DreGerencial() {
           {/* Card Período Anterior/Comparado */}
           <Card className="bg-white border-slate-200 shadow-xs">
             <CardContent className="py-3 px-4">
-              <div className="flex items-center justify-between text-slate-500">
-                <span className="text-[11px] font-semibold uppercase tracking-wider">
+              <div className="flex items-center justify-between text-slate-500 gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider truncate">
                   Período Comparado ({p2Descricao})
                 </span>
-                <Badge variant="outline" className="text-[10px]">
-                  Ref
-                </Badge>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAbrirImportacao({ periodoAlvo: 'comparado' })}
+                    disabled={gerandoPreview}
+                    className="h-6 text-[10px] px-2 font-bold text-purple-700 border-purple-200 hover:bg-purple-50 gap-1"
+                    title="Importar os dados deste período comparado para a DRE do Sistema"
+                  >
+                    <Database className="w-3 h-3 text-purple-600" />
+                    Importar Este
+                  </Button>
+                  <Badge variant="outline" className="text-[10px]">
+                    Ref
+                  </Badge>
+                </div>
               </div>
               <div className="mt-2 space-y-1">
                 <div className="flex justify-between items-baseline">
@@ -805,13 +889,27 @@ export default function DreGerencial() {
           {/* Card Período Atual */}
           <Card className="bg-white border-slate-200 shadow-xs">
             <CardContent className="py-3 px-4">
-              <div className="flex items-center justify-between text-slate-500">
-                <span className="text-[11px] font-semibold uppercase tracking-wider">
+              <div className="flex items-center justify-between text-slate-500 gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider truncate">
                   Período Atual ({p1Descricao})
                 </span>
-                <Badge variant="default" className="text-[10px] bg-blue-600">
-                  Atual
-                </Badge>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleAbrirImportacao({ periodoAlvo: 'atual' })}
+                    disabled={gerandoPreview}
+                    className="h-6 text-[10px] px-2 font-bold text-blue-700 border-blue-200 hover:bg-blue-50 gap-1"
+                    title="Importar os dados do período atual para a DRE do Sistema"
+                  >
+                    <Database className="w-3 h-3 text-blue-600" />
+                    Importar Este
+                  </Button>
+                  <Badge variant="default" className="text-[10px] bg-blue-600">
+                    Atual
+                  </Badge>
+                </div>
               </div>
               <div className="mt-2 space-y-1">
                 <div className="flex justify-between items-baseline">
@@ -1802,6 +1900,16 @@ export default function DreGerencial() {
           carregarDados()
           window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
           window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+        }}
+      />
+
+      {/* Modal de Importação para a DRE do Sistema */}
+      <ModalImportarDreGerencial
+        open={modalImportarOpen}
+        onOpenChange={setModalImportarOpen}
+        previewData={previewImportacao}
+        onSuccess={() => {
+          carregarDados()
         }}
       />
 
