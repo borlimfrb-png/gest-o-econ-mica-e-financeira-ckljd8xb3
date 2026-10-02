@@ -38,13 +38,22 @@ import {
 import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
 import { ModernMegaMenu } from '@/components/ModernMegaMenu'
 import { CommandPalette } from '@/components/CommandPalette'
+import { VerticalSidebar } from '@/components/VerticalSidebar'
 import {
   MENU_GRUPOS,
   filtrarMenuPorPerfil,
   extrairTodosItensNavegaveis,
   type NavGroupConfig,
 } from '@/lib/menuNavigationConfig'
-import { MoreHorizontal, ChevronRight } from 'lucide-react'
+import {
+  MoreHorizontal,
+  ChevronRight,
+  Columns,
+  Rows,
+  PanelLeft,
+  PanelLeftClose,
+} from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 export default function Layout() {
   const { user, logout, isAuthenticated, isLoading, isAdmin } = useAuth()
@@ -64,6 +73,51 @@ export default function Layout() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [modalPerfilOpen, setModalPerfilOpen] = useState(false)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+  // Orientação do Menu Geral: 'vertical' (sidebar lateral) ou 'horizontal' (barra superior)
+  // Padrão solicitado: 'vertical'. Persistência em localStorage para manter entre sessões.
+  const [menuOrientation, setMenuOrientation] = useState<'vertical' | 'horizontal'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gestao_menu_orientation')
+      if (saved === 'horizontal' || saved === 'vertical') {
+        return saved
+      }
+    }
+    return 'vertical'
+  })
+
+  // Estado de colapso da sidebar no modo vertical (ícones apenas)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('gestao_sidebar_collapsed')
+      if (saved !== null) {
+        return saved === 'true'
+      }
+      // Tablet padrão colapsado
+      return window.innerWidth >= 768 && window.innerWidth < 1024
+    }
+    return false
+  })
+
+  const toggleMenuOrientation = () => {
+    setMenuOrientation((prev) => {
+      const next = prev === 'vertical' ? 'horizontal' : 'vertical'
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gestao_menu_orientation', next)
+      }
+      return next
+    })
+  }
+
+  const toggleSidebarCollapse = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gestao_sidebar_collapsed', String(next))
+      }
+      return next
+    })
+  }
 
   // Drawer mobile: controle de acordeões de grupos abertos
   const [openDrawerGroups, setOpenDrawerGroups] = useState<Record<string, boolean>>({})
@@ -269,418 +323,537 @@ export default function Layout() {
   }
 
   return (
-    <div className="h-screen w-full bg-[#F5F7FA] flex flex-col antialiased text-slate-800 overflow-hidden">
+    <div
+      className={`h-screen w-full bg-[#F5F7FA] antialiased text-slate-800 overflow-hidden ${
+        menuOrientation === 'vertical' ? 'flex flex-row' : 'flex flex-col'
+      }`}
+    >
       {/* ========================================================
-          BARRA SUPERIOR HORIZONTAL (TOPBAR) DIVIDIDA EM DUAS LINHAS
-          - Linha 1 (Superior): Logo/Nome da Empresa + Seletores Globais (Empresa/Ano) + Busca (Ctrl+K) + Avatar
-          - Linha 2 (Inferior): Barra de Navegação Horizontal com Mega-Menus e botão "Mais ▾"
-          - Evita qualquer sobreposição entre navegação e logo/busca em 1366px e em qualquer resolução
+          SIDEBAR VERTICAL (RENDERIZADA APENAS NO MODO VERTICAL EM TELAS >= 768px)
       ======================================================== */}
-      <header
-        className="shrink-0 z-40 text-white shadow-md transition-colors border-b border-slate-800/40"
-        style={{ backgroundColor: corPrimaria }}
-      >
-        {/* ---------------- LINHA 1: CABEÇALHO SUPERIOR (UTILITÁRIOS & MARCA) ---------------- */}
-        <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/20 backdrop-blur-md">
-          <div className="flex items-center justify-between h-12 md:h-13 gap-2 md:gap-4">
-            {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo Borlim / Consultoria */}
-            <div className="flex items-center gap-2 md:gap-3 shrink-0">
-              {/* Hambúrguer apenas em mobile */}
-              <button
-                type="button"
-                onClick={() => setMobileDrawerOpen(true)}
-                className="md:hidden p-1.5 -ml-1 rounded-lg text-slate-200 hover:text-white hover:bg-white/15 transition-colors cursor-pointer"
-                aria-label="Abrir menu de navegação"
-              >
-                <Menu className="w-5 h-5" />
-              </button>
+      {menuOrientation === 'vertical' && (
+        <div className="hidden md:flex h-full shrink-0">
+          <VerticalSidebar
+            menuGruposFiltrados={menuGruposFiltrados}
+            isGroupActive={isGroupActive}
+            balancoDreUrl={balancoDreUrl}
+            corPrimaria={corPrimaria}
+            corSecundaria={corSecundaria}
+            minhaEmpresa={minhaEmpresa}
+            logoUrl={logoUrl}
+            user={user}
+            userName={userName}
+            userEmail={userEmail}
+            userRole={userRole}
+            userInitial={userInitial}
+            isUserAdmin={isUserAdmin}
+            isUserFinanceiro={isUserFinanceiro}
+            isUserComercial={isUserComercial}
+            logout={() => {
+              logout()
+              navigate('/')
+            }}
+            onOpenPerfil={() => setModalPerfilOpen(true)}
+            onOpenSearch={() => setCommandPaletteOpen(true)}
+            menuOrientation={menuOrientation}
+            onToggleOrientation={toggleMenuOrientation}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={toggleSidebarCollapse}
+            selectedEmpresaId={selectedEmpresaId}
+            setSelectedEmpresaId={setSelectedEmpresaId}
+            selectedAno={selectedAno}
+            setSelectedAno={setSelectedAno}
+            todasEntidades={todasEntidades}
+            empresas={empresas}
+            anosDisponiveis={anosDisponiveis}
+          />
+        </div>
+      )}
 
-              {/* Logotipo clicável */}
-              <button
-                type="button"
-                onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
-              >
-                {logoUrl ? (
-                  <div className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden border border-white/20 group-hover:border-white/40 transition-all">
-                    <img
-                      src={logoUrl}
-                      alt={minhaEmpresa?.nome_fantasia || 'Logo'}
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-                ) : (
-                  <div
-                    className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs border border-white/20"
-                    style={{ backgroundColor: corSecundaria }}
-                  >
-                    <Scale className="w-4 h-4" />
-                  </div>
-                )}
-                <div className="truncate max-w-[150px] sm:max-w-[220px] md:max-w-[280px]">
-                  <span className="font-bold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
-                    {minhaEmpresa?.nome_fantasia ||
-                      minhaEmpresa?.razao_social ||
-                      'Borlim · Gestão Financeira'}
-                  </span>
-                  <span className="text-[9px] md:text-[9.5px] text-blue-200/90 uppercase tracking-wider font-medium block truncate">
-                    {minhaEmpresa?.razao_social
-                      ? 'Gestão Financeira & Econômica'
-                      : 'Gestão Financeira'}
-                  </span>
-                </div>
-              </button>
-            </div>
+      {/* ========================================================
+          BARRA SUPERIOR HORIZONTAL (TOPBAR)
+          - No modo horizontal: exibe as duas linhas (linha 1 com logo/seletores/avatar/alternador + linha 2 com navegação mega-menus).
+          - No modo vertical: apenas em mobile (<768px) exibe o cabeçalho compacto com hambúrguer;
+            em desktop (>=768px), o layout vertical ocupa a lateral e o main ocupa o restante.
+      ======================================================== */}
+      {menuOrientation === 'horizontal' ? (
+        <header
+          className="shrink-0 z-40 text-white shadow-md transition-colors border-b border-slate-800/40"
+          style={{ backgroundColor: corPrimaria }}
+        >
+          {/* ---------------- LINHA 1: CABEÇALHO SUPERIOR (UTILITÁRIOS & MARCA) ---------------- */}
+          <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/20 backdrop-blur-md">
+            <div className="flex items-center justify-between h-12 md:h-13 gap-2 md:gap-4">
+              {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo Borlim / Consultoria */}
+              <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                {/* Hambúrguer apenas em mobile */}
+                <button
+                  type="button"
+                  onClick={() => setMobileDrawerOpen(true)}
+                  className="md:hidden p-1.5 -ml-1 rounded-lg text-slate-200 hover:text-white hover:bg-white/15 transition-colors cursor-pointer"
+                  aria-label="Abrir menu de navegação"
+                >
+                  <Menu className="w-5 h-5" />
+                </button>
 
-            {/* LADO DIREITO: SELETORES GLOBAIS (EMPRESA/ANO) + BUSCA (Ctrl+K) + AVATAR */}
-            <div className="flex items-center gap-2 md:gap-3 shrink-0">
-              {/* Seletores Globais de Empresa e Ano integrados na Linha 1 */}
-              <div className="hidden sm:flex items-center gap-1.5 md:gap-2">
-                {/* Seletor Empresa */}
-                <div className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2.5 py-1 text-xs transition-colors">
-                  <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                  {isUserAdmin ? (
-                    <Select
-                      value={selectedEmpresaId}
-                      onValueChange={(id) => {
-                        setSelectedEmpresaId(id)
-                        if (
-                          location.pathname.startsWith('/empresas/') &&
-                          location.pathname !== `/empresas/${id}`
-                        ) {
-                          navigate(`/empresas/${id}`)
-                        }
-                      }}
-                    >
-                      <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[130px] md:w-[170px] lg:w-[200px] cursor-pointer">
-                        <SelectValue placeholder="Selecione a empresa" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                        <SelectEmpresaOuGrupoItems
-                          todasEntidades={todasEntidades}
-                          empresas={empresas}
-                        />
-                      </SelectContent>
-                    </Select>
+                {/* Logotipo clicável */}
+                <button
+                  type="button"
+                  onClick={() => navigate('/dashboard')}
+                  className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
+                >
+                  {logoUrl ? (
+                    <div className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden border border-white/20 group-hover:border-white/40 transition-all">
+                      <img
+                        src={logoUrl}
+                        alt={minhaEmpresa?.nome_fantasia || 'Logo'}
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
                   ) : (
                     <div
-                      className="flex items-center gap-1.5 py-0.5 text-xs font-semibold text-white max-w-[150px] md:max-w-[190px] truncate"
-                      title={
-                        empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
-                        'Sua Empresa'
-                      }
+                      className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs border border-white/20"
+                      style={{ backgroundColor: corSecundaria }}
                     >
-                      <span className="truncate">
-                        {empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
-                          empresas.find((e) => e.id === selectedEmpresaId)?.nome ||
-                          'Empresa Vinculada'}
-                      </span>
-                      <span className="text-[9px] bg-white/20 text-blue-100 px-1 py-0.2 rounded font-normal shrink-0">
-                        Fixa
-                      </span>
+                      <Scale className="w-4 h-4" />
                     </div>
                   )}
-                </div>
-
-                {/* Seletor Ano */}
-                <div className="flex items-center gap-1 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2 py-1 text-xs transition-colors">
-                  <Calendar className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                  <Select
-                    value={String(selectedAno)}
-                    onValueChange={(val) => setSelectedAno(Number(val))}
-                  >
-                    <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[58px] cursor-pointer">
-                      <SelectValue placeholder="Ano" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                      {anosDisponiveis.map((ano) => (
-                        <SelectItem key={ano} value={String(ano)} className="text-xs">
-                          {ano}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  <div className="truncate max-w-[150px] sm:max-w-[220px] md:max-w-[280px]">
+                    <span className="font-bold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
+                      {minhaEmpresa?.nome_fantasia ||
+                        minhaEmpresa?.razao_social ||
+                        'Borlim · Gestão Financeira'}
+                    </span>
+                    <span className="text-[9px] md:text-[9.5px] text-blue-200/90 uppercase tracking-wider font-medium block truncate">
+                      {minhaEmpresa?.razao_social
+                        ? 'Gestão Financeira & Econômica'
+                        : 'Gestão Financeira'}
+                    </span>
+                  </div>
+                </button>
               </div>
 
-              {/* Botão de Busca Rápida (Command Palette Ctrl+K) */}
-              <button
-                type="button"
-                onClick={() => setCommandPaletteOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-blue-600/35 hover:border-blue-400/50 hover:text-white text-slate-100 text-xs border border-white/20 transition-all duration-150 shadow-xs cursor-pointer group"
-                title="Pressione Ctrl+K para buscar módulos e relatórios"
-              >
-                <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
-                <span className="inline text-xs font-medium text-slate-100 group-hover:text-white">
-                  Buscar...
-                </span>
-                <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
-                  <span className="text-[8px]">⌘</span>K
-                </kbd>
-              </button>
-
-              {/* Menu de Avatar do Usuário */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
-                  >
-                    <Avatar
-                      className="w-7 h-7 md:w-8 md:h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
-                      style={{ backgroundColor: corSecundaria }}
-                    >
-                      {user?.avatar && (
-                        <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
-                      )}
-                      <AvatarFallback
-                        style={{ backgroundColor: corSecundaria }}
-                        className="text-white font-semibold text-xs"
+              {/* LADO DIREITO: SELETORES GLOBAIS (EMPRESA/ANO) + BUSCA (Ctrl+K) + ALTERNADOR + AVATAR */}
+              <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                {/* Seletores Globais de Empresa e Ano integrados na Linha 1 */}
+                <div className="hidden sm:flex items-center gap-1.5 md:gap-2">
+                  {/* Seletor Empresa */}
+                  <div className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2.5 py-1 text-xs transition-colors">
+                    <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                    {isUserAdmin ? (
+                      <Select
+                        value={selectedEmpresaId}
+                        onValueChange={(id) => {
+                          setSelectedEmpresaId(id)
+                          if (
+                            location.pathname.startsWith('/empresas/') &&
+                            location.pathname !== `/empresas/${id}`
+                          ) {
+                            navigate(`/empresas/${id}`)
+                          }
+                        }}
                       >
-                        {userInitial}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="hidden xl:flex flex-col items-start text-left max-w-[130px] truncate">
-                      <span className="text-xs font-semibold text-white truncate leading-tight block">
-                        {userName}
-                      </span>
-                      <span className="text-[10px] text-blue-200/80 truncate block">
-                        {userRole}
-                      </span>
-                    </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/80 hidden xl:block" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  sideOffset={8}
-                  className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
-                >
-                  {/* Cabeçalho do usuário */}
-                  <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10 mb-1">
-                    <Avatar
-                      className="w-10 h-10 border border-white/20 shrink-0"
-                      style={{ backgroundColor: corSecundaria }}
-                    >
-                      {user?.avatar && (
-                        <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
-                      )}
-                      <AvatarFallback
-                        style={{ backgroundColor: corSecundaria }}
-                        className="text-white font-bold text-sm"
+                        <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[130px] md:w-[170px] lg:w-[200px] cursor-pointer">
+                          <SelectValue placeholder="Selecione a empresa" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
+                          <SelectEmpresaOuGrupoItems
+                            todasEntidades={todasEntidades}
+                            empresas={empresas}
+                          />
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div
+                        className="flex items-center gap-1.5 py-0.5 text-xs font-semibold text-white max-w-[150px] md:max-w-[190px] truncate"
+                        title={
+                          empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                          'Sua Empresa'
+                        }
                       >
-                        {userInitial}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-xs font-bold text-white truncate">{userName}</p>
-                        <span
-                          className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${
-                            isUserAdmin
-                              ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
-                              : isUserFinanceiro
-                                ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
-                                : isUserComercial
-                                  ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
-                                  : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
-                          }`}
-                        >
-                          {userRole}
+                        <span className="truncate">
+                          {empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                            empresas.find((e) => e.id === selectedEmpresaId)?.nome ||
+                            'Empresa Vinculada'}
+                        </span>
+                        <span className="text-[9px] bg-white/20 text-blue-100 px-1 py-0.2 rounded font-normal shrink-0">
+                          Fixa
                         </span>
                       </div>
-                      <p className="text-[11px] text-blue-200/70 truncate mt-0.5">{userEmail}</p>
-                    </div>
+                    )}
                   </div>
 
-                  <DropdownMenuSeparator className="bg-white/10 my-1" />
+                  {/* Seletor Ano */}
+                  <div className="flex items-center gap-1 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2 py-1 text-xs transition-colors">
+                    <Calendar className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                    <Select
+                      value={String(selectedAno)}
+                      onValueChange={(val) => setSelectedAno(Number(val))}
+                    >
+                      <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[58px] cursor-pointer">
+                        <SelectValue placeholder="Ano" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
+                        {anosDisponiveis.map((ano) => (
+                          <SelectItem key={ano} value={String(ano)} className="text-xs">
+                            {ano}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-                  {/* Configurações da Conta */}
-                  <DropdownMenuItem
-                    onClick={() => navigate('/configuracoes')}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
-                  >
-                    <Settings className="w-4 h-4 text-slate-300" />
-                    <span>Configurações do Sistema</span>
-                  </DropdownMenuItem>
+                {/* Botão de Busca Rápida (Command Palette Ctrl+K) */}
+                <button
+                  type="button"
+                  onClick={() => setCommandPaletteOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-blue-600/35 hover:border-blue-400/50 hover:text-white text-slate-100 text-xs border border-white/20 transition-all duration-150 shadow-xs cursor-pointer group"
+                  title="Pressione Ctrl+K para buscar módulos e relatórios"
+                >
+                  <Search className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
+                  <span className="inline text-xs font-medium text-slate-100 group-hover:text-white">
+                    Buscar...
+                  </span>
+                  <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1 py-0.5 text-[9px] font-mono bg-black/40 border border-white/20 rounded text-slate-200 group-hover:text-white font-semibold">
+                    <span className="text-[8px]">⌘</span>K
+                  </kbd>
+                </button>
 
-                  {/* Perfil & Alertas */}
-                  <DropdownMenuItem
-                    onClick={() => setModalPerfilOpen(true)}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
-                  >
-                    <Bell className="w-4 h-4 text-blue-300" />
-                    <span>Alertas & Preferências</span>
-                  </DropdownMenuItem>
+                {/* ALTERNADOR DE ORIENTAÇÃO: Mudar para Vertical (Sidebar) */}
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={toggleMenuOrientation}
+                        className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/12 hover:bg-blue-600/35 hover:border-blue-400/50 hover:text-white text-slate-100 text-xs border border-white/20 transition-all duration-150 shadow-xs cursor-pointer group"
+                        aria-label="Mudar para Menu Vertical (Barra Lateral)"
+                      >
+                        <Columns className="w-3.5 h-3.5 text-blue-200 group-hover:text-white transition-colors" />
+                        <span className="text-[11px] font-semibold hidden lg:inline">
+                          Menu Vertical
+                        </span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="bottom"
+                      className="bg-[#0B1F3A] text-white border-slate-700 text-xs"
+                    >
+                      Alternar para Menu Vertical (Barra Lateral)
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
 
-                  {/* Minha Empresa */}
-                  <DropdownMenuItem
-                    onClick={() => navigate('/minha-empresa')}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
-                  >
-                    <Building className="w-4 h-4 text-emerald-400" />
-                    <span>Dados da Minha Consultoria</span>
-                  </DropdownMenuItem>
-
-                  <DropdownMenuSeparator className="bg-white/10 my-1" />
-
-                  {/* Logout */}
-                  <DropdownMenuItem
-                    onClick={() => {
-                      logout()
-                      navigate('/')
-                    }}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-300 bg-red-950/30 hover:bg-red-900/50 hover:text-red-100 cursor-pointer focus:bg-red-900/50 focus:text-red-100 border border-red-800/30"
-                  >
-                    <LogOut className="w-4 h-4 text-red-400" />
-                    <span>Sair do sistema</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
-
-        {/* ---------------- LINHA 2: BARRA DE NAVEGAÇÃO HORIZONTAL (MEGA-MENUS & MAIS) ---------------- */}
-        <div className="w-full px-3 lg:px-5 border-b border-white/10 hidden md:block bg-black/10">
-          <div className="flex items-center justify-between h-9.5 lg:h-10 overflow-visible">
-            <nav className="flex items-center gap-0.5 lg:gap-1 xl:gap-1.5 flex-1 justify-start min-w-0 overflow-visible py-0.5">
-              {gruposVisiveis.map((grupo, idx) => {
-                const active = isGroupActive(grupo)
-                // Se estiver no último terço dos itens, alinhar painel à direita para não cortar na borda direita
-                const align = idx >= gruposVisiveis.length - 2 ? 'right' : 'auto'
-                return (
-                  <ModernMegaMenu
-                    key={grupo.id}
-                    grupo={grupo}
-                    isActive={active}
-                    balancoDreUrl={balancoDreUrl}
-                    align={align}
-                  />
-                )
-              })}
-
-              {/* DROPDOWN "MAIS" PARA GRUPOS EXCEDENTES */}
-              {gruposExcedentes.length > 0 && (
+                {/* Menu de Avatar do Usuário */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300 shrink-0 ${
-                        isAnyExcedenteActive
-                          ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
-                          : 'text-slate-100 hover:text-white hover:bg-white/10'
-                      }`}
+                      className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
                     >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-blue-200" />
-                      <span>Mais</span>
-                      {isAnyExcedenteActive && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
-                      )}
-                      <ChevronDown className="w-3 h-3 text-slate-200 opacity-80" />
+                      <Avatar
+                        className="w-7 h-7 md:w-8 md:h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
+                        style={{ backgroundColor: corSecundaria }}
+                      >
+                        {user?.avatar && (
+                          <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
+                        )}
+                        <AvatarFallback
+                          style={{ backgroundColor: corSecundaria }}
+                          className="text-white font-semibold text-xs"
+                        >
+                          {userInitial}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="hidden xl:flex flex-col items-start text-left max-w-[130px] truncate">
+                        <span className="text-xs font-semibold text-white truncate leading-tight block">
+                          {userName}
+                        </span>
+                        <span className="text-[10px] text-blue-200/80 truncate block">
+                          {userRole}
+                        </span>
+                      </div>
+                      <ChevronDown className="w-3.5 h-3.5 text-blue-200/80 hidden xl:block" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
                     sideOffset={8}
-                    className="w-72 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
+                    className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
                   >
-                    <div className="px-2.5 py-1.5 text-[10px] font-bold text-blue-200 uppercase tracking-wider border-b border-white/10 mb-1">
-                      Módulos Adicionais
-                    </div>
-                    {gruposExcedentes.map((grupo) => {
-                      const GroupIcon = grupo.icon
-                      const active = isGroupActive(grupo)
-
-                      // Se o grupo excedente for link direto
-                      if (grupo.tipo === 'link' && grupo.path) {
-                        return (
-                          <DropdownMenuItem
-                            key={grupo.id}
-                            onClick={() => navigate(grupo.path!)}
-                            className={`flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
-                              active
-                                ? 'bg-blue-600/40 text-white font-bold border border-blue-400/50'
-                                : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                    {/* Cabeçalho do usuário */}
+                    <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10 mb-1">
+                      <Avatar
+                        className="w-10 h-10 border border-white/20 shrink-0"
+                        style={{ backgroundColor: corSecundaria }}
+                      >
+                        {user?.avatar && (
+                          <AvatarImage src={pb.files.getURL(user, user.avatar)} alt={userName} />
+                        )}
+                        <AvatarFallback
+                          style={{ backgroundColor: corSecundaria }}
+                          className="text-white font-bold text-sm"
+                        >
+                          {userInitial}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-bold text-white truncate">{userName}</p>
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded font-semibold uppercase ${
+                              isUserAdmin
+                                ? 'bg-purple-400/20 text-purple-200 border border-purple-400/30'
+                                : isUserFinanceiro
+                                  ? 'bg-blue-400/20 text-blue-200 border border-blue-400/30'
+                                  : isUserComercial
+                                    ? 'bg-amber-400/20 text-amber-200 border border-amber-400/30'
+                                    : 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
                             }`}
                           >
-                            <div className="flex items-center gap-2.5 truncate">
-                              <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-blue-200">
-                                <GroupIcon className="w-3.5 h-3.5" />
-                              </div>
-                              <div className="flex flex-col truncate">
-                                <span className="font-bold truncate">{grupo.label}</span>
-                                {grupo.subtitulo && (
-                                  <span className="text-[10px] text-slate-300 truncate">
-                                    {grupo.subtitulo}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {grupo.badge && (
-                              <span className="text-[9px] bg-blue-500/30 text-blue-100 border border-blue-400/40 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
-                                {grupo.badge}
-                              </span>
-                            )}
-                          </DropdownMenuItem>
-                        )
-                      }
-
-                      // Se o grupo excedente tiver itens/submódulos
-                      const subitens = grupo.colunas
-                        ? grupo.colunas.flatMap((c) => c.itens)
-                        : grupo.itens || []
-
-                      return (
-                        <div key={grupo.id} className="mb-1 last:mb-0">
-                          <div className="px-2.5 py-1 text-[11px] font-bold text-blue-200 flex items-center gap-2">
-                            <GroupIcon className="w-3.5 h-3.5 text-blue-300" />
-                            <span>{grupo.label}</span>
-                          </div>
-                          <div className="space-y-0.5 pl-2">
-                            {subitens.map((sub) => {
-                              const SubIcon = sub.icon
-                              const isSubActive =
-                                location.pathname === sub.path ||
-                                (sub.path.includes('novo=balanco-dre') &&
-                                  location.pathname.startsWith('/empresas') &&
-                                  location.search.includes('novo=balanco-dre'))
-                              return (
-                                <DropdownMenuItem
-                                  key={sub.id}
-                                  onClick={() => navigate(sub.path)}
-                                  className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
-                                    isSubActive
-                                      ? 'bg-blue-600 text-white font-bold'
-                                      : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-2 truncate">
-                                    <SubIcon className="w-3 h-3 text-blue-200 shrink-0" />
-                                    <span className="truncate">{sub.name}</span>
-                                  </div>
-                                  {sub.badge && (
-                                    <span className="text-[8px] px-1 py-0.2 rounded font-bold uppercase bg-white/20 text-blue-100 shrink-0">
-                                      {sub.badge}
-                                    </span>
-                                  )}
-                                </DropdownMenuItem>
-                              )
-                            })}
-                          </div>
+                            {userRole}
+                          </span>
                         </div>
-                      )
-                    })}
+                        <p className="text-[11px] text-blue-200/70 truncate mt-0.5">{userEmail}</p>
+                      </div>
+                    </div>
+
+                    <DropdownMenuSeparator className="bg-white/10 my-1" />
+
+                    {/* Configurações da Conta */}
+                    <DropdownMenuItem
+                      onClick={() => navigate('/configuracoes')}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
+                    >
+                      <Settings className="w-4 h-4 text-slate-300" />
+                      <span>Configurações do Sistema</span>
+                    </DropdownMenuItem>
+
+                    {/* Perfil & Alertas */}
+                    <DropdownMenuItem
+                      onClick={() => setModalPerfilOpen(true)}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
+                    >
+                      <Bell className="w-4 h-4 text-blue-300" />
+                      <span>Alertas & Preferências</span>
+                    </DropdownMenuItem>
+
+                    {/* Minha Empresa */}
+                    <DropdownMenuItem
+                      onClick={() => navigate('/minha-empresa')}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-200 hover:bg-white/10 hover:text-white cursor-pointer focus:bg-white/10 focus:text-white"
+                    >
+                      <Building className="w-4 h-4 text-emerald-400" />
+                      <span>Dados da Minha Consultoria</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator className="bg-white/10 my-1" />
+
+                    {/* Logout */}
+                    <DropdownMenuItem
+                      onClick={() => {
+                        logout()
+                        navigate('/')
+                      }}
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold text-red-300 bg-red-950/30 hover:bg-red-900/50 hover:text-red-100 cursor-pointer focus:bg-red-900/50 focus:text-red-100 border border-red-800/30"
+                    >
+                      <LogOut className="w-4 h-4 text-red-400" />
+                      <span>Sair do sistema</span>
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              )}
-            </nav>
+              </div>
+            </div>
           </div>
-        </div>
-      </header>
+
+          {/* ---------------- LINHA 2: BARRA DE NAVEGAÇÃO HORIZONTAL (MEGA-MENUS & MAIS) ---------------- */}
+          <div className="w-full px-3 lg:px-5 border-b border-white/10 hidden md:block bg-black/10">
+            <div className="flex items-center justify-between h-9.5 lg:h-10 overflow-visible">
+              <nav className="flex items-center gap-0.5 lg:gap-1 xl:gap-1.5 flex-1 justify-start min-w-0 overflow-visible py-0.5">
+                {gruposVisiveis.map((grupo, idx) => {
+                  const active = isGroupActive(grupo)
+                  // Se estiver no último terço dos itens, alinhar painel à direita para não cortar na borda direita
+                  const align = idx >= gruposVisiveis.length - 2 ? 'right' : 'auto'
+                  return (
+                    <ModernMegaMenu
+                      key={grupo.id}
+                      grupo={grupo}
+                      isActive={active}
+                      balancoDreUrl={balancoDreUrl}
+                      align={align}
+                    />
+                  )
+                })}
+
+                {/* DROPDOWN "MAIS" PARA GRUPOS EXCEDENTES */}
+                {gruposExcedentes.length > 0 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className={`flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300 shrink-0 ${
+                          isAnyExcedenteActive
+                            ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
+                            : 'text-slate-100 hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        <MoreHorizontal className="w-3.5 h-3.5 text-blue-200" />
+                        <span>Mais</span>
+                        {isAnyExcedenteActive && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                        )}
+                        <ChevronDown className="w-3 h-3 text-slate-200 opacity-80" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      sideOffset={8}
+                      className="w-72 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
+                    >
+                      <div className="px-2.5 py-1.5 text-[10px] font-bold text-blue-200 uppercase tracking-wider border-b border-white/10 mb-1">
+                        Módulos Adicionais
+                      </div>
+                      {gruposExcedentes.map((grupo) => {
+                        const GroupIcon = grupo.icon
+                        const active = isGroupActive(grupo)
+
+                        // Se o grupo excedente for link direto
+                        if (grupo.tipo === 'link' && grupo.path) {
+                          return (
+                            <DropdownMenuItem
+                              key={grupo.id}
+                              onClick={() => navigate(grupo.path!)}
+                              className={`flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium cursor-pointer transition-colors ${
+                                active
+                                  ? 'bg-blue-600/40 text-white font-bold border border-blue-400/50'
+                                  : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 truncate">
+                                <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center shrink-0 text-blue-200">
+                                  <GroupIcon className="w-3.5 h-3.5" />
+                                </div>
+                                <div className="flex flex-col truncate">
+                                  <span className="font-bold truncate">{grupo.label}</span>
+                                  {grupo.subtitulo && (
+                                    <span className="text-[10px] text-slate-300 truncate">
+                                      {grupo.subtitulo}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              {grupo.badge && (
+                                <span className="text-[9px] bg-blue-500/30 text-blue-100 border border-blue-400/40 px-1.5 py-0.5 rounded font-bold uppercase shrink-0">
+                                  {grupo.badge}
+                                </span>
+                              )}
+                            </DropdownMenuItem>
+                          )
+                        }
+
+                        // Se o grupo excedente tiver itens/submódulos
+                        const subitens = grupo.colunas
+                          ? grupo.colunas.flatMap((c) => c.itens)
+                          : grupo.itens || []
+
+                        return (
+                          <div key={grupo.id} className="mb-1 last:mb-0">
+                            <div className="px-2.5 py-1 text-[11px] font-bold text-blue-200 flex items-center gap-2">
+                              <GroupIcon className="w-3.5 h-3.5 text-blue-300" />
+                              <span>{grupo.label}</span>
+                            </div>
+                            <div className="space-y-0.5 pl-2">
+                              {subitens.map((sub) => {
+                                const SubIcon = sub.icon
+                                const isSubActive =
+                                  location.pathname === sub.path ||
+                                  (sub.path.includes('novo=balanco-dre') &&
+                                    location.pathname.startsWith('/empresas') &&
+                                    location.search.includes('novo=balanco-dre'))
+                                return (
+                                  <DropdownMenuItem
+                                    key={sub.id}
+                                    onClick={() => navigate(sub.path)}
+                                    className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                                      isSubActive
+                                        ? 'bg-blue-600 text-white font-bold'
+                                        : 'text-slate-200 hover:bg-white/10 hover:text-white focus:bg-white/10 focus:text-white'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 truncate">
+                                      <SubIcon className="w-3 h-3 text-blue-200 shrink-0" />
+                                      <span className="truncate">{sub.name}</span>
+                                    </div>
+                                    {sub.badge && (
+                                      <span className="text-[8px] px-1 py-0.2 rounded font-bold uppercase bg-white/20 text-blue-100 shrink-0">
+                                        {sub.badge}
+                                      </span>
+                                    )}
+                                  </DropdownMenuItem>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </nav>
+            </div>
+          </div>
+        </header>
+      ) : (
+        /* Cabeçalho compacto APENAS no mobile quando em modo Vertical */
+        <header
+          className="md:hidden shrink-0 z-40 text-white shadow-md transition-colors border-b border-slate-800/40 px-3 py-2 flex items-center justify-between"
+          style={{ backgroundColor: corPrimaria }}
+        >
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileDrawerOpen(true)}
+              className="p-1.5 rounded-lg text-slate-200 hover:text-white hover:bg-white/15 transition-colors cursor-pointer"
+              aria-label="Abrir menu de navegação"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="truncate max-w-[200px]">
+              <span className="font-bold text-xs text-white truncate block">
+                {minhaEmpresa?.nome_fantasia || minhaEmpresa?.razao_social || 'Gestão Financeira'}
+              </span>
+              <span className="text-[9px] text-blue-200/90 truncate block">
+                {minhaEmpresa?.razao_social
+                  ? 'Gestão Financeira & Econômica'
+                  : 'Análise de Balanço'}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="p-1.5 rounded-lg bg-white/10 text-blue-200 hover:text-white cursor-pointer"
+              aria-label="Buscar"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={toggleMenuOrientation}
+              className="p-1.5 rounded-lg bg-white/10 text-blue-200 hover:text-white cursor-pointer"
+              title="Mudar para Menu Horizontal"
+              aria-label="Mudar para Menu Horizontal"
+            >
+              <Rows className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+      )}
+
       {/* ========================================================
-          DRAWER MOBILE (< 768px)
-          Modernizado com busca e suporte aos mesmos dados ricos
+      DRAWER MOBILE (< 768px)          Modernizado com busca e suporte aos mesmos dados ricos
       ======================================================== */}
       {mobileDrawerOpen && (
         <div className="fixed inset-0 z-50 md:hidden flex">
@@ -946,6 +1119,42 @@ export default function Layout() {
           ÁREA DE CONTEÚDO PRINCIPAL (OCUPA 100% DA ALTURA RESTANTE, ROLAGEM INTERNA SUAVE)
       ======================================================== */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        {/* Barra superior de contexto para o modo VERTICAL em telas >= 768px:
+            Exibe controle de alternar menu, atalhos de perfil e seleção quando o cabeçalho de filtros da página não estiver visível,
+            ou integra botões contextuais perfeitamente */}
+        {menuOrientation === 'vertical' && !showHeaderFilters && (
+          <div className="hidden md:flex items-center justify-between bg-white border-b border-slate-200 px-4 sm:px-6 py-2 shrink-0 shadow-xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
+                {minhaEmpresa?.nome_fantasia || 'Gestão Econômica e Financeira'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <TooltipProvider delayDuration={150}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={toggleMenuOrientation}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                      aria-label="Mudar para Menu Horizontal no topo"
+                    >
+                      <Rows className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Menu Horizontal</span>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent
+                    side="bottom"
+                    className="bg-[#0B1F3A] text-white border-slate-700 text-xs"
+                  >
+                    Mudar para barra superior horizontal
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        )}
+
         {/* Cabeçalho de Página com Título e Seletores Globais */}
         {showHeaderFilters && (
           <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 shadow-xs">
@@ -1072,6 +1281,31 @@ export default function Layout() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Botão de alternar menu quando no modo vertical (visível no header da página) */}
+              {menuOrientation === 'vertical' && (
+                <TooltipProvider delayDuration={150}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={toggleMenuOrientation}
+                        className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                        aria-label="Mudar para Menu Horizontal no topo"
+                      >
+                        <Rows className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="hidden xl:inline">Menu Horizontal</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="bottom"
+                      className="bg-[#0B1F3A] text-white border-slate-700 text-xs"
+                    >
+                      Mudar para barra superior horizontal
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
         )}
@@ -1087,7 +1321,7 @@ export default function Layout() {
             GESTÃO ECONÔMICA E FINANCEIRA · Consultoria de Alta Performance
           </span>
           <span className="text-slate-400 font-mono text-[10px]">
-            v2.4 · &copy; {new Date().getFullYear()} Todos os direitos reservados.
+            v0.0.209 · &copy; {new Date().getFullYear()} Todos os direitos reservados.
           </span>
         </footer>
       </div>
