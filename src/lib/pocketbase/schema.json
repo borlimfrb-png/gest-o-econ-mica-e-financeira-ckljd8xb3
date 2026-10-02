@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-01T22:23:01.299Z",
+  "generatedAt": "2026-10-02T11:15:32.284Z",
   "collections": [
     {
       "name": "users",
@@ -905,6 +905,24 @@
             "Despesa Financeira",
             "Receita Financeira"
           ]
+        },
+        {
+          "name": "nao_exibir_dre",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nao_exibir_fluxo_caixa",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nao_exibir_em_nada",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

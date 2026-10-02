@@ -1165,6 +1165,25 @@ export default function PlanoContas() {
                                   <span className="mx-1">·</span>
                                   {conta.nome}
                                 </Badge>
+
+                                {/* Badges de Exclusão de Relatórios Gerenciais */}
+                                <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                  {conta.nao_exibir_em_nada && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-red-600 text-white border-red-700 font-bold shadow-2xs">
+                                      🛑 Oculta em tudo
+                                    </Badge>
+                                  )}
+                                  {!conta.nao_exibir_em_nada && conta.nao_exibir_dre && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-rose-100 text-rose-800 border-rose-300 font-medium">
+                                      🚫 Não DRE
+                                    </Badge>
+                                  )}
+                                  {!conta.nao_exibir_em_nada && conta.nao_exibir_fluxo_caixa && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-medium">
+                                      🚫 Não Fluxo
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             ) : (
                               <span className="text-slate-400 italic">Conta removida</span>

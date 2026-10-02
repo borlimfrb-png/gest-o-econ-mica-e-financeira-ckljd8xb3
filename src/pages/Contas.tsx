@@ -81,6 +81,9 @@ interface ContaFormData {
   grupo: string
   descricao: string
   classificacao_dre: ClassificacaoDre | ''
+  nao_exibir_dre: boolean
+  nao_exibir_fluxo_caixa: boolean
+  nao_exibir_em_nada: boolean
 }
 
 const EMPTY_FORM: ContaFormData = {
@@ -89,6 +92,9 @@ const EMPTY_FORM: ContaFormData = {
   grupo: '',
   descricao: '',
   classificacao_dre: '',
+  nao_exibir_dre: false,
+  nao_exibir_fluxo_caixa: false,
+  nao_exibir_em_nada: false,
 }
 
 type FormErrors = Partial<Record<keyof ContaFormData | 'general', string>>
@@ -288,8 +294,13 @@ export default function Contas() {
           form.classificacao_dre ||
           sugerirClassificacaoDre(form.nome, form.tipo, form.grupo) ||
           undefined,
+        nao_exibir_dre: form.nao_exibir_dre,
+        nao_exibir_fluxo_caixa: form.nao_exibir_fluxo_caixa,
+        nao_exibir_em_nada: form.nao_exibir_em_nada,
         empresa: effectiveEmpresaId || undefined,
       })
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
       toast({
         title: 'Conta cadastrada',
         description: `"${novo.nome}" foi criada com o código ${novo.codigo}.`,
@@ -314,9 +325,51 @@ export default function Contas() {
       grupo: c.grupo || '',
       descricao: c.descricao || '',
       classificacao_dre: c.classificacao_dre || '',
+      nao_exibir_dre: !!c.nao_exibir_dre,
+      nao_exibir_fluxo_caixa: !!c.nao_exibir_fluxo_caixa,
+      nao_exibir_em_nada: !!c.nao_exibir_em_nada,
     })
     setErrors({})
     setEditOpen(true)
+  }
+
+  const toggleFlagRapida = async (
+    conta: ContaRecord,
+    campo: 'nao_exibir_dre' | 'nao_exibir_fluxo_caixa' | 'nao_exibir_em_nada',
+  ) => {
+    try {
+      const valorAtual = !!conta[campo]
+      const novoValor = !valorAtual
+      let payload: Partial<ContaRecord> = {}
+
+      if (campo === 'nao_exibir_em_nada') {
+        payload = {
+          nao_exibir_em_nada: novoValor,
+          nao_exibir_dre: novoValor ? false : !!conta.nao_exibir_dre,
+          nao_exibir_fluxo_caixa: novoValor ? false : !!conta.nao_exibir_fluxo_caixa,
+        }
+      } else {
+        payload = {
+          [campo]: novoValor,
+          nao_exibir_em_nada: novoValor ? false : !!conta.nao_exibir_em_nada,
+        }
+      }
+
+      await contasService.update(conta.id, payload)
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+      loadData()
+      toast({
+        title: 'Marcação atualizada',
+        description: `Conta "${conta.nome}" atualizada com sucesso.`,
+      })
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar flag',
+        description: err?.message || 'Falha ao salvar marcação.',
+      })
+    }
   }
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -330,7 +383,12 @@ export default function Contas() {
         grupo: form.grupo,
         descricao: form.descricao,
         classificacao_dre: (form.classificacao_dre as ClassificacaoDre) || undefined,
+        nao_exibir_dre: form.nao_exibir_dre,
+        nao_exibir_fluxo_caixa: form.nao_exibir_fluxo_caixa,
+        nao_exibir_em_nada: form.nao_exibir_em_nada,
       })
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
       toast({ title: 'Conta atualizada', description: 'As alterações foram salvas.' })
       setEditOpen(false)
       setEditing(null)
@@ -580,6 +638,61 @@ export default function Contas() {
                       className="h-9 text-xs"
                     />
                   </div>
+
+                  {/* Marcações de Exclusão nos Relatórios Gerenciais */}
+                  <div className="pt-2 border-t border-slate-100 space-y-2">
+                    <Label className="text-xs font-semibold text-slate-700 block">
+                      Exclusões de Relatórios Gerenciais (Flags)
+                    </Label>
+                    <div className="space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 font-medium">
+                        <input
+                          type="checkbox"
+                          checked={form.nao_exibir_dre}
+                          disabled={form.nao_exibir_em_nada}
+                          onChange={(e) => {
+                            setField('nao_exibir_dre', e.target.checked)
+                            if (e.target.checked) setField('nao_exibir_em_nada', false)
+                          }}
+                          className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                        />
+                        <span>Não exibir na DRE Gerencial</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 font-medium">
+                        <input
+                          type="checkbox"
+                          checked={form.nao_exibir_fluxo_caixa}
+                          disabled={form.nao_exibir_em_nada}
+                          onChange={(e) => {
+                            setField('nao_exibir_fluxo_caixa', e.target.checked)
+                            if (e.target.checked) setField('nao_exibir_em_nada', false)
+                          }}
+                          className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>Não exibir no Fluxo de Caixa (DRE)</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-900 font-semibold pt-1 border-t border-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={form.nao_exibir_em_nada}
+                          onChange={(e) => {
+                            const val = e.target.checked
+                            setField('nao_exibir_em_nada', val)
+                            if (val) {
+                              setField('nao_exibir_dre', false)
+                              setField('nao_exibir_fluxo_caixa', false)
+                            }
+                          }}
+                          className="rounded border-slate-300 text-red-700 focus:ring-red-600"
+                        />
+                        <span className="text-red-700">
+                          Não exibir em nada (ambos os relatórios)
+                        </span>
+                      </label>
+                    </div>
+                  </div>
                   <div className="flex justify-end">
                     <Button
                       type="submit"
@@ -664,10 +777,11 @@ export default function Contas() {
                           <th className="py-3 px-4">Código</th>
                           <th className="py-3 px-4">Nome</th>
                           <th className="py-3 px-4">Tipo</th>
-                          <th className="py-3 px-4">Grupo DRE</th>
-                          <th className="py-3 px-4">Grupo Contábil</th>
+                          <th className="py-3 px-4">Classificação DRE</th>
+                          <th className="py-3 px-4 text-center">Exclusões Gerenciais</th>
+                          <th className="py-3 px-4">Grupo</th>
                           <th className="py-3 px-4 text-right">Ações</th>
-                        </tr>
+                        </tr>{' '}
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {contasFiltradas.map((c) => (
@@ -713,6 +827,54 @@ export default function Contas() {
                                   (auto)
                                 </span>
                               )}
+                            </td>
+                            <td className="py-3 px-4 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {c.nao_exibir_em_nada ? (
+                                  <Badge
+                                    onClick={() => toggleFlagRapida(c, 'nao_exibir_em_nada')}
+                                    className="text-[9px] bg-red-600 text-white border-red-700 cursor-pointer hover:bg-red-700 shadow-2xs"
+                                    title="Bloqueada em tudo (DRE e Fluxo). Clique para alternar."
+                                  >
+                                    🛑 Em nada
+                                  </Badge>
+                                ) : (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFlagRapida(c, 'nao_exibir_dre')}
+                                      className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold transition-colors cursor-pointer ${
+                                        c.nao_exibir_dre
+                                          ? 'bg-rose-100 text-rose-800 border-rose-300 font-bold'
+                                          : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-600'
+                                      }`}
+                                      title="Não exibir na DRE Gerencial. Clique para alternar."
+                                    >
+                                      {c.nao_exibir_dre ? '🚫 DRE' : 'DRE'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFlagRapida(c, 'nao_exibir_fluxo_caixa')}
+                                      className={`text-[9px] px-1.5 py-0.5 rounded border font-semibold transition-colors cursor-pointer ${
+                                        c.nao_exibir_fluxo_caixa
+                                          ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
+                                          : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-slate-600'
+                                      }`}
+                                      title="Não exibir no Fluxo de Caixa (DRE). Clique para alternar."
+                                    >
+                                      {c.nao_exibir_fluxo_caixa ? '🚫 Fluxo' : 'Fluxo'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleFlagRapida(c, 'nao_exibir_em_nada')}
+                                      className="text-[9px] px-1.5 py-0.5 rounded border font-semibold bg-slate-50 text-slate-400 border-slate-200 hover:text-red-700 transition-colors cursor-pointer"
+                                      title="Marcar para não sair em nada (DRE e Fluxo)"
+                                    >
+                                      Nada
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </td>
                             <td className="py-3 px-4 text-slate-700">
                               {c.grupo ? c.grupo : <span className="text-slate-400 italic">—</span>}
@@ -1095,6 +1257,59 @@ export default function Contas() {
                   onChange={(e) => setField('descricao', e.target.value)}
                   className="h-9 text-xs"
                 />
+              </div>
+
+              {/* Marcações de Exclusão nos Relatórios Gerenciais na Edição */}
+              <div className="pt-2 border-t border-slate-100 space-y-2">
+                <Label className="text-xs font-semibold text-slate-700 block">
+                  Exclusões de Relatórios Gerenciais (Flags)
+                </Label>
+                <div className="space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={form.nao_exibir_dre}
+                      disabled={form.nao_exibir_em_nada}
+                      onChange={(e) => {
+                        setField('nao_exibir_dre', e.target.checked)
+                        if (e.target.checked) setField('nao_exibir_em_nada', false)
+                      }}
+                      className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                    />
+                    <span>Não exibir na DRE Gerencial</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 font-medium">
+                    <input
+                      type="checkbox"
+                      checked={form.nao_exibir_fluxo_caixa}
+                      disabled={form.nao_exibir_em_nada}
+                      onChange={(e) => {
+                        setField('nao_exibir_fluxo_caixa', e.target.checked)
+                        if (e.target.checked) setField('nao_exibir_em_nada', false)
+                      }}
+                      className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span>Não exibir no Fluxo de Caixa (DRE)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-900 font-semibold pt-1 border-t border-slate-200">
+                    <input
+                      type="checkbox"
+                      checked={form.nao_exibir_em_nada}
+                      onChange={(e) => {
+                        const val = e.target.checked
+                        setField('nao_exibir_em_nada', val)
+                        if (val) {
+                          setField('nao_exibir_dre', false)
+                          setField('nao_exibir_fluxo_caixa', false)
+                        }
+                      }}
+                      className="rounded border-slate-300 text-red-700 focus:ring-red-600"
+                    />
+                    <span className="text-red-700">Não exibir em nada (ambos os relatórios)</span>
+                  </label>
+                </div>
               </div>
             </div>
 

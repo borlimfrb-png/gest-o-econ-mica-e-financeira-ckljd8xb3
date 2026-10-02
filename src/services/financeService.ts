@@ -943,6 +943,9 @@ export const contasService = {
     grupo?: string
     empresa?: string
     classificacao_dre?: ContaRecord['classificacao_dre']
+    nao_exibir_dre?: boolean
+    nao_exibir_fluxo_caixa?: boolean
+    nao_exibir_em_nada?: boolean
   }): Promise<ContaRecord> {
     return await pb.collection('contas').create<ContaRecord>({
       nome: data.nome.trim(),
@@ -951,6 +954,9 @@ export const contasService = {
       grupo: data.grupo?.trim() || undefined,
       empresa: data.empresa || undefined,
       classificacao_dre: data.classificacao_dre || undefined,
+      nao_exibir_dre: !!data.nao_exibir_dre,
+      nao_exibir_fluxo_caixa: !!data.nao_exibir_fluxo_caixa,
+      nao_exibir_em_nada: !!data.nao_exibir_em_nada,
       user: currentUserId(),
     } as any)
   },
@@ -958,7 +964,18 @@ export const contasService = {
   async update(
     id: string,
     data: Partial<
-      Pick<ContaRecord, 'nome' | 'tipo' | 'descricao' | 'grupo' | 'empresa' | 'classificacao_dre'>
+      Pick<
+        ContaRecord,
+        | 'nome'
+        | 'tipo'
+        | 'descricao'
+        | 'grupo'
+        | 'empresa'
+        | 'classificacao_dre'
+        | 'nao_exibir_dre'
+        | 'nao_exibir_fluxo_caixa'
+        | 'nao_exibir_em_nada'
+      >
     >,
   ): Promise<ContaRecord> {
     const payload: Record<string, unknown> = { ...data }
@@ -967,6 +984,11 @@ export const contasService = {
     if (data.grupo !== undefined) payload.grupo = data.grupo.trim() || undefined
     if (data.classificacao_dre !== undefined)
       payload.classificacao_dre = data.classificacao_dre || null
+    if (data.nao_exibir_dre !== undefined) payload.nao_exibir_dre = !!data.nao_exibir_dre
+    if (data.nao_exibir_fluxo_caixa !== undefined)
+      payload.nao_exibir_fluxo_caixa = !!data.nao_exibir_fluxo_caixa
+    if (data.nao_exibir_em_nada !== undefined)
+      payload.nao_exibir_em_nada = !!data.nao_exibir_em_nada
     return await pb.collection('contas').update<ContaRecord>(id, payload)
   },
 

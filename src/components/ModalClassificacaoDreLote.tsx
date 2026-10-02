@@ -51,11 +51,29 @@ export function ModalClassificacaoDreLote({
   const [salvando, setSalvando] = useState(false)
   const [filtroTipo, setFiltroTipo] = useState<string>('todas')
   const [classificacoes, setClassificacoes] = useState<Record<string, ClassificacaoDre | ''>>({})
+  const [flags, setFlags] = useState<
+    Record<
+      string,
+      {
+        nao_exibir_dre: boolean
+        nao_exibir_fluxo_caixa: boolean
+        nao_exibir_em_nada: boolean
+      }
+    >
+  >({})
 
   // Inicializar estado quando o modal abre
   React.useEffect(() => {
     if (open) {
       const mapa: Record<string, ClassificacaoDre | ''> = {}
+      const flagsMapa: Record<
+        string,
+        {
+          nao_exibir_dre: boolean
+          nao_exibir_fluxo_caixa: boolean
+          nao_exibir_em_nada: boolean
+        }
+      > = {}
       for (const c of contas) {
         if (c.classificacao_dre) {
           mapa[c.id] = c.classificacao_dre
@@ -64,8 +82,14 @@ export function ModalClassificacaoDreLote({
           const sugestao = sugerirClassificacaoDre(c.nome, c.tipo, c.grupo)
           mapa[c.id] = sugestao || ''
         }
+        flagsMapa[c.id] = {
+          nao_exibir_dre: !!c.nao_exibir_dre,
+          nao_exibir_fluxo_caixa: !!c.nao_exibir_fluxo_caixa,
+          nao_exibir_em_nada: !!c.nao_exibir_em_nada,
+        }
       }
       setClassificacoes(mapa)
+      setFlags(flagsMapa)
       if (preFilteredIds && preFilteredIds.length > 0) {
         setFiltroTipo('selecionadas')
       } else {
@@ -106,6 +130,48 @@ export function ModalClassificacaoDreLote({
     })
   }
 
+  const toggleFlag = (
+    contaId: string,
+    chave: 'nao_exibir_dre' | 'nao_exibir_fluxo_caixa' | 'nao_exibir_em_nada',
+  ) => {
+    setFlags((prev) => {
+      const atual = prev[contaId] || {
+        nao_exibir_dre: false,
+        nao_exibir_fluxo_caixa: false,
+        nao_exibir_em_nada: false,
+      }
+      const novoValor = !atual[chave]
+      if (chave === 'nao_exibir_em_nada' && novoValor) {
+        // Ao marcar "não exibir em nada", desmarca as específicas (pois "em nada" já engloba ambos)
+        return {
+          ...prev,
+          [contaId]: {
+            nao_exibir_em_nada: true,
+            nao_exibir_dre: false,
+            nao_exibir_fluxo_caixa: false,
+          },
+        }
+      }
+      if ((chave === 'nao_exibir_dre' || chave === 'nao_exibir_fluxo_caixa') && novoValor) {
+        return {
+          ...prev,
+          [contaId]: {
+            ...atual,
+            [chave]: true,
+            nao_exibir_em_nada: false,
+          },
+        }
+      }
+      return {
+        ...prev,
+        [contaId]: {
+          ...atual,
+          [chave]: novoValor,
+        },
+      }
+    })
+  }
+
   const handleSalvar = async () => {
     setSalvando(true)
     let alteradas = 0
@@ -114,10 +180,24 @@ export function ModalClassificacaoDreLote({
     try {
       for (const c of contas) {
         const novoValor = classificacoes[c.id] || null
-        if (novoValor !== (c.classificacao_dre || null)) {
+        const novasFlags = flags[c.id] || {
+          nao_exibir_dre: false,
+          nao_exibir_fluxo_caixa: false,
+          nao_exibir_em_nada: false,
+        }
+
+        const dreMudou = novoValor !== (c.classificacao_dre || null)
+        const flagDreMudou = novasFlags.nao_exibir_dre !== !!c.nao_exibir_dre
+        const flagFluxoMudou = novasFlags.nao_exibir_fluxo_caixa !== !!c.nao_exibir_fluxo_caixa
+        const flagNadaMudou = novasFlags.nao_exibir_em_nada !== !!c.nao_exibir_em_nada
+
+        if (dreMudou || flagDreMudou || flagFluxoMudou || flagNadaMudou) {
           try {
             await contasService.update(c.id, {
               classificacao_dre: (novoValor as ClassificacaoDre) || undefined,
+              nao_exibir_dre: novasFlags.nao_exibir_dre,
+              nao_exibir_fluxo_caixa: novasFlags.nao_exibir_fluxo_caixa,
+              nao_exibir_em_nada: novasFlags.nao_exibir_em_nada,
             })
             alteradas++
           } catch (e) {
@@ -127,8 +207,12 @@ export function ModalClassificacaoDreLote({
         }
       }
 
+      // Dispara eventos locais para atualização imediata dos relatórios no mesmo navegador
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+
       toast({
-        title: 'Classificações DRE salvas',
+        title: 'Classificações e marcações salvas',
         description: `${alteradas} conta(s) atualizada(s)${erros > 0 ? `, ${erros} com falha` : ''}.`,
       })
       onSuccess()
@@ -150,12 +234,12 @@ export function ModalClassificacaoDreLote({
         <DialogHeader>
           <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
             <Layers className="w-5 h-5 text-blue-600" />
-            Classificação DRE do Plano de Contas
+            Classificação DRE e Exclusões Gerenciais
           </DialogTitle>
           <DialogDescription className="text-xs text-slate-500">
-            Defina o grupo gerencial da DRE para cada conta (Receita, Despesa Variável, Fixa ou
-            Financeira). Contas sem classificação serão sugeridas automaticamente por palavras-chave
-            ou exibidas em &quot;Não classificados&quot; na DRE.
+            Defina o grupo gerencial da DRE e controle onde a conta deve ser exibida. Você pode
+            marcar contas para não saírem na DRE Gerencial, não saírem no Fluxo de Caixa (DRE) ou
+            não saírem em nada.
           </DialogDescription>
         </DialogHeader>
 
@@ -209,12 +293,18 @@ export function ModalClassificacaoDreLote({
                 <th className="py-2.5 px-3">Código</th>
                 <th className="py-2.5 px-3">Nome da Conta</th>
                 <th className="py-2.5 px-3">Tipo Contábil</th>
-                <th className="py-2.5 px-3">Classificação DRE Gerencial</th>
+                <th className="py-2.5 px-3">Classificação DRE</th>
+                <th className="py-2.5 px-3 text-center">Exclusões de Relatórios Gerenciais</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {contasExibidas.map((c) => {
                 const valorAtual = classificacoes[c.id] || ''
+                const contaFlags = flags[c.id] || {
+                  nao_exibir_dre: false,
+                  nao_exibir_fluxo_caixa: false,
+                  nao_exibir_em_nada: false,
+                }
                 return (
                   <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-2.5 px-3 font-mono font-semibold text-blue-700 text-[11px]">
@@ -242,7 +332,7 @@ export function ModalClassificacaoDreLote({
                             }))
                           }
                         >
-                          <SelectTrigger className="h-8 text-xs bg-white w-52">
+                          <SelectTrigger className="h-8 text-xs bg-white w-44">
                             <SelectValue placeholder="Selecione o grupo DRE" />
                           </SelectTrigger>
                           <SelectContent>
@@ -266,6 +356,50 @@ export function ModalClassificacaoDreLote({
                             {valorAtual}
                           </Badge>
                         )}
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => toggleFlag(c.id, 'nao_exibir_dre')}
+                          disabled={contaFlags.nao_exibir_em_nada}
+                          className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
+                            contaFlags.nao_exibir_dre
+                              ? 'bg-rose-100 text-rose-800 border-rose-300 font-bold'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          } ${contaFlags.nao_exibir_em_nada ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                          title="Não exibir lançamentos desta conta na DRE Gerencial"
+                        >
+                          🚫 Não DRE
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleFlag(c.id, 'nao_exibir_fluxo_caixa')}
+                          disabled={contaFlags.nao_exibir_em_nada}
+                          className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors ${
+                            contaFlags.nao_exibir_fluxo_caixa
+                              ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          } ${contaFlags.nao_exibir_em_nada ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                          title="Não exibir lançamentos desta conta no Fluxo de Caixa DRE"
+                        >
+                          🚫 Não Fluxo
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleFlag(c.id, 'nao_exibir_em_nada')}
+                          className={`text-[10px] font-semibold px-2 py-1 rounded border transition-colors cursor-pointer ${
+                            contaFlags.nao_exibir_em_nada
+                              ? 'bg-red-600 text-white border-red-700 font-bold shadow-xs'
+                              : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                          }`}
+                          title="Excluir lançamentos desta conta de AMBOS os relatórios gerenciais (DRE e Fluxo)"
+                        >
+                          🛑 Não em nada
+                        </button>
                       </div>
                     </td>
                   </tr>

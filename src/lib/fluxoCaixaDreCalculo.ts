@@ -72,8 +72,10 @@ export function calcularFluxoCaixaDre(
   meses: MesItem[],
   planoContas?: PlanoContaRecord[],
 ): FluxoCaixaDreResultado {
-  // Reutiliza a matriz DRE existente sem duplicar resolução contábil
-  const matrizDre = calcularDreGerencialMatriz(lancamentos, contas, meses, planoContas)
+  // Reutiliza o motor de cálculo da DRE parametrizado para o Fluxo de Caixa (filtra nao_exibir_fluxo_caixa e nao_exibir_em_nada)
+  const matrizDre = calcularDreGerencialMatriz(lancamentos, contas, meses, planoContas, {
+    tipoRelatorio: 'fluxo_caixa',
+  })
 
   // Mapas dos grupos da DRE
   const gruposMap = new Map<ClassificacaoDre, (typeof matrizDre.grupos)[number]>()

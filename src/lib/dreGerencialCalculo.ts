@@ -35,7 +35,11 @@ export function calcularDreGerencialMatriz(
   contas: ContaRecord[],
   meses: MesItem[],
   planoContas?: PlanoContaRecord[],
+  options?: {
+    tipoRelatorio?: 'dre' | 'fluxo_caixa'
+  },
 ): DreMatrizResultado {
+  const tipoRelatorio = options?.tipoRelatorio || 'dre'
   const chavesMesesValidos = new Set(meses.map((m) => m.chave))
 
   // Mapa de contas por ID
@@ -140,6 +144,23 @@ export function calcularDreGerencialMatriz(
   // Percorre as entradas de somaPorContaMes
   for (const [contaId, mapaMeses] of somaPorContaMes.entries()) {
     const conta = contaId !== '__sem_conta__' ? contaMap.get(contaId) : null
+
+    // Regras de exclusão de relatórios gerenciais:
+    // 1. "Não exibir em nada": oculta a conta tanto da DRE quanto do Fluxo de Caixa (e de Não Classificados)
+    // 2. "Não exibir na DRE Gerencial": se tipoRelatorio === 'dre', oculta da DRE
+    // 3. "Não exibir no Fluxo de Caixa": se tipoRelatorio === 'fluxo_caixa', oculta do Fluxo de Caixa
+    if (conta) {
+      if (conta.nao_exibir_em_nada) {
+        continue
+      }
+      if (tipoRelatorio === 'dre' && conta.nao_exibir_dre) {
+        continue
+      }
+      if (tipoRelatorio === 'fluxo_caixa' && conta.nao_exibir_fluxo_caixa) {
+        continue
+      }
+    }
+
     const classificacao = obterClassificacaoDreConta(conta)
 
     const valoresPorMesConta: Record<string, number> = {}
