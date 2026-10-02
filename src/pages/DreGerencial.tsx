@@ -13,6 +13,7 @@ import {
   exportarDreComparativoExcel,
   exportarDreComparativoCsv,
 } from '@/lib/dreGerencialExport'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -1802,6 +1803,13 @@ export default function DreGerencial() {
           window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
           window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
         }}
+      />
+
+      {/* Rodapé fixo na impressão / PDF A4 */}
+      <DocumentPrintFooter
+        documentTitle="DRE Gerencial"
+        empresaNome={selectedEmpresa?.nome}
+        exercicioAno={selectedAno || anoInicial}
       />
     </div>
   )

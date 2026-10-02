@@ -7,6 +7,7 @@ import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/fi
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import { calcularFluxoCaixaDre, type FluxoCaixaDreResultado } from '@/lib/fluxoCaixaDreCalculo'
 import { exportarFluxoCaixaDreExcel, exportarFluxoCaixaDreCsv } from '@/lib/fluxoCaixaDreExport'
+import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -1156,6 +1157,13 @@ export default function FluxoCaixaDre() {
           gerações de caixa da empresa ao longo do horizonte selecionado (até 12 meses).
         </p>
       </div>
+
+      {/* Rodapé fixo na impressão / PDF A4 */}
+      <DocumentPrintFooter
+        documentTitle="Fluxo de Caixa (DRE)"
+        empresaNome={selectedEmpresa?.nome}
+        exercicioAno={selectedAno || anoInicial}
+      />
     </div>
   )
 }
