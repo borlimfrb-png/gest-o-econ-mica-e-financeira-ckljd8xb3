@@ -37,9 +37,11 @@ export function exportarDreComparativoExcel(
     })
 
     for (const conta of grupo.contas) {
-      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
+      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
+      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       rows.push({
-        Estrutura: `    ${codStr}${conta.nome}`,
+        Estrutura: `    ${centroStr}${tipoStr}${codStr}${conta.nome}`,
         Tipo: 'Conta',
         [colP1]: conta.valorPeriodo1,
         [colP2]: conta.valorPeriodo2,
@@ -89,9 +91,11 @@ export function exportarDreComparativoExcel(
       Impacto: nc.favoravel ? 'Favorável' : 'Desfavorável',
     })
     for (const conta of nc.contas) {
-      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
+      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
+      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       rows.push({
-        Estrutura: `    ${codStr}${conta.nome}`,
+        Estrutura: `    ${centroStr}${tipoStr}${codStr}${conta.nome}`,
         Tipo: 'Conta Não Classificada',
         [colP1]: conta.valorPeriodo1,
         [colP2]: conta.valorPeriodo2,
@@ -168,10 +172,12 @@ export function exportarDreComparativoCsv(
     )
 
     for (const conta of grupo.contas) {
-      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
+      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
+      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       linhas.push(
         [
-          `  ${codStr}${conta.nome}`,
+          `  ${centroStr}${tipoStr}${codStr}${conta.nome}`,
           'Conta',
           formatMoedaCsv(conta.valorPeriodo1),
           formatMoedaCsv(conta.valorPeriodo2),
@@ -240,9 +246,11 @@ export function exportarDreGerencialExcel(
 
     // Contas individuais (detalhamento)
     for (const conta of grupo.contas) {
-      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
+      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
+      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       const linhaConta: Record<string, any> = {
-        Estrutura: `    ${codStr}${conta.nome}`,
+        Estrutura: `    ${centroStr}${tipoStr}${codStr}${conta.nome}`,
         Tipo: 'Conta',
       }
       for (const m of matriz.meses) {
@@ -296,9 +304,11 @@ export function exportarDreGerencialExcel(
     rows.push(linhaNc)
 
     for (const conta of matriz.naoClassificados.contas) {
-      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
+      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
+      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       const linhaConta: Record<string, any> = {
-        Estrutura: `    ${codStr}${conta.nome}`,
+        Estrutura: `    ${centroStr}${tipoStr}${codStr}${conta.nome}`,
         Tipo: 'Conta Não Classificada',
       }
       for (const m of matriz.meses) {
@@ -372,10 +382,12 @@ export function exportarDreGerencialCsv(
     )
 
     for (const conta of grupo.contas) {
-      const codStr = conta.codigo ? `[${conta.codigo}] ` : ''
+      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
+      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
+      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       linhas.push(
         [
-          `  ${codStr}${conta.nome}`,
+          `  ${centroStr}${tipoStr}${codStr}${conta.nome}`,
           'Conta',
           ...matriz.meses.map((m) => formatMoedaCsv(conta.valoresPorMes[m.chave])),
           formatMoedaCsv(conta.totalPeriodo),

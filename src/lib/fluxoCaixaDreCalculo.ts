@@ -9,6 +9,7 @@ import {
   type ContaMatrizItem,
   type DreMatrizResultado,
   compararContasDre,
+  compararCentroTipoConta,
 } from './dreGerencialTypes'
 import { calcularDreGerencialMatriz } from './dreGerencialCalculo'
 
@@ -125,11 +126,11 @@ export function calcularFluxoCaixaDre(
     totalSaidasOp += vTotal
   }
 
-  // Combina as contas operacionais (Despesas Variáveis + Despesas Fixas) ordenadas por código hierárquico
+  // Combina as contas operacionais (Despesas Variáveis + Despesas Fixas) ordenadas por 1º Centro -> 2º Tipo -> 3º Conta
   const contasSaidasOp: ContaMatrizItem[] = [
     ...(grupoDespVar?.contas || []),
     ...(grupoDespFix?.contas || []),
-  ].sort(compararContasDre)
+  ].sort(compararCentroTipoConta)
 
   const saidasOperacionais: LinhaFluxoDreItem = {
     chave: 'saidasOperacionais',

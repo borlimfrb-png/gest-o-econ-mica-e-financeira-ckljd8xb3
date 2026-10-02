@@ -42,8 +42,15 @@ export function exportarFluxoCaixaDreExcel(
     fluxo.entradasOperacionais.totalPeriodo,
   )
   for (const c of fluxo.contasEntradasOperacionais) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Operacional', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    adicionarLinha(
+      `    ${centro}${tipo}${cod}${c.nome}`,
+      'Conta Operacional',
+      c.valoresPorMes,
+      c.totalPeriodo,
+    )
   }
 
   // 2. Saídas Operacionais
@@ -54,8 +61,15 @@ export function exportarFluxoCaixaDreExcel(
     fluxo.saidasOperacionais.totalPeriodo,
   )
   for (const c of fluxo.contasSaidasOperacionais) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Operacional', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    adicionarLinha(
+      `    ${centro}${tipo}${cod}${c.nome}`,
+      'Conta Operacional',
+      c.valoresPorMes,
+      c.totalPeriodo,
+    )
   }
 
   // 3. = Geração Operacional
@@ -76,8 +90,15 @@ export function exportarFluxoCaixaDreExcel(
     fluxo.entradasFinanceiras.totalPeriodo,
   )
   for (const c of fluxo.contasEntradasFinanceiras) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Financeira', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    adicionarLinha(
+      `    ${centro}${tipo}${cod}${c.nome}`,
+      'Conta Financeira',
+      c.valoresPorMes,
+      c.totalPeriodo,
+    )
   }
 
   // 5. Saídas Financeiras
@@ -88,8 +109,15 @@ export function exportarFluxoCaixaDreExcel(
     fluxo.saidasFinanceiras.totalPeriodo,
   )
   for (const c of fluxo.contasSaidasFinanceiras) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    adicionarLinha(`    ${cod}${c.nome}`, 'Conta Financeira', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    adicionarLinha(
+      `    ${centro}${tipo}${cod}${c.nome}`,
+      'Conta Financeira',
+      c.valoresPorMes,
+      c.totalPeriodo,
+    )
   }
 
   // 6. = Geração Financeira
@@ -193,8 +221,10 @@ export function exportarFluxoCaixaDreCsv(
     fluxo.entradasOperacionais.totalPeriodo,
   )
   for (const c of fluxo.contasEntradasOperacionais) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 2. Saídas Operacionais
@@ -205,8 +235,10 @@ export function exportarFluxoCaixaDreCsv(
     fluxo.saidasOperacionais.totalPeriodo,
   )
   for (const c of fluxo.contasSaidasOperacionais) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 3. = Geração Operacional
@@ -225,8 +257,10 @@ export function exportarFluxoCaixaDreCsv(
     fluxo.entradasFinanceiras.totalPeriodo,
   )
   for (const c of fluxo.contasEntradasFinanceiras) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 5. Saídas Financeiras
@@ -237,8 +271,10 @@ export function exportarFluxoCaixaDreCsv(
     fluxo.saidasFinanceiras.totalPeriodo,
   )
   for (const c of fluxo.contasSaidasFinanceiras) {
-    const cod = c.codigo ? `[${c.codigo}] ` : ''
-    pushLinha(`  ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
+    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const cod = c.codigo ? `${c.codigo} — ` : ''
+    pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 6. = Geração Financeira

@@ -497,4 +497,160 @@ describe('Fluxo de Caixa por grupo DRE', () => {
     expect(fluxo.fluxoCaixaTotal.totalPeriodo).toBe(0)
     expect(fluxo.saldoAcumulado.saldoFinal).toBe(0)
   })
+
+  it('ordena contas combinadas de saídas operacionais por 1º Centro -> 2º Tipo -> 3º Conta', () => {
+    const meses = gerarListaMeses(2025, 1, 1)
+
+    const contasMock: ContaRecord[] = [
+      {
+        id: 'c-1',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.1',
+        nome: 'Aluguel Matriz B',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+      {
+        id: 'c-2',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.10',
+        nome: 'Serviços Centro A Tipo Adm 10',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+      {
+        id: 'c-3',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.2',
+        nome: 'Serviços Centro A Tipo Adm 2',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+      {
+        id: 'c-4',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.5',
+        nome: 'Comissão Centro A Tipo Vendas',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Variável',
+        created: '',
+      },
+    ]
+
+    const lancamentosMock: LancamentoRecord[] = [
+      {
+        id: 'l-1',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p1',
+        data: '2025-01-10',
+        valor: 100,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p1',
+            conta: 'c-1',
+            expand: {
+              conta: contasMock[0],
+              centro: { id: 'cc-b', nome: 'Centro B', tipo: 'Despesa' } as any,
+              tipo_despesa: { id: 'td-1', nome: 'Geral' } as any,
+            },
+          } as any,
+        },
+      },
+      {
+        id: 'l-2',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p2',
+        data: '2025-01-10',
+        valor: 200,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p2',
+            conta: 'c-2',
+            expand: {
+              conta: contasMock[1],
+              centro: { id: 'cc-a', nome: 'Centro A', tipo: 'Despesa' } as any,
+              tipo_despesa: { id: 'td-adm', nome: 'Administrativo' } as any,
+            },
+          } as any,
+        },
+      },
+      {
+        id: 'l-3',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p3',
+        data: '2025-01-10',
+        valor: 300,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p3',
+            conta: 'c-3',
+            expand: {
+              conta: contasMock[2],
+              centro: { id: 'cc-a', nome: 'Centro A', tipo: 'Despesa' } as any,
+              tipo_despesa: { id: 'td-adm', nome: 'Administrativo' } as any,
+            },
+          } as any,
+        },
+      },
+      {
+        id: 'l-4',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p4',
+        data: '2025-01-10',
+        valor: 400,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p4',
+            conta: 'c-4',
+            expand: {
+              conta: contasMock[3],
+              centro: { id: 'cc-a', nome: 'Centro A', tipo: 'Despesa' } as any,
+              tipo_despesa: { id: 'td-vendas', nome: 'Vendas' } as any,
+            },
+          } as any,
+        },
+      },
+    ]
+
+    const fluxo = calcularFluxoCaixaDre(lancamentosMock, contasMock, meses)
+    expect(
+      fluxo.contasSaidasOperacionais.map((c) => ({
+        centro: c.centroNome,
+        tipo: c.tipoDespesaNome,
+        codigo: c.codigo,
+      })),
+    ).toEqual([
+      { centro: 'Centro A', tipo: 'Administrativo', codigo: '3.2' },
+      { centro: 'Centro A', tipo: 'Administrativo', codigo: '3.10' },
+      { centro: 'Centro A', tipo: 'Vendas', codigo: '3.5' },
+      { centro: 'Centro B', tipo: 'Geral', codigo: '3.1' },
+    ])
+  })
 })

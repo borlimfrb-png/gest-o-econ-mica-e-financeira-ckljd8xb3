@@ -43,6 +43,12 @@ export interface ContaMatrizItem {
   classificacao: ClassificacaoDre | 'NaoClassificado'
   valoresPorMes: Record<string, number> // chaveMes -> soma líquida do mês
   totalPeriodo: number
+  centroId?: string
+  centroNome?: string
+  centroCodigo?: string
+  tipoDespesaId?: string
+  tipoDespesaNome?: string
+  tipoDespesaCodigo?: string
 }
 
 /**
@@ -117,6 +123,60 @@ export function compararContasDre(
   return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
 }
 
+/**
+ * Ordenação conforme regra de negócio:
+ * 1º Centro de Custo (nome ou código do centro; contas com centro vêm antes, vazias por último)
+ * 2º Tipo de Despesa (nome ou código do tipo; tipos com valor vêm antes, vazios por último dentro do centro)
+ * 3º Conta Contábil (código hierárquico contábil e desempate alfabético pelo nome via compararContasDre)
+ */
+export function compararCentroTipoConta(
+  a: {
+    codigo?: string | null
+    nome: string
+    centroNome?: string | null
+    centroCodigo?: string | null
+    tipoDespesaNome?: string | null
+    tipoDespesaCodigo?: string | null
+  },
+  b: {
+    codigo?: string | null
+    nome: string
+    centroNome?: string | null
+    centroCodigo?: string | null
+    tipoDespesaNome?: string | null
+    tipoDespesaCodigo?: string | null
+  },
+): number {
+  // 1º Centro de Custo
+  const centroA = (a.centroNome || a.centroCodigo || '').trim()
+  const centroB = (b.centroNome || b.centroCodigo || '').trim()
+
+  if (centroA && centroB) {
+    const cmpCentro = centroA.localeCompare(centroB, 'pt-BR', { sensitivity: 'base' })
+    if (cmpCentro !== 0) return cmpCentro
+  } else if (centroA && !centroB) {
+    return -1 // preenchido vem antes de vazio
+  } else if (!centroA && centroB) {
+    return 1
+  }
+
+  // 2º Tipo de Despesa
+  const tipoA = (a.tipoDespesaNome || a.tipoDespesaCodigo || '').trim()
+  const tipoB = (b.tipoDespesaNome || b.tipoDespesaCodigo || '').trim()
+
+  if (tipoA && tipoB) {
+    const cmpTipo = tipoA.localeCompare(tipoB, 'pt-BR', { sensitivity: 'base' })
+    if (cmpTipo !== 0) return cmpTipo
+  } else if (tipoA && !tipoB) {
+    return -1 // preenchido vem antes de vazio dentro do mesmo centro
+  } else if (!tipoA && tipoB) {
+    return 1
+  }
+
+  // 3º Conta (Código hierárquico + Nome)
+  return compararContasDre(a, b)
+}
+
 export interface GrupoMatrizItem {
   classificacao: ClassificacaoDre
   titulo: string
@@ -165,6 +225,12 @@ export interface ContaComparativoItem {
   diferenca: number
   percentual: number | null
   favoravel: boolean
+  centroId?: string
+  centroNome?: string
+  centroCodigo?: string
+  tipoDespesaId?: string
+  tipoDespesaNome?: string
+  tipoDespesaCodigo?: string
 }
 
 export interface GrupoComparativoItem {

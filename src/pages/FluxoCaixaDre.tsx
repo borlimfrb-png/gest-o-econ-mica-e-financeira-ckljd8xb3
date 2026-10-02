@@ -665,7 +665,17 @@ export default function FluxoCaixaDre() {
                         className="hover:bg-emerald-50/20 text-slate-700 transition-colors text-[11px]"
                       >
                         <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                          <div className="flex items-center gap-2 truncate">
+                          <div className="flex items-center gap-1.5 truncate flex-wrap">
+                            {conta.centroNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                {conta.centroNome}
+                              </span>
+                            )}
+                            {conta.tipoDespesaNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-emerald-50 text-emerald-800 rounded border border-emerald-200 shrink-0">
+                                {conta.tipoDespesaNome}
+                              </span>
+                            )}
                             {conta.codigo && (
                               <span className="font-mono text-[10px] text-emerald-600 font-semibold shrink-0">
                                 {conta.codigo}
@@ -745,7 +755,17 @@ export default function FluxoCaixaDre() {
                         className="hover:bg-rose-50/20 text-slate-700 transition-colors text-[11px]"
                       >
                         <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                          <div className="flex items-center gap-2 truncate">
+                          <div className="flex items-center gap-1.5 truncate flex-wrap">
+                            {conta.centroNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                {conta.centroNome}
+                              </span>
+                            )}
+                            {conta.tipoDespesaNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-rose-50 text-rose-800 rounded border border-rose-200 shrink-0">
+                                {conta.tipoDespesaNome}
+                              </span>
+                            )}
                             {conta.codigo && (
                               <span className="font-mono text-[10px] text-rose-600 font-semibold shrink-0">
                                 {conta.codigo}
@@ -859,7 +879,17 @@ export default function FluxoCaixaDre() {
                         className="hover:bg-sky-50/20 text-slate-700 transition-colors text-[11px]"
                       >
                         <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                          <div className="flex items-center gap-2 truncate">
+                          <div className="flex items-center gap-1.5 truncate flex-wrap">
+                            {conta.centroNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                {conta.centroNome}
+                              </span>
+                            )}
+                            {conta.tipoDespesaNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-sky-50 text-sky-800 rounded border border-sky-200 shrink-0">
+                                {conta.tipoDespesaNome}
+                              </span>
+                            )}
                             {conta.codigo && (
                               <span className="font-mono text-[10px] text-sky-600 font-semibold shrink-0">
                                 {conta.codigo}
@@ -939,7 +969,17 @@ export default function FluxoCaixaDre() {
                         className="hover:bg-purple-50/20 text-slate-700 transition-colors text-[11px]"
                       >
                         <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                          <div className="flex items-center gap-2 truncate">
+                          <div className="flex items-center gap-1.5 truncate flex-wrap">
+                            {conta.centroNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                {conta.centroNome}
+                              </span>
+                            )}
+                            {conta.tipoDespesaNome && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-purple-50 text-purple-800 rounded border border-purple-200 shrink-0">
+                                {conta.tipoDespesaNome}
+                              </span>
+                            )}
                             {conta.codigo && (
                               <span className="font-mono text-[10px] text-purple-600 font-semibold shrink-0">
                                 {conta.codigo}

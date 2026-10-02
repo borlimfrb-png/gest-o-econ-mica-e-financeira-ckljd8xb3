@@ -3,6 +3,7 @@ import {
   gerarListaMeses,
   compararCodigosHierarquicos,
   compararContasDre,
+  compararCentroTipoConta,
 } from './dreGerencialTypes'
 import {
   calcularDreGerencialMatriz,
@@ -813,6 +814,317 @@ describe('DRE Gerencial - Cálculos e Geração de Matriz', () => {
 
       const matriz = calcularDreGerencialMatriz(lancamentosMock, contasMock, meses)
       expect(matriz.naoClassificados.contas.map((c) => c.codigo)).toEqual(['9.2', '9.10'])
+    })
+
+    describe('Ordenação por 1º Centro de Custo -> 2º Tipo de Despesa -> 3º Conta', () => {
+      it('função pura compararCentroTipoConta ordena corretamente conforme todas as regras', () => {
+        const contas = [
+          // Centro B, Tipo B, conta 1.1
+          { nome: 'Conta 1', codigo: '1.1', centroNome: 'Centro B', tipoDespesaNome: 'Tipo B' },
+          // Centro A, Tipo B, conta 1.2
+          { nome: 'Conta 2', codigo: '1.2', centroNome: 'Centro A', tipoDespesaNome: 'Tipo B' },
+          // Centro A, Tipo A, conta 1.10 (deve vir depois de 1.2 numérico quando tipo for igual)
+          { nome: 'Conta 3', codigo: '1.10', centroNome: 'Centro A', tipoDespesaNome: 'Tipo A' },
+          // Centro A, Tipo A, conta 1.2
+          { nome: 'Conta 4', codigo: '1.2', centroNome: 'Centro A', tipoDespesaNome: 'Tipo A' },
+          // Centro A, Tipo A, conta 1.1
+          { nome: 'Conta 5', codigo: '1.1', centroNome: 'Centro A', tipoDespesaNome: 'Tipo A' },
+          // Centro A, Sem Tipo, conta 1.1 (tipo vazio no fim do seu centro)
+          { nome: 'Conta 6', codigo: '1.1', centroNome: 'Centro A', tipoDespesaNome: '' },
+          // Sem Centro, Tipo A, conta 1.1 (centro vazio no fim de todos)
+          { nome: 'Conta 7', codigo: '1.1', centroNome: '', tipoDespesaNome: 'Tipo A' },
+        ]
+
+        const ordenadas = [...contas].sort(compararCentroTipoConta)
+        expect(ordenadas.map((c) => c.nome)).toEqual([
+          'Conta 5', // Centro A, Tipo A, 1.1
+          'Conta 4', // Centro A, Tipo A, 1.2
+          'Conta 3', // Centro A, Tipo A, 1.10
+          'Conta 2', // Centro A, Tipo B, 1.2
+          'Conta 6', // Centro A, Sem Tipo, 1.1
+          'Conta 1', // Centro B, Tipo B, 1.1
+          'Conta 7', // Sem Centro, Tipo A, 1.1
+        ])
+      })
+
+      it('DRE Gerencial agrupa e ordena respeitando 1º Centro -> 2º Tipo -> 3º Conta', () => {
+        const meses = gerarListaMeses(2023, 1, 1)
+
+        const contasMock: ContaRecord[] = [
+          {
+            id: 'c-1',
+            collectionId: 'contas',
+            collectionName: 'contas',
+            user: 'u-1',
+            codigo: '3.1',
+            nome: 'Despesa Centro B',
+            tipo: 'Despesa',
+            classificacao_dre: 'Despesa Fixa',
+            created: '',
+          },
+          {
+            id: 'c-2',
+            collectionId: 'contas',
+            collectionName: 'contas',
+            user: 'u-1',
+            codigo: '3.9',
+            nome: 'Despesa Centro A - Tipo Op',
+            tipo: 'Despesa',
+            classificacao_dre: 'Despesa Fixa',
+            created: '',
+          },
+          {
+            id: 'c-3',
+            collectionId: 'contas',
+            collectionName: 'contas',
+            user: 'u-1',
+            codigo: '3.2',
+            nome: 'Despesa Centro A - Tipo Adm (1.2)',
+            tipo: 'Despesa',
+            classificacao_dre: 'Despesa Fixa',
+            created: '',
+          },
+          {
+            id: 'c-4',
+            collectionId: 'contas',
+            collectionName: 'contas',
+            user: 'u-1',
+            codigo: '3.10',
+            nome: 'Despesa Centro A - Tipo Adm (1.10)',
+            tipo: 'Despesa',
+            classificacao_dre: 'Despesa Fixa',
+            created: '',
+          },
+          {
+            id: 'c-5',
+            collectionId: 'contas',
+            collectionName: 'contas',
+            user: 'u-1',
+            codigo: '3.1',
+            nome: 'Despesa Sem Centro',
+            tipo: 'Despesa',
+            classificacao_dre: 'Despesa Fixa',
+            created: '',
+          },
+        ]
+
+        const lancamentosMock: LancamentoRecord[] = [
+          {
+            id: 'l-1',
+            collectionId: 'lancamentos',
+            collectionName: 'lancamentos',
+            empresa: 'emp-1',
+            plano_conta: 'pc-1',
+            data: '2023-01-10 12:00:00.000Z',
+            valor: 100,
+            user: 'u-1',
+            created: '',
+            expand: {
+              plano_conta: {
+                id: 'pc-1',
+                collectionId: 'plano_contas',
+                collectionName: 'plano_contas',
+                user: 'u-1',
+                conta: 'c-1',
+                centro: 'cc-b',
+                tipo_despesa: 'td-1',
+                created: '',
+                expand: {
+                  conta: contasMock[0],
+                  centro: {
+                    id: 'cc-b',
+                    nome: 'Centro B',
+                    tipo: 'Despesa',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'centros',
+                    collectionName: 'centros',
+                  },
+                  tipo_despesa: {
+                    id: 'td-1',
+                    nome: 'Geral',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'tipos_despesas',
+                    collectionName: 'tipos_despesas',
+                  },
+                },
+              },
+            },
+          },
+          {
+            id: 'l-2',
+            collectionId: 'lancamentos',
+            collectionName: 'lancamentos',
+            empresa: 'emp-1',
+            plano_conta: 'pc-2',
+            data: '2023-01-10 12:00:00.000Z',
+            valor: 200,
+            user: 'u-1',
+            created: '',
+            expand: {
+              plano_conta: {
+                id: 'pc-2',
+                collectionId: 'plano_contas',
+                collectionName: 'plano_contas',
+                user: 'u-1',
+                conta: 'c-2',
+                centro: 'cc-a',
+                tipo_despesa: 'td-op',
+                created: '',
+                expand: {
+                  conta: contasMock[1],
+                  centro: {
+                    id: 'cc-a',
+                    nome: 'Centro A',
+                    tipo: 'Despesa',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'centros',
+                    collectionName: 'centros',
+                  },
+                  tipo_despesa: {
+                    id: 'td-op',
+                    nome: 'Operacional',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'tipos_despesas',
+                    collectionName: 'tipos_despesas',
+                  },
+                },
+              },
+            },
+          },
+          {
+            id: 'l-3',
+            collectionId: 'lancamentos',
+            collectionName: 'lancamentos',
+            empresa: 'emp-1',
+            plano_conta: 'pc-3',
+            data: '2023-01-10 12:00:00.000Z',
+            valor: 300,
+            user: 'u-1',
+            created: '',
+            expand: {
+              plano_conta: {
+                id: 'pc-3',
+                collectionId: 'plano_contas',
+                collectionName: 'plano_contas',
+                user: 'u-1',
+                conta: 'c-3',
+                centro: 'cc-a',
+                tipo_despesa: 'td-adm',
+                created: '',
+                expand: {
+                  conta: contasMock[2],
+                  centro: {
+                    id: 'cc-a',
+                    nome: 'Centro A',
+                    tipo: 'Despesa',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'centros',
+                    collectionName: 'centros',
+                  },
+                  tipo_despesa: {
+                    id: 'td-adm',
+                    nome: 'Administrativo',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'tipos_despesas',
+                    collectionName: 'tipos_despesas',
+                  },
+                },
+              },
+            },
+          },
+          {
+            id: 'l-4',
+            collectionId: 'lancamentos',
+            collectionName: 'lancamentos',
+            empresa: 'emp-1',
+            plano_conta: 'pc-4',
+            data: '2023-01-10 12:00:00.000Z',
+            valor: 400,
+            user: 'u-1',
+            created: '',
+            expand: {
+              plano_conta: {
+                id: 'pc-4',
+                collectionId: 'plano_contas',
+                collectionName: 'plano_contas',
+                user: 'u-1',
+                conta: 'c-4',
+                centro: 'cc-a',
+                tipo_despesa: 'td-adm',
+                created: '',
+                expand: {
+                  conta: contasMock[3],
+                  centro: {
+                    id: 'cc-a',
+                    nome: 'Centro A',
+                    tipo: 'Despesa',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'centros',
+                    collectionName: 'centros',
+                  },
+                  tipo_despesa: {
+                    id: 'td-adm',
+                    nome: 'Administrativo',
+                    user: 'u-1',
+                    created: '',
+                    collectionId: 'tipos_despesas',
+                    collectionName: 'tipos_despesas',
+                  },
+                },
+              },
+            },
+          },
+          {
+            id: 'l-5',
+            collectionId: 'lancamentos',
+            collectionName: 'lancamentos',
+            empresa: 'emp-1',
+            plano_conta: 'pc-5',
+            data: '2023-01-10 12:00:00.000Z',
+            valor: 500,
+            user: 'u-1',
+            created: '',
+            expand: {
+              plano_conta: {
+                id: 'pc-5',
+                collectionId: 'plano_contas',
+                collectionName: 'plano_contas',
+                user: 'u-1',
+                conta: 'c-5',
+                centro: '',
+                created: '',
+                expand: {
+                  conta: contasMock[4],
+                },
+              },
+            },
+          },
+        ]
+
+        const matriz = calcularDreGerencialMatriz(lancamentosMock, contasMock, meses)
+        const despFixa = matriz.grupos.find((g) => g.classificacao === 'Despesa Fixa')!
+
+        expect(
+          despFixa.contas.map((c) => ({
+            centro: c.centroNome || 'Sem Centro',
+            tipo: c.tipoDespesaNome || 'Sem Tipo',
+            codigo: c.codigo,
+          })),
+        ).toEqual([
+          { centro: 'Centro A', tipo: 'Administrativo', codigo: '3.2' },
+          { centro: 'Centro A', tipo: 'Administrativo', codigo: '3.10' },
+          { centro: 'Centro A', tipo: 'Operacional', codigo: '3.9' },
+          { centro: 'Centro B', tipo: 'Geral', codigo: '3.1' },
+          { centro: 'Sem Centro', tipo: 'Sem Tipo', codigo: '3.1' },
+        ])
+      })
     })
   })
 })

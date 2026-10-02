@@ -1048,7 +1048,17 @@ export default function DreGerencial() {
                               className="hover:bg-blue-50/30 text-slate-700 transition-colors text-[11px]"
                             >
                               <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                                <div className="flex items-center gap-2 truncate">
+                                <div className="flex items-center gap-1.5 truncate flex-wrap">
+                                  {conta.centroNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                      {conta.centroNome}
+                                    </span>
+                                  )}
+                                  {conta.tipoDespesaNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-amber-50 text-amber-800 rounded border border-amber-200 shrink-0">
+                                      {conta.tipoDespesaNome}
+                                    </span>
+                                  )}
                                   {conta.codigo && (
                                     <span className="font-mono text-[10px] text-blue-600 font-semibold shrink-0">
                                       {conta.codigo}
@@ -1262,13 +1272,30 @@ export default function DreGerencial() {
                           >
                             <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="truncate font-medium">{conta.nome}</span>
+                                <div className="flex items-center gap-1.5 truncate flex-wrap">
+                                  {conta.centroNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                      {conta.centroNome}
+                                    </span>
+                                  )}
+                                  {conta.tipoDespesaNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-amber-50 text-amber-800 rounded border border-amber-200 shrink-0">
+                                      {conta.tipoDespesaNome}
+                                    </span>
+                                  )}
+                                  {conta.codigo && (
+                                    <span className="font-mono text-[10px] text-amber-700 font-semibold shrink-0">
+                                      {conta.codigo}
+                                    </span>
+                                  )}
+                                  <span className="truncate font-medium">{conta.nome}</span>
+                                </div>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => abrirClassificacaoLote([conta.id])}
-                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1 font-semibold"
+                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1 font-semibold shrink-0"
                                 >
                                   Classificar
                                 </Button>
@@ -1421,7 +1448,17 @@ export default function DreGerencial() {
                               className="hover:bg-blue-50/30 text-slate-700 transition-colors text-[11px]"
                             >
                               <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                                <div className="flex items-center gap-2 truncate">
+                                <div className="flex items-center gap-1.5 truncate flex-wrap">
+                                  {conta.centroNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                      {conta.centroNome}
+                                    </span>
+                                  )}
+                                  {conta.tipoDespesaNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-amber-50 text-amber-800 rounded border border-amber-200 shrink-0">
+                                      {conta.tipoDespesaNome}
+                                    </span>
+                                  )}
                                   {conta.codigo && (
                                     <span className="font-mono text-[10px] text-blue-600 font-semibold shrink-0">
                                       {conta.codigo}
@@ -1678,13 +1715,30 @@ export default function DreGerencial() {
                           >
                             <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
                               <div className="flex items-center justify-between gap-2">
-                                <span className="truncate font-medium">{conta.nome}</span>
+                                <div className="flex items-center gap-1.5 truncate flex-wrap">
+                                  {conta.centroNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
+                                      {conta.centroNome}
+                                    </span>
+                                  )}
+                                  {conta.tipoDespesaNome && (
+                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-amber-50 text-amber-800 rounded border border-amber-200 shrink-0">
+                                      {conta.tipoDespesaNome}
+                                    </span>
+                                  )}
+                                  {conta.codigo && (
+                                    <span className="font-mono text-[10px] text-amber-700 font-semibold shrink-0">
+                                      {conta.codigo}
+                                    </span>
+                                  )}
+                                  <span className="truncate font-medium">{conta.nome}</span>
+                                </div>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => abrirClassificacaoLote([conta.id])}
-                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1 font-semibold"
+                                  className="h-6 text-[10px] text-blue-600 hover:text-blue-800 p-1 font-semibold shrink-0"
                                 >
                                   Classificar
                                 </Button>

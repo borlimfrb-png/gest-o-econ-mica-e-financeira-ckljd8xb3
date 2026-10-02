@@ -5,6 +5,7 @@ import {
   TITULOS_GRUPOS_DRE,
   SINAL_MULTIPLICADOR_GRUPO,
   compararContasDre,
+  compararCentroTipoConta,
   type DreMatrizResultado,
   type DreComparativoResultado,
   type GrupoComparativoItem,
@@ -57,6 +58,36 @@ export function calcularDreGerencialMatriz(
     }
   }
 
+  // Metadados de centro e tipo de despesa por conta
+  const contaMetadados = new Map<
+    string,
+    {
+      centroId?: string
+      centroNome?: string
+      centroCodigo?: string
+      tipoDespesaId?: string
+      tipoDespesaNome?: string
+      tipoDespesaCodigo?: string
+    }
+  >()
+
+  // Popula metadados antecipadamente caso planoContas tenha sido fornecido
+  if (planoContas) {
+    for (const p of planoContas) {
+      const cId = p.conta
+      if (cId && !contaMetadados.has(cId)) {
+        contaMetadados.set(cId, {
+          centroId: p.expand?.centro?.id || p.centro || undefined,
+          centroNome: p.expand?.centro?.nome || undefined,
+          centroCodigo: (p.expand?.centro as any)?.codigo || undefined,
+          tipoDespesaId: p.expand?.tipo_despesa?.id || p.tipo_despesa || undefined,
+          tipoDespesaNome: p.expand?.tipo_despesa?.nome || undefined,
+          tipoDespesaCodigo: p.expand?.tipo_despesa?.codigo || undefined,
+        })
+      }
+    }
+  }
+
   // Agrupamento de lançamentos por conta e por mês (chave YYYY-MM)
   // map: contaId -> mesChave -> soma dos valores
   const somaPorContaMes = new Map<string, Map<string, number>>()
@@ -98,6 +129,47 @@ export function calcularDreGerencialMatriz(
 
     if (!contaId) {
       contaId = '__sem_conta__'
+    }
+
+    // Informações de Centro de Custo e Tipo de Despesa
+    const centroExpandido = expandPlanoConta?.expand?.centro || planoDoMapa?.expand?.centro
+    const centroId =
+      centroExpandido?.id || expandPlanoConta?.centro || planoDoMapa?.centro || undefined
+    const centroNome = centroExpandido?.nome || undefined
+    const centroCodigo = (centroExpandido as any)?.codigo || undefined
+
+    const tipoDespesaExpandido =
+      expandPlanoConta?.expand?.tipo_despesa || planoDoMapa?.expand?.tipo_despesa
+    const tipoDespesaId =
+      tipoDespesaExpandido?.id ||
+      expandPlanoConta?.tipo_despesa ||
+      planoDoMapa?.tipo_despesa ||
+      undefined
+    const tipoDespesaNome = tipoDespesaExpandido?.nome || undefined
+    const tipoDespesaCodigo = tipoDespesaExpandido?.codigo || undefined
+
+    // Se a conta já tiver centro/tipo guardados e não tiver sobrescrito, complementa
+    if (!contaMetadados.has(contaId)) {
+      contaMetadados.set(contaId, {
+        centroId,
+        centroNome,
+        centroCodigo,
+        tipoDespesaId,
+        tipoDespesaNome,
+        tipoDespesaCodigo,
+      })
+    } else {
+      const atualMeta = contaMetadados.get(contaId)!
+      if (!atualMeta.centroNome && centroNome) {
+        atualMeta.centroId = centroId
+        atualMeta.centroNome = centroNome
+        atualMeta.centroCodigo = centroCodigo
+      }
+      if (!atualMeta.tipoDespesaNome && tipoDespesaNome) {
+        atualMeta.tipoDespesaId = tipoDespesaId
+        atualMeta.tipoDespesaNome = tipoDespesaNome
+        atualMeta.tipoDespesaCodigo = tipoDespesaCodigo
+      }
     }
 
     const valor = Number(lanc.valor) || 0
@@ -178,6 +250,8 @@ export function calcularDreGerencialMatriz(
       continue
     }
 
+    const meta = contaMetadados.get(contaId)
+
     const contaMatrizItem: ContaMatrizItem = {
       id: contaId,
       nome: conta ? conta.nome : 'Lançamentos sem conta vinculada',
@@ -187,6 +261,12 @@ export function calcularDreGerencialMatriz(
       classificacao: classificacao || 'NaoClassificado',
       valoresPorMes: valoresPorMesConta,
       totalPeriodo: totalConta,
+      centroId: meta?.centroId,
+      centroNome: meta?.centroNome,
+      centroCodigo: meta?.centroCodigo,
+      tipoDespesaId: meta?.tipoDespesaId,
+      tipoDespesaNome: meta?.tipoDespesaNome,
+      tipoDespesaCodigo: meta?.tipoDespesaCodigo,
     }
 
     if (classificacao && gruposMap.has(classificacao)) {
@@ -205,11 +285,11 @@ export function calcularDreGerencialMatriz(
     }
   }
 
-  // Ordenar contas pelo código hierárquico contábil e desempate por nome dentro de cada grupo
+  // Ordenar contas por 1º Centro de Custo -> 2º Tipo de Despesa -> 3º Conta Contábil (código hierárquico + nome)
   for (const grupo of gruposMap.values()) {
-    grupo.contas.sort(compararContasDre)
+    grupo.contas.sort(compararCentroTipoConta)
   }
-  naoClassificados.contas.sort(compararContasDre)
+  naoClassificados.contas.sort(compararCentroTipoConta)
 
   const grupos = GRUPOS_DRE_ORDEM.map((clf) => gruposMap.get(clf)!)
 
@@ -361,10 +441,16 @@ export function calcularComparativoDre(
         diferenca: cDiff,
         percentual: cPct,
         favoravel: cFav,
+        centroId: ref.centroId,
+        centroNome: ref.centroNome,
+        centroCodigo: ref.centroCodigo,
+        tipoDespesaId: ref.tipoDespesaId,
+        tipoDespesaNome: ref.tipoDespesaNome,
+        tipoDespesaCodigo: ref.tipoDespesaCodigo,
       })
     }
 
-    contasComparativo.sort(compararContasDre)
+    contasComparativo.sort(compararCentroTipoConta)
 
     gruposComparativo.push({
       classificacao: clf,
@@ -430,9 +516,15 @@ export function calcularComparativoDre(
       diferenca: cv2 - cv1,
       percentual: calcularVariacaoPercentual(cv1, cv2),
       favoravel: isVariacaoFavoravel('NaoClassificado', cv1, cv2),
+      centroId: ref.centroId,
+      centroNome: ref.centroNome,
+      centroCodigo: ref.centroCodigo,
+      tipoDespesaId: ref.tipoDespesaId,
+      tipoDespesaNome: ref.tipoDespesaNome,
+      tipoDespesaCodigo: ref.tipoDespesaCodigo,
     })
   }
-  ncContas.sort(compararContasDre)
+  ncContas.sort(compararCentroTipoConta)
 
   return {
     periodo1Descricao,
