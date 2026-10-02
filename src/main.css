@@ -407,8 +407,12 @@
   }
 
   /* 3. Ocultar elementos da casca da aplicação que não fazem parte do documento */
+  header,
+  footer,
   #root > div > header,
   #root > div > footer,
+  #root header,
+  #root footer,
   nav,
   aside,
   button,
@@ -554,8 +558,7 @@
   /* Garantir que blocos de parecer técnico e assinaturas não sejam divididos entre páginas */
   .border-t.border-slate-400,
   .border-t.border-slate-700,
-  [class*='assinatura'],
-  footer:not(body > footer) {
+  [class*='assinatura'] {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

@@ -1081,8 +1081,8 @@ export default function Layout() {
           <Outlet />
         </main>
 
-        {/* Footer Slim e Tecnológico */}
-        <footer className="bg-white border-t border-slate-200 py-2.5 px-6 text-center text-[11px] text-[#5B6B7F] flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
+        {/* Footer Slim e Tecnológico (oculto em impressão para não sobrepor relatórios e DRE) */}
+        <footer className="bg-white border-t border-slate-200 py-2.5 px-6 text-center text-[11px] text-[#5B6B7F] flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 print:hidden">
           <span className="font-medium text-slate-600">
             GESTÃO ECONÔMICA E FINANCEIRA · Consultoria de Alta Performance
           </span>
