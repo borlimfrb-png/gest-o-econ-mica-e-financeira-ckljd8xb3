@@ -328,6 +328,140 @@ describe('Fluxo de Caixa por grupo DRE', () => {
     expect(fluxo.contasEntradasOperacionais).toHaveLength(1)
   })
 
+  it('ordena contas combinadas de saídas operacionais por código hierárquico (1.2 antes de 1.10)', () => {
+    const meses = gerarListaMeses(2025, 1, 1)
+
+    const contasMock: ContaRecord[] = [
+      {
+        id: 'c-desp-10',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.10',
+        nome: 'Serviços Terceiros',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+      {
+        id: 'c-desp-2',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.2',
+        nome: 'Comissão Especial',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Variável',
+        created: '',
+      },
+      {
+        id: 'c-desp-1',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '3.1',
+        nome: 'Aluguel Matriz',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+      {
+        id: 'c-desp-sem-cod',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '',
+        nome: 'Despesa Diversa Sem Código',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Fixa',
+        created: '',
+      },
+    ]
+
+    const lancamentosMock: LancamentoRecord[] = [
+      {
+        id: 'l-10',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p10',
+        data: '2025-01-10',
+        valor: 100,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p10',
+            conta: 'c-desp-10',
+            expand: { conta: contasMock[0] },
+          } as any,
+        },
+      },
+      {
+        id: 'l-2',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p2',
+        data: '2025-01-10',
+        valor: 200,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p2',
+            conta: 'c-desp-2',
+            expand: { conta: contasMock[1] },
+          } as any,
+        },
+      },
+      {
+        id: 'l-1',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p1',
+        data: '2025-01-10',
+        valor: 300,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p1',
+            conta: 'c-desp-1',
+            expand: { conta: contasMock[2] },
+          } as any,
+        },
+      },
+      {
+        id: 'l-sem-cod',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'e1',
+        plano_conta: 'p-sc',
+        data: '2025-01-10',
+        valor: 400,
+        user: 'u1',
+        created: '',
+        expand: {
+          plano_conta: {
+            id: 'p-sc',
+            conta: 'c-desp-sem-cod',
+            expand: { conta: contasMock[3] },
+          } as any,
+        },
+      },
+    ]
+
+    const fluxo = calcularFluxoCaixaDre(lancamentosMock, contasMock, meses)
+    expect(fluxo.contasSaidasOperacionais.map((c) => c.codigo || 'S/C')).toEqual([
+      '3.1',
+      '3.2',
+      '3.10',
+      'S/C',
+    ])
+  })
+
   it('ignora lançamentos estornados no fluxo de caixa', () => {
     const meses = gerarListaMeses(2025, 1, 1)
     const contasMock: ContaRecord[] = [

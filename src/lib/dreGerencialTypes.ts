@@ -45,6 +45,78 @@ export interface ContaMatrizItem {
   totalPeriodo: number
 }
 
+/**
+ * Compara dois códigos hierárquicos contábeis de forma numérica por segmento (ex: 1.1, 1.2, 1.10).
+ * Retorna número negativo se a < b, positivo se a > b, 0 se equivalentes.
+ * Trata segmentos como inteiros quando numéricos ("2" < "10") e string quando alfanuméricos.
+ */
+export function compararCodigosHierarquicos(codA?: string | null, codB?: string | null): number {
+  const limpoA = (codA || '').trim()
+  const limpoB = (codB || '').trim()
+
+  // Ambos vazios
+  if (!limpoA && !limpoB) return 0
+  // Sem código fica por último
+  if (!limpoA) return 1
+  if (!limpoB) return -1
+
+  // Divide por separadores contábeis comuns (ponto, hífen, barra)
+  const partesA = limpoA.split(/[.\-/]+/).filter(Boolean)
+  const partesB = limpoB.split(/[.\-/]+/).filter(Boolean)
+
+  const maxLen = Math.max(partesA.length, partesB.length)
+  for (let i = 0; i < maxLen; i++) {
+    const pA = partesA[i]
+    const pB = partesB[i]
+
+    if (pA === undefined) return -1 // mais curto vem antes (ex: 1.1 antes de 1.1.1)
+    if (pB === undefined) return 1
+
+    const numA = Number(pA)
+    const numB = Number(pB)
+    const isNumA = !Number.isNaN(numA) && /^\d+$/.test(pA)
+    const isNumB = !Number.isNaN(numB) && /^\d+$/.test(pB)
+
+    if (isNumA && isNumB) {
+      if (numA !== numB) {
+        return numA - numB
+      }
+    } else {
+      const cmp = pA.localeCompare(pB, 'pt-BR', { numeric: true, sensitivity: 'base' })
+      if (cmp !== 0) return cmp
+    }
+  }
+
+  return 0
+}
+
+/**
+ * Função de ordenação determinística para itens de contas da DRE:
+ * 1. Primeiro pelo código hierárquico contábil (segmentos numéricos)
+ * 2. Contas sem código ficam por último
+ * 3. Desempate alfabético pelo nome da conta
+ */
+export function compararContasDre(
+  a: { codigo?: string | null; nome: string },
+  b: { codigo?: string | null; nome: string },
+): number {
+  const codA = (a.codigo || '').trim()
+  const codB = (b.codigo || '').trim()
+
+  if (codA && codB) {
+    const cmpCod = compararCodigosHierarquicos(codA, codB)
+    if (cmpCod !== 0) return cmpCod
+    return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
+  }
+
+  // Contas com código vêm antes de contas sem código
+  if (codA && !codB) return -1
+  if (!codA && codB) return 1
+
+  // Ambas sem código: ordenação por nome
+  return a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' })
+}
+
 export interface GrupoMatrizItem {
   classificacao: ClassificacaoDre
   titulo: string

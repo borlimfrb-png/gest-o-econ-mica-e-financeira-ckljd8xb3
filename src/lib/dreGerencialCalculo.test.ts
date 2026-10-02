@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { gerarListaMeses } from './dreGerencialTypes'
+import {
+  gerarListaMeses,
+  compararCodigosHierarquicos,
+  compararContasDre,
+} from './dreGerencialTypes'
 import {
   calcularDreGerencialMatriz,
   calcularComparativoDre,
@@ -541,5 +545,274 @@ describe('DRE Gerencial - Cálculos e Geração de Matriz', () => {
     // Despesa Variável: subiu = desfavorável, caiu = favorável
     expect(isVariacaoFavoravel('Despesa Variável', 10, 20)).toBe(false)
     expect(isVariacaoFavoravel('Despesa Variável', 20, 10)).toBe(true)
+  })
+
+  describe('Ordenação Hierárquica do Plano de Contas na DRE', () => {
+    it('ordena segmentos numéricos hierárquicos corretamente (1.2 antes de 1.10)', () => {
+      expect(compararCodigosHierarquicos('1.2', '1.10')).toBeLessThan(0)
+      expect(compararCodigosHierarquicos('1.10', '1.2')).toBeGreaterThan(0)
+      expect(compararCodigosHierarquicos('1.1', '1.2')).toBeLessThan(0)
+      expect(compararCodigosHierarquicos('1.1.01', '1.1.02')).toBeLessThan(0)
+      expect(compararCodigosHierarquicos('1.1', '1.1.01')).toBeLessThan(0)
+      expect(compararCodigosHierarquicos('1.1.02', '1.1.10')).toBeLessThan(0)
+      expect(compararCodigosHierarquicos('1.1', '1.1')).toBe(0)
+    })
+
+    it('coloca contas sem código por último e desempata por nome', () => {
+      const contas = [
+        { codigo: undefined, nome: 'Zebra Sem Código' },
+        { codigo: '1.10', nome: 'Conta Dez' },
+        { codigo: '1.2', nome: 'Conta Dois' },
+        { codigo: '1.2', nome: 'Alfa Dois' },
+        { codigo: '', nome: 'Amora Sem Código' },
+        { codigo: '1.1', nome: 'Conta Um' },
+      ]
+
+      const ordenadas = [...contas].sort(compararContasDre)
+
+      expect(ordenadas.map((c) => `${c.codigo ?? 'S/C'}: ${c.nome}`)).toEqual([
+        '1.1: Conta Um',
+        '1.2: Alfa Dois',
+        '1.2: Conta Dois',
+        '1.10: Conta Dez',
+        'S/C: Amora Sem Código',
+        'S/C: Zebra Sem Código',
+      ])
+    })
+
+    it('aplica ordenação hierárquica dentro dos grupos da DRE Gerencial calculada', () => {
+      const meses = gerarListaMeses(2023, 1, 1)
+
+      const contasMock: ContaRecord[] = [
+        {
+          id: 'c-rec-10',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '1.10',
+          nome: 'Receita Serviços TI',
+          tipo: 'Receita',
+          classificacao_dre: 'Receita',
+          created: '',
+        },
+        {
+          id: 'c-rec-2',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '1.2',
+          nome: 'Receita Mercadorias',
+          tipo: 'Receita',
+          classificacao_dre: 'Receita',
+          created: '',
+        },
+        {
+          id: 'c-rec-1',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '1.1',
+          nome: 'Receita Produtos',
+          tipo: 'Receita',
+          classificacao_dre: 'Receita',
+          created: '',
+        },
+        {
+          id: 'c-rec-sem-cod',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '',
+          nome: 'Outras Receitas Diversas',
+          tipo: 'Receita',
+          classificacao_dre: 'Receita',
+          created: '',
+        },
+      ]
+
+      const lancamentosMock: LancamentoRecord[] = [
+        {
+          id: 'l-10',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          plano_conta: 'pc-10',
+          data: '2023-01-10 12:00:00.000Z',
+          valor: 1000,
+          user: 'u-1',
+          created: '',
+          expand: {
+            plano_conta: {
+              id: 'pc-10',
+              collectionId: 'plano_contas',
+              collectionName: 'plano_contas',
+              user: 'u-1',
+              conta: 'c-rec-10',
+              centro: 'cc-1',
+              created: '',
+              expand: { conta: contasMock[0] },
+            },
+          },
+        },
+        {
+          id: 'l-2',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          plano_conta: 'pc-2',
+          data: '2023-01-10 12:00:00.000Z',
+          valor: 2000,
+          user: 'u-1',
+          created: '',
+          expand: {
+            plano_conta: {
+              id: 'pc-2',
+              collectionId: 'plano_contas',
+              collectionName: 'plano_contas',
+              user: 'u-1',
+              conta: 'c-rec-2',
+              centro: 'cc-1',
+              created: '',
+              expand: { conta: contasMock[1] },
+            },
+          },
+        },
+        {
+          id: 'l-1',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          plano_conta: 'pc-1',
+          data: '2023-01-10 12:00:00.000Z',
+          valor: 3000,
+          user: 'u-1',
+          created: '',
+          expand: {
+            plano_conta: {
+              id: 'pc-1',
+              collectionId: 'plano_contas',
+              collectionName: 'plano_contas',
+              user: 'u-1',
+              conta: 'c-rec-1',
+              centro: 'cc-1',
+              created: '',
+              expand: { conta: contasMock[2] },
+            },
+          },
+        },
+        {
+          id: 'l-sem-cod',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          plano_conta: 'pc-sem-cod',
+          data: '2023-01-10 12:00:00.000Z',
+          valor: 4000,
+          user: 'u-1',
+          created: '',
+          expand: {
+            plano_conta: {
+              id: 'pc-sem-cod',
+              collectionId: 'plano_contas',
+              collectionName: 'plano_contas',
+              user: 'u-1',
+              conta: 'c-rec-sem-cod',
+              centro: 'cc-1',
+              created: '',
+              expand: { conta: contasMock[3] },
+            },
+          },
+        },
+      ]
+
+      const matriz = calcularDreGerencialMatriz(lancamentosMock, contasMock, meses)
+      const grupoReceita = matriz.grupos.find((g) => g.classificacao === 'Receita')!
+
+      expect(grupoReceita.contas.map((c) => c.codigo || 'S/C')).toEqual([
+        '1.1',
+        '1.2',
+        '1.10',
+        'S/C',
+      ])
+    })
+
+    it('ordena contas não classificadas pelo código hierárquico e nome', () => {
+      const meses = gerarListaMeses(2023, 1, 1)
+
+      const contasMock: ContaRecord[] = [
+        {
+          id: 'c-nc-10',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '9.10',
+          nome: 'Pendente B',
+          tipo: 'Despesa',
+          created: '',
+        },
+        {
+          id: 'c-nc-2',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '9.2',
+          nome: 'Pendente A',
+          tipo: 'Despesa',
+          created: '',
+        },
+      ]
+
+      const lancamentosMock: LancamentoRecord[] = [
+        {
+          id: 'l-nc-10',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          plano_conta: 'pc-nc-10',
+          data: '2023-01-10 12:00:00.000Z',
+          valor: 500,
+          user: 'u-1',
+          created: '',
+          expand: {
+            plano_conta: {
+              id: 'pc-nc-10',
+              collectionId: 'plano_contas',
+              collectionName: 'plano_contas',
+              user: 'u-1',
+              conta: 'c-nc-10',
+              centro: 'cc-1',
+              created: '',
+              expand: { conta: contasMock[0] },
+            },
+          },
+        },
+        {
+          id: 'l-nc-2',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          plano_conta: 'pc-nc-2',
+          data: '2023-01-10 12:00:00.000Z',
+          valor: 700,
+          user: 'u-1',
+          created: '',
+          expand: {
+            plano_conta: {
+              id: 'pc-nc-2',
+              collectionId: 'plano_contas',
+              collectionName: 'plano_contas',
+              user: 'u-1',
+              conta: 'c-nc-2',
+              centro: 'cc-1',
+              created: '',
+              expand: { conta: contasMock[1] },
+            },
+          },
+        },
+      ]
+
+      const matriz = calcularDreGerencialMatriz(lancamentosMock, contasMock, meses)
+      expect(matriz.naoClassificados.contas.map((c) => c.codigo)).toEqual(['9.2', '9.10'])
+    })
   })
 })

@@ -4,7 +4,12 @@ import type {
   PlanoContaRecord,
   ClassificacaoDre,
 } from '@/types/finance'
-import { type MesItem, type ContaMatrizItem, type DreMatrizResultado } from './dreGerencialTypes'
+import {
+  type MesItem,
+  type ContaMatrizItem,
+  type DreMatrizResultado,
+  compararContasDre,
+} from './dreGerencialTypes'
 import { calcularDreGerencialMatriz } from './dreGerencialCalculo'
 
 export type GrupoFluxoDreChave =
@@ -120,11 +125,11 @@ export function calcularFluxoCaixaDre(
     totalSaidasOp += vTotal
   }
 
-  // Combina as contas operacionais (Despesas Variáveis + Despesas Fixas)
+  // Combina as contas operacionais (Despesas Variáveis + Despesas Fixas) ordenadas por código hierárquico
   const contasSaidasOp: ContaMatrizItem[] = [
     ...(grupoDespVar?.contas || []),
     ...(grupoDespFix?.contas || []),
-  ].sort((a, b) => a.nome.localeCompare(b.nome))
+  ].sort(compararContasDre)
 
   const saidasOperacionais: LinhaFluxoDreItem = {
     chave: 'saidasOperacionais',

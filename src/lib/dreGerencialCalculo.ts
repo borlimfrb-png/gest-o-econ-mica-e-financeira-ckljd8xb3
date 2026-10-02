@@ -4,6 +4,7 @@ import {
   GRUPOS_DRE_ORDEM,
   TITULOS_GRUPOS_DRE,
   SINAL_MULTIPLICADOR_GRUPO,
+  compararContasDre,
   type DreMatrizResultado,
   type DreComparativoResultado,
   type GrupoComparativoItem,
@@ -204,11 +205,11 @@ export function calcularDreGerencialMatriz(
     }
   }
 
-  // Ordenar contas alfabeticamente dentro de cada grupo
+  // Ordenar contas pelo código hierárquico contábil e desempate por nome dentro de cada grupo
   for (const grupo of gruposMap.values()) {
-    grupo.contas.sort((a, b) => a.nome.localeCompare(b.nome))
+    grupo.contas.sort(compararContasDre)
   }
-  naoClassificados.contas.sort((a, b) => a.nome.localeCompare(b.nome))
+  naoClassificados.contas.sort(compararContasDre)
 
   const grupos = GRUPOS_DRE_ORDEM.map((clf) => gruposMap.get(clf)!)
 
@@ -363,7 +364,7 @@ export function calcularComparativoDre(
       })
     }
 
-    contasComparativo.sort((a, b) => a.nome.localeCompare(b.nome))
+    contasComparativo.sort(compararContasDre)
 
     gruposComparativo.push({
       classificacao: clf,
@@ -431,7 +432,7 @@ export function calcularComparativoDre(
       favoravel: isVariacaoFavoravel('NaoClassificado', cv1, cv2),
     })
   }
-  ncContas.sort((a, b) => a.nome.localeCompare(b.nome))
+  ncContas.sort(compararContasDre)
 
   return {
     periodo1Descricao,
