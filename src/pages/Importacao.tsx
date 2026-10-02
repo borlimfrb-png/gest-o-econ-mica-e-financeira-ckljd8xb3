@@ -1124,12 +1124,12 @@ export default function Importacao() {
   const totalMatchedValue = matchedFound.reduce((acc, curr) => acc + (curr.valor || 0), 0)
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-12">
+    <div className="space-y-4 max-w-7xl mx-auto pb-6">
       {/* Header Principal */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900">Importação de Dados</h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="text-xl font-bold tracking-tight text-slate-900">Importação de Dados</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
             Importe seus demonstrativos contábeis via Excel, converta PDFs em planilhas customizadas
             ou processe documentos com OCR inteligente.
           </p>
@@ -1140,9 +1140,9 @@ export default function Importacao() {
             size="sm"
             onClick={loadInitialCatalogs}
             disabled={loadingData}
-            className="gap-2 bg-white"
+            className="gap-1.5 bg-white text-xs h-8 cursor-pointer"
           >
-            <RefreshCw className={`w-4 h-4 ${loadingData ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loadingData ? 'animate-spin' : ''}`} />
             Atualizar Catálogos
           </Button>
         </div>

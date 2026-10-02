@@ -123,9 +123,9 @@ export function ModernMegaMenu({
         key={item.id}
         to={item.path}
         className={cn(
-          'group flex items-start gap-3 p-2.5 rounded-xl transition-all duration-150 outline-none select-none text-left relative',
+          'group flex items-start gap-2.5 p-2 rounded-xl transition-all duration-150 outline-none select-none text-left relative',
           active
-            ? 'bg-blue-600/40 border border-blue-400/60 text-white shadow-sm ring-1 ring-blue-400/30'
+            ? 'bg-blue-600/40 border border-blue-400/60 text-white shadow-xs ring-1 ring-blue-400/30'
             : item.destaque
               ? 'bg-white/8 hover:bg-white/16 border border-amber-400/40 text-white hover:border-amber-300/60'
               : 'hover:bg-white/12 text-slate-100 hover:text-white border border-transparent hover:border-white/15',
@@ -133,7 +133,7 @@ export function ModernMegaMenu({
       >
         <div
           className={cn(
-            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-colors duration-150',
+            'w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-colors duration-150',
             active
               ? 'bg-blue-500 text-white shadow-xs'
               : item.destaque
@@ -141,7 +141,7 @@ export function ModernMegaMenu({
                 : 'bg-white/15 text-blue-200 group-hover:bg-blue-600 group-hover:text-white',
           )}
         >
-          <ItemIcon className="w-4 h-4" />
+          <ItemIcon className="w-3.5 h-3.5" />
         </div>
 
         <div className="flex-1 min-w-0">
@@ -157,7 +157,7 @@ export function ModernMegaMenu({
             <div className="flex items-center gap-1 shrink-0">
               {renderBadge(item.badge, item.badgeVariant)}
               {active && (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400/60" />
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-xs shadow-emerald-400/60" />
               )}
             </div>
           </div>
@@ -165,7 +165,7 @@ export function ModernMegaMenu({
           {item.descricao && (
             <p
               className={cn(
-                'text-[11px] leading-snug mt-0.5 line-clamp-2 transition-colors font-medium',
+                'text-[10.5px] leading-snug mt-0.5 line-clamp-2 transition-colors font-medium',
                 active ? 'text-blue-100' : 'text-slate-300 group-hover:text-slate-100',
               )}
             >
@@ -184,7 +184,7 @@ export function ModernMegaMenu({
       <NavLink
         to={grupo.path}
         className={cn(
-          'flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none shrink-0',
+          'flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none shrink-0',
           isDirectActive
             ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
             : 'text-slate-100 hover:text-white hover:bg-white/10',
@@ -249,7 +249,7 @@ export function ModernMegaMenu({
         aria-expanded={open}
         aria-haspopup="true"
         className={cn(
-          'flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
+          'flex items-center gap-1 xl:gap-1.5 px-2 xl:px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all duration-150 cursor-pointer select-none outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
           isActive
             ? 'bg-white/20 text-white shadow-xs ring-1 ring-white/30'
             : open

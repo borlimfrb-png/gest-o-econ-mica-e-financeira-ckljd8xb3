@@ -243,46 +243,46 @@ export default function WelcomeSplash() {
       </header>
 
       {/* Centro: Painel de Apresentação e Seleção de Contexto */}
-      <main className="relative z-10 my-4 sm:my-6 w-full max-w-2xl flex flex-col items-center">
-        <div className="w-full bg-white/[0.04] backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 rounded-3xl p-6 sm:p-8 flex flex-col items-center animate-in fade-in zoom-in-98 duration-400">
+      <main className="relative z-10 my-2 sm:my-4 w-full max-w-2xl flex flex-col items-center">
+        <div className="w-full bg-white/[0.04] backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 rounded-2xl p-5 sm:p-7 flex flex-col items-center animate-in fade-in zoom-in-98 duration-300">
           {/* TOPO: LOGOMARCA E IDENTIDADE */}
-          <div className="flex flex-col items-center justify-center min-h-[90px] w-full mb-3">
+          <div className="flex flex-col items-center justify-center min-h-[75px] w-full mb-2">
             {logoUrlFinal ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="max-w-[260px] sm:max-w-[300px] max-h-[85px] flex items-center justify-center p-2.5 rounded-2xl bg-white/95 shadow-xl shadow-blue-950/40 border border-white">
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="max-w-[240px] sm:max-w-[280px] max-h-[75px] flex items-center justify-center p-2 rounded-xl bg-white/95 shadow-lg shadow-blue-950/40 border border-white">
                   <img
                     src={logoUrlFinal}
                     alt={nomeExibicaoEmpresa || 'Logo da Consultoria'}
-                    className="max-h-[65px] w-auto max-w-full object-contain"
+                    className="max-h-[55px] w-auto max-w-full object-contain"
                   />
                 </div>
                 {nomeExibicaoEmpresa && (
-                  <span className="text-[11px] font-semibold uppercase tracking-widest text-blue-200/90 mt-0.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-200/90 mt-0.5">
                     {nomeExibicaoEmpresa}
                   </span>
                 )}
               </div>
             ) : nomeExibicaoEmpresa ? (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-xl shadow-blue-600/30 border border-blue-400/30">
-                  <Building2 className="w-7 h-7 text-white" />
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 border border-blue-400/30">
+                  <Building2 className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-center">
-                  <h2 className="text-lg sm:text-xl font-extrabold text-white tracking-tight">
+                  <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
                     {nomeExibicaoEmpresa}
                   </h2>
-                  <span className="text-[11px] uppercase tracking-wider text-blue-300 font-semibold block">
+                  <span className="text-[10px] uppercase tracking-wider text-blue-300 font-medium block">
                     Consultoria Empresarial & Financeira
                   </span>
                 </div>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-2">
-                <div className="w-14 h-14 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-600/30 border border-blue-400/30">
-                  <Scale className="w-7 h-7 text-white" />
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 border border-blue-400/30">
+                  <Scale className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-center">
-                  <span className="text-xs uppercase tracking-wider text-blue-300 font-semibold block">
+                  <span className="text-[11px] uppercase tracking-wider text-blue-300 font-medium block">
                     Consultoria Financeira
                   </span>
                 </div>
@@ -291,11 +291,11 @@ export default function WelcomeSplash() {
           </div>
 
           {/* Nome da Plataforma & Chamada de Seleção */}
-          <div className="space-y-1 text-center">
-            <h1 className="text-lg sm:text-xl font-black text-white tracking-tight uppercase">
+          <div className="space-y-0.5 text-center">
+            <h1 className="text-base sm:text-lg font-black text-white tracking-tight uppercase">
               GESTÃO FINANCEIRA E ECONÔMICA
             </h1>
-            <p className="text-xs text-blue-100/75 max-w-md mx-auto">
+            <p className="text-[11px] text-blue-100/75 max-w-md mx-auto">
               Selecione a empresa ou o grupo econômico que deseja gerenciar nesta sessão.
             </p>
           </div>

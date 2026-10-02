@@ -774,34 +774,34 @@ export default function Contas() {
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
-                          <th className="py-3 px-4">Código</th>
-                          <th className="py-3 px-4">Nome</th>
-                          <th className="py-3 px-4">Tipo</th>
-                          <th className="py-3 px-4">Classificação DRE</th>
-                          <th className="py-3 px-4 text-center">Exclusões Gerenciais</th>
-                          <th className="py-3 px-4">Grupo</th>
-                          <th className="py-3 px-4 text-right">Ações</th>
-                        </tr>{' '}
+                          <th className="py-2 px-3">Código</th>
+                          <th className="py-2 px-3">Nome</th>
+                          <th className="py-2 px-3">Tipo</th>
+                          <th className="py-2 px-3">Classificação DRE</th>
+                          <th className="py-2 px-3 text-center">Exclusões</th>
+                          <th className="py-2 px-3">Grupo</th>
+                          <th className="py-2 px-3 text-right">Ações</th>
+                        </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {contasFiltradas.map((c) => (
                           <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-3 px-4">
-                              <span className="font-mono font-semibold text-blue-700 text-[11px]">
+                            <td className="py-2 px-3">
+                              <span className="font-mono font-semibold text-blue-700 text-[10.5px]">
                                 {c.codigo || '—'}
                               </span>
                             </td>
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
-                                  <BookOpen className="w-4 h-4" />
+                            <td className="py-2 px-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-6.5 h-6.5 rounded-md flex items-center justify-center shrink-0 bg-blue-50 text-blue-600">
+                                  <BookOpen className="w-3.5 h-3.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <span className="font-semibold text-slate-900 block truncate">
+                                  <span className="font-semibold text-slate-900 block truncate text-xs">
                                     {c.nome}
                                   </span>
                                   {c.descricao ? (
-                                    <span className="text-[11px] text-slate-500 block truncate">
+                                    <span className="text-[10px] text-slate-500 block truncate">
                                       {c.descricao}
                                     </span>
                                   ) : null}

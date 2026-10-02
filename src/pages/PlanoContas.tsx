@@ -747,46 +747,46 @@ export default function PlanoContas() {
         </div>
       </div>
 
-      {/* Cards de resumo */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Total de itens
+      {/* Cards de resumo com densidade compacta */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <Card className="bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Total itens
             </p>
-            <p className="text-lg font-bold text-[#0B1F3A] mt-0.5">{totalItens}</p>
+            <p className="text-base font-bold text-[#0B1F3A] mt-0.5">{totalItens}</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Com tipo vinculado
+        <Card className="bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Com tipo
             </p>
-            <p className="text-lg font-bold text-emerald-600 mt-0.5">{totalComTipoDespesa}</p>
+            <p className="text-base font-bold text-emerald-600 mt-0.5">{totalComTipoDespesa}</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              Sem tipo vinculado
+        <Card className="bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Sem tipo
             </p>
-            <p className="text-lg font-bold text-amber-600 mt-0.5">{totalSemTipoDespesa}</p>
+            <p className="text-base font-bold text-amber-600 mt-0.5">{totalSemTipoDespesa}</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <Card className="bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
               Contas usadas
             </p>
-            <p className="text-lg font-bold text-blue-600 mt-0.5">{totalContasUsadas}</p>
+            <p className="text-base font-bold text-blue-600 mt-0.5">{totalContasUsadas}</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <Card className="bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
               Centros usados
             </p>
-            <p className="text-lg font-bold text-violet-600 mt-0.5">{totalCentrosUsados}</p>
+            <p className="text-base font-bold text-violet-600 mt-0.5">{totalCentrosUsados}</p>
           </CardContent>
         </Card>
       </div>

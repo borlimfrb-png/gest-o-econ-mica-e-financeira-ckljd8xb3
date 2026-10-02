@@ -479,12 +479,12 @@ export default function Empresas() {
   })
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Cabeçcalho da página */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 animate-fadeIn pb-6">
+      {/* Cabeçalho da página */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">Gestão de Empresas</h1>
-          <p className="text-xs text-[#5B6B7F]">
+          <h1 className="text-lg font-bold text-[#0B1F3A] tracking-tight">Gestão de Empresas</h1>
+          <p className="text-[11px] text-[#5B6B7F]">
             Cadastre clientes, consulte demonstrativos contábeis e acompanhe diagnósticos
             financeiros
           </p>
@@ -492,33 +492,33 @@ export default function Empresas() {
 
         <Button
           onClick={openNewModal}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-sm"
+          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8 shadow-xs cursor-pointer"
         >
-          <Plus className="w-4 h-4 mr-1.5" />
+          <Plus className="w-3.5 h-3.5 mr-1" />
           Nova Empresa
         </Button>
       </div>
 
-      {/* Card da Tabela */}
-      <Card className="bg-white border-slate-200 shadow-2xs">
-        <CardHeader className="pb-3 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Card da Tabela com densidade otimizada */}
+      <Card className="bg-white border-slate-200/90 shadow-2xs">
+        <CardHeader className="py-2.5 px-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div>
-            <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+            <CardTitle className="text-xs font-bold text-[#0B1F3A]">
               Empresas Cadastradas ({filteredEmpresas.length})
             </CardTitle>
-            <CardDescription className="text-xs">
+            <CardDescription className="text-[11px]">
               Lista completa de clientes corporativos com seus últimos dados patrimoniais
             </CardDescription>
           </div>
 
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-full sm:w-60">
+            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <Input
               type="text"
               placeholder="Buscar por nome, CNPJ, cidade..."
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
-              className="pl-8 h-8 text-xs bg-slate-50 border-slate-200 focus:bg-white"
+              className="pl-8 h-7 text-xs bg-slate-50/70 border-slate-200 focus:bg-white"
             />
           </div>
         </CardHeader>
@@ -537,17 +537,17 @@ export default function Empresas() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
-                    <th className="py-3 px-4">Razão Social / Nome Fantasia</th>
-                    <th className="py-3 px-4">CNPJ</th>
-                    <th className="py-3 px-4">Segmento</th>
-                    <th className="py-3 px-4">Setor (Mercado)</th>
-                    <th className="py-3 px-4">Porte</th>
-                    <th className="py-3 px-4">Cidade / UF</th>
-                    <th className="py-3 px-4 text-center">NFSe</th>
-                    <th className="py-3 px-4 text-center">Último Balanço</th>
-                    <th className="py-3 px-4 text-right">Total do Ativo</th>
-                    <th className="py-3 px-4 text-right">Ações</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold text-[11px]">
+                    <th className="py-2 px-3">Razão Social / Nome Fantasia</th>
+                    <th className="py-2 px-3">CNPJ</th>
+                    <th className="py-2 px-3">Segmento</th>
+                    <th className="py-2 px-3">Setor</th>
+                    <th className="py-2 px-3">Porte</th>
+                    <th className="py-2 px-3">Cidade / UF</th>
+                    <th className="py-2 px-3 text-center">NFSe</th>
+                    <th className="py-2 px-3 text-center">Último Balanço</th>
+                    <th className="py-2 px-3 text-right">Total do Ativo</th>
+                    <th className="py-2 px-3 text-right">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

@@ -269,7 +269,7 @@ export default function Layout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F7FA] flex flex-col antialiased text-slate-800">
+    <div className="h-screen w-full bg-[#F5F7FA] flex flex-col antialiased text-slate-800 overflow-hidden">
       {/* ========================================================
           BARRA SUPERIOR HORIZONTAL (TOPBAR) DIVIDIDA EM DUAS LINHAS
           - Linha 1 (Superior): Logo/Nome da Empresa + Seletores Globais (Empresa/Ano) + Busca (Ctrl+K) + Avatar
@@ -277,19 +277,19 @@ export default function Layout() {
           - Evita qualquer sobreposição entre navegação e logo/busca em 1366px e em qualquer resolução
       ======================================================== */}
       <header
-        className="sticky top-0 z-40 text-white shadow-md transition-colors"
+        className="shrink-0 z-40 text-white shadow-md transition-colors border-b border-slate-800/40"
         style={{ backgroundColor: corPrimaria }}
       >
         {/* ---------------- LINHA 1: CABEÇALHO SUPERIOR (UTILITÁRIOS & MARCA) ---------------- */}
-        <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/15">
-          <div className="flex items-center justify-between h-13 md:h-14 gap-2 md:gap-4">
+        <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/20 backdrop-blur-md">
+          <div className="flex items-center justify-between h-12 md:h-13 gap-2 md:gap-4">
             {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo Borlim / Consultoria */}
             <div className="flex items-center gap-2 md:gap-3 shrink-0">
               {/* Hambúrguer apenas em mobile */}
               <button
                 type="button"
                 onClick={() => setMobileDrawerOpen(true)}
-                className="md:hidden p-2 -ml-1 rounded-lg text-slate-200 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                className="md:hidden p-1.5 -ml-1 rounded-lg text-slate-200 hover:text-white hover:bg-white/15 transition-colors cursor-pointer"
                 aria-label="Abrir menu de navegação"
               >
                 <Menu className="w-5 h-5" />
@@ -299,10 +299,10 @@ export default function Layout() {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer"
+                className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
               >
                 {logoUrl ? (
-                  <div className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden border border-white/15 group-hover:border-white/30 transition-all">
+                  <div className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden border border-white/20 group-hover:border-white/40 transition-all">
                     <img
                       src={logoUrl}
                       alt={minhaEmpresa?.nome_fantasia || 'Logo'}
@@ -311,10 +311,10 @@ export default function Layout() {
                   </div>
                 ) : (
                   <div
-                    className="w-8 h-8 md:w-9 md:h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-xs border border-white/15"
+                    className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs border border-white/20"
                     style={{ backgroundColor: corSecundaria }}
                   >
-                    <Scale className="w-4 h-4 md:w-4.5 md:h-4.5" />
+                    <Scale className="w-4 h-4" />
                   </div>
                 )}
                 <div className="truncate max-w-[150px] sm:max-w-[220px] md:max-w-[280px]">
@@ -323,7 +323,7 @@ export default function Layout() {
                       minhaEmpresa?.razao_social ||
                       'Borlim · Gestão Financeira'}
                   </span>
-                  <span className="text-[9px] md:text-[10px] text-blue-200/90 uppercase tracking-wider font-semibold block truncate">
+                  <span className="text-[9px] md:text-[9.5px] text-blue-200/90 uppercase tracking-wider font-medium block truncate">
                     {minhaEmpresa?.razao_social
                       ? 'Gestão Financeira & Econômica'
                       : 'Gestão Financeira'}
@@ -542,9 +542,9 @@ export default function Layout() {
         </div>
 
         {/* ---------------- LINHA 2: BARRA DE NAVEGAÇÃO HORIZONTAL (MEGA-MENUS & MAIS) ---------------- */}
-        <div className="w-full px-3 lg:px-5 border-b border-white/10 hidden md:block">
-          <div className="flex items-center justify-between h-10 lg:h-11 overflow-visible">
-            <nav className="flex items-center gap-1 xl:gap-1.5 flex-1 justify-start min-w-0 overflow-visible py-1">
+        <div className="w-full px-3 lg:px-5 border-b border-white/10 hidden md:block bg-black/10">
+          <div className="flex items-center justify-between h-9.5 lg:h-10 overflow-visible">
+            <nav className="flex items-center gap-0.5 lg:gap-1 xl:gap-1.5 flex-1 justify-start min-w-0 overflow-visible py-0.5">
               {gruposVisiveis.map((grupo, idx) => {
                 const active = isGroupActive(grupo)
                 // Se estiver no último terço dos itens, alinhar painel à direita para não cortar na borda direita
@@ -943,14 +943,14 @@ export default function Layout() {
       )}
 
       {/* ========================================================
-          ÁREA DE CONTEÚDO PRINCIPAL (LARGURA TOTAL 100%)
+          ÁREA DE CONTEÚDO PRINCIPAL (OCUPA 100% DA ALTURA RESTANTE, ROLAGEM INTERNA SUAVE)
       ======================================================== */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-y-auto">
         {/* Cabeçalho de Página com Título e Seletores Globais */}
         {showHeaderFilters && (
-          <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sticky top-13 md:top-[100px] z-20 shadow-xs">
+          <div className="bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 shadow-xs">
             <div>
-              <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+              <h1 className="text-lg font-bold text-[#0B1F3A] tracking-tight">
                 {location.pathname === '/indicadores/apresentacao' &&
                   'Apresentação Geral de Indicadores'}
                 {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
@@ -973,7 +973,7 @@ export default function Layout() {
                   'Simulador de Preços & Mark-Up'}
                 {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
               </h1>
-              <p className="text-xs text-[#5B6B7F]">
+              <p className="text-[11px] text-[#5B6B7F] line-clamp-1">
                 {location.pathname === '/indicadores/apresentacao' &&
                   'Catálogo educativo com todos os indicadores do sistema, fórmulas passo a passo, faixas e apuração em tempo real'}
                 {location.pathname === '/dashboard' &&
@@ -1006,9 +1006,9 @@ export default function Layout() {
             </div>
 
             {/* Seletores Globais Empresa e Ano */}
-            <div className="flex items-center gap-2.5 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               {/* Seletor Empresa */}
-              <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
+              <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/90 rounded-lg px-2.5 py-0.5 text-xs transition-colors">
                 <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 {isUserAdmin ? (
                   <Select
@@ -1023,7 +1023,7 @@ export default function Layout() {
                       }
                     }}
                   >
-                    <SelectTrigger className="h-7 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 p-0 focus:ring-0 w-[180px] sm:w-[220px]">
+                    <SelectTrigger className="h-6.5 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 p-0 focus:ring-0 w-[170px] sm:w-[210px] cursor-pointer">
                       <SelectValue placeholder="Selecione a empresa" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1035,7 +1035,7 @@ export default function Layout() {
                   </Select>
                 ) : (
                   <div
-                    className="flex items-center gap-1.5 py-1 text-xs font-semibold text-slate-800 max-w-[200px] truncate"
+                    className="flex items-center gap-1.5 py-0.5 text-xs font-semibold text-slate-800 max-w-[190px] truncate"
                     title={
                       empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
                       'Sua Empresa'
@@ -1046,7 +1046,7 @@ export default function Layout() {
                         empresas.find((e) => e.id === selectedEmpresaId)?.nome ||
                         'Empresa Vinculada'}
                     </span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.2 rounded font-normal">
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
                       Fixa
                     </span>
                   </div>
@@ -1054,13 +1054,13 @@ export default function Layout() {
               </div>
 
               {/* Seletor Ano */}
-              <div className="flex items-center gap-1.5 bg-[#F5F7FA] border border-slate-200 rounded-lg px-2.5 py-1 text-xs">
+              <div className="flex items-center gap-1 bg-slate-50 hover:bg-slate-100 border border-slate-200/90 rounded-lg px-2 py-0.5 text-xs transition-colors">
                 <Calendar className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <Select
                   value={String(selectedAno)}
                   onValueChange={(val) => setSelectedAno(Number(val))}
                 >
-                  <SelectTrigger className="h-7 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 p-0 focus:ring-0 w-[75px]">
+                  <SelectTrigger className="h-6.5 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 p-0 focus:ring-0 w-[68px] cursor-pointer">
                     <SelectValue placeholder="Ano" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1076,15 +1076,19 @@ export default function Layout() {
           </div>
         )}
 
-        {/* Page Body */}
-        <main className="flex-1 p-4 sm:p-6 min-h-0 bg-[#F5F7FA]">
+        {/* Page Body - Rolagem natural dentro da viewport */}
+        <main className="flex-1 p-3.5 sm:p-5 lg:p-6 min-h-0 bg-[#F5F7FA]">
           <Outlet />
         </main>
 
-        {/* Footer */}
-        <footer className="bg-white border-t border-slate-200 py-3.5 px-6 text-center text-xs text-[#5B6B7F] flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Análise de Balanço · Consultoria Financeira</span>
-          <span>&copy; {new Date().getFullYear()} Todos os direitos reservados.</span>
+        {/* Footer Slim e Tecnológico */}
+        <footer className="bg-white border-t border-slate-200 py-2.5 px-6 text-center text-[11px] text-[#5B6B7F] flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
+          <span className="font-medium text-slate-600">
+            GESTÃO ECONÔMICA E FINANCEIRA · Consultoria de Alta Performance
+          </span>
+          <span className="text-slate-400 font-mono text-[10px]">
+            v2.4 · &copy; {new Date().getFullYear()} Todos os direitos reservados.
+          </span>
         </footer>
       </div>
 

@@ -265,29 +265,29 @@ export default function Index() {
       </div>
 
       {/* Coluna Direita - Formulário de Login / Cadastro */}
-      <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-10 bg-[#F5F7FA] text-slate-900 min-h-screen">
-        <div className="w-full max-w-[440px]">
+      <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 bg-[#F5F7FA] text-slate-900 min-h-screen">
+        <div className="w-full max-w-[420px] py-4">
           {/* Identificação Mobile */}
-          <div className="flex lg:hidden flex-col items-center justify-center gap-2 mb-6 text-center">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
-                <Scale className="w-5 h-5" />
+          <div className="flex lg:hidden flex-col items-center justify-center gap-2 mb-4 text-center">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
+                <Scale className="w-4.5 h-4.5" />
               </div>
-              <span className="text-base font-bold text-slate-900 tracking-tight leading-snug">
+              <span className="text-sm font-bold text-slate-900 tracking-tight leading-snug">
                 GESTÃO FINANCEIRA E ECONÔMICA
               </span>
             </div>
 
             {/* Logo ou Nome da Empresa do Usuário logo abaixo do título */}
             {empresaPublica?.logo ? (
-              <div className="pt-1 flex flex-col items-center gap-1">
+              <div className="pt-0.5 flex flex-col items-center gap-1">
                 <img
                   src={pb.files.getURL(empresaPublica, empresaPublica.logo)}
                   alt={empresaPublica.nome_fantasia || empresaPublica.razao_social || 'Logo'}
-                  className="h-9 max-w-[160px] object-contain rounded bg-white p-1 border border-slate-200 shadow-xs"
+                  className="h-8 max-w-[150px] object-contain rounded bg-white p-1 border border-slate-200 shadow-xs"
                 />
                 {(empresaPublica.nome_fantasia || empresaPublica.razao_social) && (
-                  <span className="text-[11px] uppercase tracking-wider text-slate-600 font-semibold">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">
                     {empresaPublica.nome_fantasia || empresaPublica.razao_social}
                   </span>
                 )}
@@ -300,14 +300,14 @@ export default function Index() {
           </div>
 
           {/* Card Principal */}
-          <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/70 border border-slate-200/80 p-8">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-[#0B1F3A] tracking-tight">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-200/90 p-6 sm:p-7">
+            <div className="text-center mb-5">
+              <h2 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
                 {activeTab === 'login' ? 'Acesse sua conta' : 'Criar nova conta'}
               </h2>
-              <p className="text-sm text-[#5B6B7F] mt-1">
+              <p className="text-xs text-[#5B6B7F] mt-1">
                 {activeTab === 'login'
-                  ? 'Informe suas credenciais para acessar o painel'
+                  ? 'Informe suas credenciais para acessar a plataforma corporativa'
                   : 'Preencha os dados abaixo para começar'}
               </p>
             </div>

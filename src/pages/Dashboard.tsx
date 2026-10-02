@@ -2381,64 +2381,64 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Grid de KPIs - 2 colunas mobile, 6 colunas desktop */}
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4">
+      {/* Grid de KPIs - 2 colunas mobile, 6 colunas desktop com densidade calibrada */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2.5 sm:gap-3">
         {/* Ativo Total */}
-        <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <Card className="p-3 bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all duration-150">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Ativo Total
             </span>
-            <div className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-              <DollarSign className="w-4 h-4" />
+            <div className="p-1 bg-blue-50 text-blue-600 rounded-md">
+              <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="mt-2 text-xl sm:text-2xl font-bold text-[#0B1F3A] tracking-tight">
+          <div className="mt-1 text-lg sm:text-xl font-extrabold text-[#0B1F3A] tracking-tight">
             <AnimatedCounter value={calcB.ativoTotal} formatter={(v) => formatBrlMil(v)} />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Recursos sob gestão</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Recursos sob gestão</p>
         </Card>
 
         {/* Passivo Total */}
-        <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <Card className="p-3 bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all duration-150">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Passivo Total
             </span>
-            <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
-              <Scale className="w-4 h-4" />
+            <div className="p-1 bg-amber-50 text-amber-600 rounded-md">
+              <Scale className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="mt-2 text-xl sm:text-2xl font-bold text-[#0B1F3A] tracking-tight">
+          <div className="mt-1 text-lg sm:text-xl font-extrabold text-[#0B1F3A] tracking-tight">
             <AnimatedCounter value={calcB.passivoTotal} formatter={(v) => formatBrlMil(v)} />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Capital de terceiros</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Capital terceiros</p>
         </Card>
 
         {/* Patrimônio Líquido */}
-        <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <Card className="p-3 bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all duration-150">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Patrimônio Líquido
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Patrimônio Líq.
             </span>
-            <div className="p-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
-              <TrendingUp className="w-4 h-4" />
+            <div className="p-1 bg-emerald-50 text-emerald-600 rounded-md">
+              <TrendingUp className="w-3.5 h-3.5" />
             </div>
           </div>
-          <div className="mt-2 text-xl sm:text-2xl font-bold text-[#0B1F3A] tracking-tight">
+          <div className="mt-1 text-lg sm:text-xl font-extrabold text-[#0B1F3A] tracking-tight">
             <AnimatedCounter value={calcB.patrimonioLiquido} formatter={(v) => formatBrlMil(v)} />
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Capital próprio</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Capital próprio</p>
         </Card>
 
         {/* Liquidez Corrente */}
-        <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <Card className="p-3 bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all duration-150">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              Liquidez Corrente
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              Liquidez Corr.
             </span>
             <span
-              className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+              className={`text-[9.5px] font-bold px-1 py-0.2 rounded ${
                 (calcInd.liquidezCorrente || 0) >= 1.0
                   ? 'bg-emerald-50 text-emerald-700'
                   : (calcInd.liquidezCorrente || 0) >= 0.8
@@ -2450,7 +2450,7 @@ export default function Dashboard() {
             </span>
           </div>
           <div
-            className={`mt-2 text-xl sm:text-2xl font-bold tracking-tight ${
+            className={`mt-1 text-lg sm:text-xl font-extrabold tracking-tight ${
               calcInd.liquidezCorrente === null
                 ? 'text-slate-400'
                 : calcInd.liquidezCorrente >= 1.0
@@ -2469,11 +2469,11 @@ export default function Dashboard() {
               '—'
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">
+          <p className="text-[10px] text-slate-500 mt-0.5">
             {calcInd.liquidezCorrente === null
               ? 'Sem dados'
               : calcInd.liquidezCorrente >= 1.0
-                ? 'Capacidade adequada (≥1,0)'
+                ? 'Adequada (≥1,0)'
                 : calcInd.liquidezCorrente >= 0.8
                   ? 'Atenção moderada'
                   : 'Insuficiência (<0,8)'}
@@ -2481,15 +2481,15 @@ export default function Dashboard() {
         </Card>
 
         {/* ROE */}
-        <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <Card className="p-3 bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all duration-150">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               ROE (Retorno PL)
             </span>
-            <span className="text-[10px] font-bold text-slate-500">LL / PL</span>
+            <span className="text-[9.5px] font-bold text-slate-500">LL / PL</span>
           </div>
           <div
-            className={`mt-2 text-xl sm:text-2xl font-bold tracking-tight ${
+            className={`mt-1 text-lg sm:text-xl font-extrabold tracking-tight ${
               calcInd.roe === null
                 ? 'text-slate-400'
                 : calcInd.roe >= 0
@@ -2503,19 +2503,19 @@ export default function Dashboard() {
               '—'
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Rentabilidade do capital</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Rentabilidade do capital</p>
         </Card>
 
         {/* Margem Líquida */}
-        <Card className="p-4 bg-white border-slate-200 shadow-2xs hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+        <Card className="p-3 bg-white border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all duration-150">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
               Margem Líquida
             </span>
-            <span className="text-[10px] font-bold text-slate-500">LL / Rec</span>
+            <span className="text-[9.5px] font-bold text-slate-500">LL / Rec</span>
           </div>
           <div
-            className={`mt-2 text-xl sm:text-2xl font-bold tracking-tight ${
+            className={`mt-1 text-lg sm:text-xl font-extrabold tracking-tight ${
               calcInd.margemLiquida === null
                 ? 'text-slate-400'
                 : calcInd.margemLiquida >= 0
@@ -2529,7 +2529,7 @@ export default function Dashboard() {
               '—'
             )}
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">Eficiência operacional</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Eficiência operacional</p>
         </Card>
       </div>
 

@@ -40,6 +40,7 @@ import {
   Wallet,
   ArrowDownRight,
   ArrowUpRight,
+  Layers,
 } from 'lucide-react'
 
 const MESES_OPCOES = [
@@ -267,26 +268,25 @@ export default function FluxoCaixaDre() {
   const saldoFinal = fluxo.saldoAcumulado.saldoFinal
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12 print:p-0 print:m-0">
-      {/* Cabeçalho da página */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-4 animate-fadeIn pb-6 print:p-0 print:m-0">
+      {/* Cabeçalho da tela */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-emerald-100/70 text-emerald-700">
-              <Coins className="w-5 h-5" />
+            <span className="p-1.5 rounded-lg bg-blue-100/80 text-blue-700 shadow-xs">
+              <Layers className="w-4.5 h-4.5" />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
-                Fluxo de Caixa por Grupo DRE
+              <h1 className="text-lg font-bold text-[#0B1F3A] tracking-tight">
+                Fluxo de Caixa (DRE Gerencial)
               </h1>
-              <p className="text-xs text-[#5B6B7F]">
-                Demonstração da geração operacional e financeira de caixa estruturada pelos grupos
-                da DRE gerencial (até 12 meses).
+              <p className="text-[11px] text-[#5B6B7F]">
+                Demonstração mensal da movimentação de caixa baseada nos lançamentos com regime de
+                caixa apurado mês a mês e saldo acumulado.
               </p>
             </div>
           </div>
         </div>
-
         {/* Botões de Ações e Exportação */}
         <div className="flex items-center gap-2 flex-wrap print:hidden">
           <Button
@@ -357,19 +357,19 @@ export default function FluxoCaixaDre() {
       </div>
 
       {/* Barra de Filtros e Empresa */}
-      <Card className="bg-white border-slate-200 shadow-xs print:hidden">
-        <CardContent className="py-4 px-5">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <Card className="bg-white border-slate-200/90 shadow-xs print:hidden">
+        <CardContent className="py-3 px-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* Empresa Ativa */}
             <div className="flex items-center gap-2">
-              <Building className="w-4 h-4 text-slate-400 shrink-0" />
+              <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="text-xs">
                 <span className="text-slate-500">Empresa / Grupo: </span>
                 <span className="font-bold text-[#0B1F3A]">
                   {selectedEmpresa ? selectedEmpresa.nome : 'Todas as empresas (Consolidado)'}
                 </span>
                 {selectedEmpresa?.segmento && (
-                  <Badge variant="outline" className="ml-2 text-[10px]">
+                  <Badge variant="outline" className="ml-2 text-[10px] py-0">
                     {selectedEmpresa.segmento}
                   </Badge>
                 )}
@@ -454,32 +454,32 @@ export default function FluxoCaixaDre() {
       </Card>
 
       {/* Cards de Resumo Executivo */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 print:grid-cols-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 print:grid-cols-3">
         {/* Entradas Operacionais */}
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
+        <Card className="bg-white border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3.5">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                1. Entradas Operacionais
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                1. Entradas Op.
               </p>
               <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
             </div>
-            <p className="text-base font-bold text-emerald-700 mt-1 truncate">
+            <p className="text-sm font-bold text-emerald-700 mt-0.5 truncate">
               {formatBrl(totalEntradasOp)}
             </p>
           </CardContent>
         </Card>
 
         {/* Saídas Operacionais */}
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
+        <Card className="bg-white border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3.5">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                2. Saídas Operacionais
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                2. Saídas Op.
               </p>
               <ArrowDownRight className="w-3.5 h-3.5 text-rose-600" />
             </div>
-            <p className="text-base font-bold text-rose-700 mt-1 truncate">
+            <p className="text-sm font-bold text-rose-700 mt-0.5 truncate">
               {formatBrl(totalSaidasOp)}
             </p>
           </CardContent>
@@ -489,16 +489,16 @@ export default function FluxoCaixaDre() {
         <Card
           className={`border shadow-xs ${
             totalGeracaoOp >= 0
-              ? 'bg-emerald-50/50 border-emerald-300'
-              : 'bg-rose-50/50 border-rose-300'
+              ? 'bg-gradient-to-br from-emerald-50/90 to-emerald-100/50 border-emerald-300'
+              : 'bg-gradient-to-br from-rose-50/90 to-rose-100/50 border-rose-300'
           }`}
         >
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-              3. Geração Operacional
+          <CardContent className="py-2.5 px-3.5">
+            <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">
+              3. Geração Op.
             </p>
             <p
-              className={`text-base font-extrabold mt-1 truncate ${
+              className={`text-sm font-extrabold mt-0.5 truncate ${
                 totalGeracaoOp >= 0 ? 'text-emerald-800' : 'text-rose-800'
               }`}
             >
@@ -508,13 +508,13 @@ export default function FluxoCaixaDre() {
         </Card>
 
         {/* Geração Financeira */}
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardContent className="py-3 px-4">
-            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-              4. Geração Financeira
+        <Card className="bg-white border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+          <CardContent className="py-2.5 px-3.5">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              4. Geração Fin.
             </p>
             <p
-              className={`text-base font-bold mt-1 truncate ${
+              className={`text-sm font-bold mt-0.5 truncate ${
                 totalGeracaoFin >= 0 ? 'text-emerald-700' : 'text-purple-700'
               }`}
             >
@@ -527,26 +527,26 @@ export default function FluxoCaixaDre() {
         <Card
           className={`border shadow-xs ${
             totalFluxoCaixa >= 0
-              ? 'bg-blue-50/80 border-blue-300 text-blue-950'
-              : 'bg-amber-50/80 border-amber-300 text-amber-950'
+              ? 'bg-gradient-to-br from-blue-50/90 to-blue-100/50 border-blue-300 text-blue-950'
+              : 'bg-gradient-to-br from-amber-50/90 to-amber-100/50 border-amber-300 text-amber-950'
           }`}
         >
-          <CardContent className="py-3 px-4">
+          <CardContent className="py-2.5 px-3.5">
             <div className="flex items-center justify-between">
-              <p className="text-[11px] font-bold uppercase tracking-wider">
+              <p className="text-[10px] font-bold uppercase tracking-wider">
                 Total Período (Caixa)
               </p>
-              <Wallet className="w-4 h-4 text-blue-700" />
+              <Wallet className="w-3.5 h-3.5 text-blue-700" />
             </div>
             <p
-              className={`text-base font-black mt-1 truncate ${
+              className={`text-sm font-black mt-0.5 truncate ${
                 totalFluxoCaixa >= 0 ? 'text-blue-900' : 'text-rose-900'
               }`}
             >
               {formatBrl(totalFluxoCaixa)}
             </p>
-            <p className="text-[10px] font-semibold opacity-80 mt-0.5">
-              Saldo Final Acumulado: {formatBrl(saldoFinal)}
+            <p className="text-[9.5px] font-semibold opacity-85 mt-0.5">
+              Saldo Final: {formatBrl(saldoFinal)}
             </p>
           </CardContent>
         </Card>
@@ -599,18 +599,18 @@ export default function FluxoCaixaDre() {
               >
                 <thead>
                   <tr className="bg-slate-100/90 text-[#0B1F3A] border-b border-slate-200 font-bold text-left">
-                    <th className="py-3 px-4 w-[280px] min-w-[240px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                    <th className="py-2 px-3 w-[260px] min-w-[220px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200 text-xs">
                       Estrutura do Fluxo de Caixa
                     </th>
                     {meses.map((m) => (
                       <th
                         key={m.chave}
-                        className="py-3 px-2 min-w-[105px] text-right border-r border-slate-200 font-semibold whitespace-nowrap"
+                        className="py-2 px-2 min-w-[96px] text-right border-r border-slate-200 font-semibold text-[11px] whitespace-nowrap"
                       >
                         {m.rotuloCurto}
                       </th>
                     ))}
-                    <th className="py-3 px-4 min-w-[130px] text-right bg-slate-200/80 font-bold text-[#0B1F3A] whitespace-nowrap">
+                    <th className="py-2 px-3 min-w-[115px] text-right bg-slate-200/80 font-bold text-[#0B1F3A] text-xs whitespace-nowrap">
                       Total Período
                     </th>
                   </tr>

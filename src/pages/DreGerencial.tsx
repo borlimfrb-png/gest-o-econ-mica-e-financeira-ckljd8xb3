@@ -386,26 +386,25 @@ export default function DreGerencial() {
     matriz.grupos.find((g) => g.classificacao === 'Receita Financeira')?.totalPeriodo || 0
 
   return (
-    <div className="space-y-6 animate-fadeIn pb-12 print:p-0 print:m-0">
+    <div className="space-y-4 animate-fadeIn pb-6 print:p-0 print:m-0">
       {/* Cabeçalho da tela */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-blue-100/70 text-blue-700">
-              <BarChart3 className="w-5 h-5" />
+            <span className="p-1.5 rounded-lg bg-blue-100/80 text-blue-700 shadow-xs">
+              <BarChart3 className="w-4.5 h-4.5" />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+              <h1 className="text-lg font-bold text-[#0B1F3A] tracking-tight">
                 DRE Gerencial por Período
               </h1>
-              <p className="text-xs text-[#5B6B7F]">
-                Demonstração do Resultado gerencial matricial extraída diretamente dos lançamentos
-                rápidos (até 12 meses).
+              <p className="text-[11px] text-[#5B6B7F]">
+                Demonstração estruturada em 6 níveis contábeis com visão matricial mês a mês (até 12
+                meses) ou comparativa lado a lado entre 2 períodos.
               </p>
             </div>
           </div>
         </div>
-
         {/* Toggle de Modo: Período único vs Comparativo e Ações */}
         <div className="flex items-center gap-2 flex-wrap print:hidden">
           {/* Toggle de Modo */}
@@ -518,12 +517,12 @@ export default function DreGerencial() {
       </div>
 
       {/* Barra de Filtros e Empresa */}
-      <Card className="bg-white border-slate-200 shadow-xs print:hidden">
-        <CardContent className="py-4 px-5">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <Card className="bg-white border-slate-200/90 shadow-xs print:hidden">
+        <CardContent className="py-3 px-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* Empresa Ativa */}
             <div className="flex items-center gap-2">
-              <Building className="w-4 h-4 text-slate-400 shrink-0" />
+              <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="text-xs">
                 <span className="text-slate-500">Empresa: </span>
                 <span className="font-bold text-[#0B1F3A]">
@@ -668,57 +667,57 @@ export default function DreGerencial() {
 
       {/* Cards de Resumo Gerencial */}
       {modoVisualizacao === 'unico' ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 print:grid-cols-3">
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardContent className="py-3 px-4">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 print:grid-cols-3">
+          <Card className="bg-white border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
+            <CardContent className="py-2.5 px-3.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 1. Receitas
               </p>
-              <p className="text-base font-bold text-emerald-700 mt-1 truncate">
+              <p className="text-sm font-bold text-emerald-700 mt-0.5 truncate">
                 {formatBrl(totalReceitas)}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardContent className="py-3 px-4">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          <Card className="bg-white border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
+            <CardContent className="py-2.5 px-3.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 2. Desp. Variáveis
               </p>
-              <p className="text-base font-bold text-amber-700 mt-1 truncate">
+              <p className="text-sm font-bold text-amber-700 mt-0.5 truncate">
                 {formatBrl(totalDespesasVar)}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardContent className="py-3 px-4">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          <Card className="bg-white border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
+            <CardContent className="py-2.5 px-3.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 3. Desp. Fixas
               </p>
-              <p className="text-base font-bold text-rose-700 mt-1 truncate">
+              <p className="text-sm font-bold text-rose-700 mt-0.5 truncate">
                 {formatBrl(totalDespesasFix)}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardContent className="py-3 px-4">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          <Card className="bg-white border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
+            <CardContent className="py-2.5 px-3.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 4. Desp. Financeiras
               </p>
-              <p className="text-base font-bold text-purple-700 mt-1 truncate">
+              <p className="text-sm font-bold text-purple-700 mt-0.5 truncate">
                 {formatBrl(totalDespesasFin)}
               </p>
             </CardContent>
           </Card>
 
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardContent className="py-3 px-4">
-              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+          <Card className="bg-white border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
+            <CardContent className="py-2.5 px-3.5">
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                 5. Rec. Financeiras
               </p>
-              <p className="text-base font-bold text-sky-700 mt-1 truncate">
+              <p className="text-sm font-bold text-sky-700 mt-0.5 truncate">
                 {formatBrl(totalReceitasFin)}
               </p>
             </CardContent>
@@ -728,29 +727,29 @@ export default function DreGerencial() {
           <Card
             className={`border shadow-xs ${
               isLucro
-                ? 'bg-emerald-50/70 border-emerald-300 text-emerald-950'
-                : 'bg-rose-50/70 border-rose-300 text-rose-950'
+                ? 'bg-gradient-to-br from-emerald-50/90 to-emerald-100/50 border-emerald-300 text-emerald-950'
+                : 'bg-gradient-to-br from-rose-50/90 to-rose-100/50 border-rose-300 text-rose-950'
             }`}
           >
-            <CardContent className="py-3 px-4">
+            <CardContent className="py-2.5 px-3.5">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold uppercase tracking-wider">
+                <p className="text-[10px] font-bold uppercase tracking-wider">
                   {isLucro ? 'Lucro do Período' : 'Prejuízo do Período'}
                 </p>
                 {isLucro ? (
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
                 ) : (
-                  <TrendingDown className="w-4 h-4 text-rose-600" />
+                  <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
                 )}
               </div>
               <p
-                className={`text-base font-extrabold mt-1 truncate ${
+                className={`text-sm font-extrabold mt-0.5 truncate ${
                   isLucro ? 'text-emerald-700' : 'text-rose-700'
                 }`}
               >
                 {formatBrl(lucroTotal)}
               </p>
-              <p className="text-[10px] font-semibold opacity-80 mt-0.5">
+              <p className="text-[9.5px] font-semibold opacity-85 mt-0.5">
                 Margem Líquida:{' '}
                 {matriz.margemLiquidaTotal !== null
                   ? `${matriz.margemLiquidaTotal.toFixed(1)}%`
@@ -967,18 +966,18 @@ export default function DreGerencial() {
               >
                 <thead>
                   <tr className="bg-slate-100/90 text-[#0B1F3A] border-b border-slate-200 font-bold text-left">
-                    <th className="py-3 px-4 w-[260px] min-w-[220px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                    <th className="py-2 px-3 w-[240px] min-w-[210px] sticky left-0 bg-slate-100 z-10 border-r border-slate-200 text-xs">
                       Estrutura de Contas / Grupos
                     </th>
                     {meses.map((m) => (
                       <th
                         key={m.chave}
-                        className="py-3 px-2 min-w-[105px] text-right border-r border-slate-200 font-semibold whitespace-nowrap"
+                        className="py-2 px-2 min-w-[96px] text-right border-r border-slate-200 font-semibold text-[11px] whitespace-nowrap"
                       >
                         {m.rotuloCurto}
                       </th>
                     ))}
-                    <th className="py-3 px-4 min-w-[130px] text-right bg-slate-200/80 font-bold text-[#0B1F3A] whitespace-nowrap">
+                    <th className="py-2 px-3 min-w-[115px] text-right bg-slate-200/80 font-bold text-[#0B1F3A] text-xs whitespace-nowrap">
                       Total Período
                     </th>
                   </tr>
