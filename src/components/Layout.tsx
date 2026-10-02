@@ -240,6 +240,10 @@ export default function Layout() {
       )
     }
 
+    if (grupo.id === 'gerencial') {
+      return location.pathname === '/gerencial/dre' || location.pathname.startsWith('/gerencial/')
+    }
+
     if (grupo.id === 'financeiro') {
       return (
         location.pathname === '/financeiro' ||
@@ -273,14 +277,27 @@ export default function Layout() {
     return gruposExcedentes.some((g) => isGroupActive(g))
   }, [gruposExcedentes, location.pathname, location.search])
 
-  // Atualiza acordeões do drawer mobile quando rota mudar
+  // Atualiza acordeões do drawer mobile quando rota mudar e fecha drawer se aberto
   useEffect(() => {
     menuGruposFiltrados.forEach((g) => {
       if (isGroupActive(g)) {
         setOpenDrawerGroups((prev) => ({ ...prev, [g.id]: true }))
       }
     })
+    // Fecha o drawer mobile ao navegar para qualquer nova rota/busca
+    setMobileDrawerOpen(false)
   }, [location.pathname, location.search, menuGruposFiltrados])
+
+  // Fecha o drawer mobile ao teclar Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileDrawerOpen) {
+        setMobileDrawerOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileDrawerOpen])
 
   // Redirect to login if not authenticated
   useEffect(() => {
@@ -315,6 +332,8 @@ export default function Layout() {
     location.pathname === '/planejamento/bsc' ||
     location.pathname === '/notas-fiscais' ||
     location.pathname === '/indicadores/apresentacao' ||
+    location.pathname === '/gerencial/dre' ||
+    location.pathname === '/gerencial/fluxo-caixa' ||
     location.pathname.startsWith('/empresas/') ||
     location.pathname.startsWith('/formacao-preco')
 
@@ -856,21 +875,28 @@ export default function Layout() {
       DRAWER MOBILE (< 768px)          Modernizado com busca e suporte aos mesmos dados ricos
       ======================================================== */}
       {mobileDrawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          {/* Overlay escuro */}
-          <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+        <div
+          className="fixed inset-0 z-50 md:hidden flex animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Menu de Navegação Principal"
+        >
+          {/* Overlay escuro com clique para fechar */}
+          <button
+            type="button"
+            className="fixed inset-0 w-full h-full bg-black/60 backdrop-blur-xs transition-opacity cursor-pointer border-none p-0 m-0"
             onClick={() => setMobileDrawerOpen(false)}
+            aria-label="Fechar menu ao clicar no fundo"
           />
 
           {/* Drawer Lateral */}
           <div
-            className="relative w-80 max-w-[85vw] text-white flex flex-col justify-between h-full p-4 sm:p-5 shadow-2xl z-10 transition-colors"
+            className="relative w-80 max-w-[85vw] text-white flex flex-col justify-between h-full p-4 sm:p-5 shadow-2xl z-10 transition-colors animate-in slide-in-from-left duration-200"
             style={{ backgroundColor: corPrimaria }}
           >
-            <div>
+            <div className="flex-1 flex flex-col min-h-0">
               {/* Cabeçalho do Drawer */}
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center justify-between pb-3.5 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5 overflow-hidden">
                   {logoUrl ? (
                     <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md">
@@ -909,8 +935,66 @@ export default function Layout() {
                 </button>
               </div>
 
+              {/* Seletores Globais no Drawer Mobile (Empresa + Exercício) */}
+              <div className="mt-3 space-y-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-xl px-2.5 py-1 text-xs">
+                  <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                  {isUserAdmin ? (
+                    <Select
+                      value={selectedEmpresaId}
+                      onValueChange={(id) => {
+                        setSelectedEmpresaId(id)
+                        if (
+                          location.pathname.startsWith('/empresas/') &&
+                          location.pathname !== `/empresas/${id}`
+                        ) {
+                          navigate(`/empresas/${id}`)
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-full cursor-pointer">
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white z-[60]">
+                        <SelectEmpresaOuGrupoItems
+                          todasEntidades={todasEntidades}
+                          empresas={empresas}
+                        />
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="truncate text-xs font-semibold text-white">
+                      {empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
+                        'Empresa Vinculada'}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between bg-white/10 border border-white/15 rounded-xl px-2.5 py-1 text-xs">
+                  <div className="flex items-center gap-1.5 text-slate-200">
+                    <Calendar className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                    <span className="text-[11px] font-medium text-blue-100">Exercício:</span>
+                  </div>
+                  <Select
+                    value={String(selectedAno)}
+                    onValueChange={(val) => setSelectedAno(Number(val))}
+                  >
+                    <SelectTrigger className="h-5 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-[60px] cursor-pointer text-right">
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white z-[60]">
+                      {anosDisponiveis.map((ano) => (
+                        <SelectItem key={ano} value={String(ano)} className="text-xs">
+                          {ano}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               {/* Botão de Busca no Mobile */}
-              <div className="mt-3">
+              <div className="mt-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -929,8 +1013,8 @@ export default function Layout() {
                 </button>
               </div>
 
-              {/* Lista de navegação mobile */}
-              <nav className="mt-4 space-y-1 overflow-y-auto max-h-[calc(100vh-250px)] pr-1">
+              {/* Lista de navegação mobile com rolagem suave */}
+              <nav className="mt-3 flex-1 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/20">
                 {menuGruposFiltrados.map((grupo) => {
                   const GroupIcon = grupo.icon
                   const active = isGroupActive(grupo)
@@ -1048,7 +1132,7 @@ export default function Layout() {
             </div>
 
             {/* Rodapé do Drawer com Usuário e Logout */}
-            <div className="pt-4 border-t border-white/10 space-y-2">
+            <div className="pt-3 border-t border-white/10 space-y-2 shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -1180,6 +1264,9 @@ export default function Layout() {
                   'Configuração e Análise de Impostos'}
                 {location.pathname === '/formacao-preco/simulador' &&
                   'Simulador de Preços & Mark-Up'}
+                {location.pathname === '/gerencial/dre' && 'DRE Gerencial por Período'}
+                {location.pathname === '/gerencial/fluxo-caixa' &&
+                  'Fluxo de Caixa Estruturado (DRE)'}
                 {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
               </h1>
               <p className="text-[11px] text-[#5B6B7F] line-clamp-1">
@@ -1209,6 +1296,10 @@ export default function Layout() {
                   'Carga tributária, regimes e impacto nos custos'}
                 {location.pathname === '/formacao-preco/simulador' &&
                   'Cálculo de mark-up divisor por parâmetros percentuais e simulação por produto com custo da ficha técnica'}
+                {location.pathname === '/gerencial/dre' &&
+                  'Demonstração estruturada em 6 níveis contábeis com visão matricial mês a mês ou comparativa'}
+                {location.pathname === '/gerencial/fluxo-caixa' &&
+                  'Demonstração do fluxo de caixa estruturado por grupos DRE: operacional, financeiro e acumulado'}
                 {location.pathname.startsWith('/empresas/') &&
                   'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
               </p>

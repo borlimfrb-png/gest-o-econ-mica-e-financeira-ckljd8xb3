@@ -387,7 +387,7 @@ export default function DreGerencial() {
     matriz.grupos.find((g) => g.classificacao === 'Receita Financeira')?.totalPeriodo || 0
 
   return (
-    <div className="space-y-4 animate-fadeIn pb-6 print:p-0 print:m-0">
+    <div className="space-y-4 animate-fadeIn pb-6 print:p-0 print:m-0 w-full min-w-0 max-w-full overflow-hidden">
       {/* Cabeçalho da tela */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
@@ -960,7 +960,7 @@ export default function DreGerencial() {
             </div>
           ) : modoVisualizacao === 'unico' ? (
             /* TABELA PERÍODO ÚNICO (Matriz mês a mês) */
-            <div className="overflow-x-auto w-full max-w-full">
+            <div className="overflow-x-auto w-full max-w-full scrollbar-thin scrollbar-thumb-slate-300 touch-pan-x">
               <table
                 className="text-xs border-collapse w-full"
                 style={{ minWidth: `${Math.max(800, 260 + meses.length * 105 + 130)}px` }}
@@ -1331,7 +1331,7 @@ export default function DreGerencial() {
             </div>
           ) : (
             /* TABELA COMPARATIVA LADO A LADO */
-            <div className="overflow-x-auto w-full max-w-full">
+            <div className="overflow-x-auto w-full max-w-full scrollbar-thin scrollbar-thumb-slate-300 touch-pan-x">
               <table className="text-xs border-collapse w-full min-w-[760px]">
                 <thead>
                   <tr className="bg-slate-100 text-[#0B1F3A] border-b border-slate-200 font-bold text-left">

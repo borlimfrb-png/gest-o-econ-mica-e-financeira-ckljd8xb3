@@ -530,8 +530,9 @@ export function VerticalSidebar({
                   <DropdownMenuContent
                     side="right"
                     align="start"
-                    sideOffset={12}
-                    className="w-72 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2.5 z-50 backdrop-blur-md"
+                    sideOffset={8}
+                    collisionPadding={12}
+                    className="w-72 max-w-[calc(100vw-88px)] bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2.5 z-50 backdrop-blur-md"
                   >
                     <div className="px-2.5 py-1.5 border-b border-white/10 mb-1.5 flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -546,7 +547,7 @@ export function VerticalSidebar({
                       </p>
                     )}
 
-                    <div className="space-y-0.5 max-h-[360px] overflow-y-auto pr-1">
+                    <div className="space-y-0.5 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/20">
                       {subitens.map((item) => {
                         const ItemIcon = item.icon
                         const isSubActive = isItemActive(item.path)
@@ -701,8 +702,9 @@ export function VerticalSidebar({
                 <DropdownMenuContent
                   side="right"
                   align="end"
-                  sideOffset={12}
-                  className="w-64 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
+                  sideOffset={8}
+                  collisionPadding={12}
+                  className="w-64 max-w-[calc(100vw-88px)] bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
                 >
                   <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/10 mb-1">
                     <Avatar
