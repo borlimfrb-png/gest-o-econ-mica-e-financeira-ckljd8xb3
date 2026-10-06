@@ -291,13 +291,13 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
     ],
   },
 
-  // 3.1. Gerencial (Menu com DRE e Fluxo de Caixa)
+  // 3.1. Gerencial (Menu com DRE, Análise de Despesas Fixas e Fluxo de Caixa)
   {
     id: 'gerencial',
     label: 'Gerencial',
     icon: BarChart3,
     tipo: 'dropdown',
-    subtitulo: 'Demonstrações Gerenciais & Fluxo de Caixa',
+    subtitulo: 'Demonstrações Gerenciais, Despesas Fixas & Fluxo de Caixa',
     itens: [
       {
         id: 'gerencial-dre',
@@ -319,6 +319,26 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
           'lucro',
           'prejuízo',
           'comparativo',
+        ],
+      },
+      {
+        id: 'gerencial-despesas-fixas',
+        name: 'Análise de Despesas Fixas',
+        path: '/gerencial/despesas-fixas',
+        icon: Tags,
+        descricao:
+          'Análise matricial das despesas fixas, percentuais sobre faturamento mensal e consolidação geral',
+        modulo: 'gerencial_despesas_fixas',
+        badge: 'Novo',
+        badgeVariant: 'blue',
+        palavrasChave: [
+          'despesas fixas',
+          'custos fixos',
+          'análise despesas fixas',
+          'percentual faturamento',
+          'despesa fixa dre',
+          'balanço gerencial',
+          'faturamento mensal',
         ],
       },
       {
