@@ -364,6 +364,28 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         ],
       },
       {
+        id: 'gerencial-comparativo-despesas',
+        name: 'Comparativo Fixas × Variáveis',
+        path: '/gerencial/comparativo-despesas',
+        icon: Scale,
+        descricao:
+          'Comparativo simultâneo de Despesas Fixas vs Despesas Variáveis e apuração do peso de cada uma sobre o faturamento',
+        modulo: 'gerencial_comparativo_despesas',
+        badge: 'Novo',
+        badgeVariant: 'blue',
+        palavrasChave: [
+          'comparativo fixas x variáveis',
+          'fixas vs variáveis',
+          'comparativo despesas',
+          'peso sobre faturamento',
+          'peso fixas',
+          'peso variáveis',
+          'diagnóstico de custos',
+          'estrutura de custos',
+          'faturamento mensal',
+        ],
+      },
+      {
         id: 'gerencial-fluxo-caixa',
         name: 'Fluxo de Caixa (DRE)',
         path: '/gerencial/fluxo-caixa',
