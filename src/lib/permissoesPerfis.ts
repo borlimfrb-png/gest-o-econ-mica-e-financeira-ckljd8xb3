@@ -17,6 +17,7 @@ export type ModuloSistema =
   | 'gerencial_despesas_variaveis'
   | 'gerencial_comparativo_despesas'
   | 'gerencial_fluxo_caixa'
+  | 'gerencial_analise_faturamento'
   | 'financeiro'
   | 'baixa_recebiveis'
   | 'contratos'
@@ -68,6 +69,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_despesas_variaveis',
       'gerencial_comparativo_despesas',
       'gerencial_fluxo_caixa',
+      'gerencial_analise_faturamento',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -105,6 +107,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_despesas_variaveis',
       'gerencial_comparativo_despesas',
       'gerencial_fluxo_caixa',
+      'gerencial_analise_faturamento',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -135,6 +138,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_despesas_variaveis',
       'gerencial_comparativo_despesas',
       'gerencial_fluxo_caixa',
+      'gerencial_analise_faturamento',
       'financeiro',
       'baixa_recebiveis',
       'contratos',

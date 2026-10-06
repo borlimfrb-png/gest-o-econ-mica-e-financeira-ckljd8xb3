@@ -291,13 +291,13 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
     ],
   },
 
-  // 3.1. Gerencial (Menu com DRE, Análise de Despesas Fixas e Fluxo de Caixa)
+  // 3.1. Gerencial (Menu com DRE, Análise de Faturamento, Despesas Fixas/Variáveis e Fluxo de Caixa)
   {
     id: 'gerencial',
     label: 'Gerencial',
     icon: BarChart3,
     tipo: 'dropdown',
-    subtitulo: 'Demonstrações Gerenciais, Despesas Fixas & Fluxo de Caixa',
+    subtitulo: 'Demonstrações Gerenciais, Faturamento, Despesas & Fluxo de Caixa',
     itens: [
       {
         id: 'gerencial-dre',
@@ -319,6 +319,30 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
           'lucro',
           'prejuízo',
           'comparativo',
+        ],
+      },
+      {
+        id: 'gerencial-analise-faturamento',
+        name: 'Análise de Faturamento',
+        path: '/gerencial/analise-faturamento',
+        icon: TrendingUp,
+        descricao:
+          'Análise do faturamento histórico por ano e mês, percentuais de participação e variação ano a ano de todos os anos',
+        modulo: 'gerencial_analise_faturamento',
+        badge: 'Novo',
+        badgeVariant: 'emerald',
+        destaque: true,
+        palavrasChave: [
+          'faturamento',
+          'análise de faturamento',
+          'receitas todos os anos',
+          'receita histórica',
+          'evolução de vendas',
+          'comparativo anual',
+          'todos os anos',
+          'percentual faturamento',
+          'dre receitas',
+          'faturamento anual',
         ],
       },
       {

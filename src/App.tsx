@@ -26,6 +26,7 @@ const Lancamentos = lazy(() => import('./pages/Lancamentos'))
 const DreGerencial = lazy(() => import('./pages/DreGerencial'))
 const DespesasFixasAnalise = lazy(() => import('./pages/DespesasFixasAnalise'))
 const DespesasVariaveisAnalise = lazy(() => import('./pages/DespesasVariaveisAnalise'))
+const AnaliseFaturamento = lazy(() => import('./pages/AnaliseFaturamento'))
 const ComparativoDespesasAnalise = lazy(() => import('./pages/ComparativoDespesasAnalise'))
 const FluxoCaixaDre = lazy(() => import('./pages/FluxoCaixaDre'))
 const Financeiro = lazy(() => import('./pages/Financeiro'))
@@ -214,6 +215,14 @@ const App = () => (
                     element={
                       <ModuloRoute modulo="gerencial_dre">
                         <DreGerencial />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/gerencial/analise-faturamento"
+                    element={
+                      <ModuloRoute modulo="gerencial_analise_faturamento">
+                        <AnaliseFaturamento />
                       </ModuloRoute>
                     }
                   />
