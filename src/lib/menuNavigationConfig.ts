@@ -342,6 +342,28 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         ],
       },
       {
+        id: 'gerencial-despesas-variaveis',
+        name: 'Análise de Despesas Variáveis',
+        path: '/gerencial/despesas-variaveis',
+        icon: PieChart,
+        descricao:
+          'Análise matricial das despesas variáveis, percentuais sobre faturamento mensal e consolidação geral',
+        modulo: 'gerencial_despesas_variaveis',
+        badge: 'Novo',
+        badgeVariant: 'blue',
+        palavrasChave: [
+          'despesas variáveis',
+          'custos variáveis',
+          'análise despesas variáveis',
+          'percentual faturamento',
+          'despesa variável dre',
+          'balanço gerencial',
+          'comissões',
+          'fretes',
+          'faturamento mensal',
+        ],
+      },
+      {
         id: 'gerencial-fluxo-caixa',
         name: 'Fluxo de Caixa (DRE)',
         path: '/gerencial/fluxo-caixa',

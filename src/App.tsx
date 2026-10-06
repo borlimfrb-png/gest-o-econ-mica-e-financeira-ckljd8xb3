@@ -25,6 +25,7 @@ const PlanoContas = lazy(() => import('./pages/PlanoContas'))
 const Lancamentos = lazy(() => import('./pages/Lancamentos'))
 const DreGerencial = lazy(() => import('./pages/DreGerencial'))
 const DespesasFixasAnalise = lazy(() => import('./pages/DespesasFixasAnalise'))
+const DespesasVariaveisAnalise = lazy(() => import('./pages/DespesasVariaveisAnalise'))
 const FluxoCaixaDre = lazy(() => import('./pages/FluxoCaixaDre'))
 const Financeiro = lazy(() => import('./pages/Financeiro'))
 const BaixaRecebiveis = lazy(() => import('./pages/BaixaRecebiveis'))
@@ -220,6 +221,14 @@ const App = () => (
                     element={
                       <ModuloRoute modulo="gerencial_despesas_fixas">
                         <DespesasFixasAnalise />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/gerencial/despesas-variaveis"
+                    element={
+                      <ModuloRoute modulo="gerencial_despesas_variaveis">
+                        <DespesasVariaveisAnalise />
                       </ModuloRoute>
                     }
                   />
