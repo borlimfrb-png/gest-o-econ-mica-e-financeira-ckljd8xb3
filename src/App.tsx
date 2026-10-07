@@ -14,6 +14,7 @@ import Index from './pages/Index'
 import Layout from './components/Layout'
 import WelcomeSplash, { hasSeenSplashThisSession } from './pages/WelcomeSplash'
 
+const AnaliseEconomicaFinanceira = lazy(() => import('./pages/AnaliseEconomicaFinanceira'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const DashboardBi = lazy(() => import('./pages/DashboardBi'))
 const Empresas = lazy(() => import('./pages/Empresas'))
@@ -71,7 +72,7 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Componente para rotas exclusivas de administrador
 function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isAdmin, isLoading } = useAuth()
+  const { user, isAuthenticated, isAdmin, isLoading } = useAuth()
 
   if (isLoading) {
     return (
@@ -86,7 +87,13 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/dashboard" replace />
+    const destino =
+      user?.role === 'cliente'
+        ? '/analise-economica-financeira'
+        : user?.role === 'comercial'
+          ? '/baixa-recebiveis'
+          : '/dashboard'
+    return <Navigate to={destino} replace />
   }
 
   return <>{children}</>
@@ -109,7 +116,12 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
   }
 
   if (!perfilTemAcesso(user?.role, modulo)) {
-    const destino = user?.role === 'comercial' ? '/baixa-recebiveis' : '/dashboard'
+    const destino =
+      user?.role === 'cliente'
+        ? '/analise-economica-financeira'
+        : user?.role === 'comercial'
+          ? '/baixa-recebiveis'
+          : '/dashboard'
     return <Navigate to={destino} replace />
   }
 
@@ -189,7 +201,22 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 >
-                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route
+                    path="/analise-economica-financeira"
+                    element={
+                      <ModuloRoute modulo="analise_economica_financeira">
+                        <AnaliseEconomicaFinanceira />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/dashboard"
+                    element={
+                      <ModuloRoute modulo="dashboard">
+                        <Dashboard />
+                      </ModuloRoute>
+                    }
+                  />
                   <Route
                     path="/dashboard-bi"
                     element={
@@ -199,17 +226,94 @@ const App = () => (
                     }
                   />
                   <Route path="/bi" element={<Navigate to="/dashboard-bi" replace />} />
-                  <Route path="/dashboard/empresa/:id" element={<DashboardEmpresa />} />
-                  <Route path="/empresas" element={<Empresas />} />
-                  <Route path="/cadastro/grupos-empresariais" element={<GruposEmpresariais />} />
-                  <Route path="/grupos-empresariais" element={<GruposEmpresariais />} />
-                  <Route path="/empresas/:id" element={<AnaliseEmpresa />} />
-                  <Route path="/centros" element={<Centros />} />
-                  <Route path="/tipos-despesas" element={<TiposDespesas />} />
-                  <Route path="/contas" element={<Contas />} />
-                  <Route path="/plano-contas" element={<PlanoContas />} />
-                  <Route path="/minha-empresa" element={<MinhaEmpresa />} />
-                  <Route path="/lancamentos" element={<Lancamentos />} />
+                  <Route
+                    path="/dashboard/empresa/:id"
+                    element={
+                      <ModuloRoute modulo="dashboard">
+                        <DashboardEmpresa />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/empresas"
+                    element={
+                      <ModuloRoute modulo="empresas">
+                        <Empresas />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/cadastro/grupos-empresariais"
+                    element={
+                      <ModuloRoute modulo="grupos_empresariais">
+                        <GruposEmpresariais />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/grupos-empresariais"
+                    element={
+                      <ModuloRoute modulo="grupos_empresariais">
+                        <GruposEmpresariais />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/empresas/:id"
+                    element={
+                      <ModuloRoute modulo="empresas">
+                        <AnaliseEmpresa />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/centros"
+                    element={
+                      <ModuloRoute modulo="centros">
+                        <Centros />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/tipos-despesas"
+                    element={
+                      <ModuloRoute modulo="tipos_despesas">
+                        <TiposDespesas />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/contas"
+                    element={
+                      <ModuloRoute modulo="contas">
+                        <Contas />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/plano-contas"
+                    element={
+                      <ModuloRoute modulo="plano_contas">
+                        <PlanoContas />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/minha-empresa"
+                    element={
+                      <ModuloRoute modulo="minha_empresa">
+                        <MinhaEmpresa />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/lancamentos"
+                    element={
+                      <ModuloRoute modulo="lancamentos">
+                        <Lancamentos />
+                      </ModuloRoute>
+                    }
+                  />
                   <Route
                     path="/gerencial/dre"
                     element={
@@ -258,10 +362,38 @@ const App = () => (
                       </ModuloRoute>
                     }
                   />
-                  <Route path="/financeiro" element={<Financeiro />} />
-                  <Route path="/baixa-recebiveis" element={<BaixaRecebiveis />} />
-                  <Route path="/contratos" element={<Contratos />} />
-                  <Route path="/notas-fiscais" element={<NotasFiscais />} />
+                  <Route
+                    path="/financeiro"
+                    element={
+                      <ModuloRoute modulo="financeiro">
+                        <Financeiro />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/baixa-recebiveis"
+                    element={
+                      <ModuloRoute modulo="baixa_recebiveis">
+                        <BaixaRecebiveis />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/contratos"
+                    element={
+                      <ModuloRoute modulo="contratos">
+                        <Contratos />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/notas-fiscais"
+                    element={
+                      <ModuloRoute modulo="notas_fiscais">
+                        <NotasFiscais />
+                      </ModuloRoute>
+                    }
+                  />
                   {/* Formação de Preço - Custo */}
                   <Route
                     path="/formacao-preco/produtos"
@@ -491,7 +623,14 @@ const App = () => (
                       </ModuloRoute>
                     }
                   />{' '}
-                  <Route path="/configuracoes" element={<Configuracoes />} />
+                  <Route
+                    path="/configuracoes"
+                    element={
+                      <ModuloRoute modulo="configuracoes">
+                        <Configuracoes />
+                      </ModuloRoute>
+                    }
+                  />
                   <Route
                     path="/admin/usuarios"
                     element={

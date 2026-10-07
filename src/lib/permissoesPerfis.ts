@@ -1,6 +1,7 @@
 import type { UserRole } from '@/types/finance'
 
 export type ModuloSistema =
+  | 'analise_economica_financeira'
   | 'dashboard'
   | 'dashboard_bi'
   | 'empresas'
@@ -62,6 +63,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'contas',
       'plano_contas',
       'minha_empresa',
+      'analise_economica_financeira',
       'admin_usuarios',
       'lancamentos',
       'gerencial_dre',
@@ -97,6 +99,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'empresas',
       'grupos_empresariais',
       'centros',
+      'analise_economica_financeira',
       'tipos_despesas',
       'contas',
       'plano_contas',
@@ -158,6 +161,21 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'Acesso restrito ao ciclo comercial: Recebíveis, Contratos, Notas Fiscais e Minha Empresa. Bloqueado de módulos contábeis, valuation, formação de preço e administrativos.',
     badgeCor: 'bg-amber-100 text-amber-800 border-amber-200',
     modulosPermitidos: ['baixa_recebiveis', 'contratos', 'notas_fiscais', 'minha_empresa'],
+  },
+  cliente: {
+    id: 'cliente',
+    nome: 'Cliente',
+    descricao:
+      'Acesso exclusivo à tela-hub Análise Econômica e Financeira, Balanço Patrimonial, DRE e análises gerenciais (Faturamento, Despesas Fixas e Variáveis).',
+    badgeCor: 'bg-cyan-100 text-cyan-800 border-cyan-200',
+    modulosPermitidos: [
+      'analise_economica_financeira',
+      'gerencial_dre',
+      'gerencial_despesas_fixas',
+      'gerencial_despesas_variaveis',
+      'gerencial_analise_faturamento',
+      'empresas',
+    ],
   },
 }
 

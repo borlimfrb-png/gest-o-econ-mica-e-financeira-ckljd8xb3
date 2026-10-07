@@ -79,6 +79,18 @@ export interface NavGroupConfig {
  * atalhos de busca rápida e suporte a mega-menu.
  */
 export const MENU_GRUPOS: NavGroupConfig[] = [
+  // 0. Análise Econômica e Financeira (Tela-Hub Executiva de Demonstrações Contábeis & Gerenciais)
+  {
+    id: 'analise-economica-financeira',
+    label: 'Análise Econômica e Financeira',
+    icon: Sparkles,
+    tipo: 'link',
+    path: '/analise-economica-financeira',
+    modulo: 'analise_economica_financeira',
+    badge: 'Hub',
+    subtitulo: 'Balanço, DRE e Análises Gerenciais',
+  },
+
   // 1. Dashboard (Dropdown / Mega compacto com Geral e BI)
   {
     id: 'dashboard',
@@ -832,6 +844,85 @@ export function filtrarMenuPorPerfil(
 ): NavGroupConfig[] {
   const isFinanceiro = role === 'financeiro'
   const isComercial = role === 'comercial'
+  const isCliente = role === 'cliente'
+
+  // Perfil Cliente: Acesso estritamente restrito à tela-hub e aos 5 destinos
+  if (isCliente) {
+    const balancoPath =
+      balancoDreUrl && balancoDreUrl !== '__DYNAMIC_BALANCO_DRE__' ? balancoDreUrl : '/empresas'
+
+    return [
+      {
+        id: 'analise-economica-financeira',
+        label: 'Análise Econômica e Financeira',
+        icon: Sparkles,
+        tipo: 'link',
+        path: '/analise-economica-financeira',
+        modulo: 'analise_economica_financeira',
+        badge: 'Hub',
+        subtitulo: 'Balanço, DRE e Análises Gerenciais',
+      },
+      {
+        id: 'cliente-destinos',
+        label: 'Demonstrações & Análises',
+        icon: BarChart3,
+        tipo: 'dropdown',
+        subtitulo: 'Atalhos diretos das demonstrações contábeis e gerenciais',
+        itens: [
+          {
+            id: 'cliente-balanco',
+            name: 'Balanço Patrimonial',
+            path: balancoPath,
+            icon: Scale,
+            descricao: 'Estrutura de Ativo, Passivo e Patrimônio Líquido',
+            modulo: 'empresas',
+            badge: 'Balanço',
+            badgeVariant: 'cyan',
+          },
+          {
+            id: 'cliente-dre',
+            name: 'DRE Gerencial',
+            path: '/gerencial/dre',
+            icon: BarChart3,
+            descricao: 'Demonstração do Resultado do Exercício mensal',
+            modulo: 'gerencial_dre',
+            badge: 'Gerencial',
+            badgeVariant: 'emerald',
+          },
+          {
+            id: 'cliente-despesas-fixas',
+            name: 'Despesas Fixas',
+            path: '/gerencial/despesas-fixas',
+            icon: Tags,
+            descricao: 'Análise matricial de despesas fixas recorrentes',
+            modulo: 'gerencial_despesas_fixas',
+            badge: 'Fixas',
+            badgeVariant: 'blue',
+          },
+          {
+            id: 'cliente-despesas-variaveis',
+            name: 'Despesas Variáveis',
+            path: '/gerencial/despesas-variaveis',
+            icon: PieChart,
+            descricao: 'Custos variáveis, fretes, comissões e taxas de venda',
+            modulo: 'gerencial_despesas_variaveis',
+            badge: 'Variáveis',
+            badgeVariant: 'amber',
+          },
+          {
+            id: 'cliente-faturamento',
+            name: 'Análise de Faturamento',
+            path: '/gerencial/analise-faturamento',
+            icon: TrendingUp,
+            descricao: 'Histórico plurianual de faturamento e evolução de vendas',
+            modulo: 'gerencial_analise_faturamento',
+            badge: 'Faturamento',
+            badgeVariant: 'emerald',
+          },
+        ],
+      },
+    ]
+  }
 
   const resolvePath = (p: string) => (p === '__DYNAMIC_BALANCO_DRE__' ? balancoDreUrl : p)
 

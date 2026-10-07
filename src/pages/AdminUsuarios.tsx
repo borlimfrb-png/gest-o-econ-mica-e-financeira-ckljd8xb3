@@ -455,7 +455,7 @@ export default function AdminUsuarios() {
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card className="bg-white border-slate-200">
           <CardContent className="p-3.5 flex items-center justify-between">
             <div>
@@ -533,6 +533,22 @@ export default function AdminUsuarios() {
             </div>
           </CardContent>
         </Card>
+
+        <Card className="bg-white border-slate-200">
+          <CardContent className="p-3.5 flex items-center justify-between">
+            <div>
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                Cliente
+              </p>
+              <h3 className="text-xl font-extrabold text-cyan-700 mt-0.5">
+                {usuarios.filter((u) => u.role === 'cliente').length}
+              </h3>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-cyan-50 flex items-center justify-center text-cyan-600 shrink-0">
+              <Eye className="w-4 h-4" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
       {/* Filtros e Busca */}
       <Card className="bg-white border-slate-200 shadow-2xs">
@@ -559,6 +575,7 @@ export default function AdminUsuarios() {
                   <SelectItem value="financeiro">Financeiro</SelectItem>
                   <SelectItem value="comercial">Comercial</SelectItem>
                   <SelectItem value="empresa">Usuário Empresa</SelectItem>
+                  <SelectItem value="cliente">Cliente</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -665,6 +682,8 @@ export default function AdminUsuarios() {
                                 <Shield className="w-3 h-3" />
                               ) : u.role === 'comercial' ? (
                                 <FileCheck2 className="w-3 h-3" />
+                              ) : u.role === 'cliente' ? (
+                                <Eye className="w-3 h-3" />
                               ) : (
                                 <Building2 className="w-3 h-3" />
                               )}

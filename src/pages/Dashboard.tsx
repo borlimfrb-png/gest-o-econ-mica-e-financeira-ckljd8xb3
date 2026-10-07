@@ -2170,6 +2170,17 @@ export default function Dashboard() {
             <Button
               asChild
               size="sm"
+              className="text-xs bg-[#0B1F3A] hover:bg-[#142850] text-white font-semibold h-8 shadow-xs gap-1.5"
+            >
+              <Link to="/analise-economica-financeira">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                Análise Econômica e Financeira
+              </Link>
+            </Button>
+
+            <Button
+              asChild
+              size="sm"
               variant="outline"
               className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 font-medium h-8"
             >
