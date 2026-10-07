@@ -143,9 +143,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           ? dreService.getByEmpresa(targetEmpresaId).catch(() => [])
           : Promise.resolve([]),
         targetEmpresaId
-          ? lancamentosService
-              .getAll({ empresaId: targetEmpresaId, limit: 100 })
-              .catch(() => [] as any[])
+          ? lancamentosService.getAll({ empresaId: targetEmpresaId }).catch(() => [] as any[])
           : Promise.resolve([] as any[]),
       ])
 

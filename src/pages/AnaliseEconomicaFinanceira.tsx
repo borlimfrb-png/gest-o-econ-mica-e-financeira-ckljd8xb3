@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Scale,
@@ -15,6 +15,8 @@ import {
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { lancamentosService, balancosService, dreService } from '@/services/financeService'
+import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -37,6 +39,10 @@ export default function AnaliseEconomicaFinanceira() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { selectedEmpresa, selectedEmpresaId, selectedAno } = useFilter()
+  const isCliente = user?.role === 'cliente'
+
+  const [verificandoDados, setVerificandoDados] = useState<boolean>(false)
+  const [temDadosCliente, setTemDadosCliente] = useState<boolean>(true)
 
   const empresaAtivaId =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
@@ -44,6 +50,69 @@ export default function AnaliseEconomicaFinanceira() {
       : selectedEmpresa?.id || null
 
   const empresaNome = selectedEmpresa?.nome || 'Empresa Ativa'
+
+  useEffect(() => {
+    let cancelado = false
+
+    const verificarPresencaDados = async () => {
+      if (!isCliente) {
+        setTemDadosCliente(true)
+        return
+      }
+
+      if (!empresaAtivaId) {
+        setTemDadosCliente(false)
+        return
+      }
+
+      setVerificandoDados(true)
+      try {
+        const ano = selectedAno || new Date().getFullYear()
+
+        const [balancos, dres, lancs] = await Promise.all([
+          balancosService
+            .getByEmpresa(empresaAtivaId)
+            .then((list) => list.filter((b) => b.ano === ano))
+            .catch(() => []),
+          dreService
+            .getByEmpresa(empresaAtivaId)
+            .then((list) => list.filter((d) => d.ano === ano))
+            .catch(() => []),
+          lancamentosService
+            .getAll({ empresaId: empresaAtivaId })
+            .then((list) =>
+              list.filter((l) => {
+                const dataStr = l.data_competencia || l.data_pagamento || l.data_lancamento
+                if (!dataStr) return false
+                return new Date(dataStr).getFullYear() === ano
+              }),
+            )
+            .catch(() => []),
+        ])
+
+        if (!cancelado) {
+          const temAlgumDado = balancos.length > 0 || dres.length > 0 || lancs.length > 0
+          setTemDadosCliente(temAlgumDado)
+        }
+      } catch (err) {
+        console.error('Erro ao verificar dados da empresa para o cliente:', err)
+        if (!cancelado) {
+          // Em caso de falha de requisição, não bloqueia visualmente se tiver dúvida
+          setTemDadosCliente(true)
+        }
+      } finally {
+        if (!cancelado) {
+          setVerificandoDados(false)
+        }
+      }
+    }
+
+    verificarPresencaDados()
+
+    return () => {
+      cancelado = true
+    }
+  }, [isCliente, empresaAtivaId, selectedAno])
 
   const atalhos: HubShortcut[] = useMemo(
     () => [
@@ -193,6 +262,15 @@ export default function AnaliseEconomicaFinanceira() {
         </div>
       </div>
 
+      {/* Estado vazio para cliente sem dados no período */}
+      {isCliente && !verificandoDados && !temDadosCliente && (
+        <EstadoVazioClienteCard
+          empresaNome={empresaNome}
+          ano={selectedAno}
+          mensagem="Nenhum balanço contábil, DRE ou lançamento registrado para esta empresa no exercício selecionado. Entre em contato com seu consultor Borlim para a importação e liberação dos demonstrativos."
+        />
+      )}
+
       {/* Grid de 5 Cards Grandes com Efeito Glassmorphism e Navegação Direta */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -202,7 +280,7 @@ export default function AnaliseEconomicaFinanceira() {
               Módulos e Demonstrações Disponíveis
             </h2>
           </div>
-          <span className="text-xs text-slate-500 font-medium">5 relatórios estruturados</span>
+          <span className="text-xs text-slate-500 font-medium">5 demonstrativos estruturados</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

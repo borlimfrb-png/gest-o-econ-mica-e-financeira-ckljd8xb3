@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
+import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { useRealtime } from '@/hooks/use-realtime'
 import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
@@ -93,7 +95,9 @@ const CORES_ANOS = [
 export default function AnaliseFaturamento() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
   const { selectedEmpresaId, selectedEmpresa, isGrupoAtivo, grupoAtivo, selectedAno } = useFilter()
+  const isCliente = user?.role === 'cliente'
 
   // Estados de dados
   const [loading, setLoading] = useState(true)
@@ -551,40 +555,50 @@ export default function AnaliseFaturamento() {
               </p>
             </div>
           ) : !analise.temDados ? (
-            /* Estado vazio amigável */
-            <div className="py-16 px-6 text-center max-w-md mx-auto space-y-3">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
-                <TrendingUp className="w-6 h-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Nenhum Faturamento Encontrado na Base
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Não foram identificadas receitas nos lançamentos contábeis da empresa para compor a
-                análise histórica. Importe extratos ou balancetes, ou vincule suas contas de receita
-                na classificação DRE.
-              </p>
-              <div className="pt-2 flex items-center justify-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setModalClassificacaoOpen(true)}
-                  className="text-xs font-semibold gap-1.5 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                  Classificar Contas DRE
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => navigate('/importacao')}
-                  className="text-xs font-semibold bg-[#0B1F3A] hover:bg-blue-900 text-white gap-1.5 cursor-pointer"
-                >
-                  Importar Lançamentos
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+            /* Estado vazio amigável / orientado ao perfil */
+            <div className="p-6">
+              {isCliente ? (
+                <EstadoVazioClienteCard
+                  empresaNome={selectedEmpresa?.nome}
+                  ano={selectedAno}
+                  mensagem="Nenhum faturamento ou receita contábil registrado para esta empresa no histórico analisado. Entre em contato com seu consultor Borlim para a importação e conferência dos períodos."
+                />
+              ) : (
+                <div className="py-16 px-6 text-center max-w-md mx-auto space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto">
+                    <TrendingUp className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Nenhum Faturamento Encontrado na Base
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Não foram identificadas receitas nos lançamentos contábeis da empresa para
+                    compor a análise histórica. Importe extratos ou balancetes, ou vincule suas
+                    contas de receita na classificação DRE.
+                  </p>
+                  <div className="pt-2 flex items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setModalClassificacaoOpen(true)}
+                      className="text-xs font-semibold gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      Classificar Contas DRE
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => navigate('/importacao')}
+                      className="text-xs font-semibold bg-[#0B1F3A] hover:bg-blue-900 text-white gap-1.5 cursor-pointer"
+                    >
+                      Importar Lançamentos
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto w-full max-w-full">

@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { gerarListaMeses, type ClassificacaoDre } from '@/lib/dreGerencialTypes'
@@ -85,8 +86,10 @@ function formatBrl(val: number | undefined | null): string {
 
 export default function DreGerencial() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const { selectedEmpresaId, selectedEmpresa, empresas, selectedAno, isGrupoAtivo, grupoAtivo } =
     useFilter()
+  const isCliente = user?.role === 'cliente'
 
   // Estados de dados
   const [loading, setLoading] = useState(true)
@@ -1055,6 +1058,14 @@ export default function DreGerencial() {
               <p className="text-xs text-slate-500">
                 Calculando DRE a partir dos lançamentos rápidos...
               </p>
+            </div>
+          ) : isCliente && lancamentos.length === 0 ? (
+            <div className="p-6">
+              <EstadoVazioClienteCard
+                empresaNome={selectedEmpresa?.nome}
+                ano={selectedAno || anoInicial}
+                mensagem="Nenhum lançamento contábil ou DRE importado para esta empresa no período selecionado. Entre em contato com seu consultor Borlim para o envio dos demonstrativos."
+              />
             </div>
           ) : modoVisualizacao === 'unico' ? (
             /* TABELA PERÍODO ÚNICO (Matriz mês a mês) */

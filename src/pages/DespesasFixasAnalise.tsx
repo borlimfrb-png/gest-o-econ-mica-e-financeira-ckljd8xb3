@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
+import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { useRealtime } from '@/hooks/use-realtime'
 import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
@@ -83,7 +85,9 @@ function formatBrl(val: number | undefined | null): string {
 export default function DespesasFixasAnalise() {
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
   const { selectedEmpresaId, selectedEmpresa, selectedAno, isGrupoAtivo, grupoAtivo } = useFilter()
+  const isCliente = user?.role === 'cliente'
 
   // Estados de dados
   const [loading, setLoading] = useState(true)
@@ -585,40 +589,50 @@ export default function DespesasFixasAnalise() {
               </p>
             </div>
           ) : !analise.temDespesasFixas ? (
-            /* Estado vazio amigável */
-            <div className="py-16 px-6 text-center max-w-md mx-auto space-y-3">
-              <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
-                <FolderTree className="w-6 h-6" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800">
-                Nenhuma Despesa Fixa Lançada no Período
-              </h3>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Não foram encontrados lançamentos rápidos para contas com a classificação "Despesa
-                Fixa" no horizonte selecionado ({meses[0]?.rotuloCurto} a{' '}
-                {meses[meses.length - 1]?.rotuloCurto}).
-              </p>
-              <div className="pt-2 flex items-center justify-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setModalClassificacaoOpen(true)}
-                  className="text-xs font-semibold gap-1.5 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  Classificar Contas em Lote
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => navigate('/plano-contas')}
-                  className="text-xs font-semibold bg-[#0B1F3A] hover:bg-blue-900 text-white gap-1.5 cursor-pointer"
-                >
-                  Plano de Contas
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+            /* Estado vazio amigável / orientado ao perfil */
+            <div className="p-6">
+              {isCliente ? (
+                <EstadoVazioClienteCard
+                  empresaNome={selectedEmpresa?.nome}
+                  ano={selectedAno || anoInicial}
+                  mensagem="Nenhum lançamento contábil classificado como despesa fixa foi encontrado para esta empresa no exercício selecionado. Entre em contato com seu consultor Borlim para a conciliação do período."
+                />
+              ) : (
+                <div className="py-16 px-6 text-center max-w-md mx-auto space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto">
+                    <FolderTree className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-800">
+                    Nenhuma Despesa Fixa Lançada no Período
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Não foram encontrados lançamentos rápidos para contas com a classificação
+                    "Despesa Fixa" no horizonte selecionado ({meses[0]?.rotuloCurto} a{' '}
+                    {meses[meses.length - 1]?.rotuloCurto}).
+                  </p>
+                  <div className="pt-2 flex items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setModalClassificacaoOpen(true)}
+                      className="text-xs font-semibold gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                      Classificar Contas em Lote
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => navigate('/plano-contas')}
+                      className="text-xs font-semibold bg-[#0B1F3A] hover:bg-blue-900 text-white gap-1.5 cursor-pointer"
+                    >
+                      Plano de Contas
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto w-full max-w-full">
