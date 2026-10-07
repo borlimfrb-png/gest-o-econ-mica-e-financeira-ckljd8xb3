@@ -197,6 +197,23 @@ export function getPerfilConfig(role?: UserRole): PerfilConfig {
 }
 
 /**
+ * Retorna a rota padrão inicial de navegação para cada perfil após login ou splash.
+ */
+export function getRotaInicialPorPerfil(role?: UserRole): string {
+  switch (role) {
+    case 'cliente':
+      return '/analise-economica-financeira'
+    case 'comercial':
+      return '/baixa-recebiveis'
+    case 'admin':
+    case 'financeiro':
+    case 'empresa':
+    default:
+      return '/dashboard'
+  }
+}
+
+/**
  * Lista de todos os perfis disponíveis para formulários de seleção.
  */
 export const LISTA_PERFIS = Object.values(PERFIS_ACESSO)
