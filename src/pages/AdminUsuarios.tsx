@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   FileCheck2,
   ShieldAlert,
+  Eye,
 } from 'lucide-react'
 import { ModalAuditoriaCadastros } from '@/components/ModalAuditoriaCadastros'
 import { Button } from '@/components/ui/button'

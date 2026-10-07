@@ -148,6 +148,7 @@ export function VerticalSidebar({
     if (variant === 'emerald')
       colorClass = 'bg-emerald-500/30 text-emerald-200 border-emerald-400/50'
     if (variant === 'purple') colorClass = 'bg-purple-500/30 text-purple-200 border-purple-400/50'
+    if (variant === 'cyan') colorClass = 'bg-cyan-500/30 text-cyan-200 border-cyan-400/50'
 
     return (
       <span

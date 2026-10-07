@@ -49,7 +49,7 @@ export interface NavItemConfig {
   hideFinanceiro?: boolean
   hideComercial?: boolean
   badge?: string
-  badgeVariant?: 'default' | 'emerald' | 'amber' | 'blue' | 'purple'
+  badgeVariant?: 'default' | 'emerald' | 'amber' | 'blue' | 'purple' | 'cyan'
   destaque?: boolean
   palavrasChave?: string[]
 }
