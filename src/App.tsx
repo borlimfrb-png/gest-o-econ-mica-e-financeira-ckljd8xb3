@@ -6,7 +6,11 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider, useAuth } from '@/contexts/AuthContext'
 import { FilterProvider } from '@/contexts/FilterContext'
 import { MinhaEmpresaProvider } from '@/contexts/MinhaEmpresaContext'
-import { perfilTemAcesso, type ModuloSistema } from '@/lib/permissoesPerfis'
+import {
+  perfilTemAcesso,
+  getRotaInicialPorPerfil,
+  type ModuloSistema,
+} from '@/lib/permissoesPerfis'
 
 import { lazy, Suspense } from 'react'
 
@@ -87,12 +91,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAdmin) {
-    const destino =
-      user?.role === 'cliente'
-        ? '/analise-economica-financeira'
-        : user?.role === 'comercial'
-          ? '/baixa-recebiveis'
-          : '/dashboard'
+    const destino = getRotaInicialPorPerfil(user?.role)
     return <Navigate to={destino} replace />
   }
 
@@ -116,12 +115,7 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
   }
 
   if (!perfilTemAcesso(user?.role, modulo)) {
-    const destino =
-      user?.role === 'cliente'
-        ? '/analise-economica-financeira'
-        : user?.role === 'comercial'
-          ? '/baixa-recebiveis'
-          : '/dashboard'
+    const destino = getRotaInicialPorPerfil(user?.role)
     return <Navigate to={destino} replace />
   }
 

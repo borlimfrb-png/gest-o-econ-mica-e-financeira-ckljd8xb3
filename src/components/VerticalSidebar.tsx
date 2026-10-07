@@ -36,6 +36,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
 import type { NavGroupConfig, NavItemConfig } from '@/lib/menuNavigationConfig'
 import { cn } from '@/lib/utils'
+import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
 
 interface VerticalSidebarProps {
   menuGruposFiltrados: NavGroupConfig[]
@@ -179,7 +180,7 @@ export function VerticalSidebar({
             {/* Logotipo / Nome do Sistema */}
             <button
               type="button"
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
               className={cn(
                 'flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98] min-w-0',
                 isCollapsed && 'justify-center w-full',

@@ -3,6 +3,8 @@ import {
   empresasService,
   gruposEmpresariaisService,
   balancosService,
+  dreService,
+  lancamentosService,
 } from '@/services/financeService'
 import type { EmpresaRecord, GrupoEmpresarialRecord, BalancoRecord } from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -61,18 +63,23 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let empresasFiltradas = listEmpresas
       let gruposFiltrados = listGrupos
 
-      if (!isAdmin && empresaVinculadaId) {
-        empresasFiltradas = listEmpresas.filter((e) => e.id === empresaVinculadaId)
+      const empresaFixada =
+        (!isAdmin && empresaVinculadaId) || (user?.role === 'cliente' && user?.empresa)
+          ? empresaVinculadaId || user?.empresa || null
+          : null
+
+      if (empresaFixada) {
+        empresasFiltradas = listEmpresas.filter((e) => e.id === empresaFixada)
         // Grupos que contenham a empresa do usuário
-        gruposFiltrados = listGrupos.filter((g) => (g.empresas || []).includes(empresaVinculadaId))
+        gruposFiltrados = listGrupos.filter((g) => (g.empresas || []).includes(empresaFixada))
       }
 
       setEmpresas(empresasFiltradas)
       setGrupos(gruposFiltrados)
 
-      // Se usuário for comum e tiver empresa vinculada, fixa nela
-      if (!isAdmin && empresaVinculadaId) {
-        setSelectedEmpresaId(empresaVinculadaId)
+      // Se usuário for comum/cliente e tiver empresa vinculada, pré-seleciona e fixa nela
+      if (empresaFixada) {
+        setSelectedEmpresaId(empresaFixada)
       } else {
         const todasEntidadesIds = [
           ...empresasFiltradas.map((e) => e.id),
@@ -120,29 +127,63 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     isAuthenticated,
   )
 
-  // Carregar balanços da empresa selecionada para saber anos disponíveis
-  const loadBalancosEmpresa = async (empresaId: string) => {
+  // Carregar anos disponíveis a partir de balancos, dre e lançamentos da empresa selecionada
+  const loadExerciciosEmpresa = async (empresaId: string) => {
     if (!empresaId) return
     try {
-      const bList = await balancosService.getByEmpresa(empresaId)
+      // Se for grupo ('grupo-XXX'), não busca por empresa específica ou busca balancos das empresas do grupo
+      const isGrupo = empresaId.startsWith('grupo-')
+      const targetEmpresaId = isGrupo ? undefined : empresaId
+
+      const [bList, dreList, lancList] = await Promise.all([
+        targetEmpresaId
+          ? balancosService.getByEmpresa(targetEmpresaId).catch(() => [] as BalancoRecord[])
+          : Promise.resolve([] as BalancoRecord[]),
+        targetEmpresaId
+          ? dreService.getByEmpresa(targetEmpresaId).catch(() => [])
+          : Promise.resolve([]),
+        targetEmpresaId
+          ? lancamentosService
+              .getAll({ empresaId: targetEmpresaId, limit: 100 })
+              .catch(() => [] as any[])
+          : Promise.resolve([] as any[]),
+      ])
+
       setBalancosEmpresa(bList)
-      const anos = Array.from(new Set(bList.map((b) => b.ano))).sort((a, b) => b - a)
-      if (anos.length > 0) {
-        setAnosDisponiveis(anos)
-        if (!anos.includes(selectedAno)) {
-          setSelectedAno(anos[0])
-        }
+
+      const anosBalancos = bList.map((b) => b.ano).filter(Boolean)
+      const anosDre = dreList.map((d: any) => d.ano).filter(Boolean)
+      const anosLancamentos = lancList
+        .map((l: any) => {
+          if (l.data) {
+            const y = new Date(l.data).getFullYear()
+            return isNaN(y) ? null : y
+          }
+          return null
+        })
+        .filter((y): y is number => typeof y === 'number' && y > 1900 && y < 2100)
+
+      const anosCompletos = Array.from(
+        new Set([...anosBalancos, ...anosDre, ...anosLancamentos]),
+      ).sort((a, b) => b - a)
+
+      if (anosCompletos.length > 0) {
+        setAnosDisponiveis(anosCompletos)
+        // Seleciona por padrão o ano mais recente que possua dados reais
+        setSelectedAno((prevAno) => (anosCompletos.includes(prevAno) ? prevAno : anosCompletos[0]))
       } else {
-        setAnosDisponiveis([2024, 2023])
+        const anosPadrao = [new Date().getFullYear(), new Date().getFullYear() - 1]
+        setAnosDisponiveis(anosPadrao)
+        setSelectedAno((prevAno) => (anosPadrao.includes(prevAno) ? prevAno : anosPadrao[0]))
       }
     } catch (err) {
-      console.error('Erro ao carregar balanços da empresa:', err)
+      console.error('Erro ao carregar exercícios da empresa:', err)
     }
   }
 
   useEffect(() => {
     if (selectedEmpresaId) {
-      loadBalancosEmpresa(selectedEmpresaId)
+      loadExerciciosEmpresa(selectedEmpresaId)
     }
   }, [selectedEmpresaId])
 
@@ -151,7 +192,18 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     'balancos',
     () => {
       if (selectedEmpresaId) {
-        loadBalancosEmpresa(selectedEmpresaId)
+        loadExerciciosEmpresa(selectedEmpresaId)
+      }
+    },
+    isAuthenticated,
+  )
+
+  // Realtime dre
+  useRealtime(
+    'dre',
+    () => {
+      if (selectedEmpresaId) {
+        loadExerciciosEmpresa(selectedEmpresaId)
       }
     },
     isAuthenticated,
@@ -197,9 +249,13 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         todasEntidades,
         selectedEmpresaId,
         setSelectedEmpresaId: (id: string) => {
-          // Se for usuário comum, não permite trocar empresa para outra diferente da vinculada
-          if (!isAdmin && empresaVinculadaId) {
-            setSelectedEmpresaId(empresaVinculadaId)
+          // Se for usuário comum ou cliente, não permite trocar empresa para outra diferente da vinculada
+          const fixada =
+            (!isAdmin && empresaVinculadaId) || (user?.role === 'cliente' && user?.empresa)
+              ? empresaVinculadaId || user?.empresa
+              : null
+          if (fixada) {
+            setSelectedEmpresaId(fixada)
             return
           }
           setSelectedEmpresaId(id)

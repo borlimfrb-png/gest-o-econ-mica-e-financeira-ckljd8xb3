@@ -6,6 +6,7 @@ import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { minhaEmpresaService } from '@/services/minhaEmpresaService'
 import type { MinhaEmpresaRecord } from '@/types/finance'
 import pb from '@/lib/pocketbase/client'
+import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
 import {
   Scale,
   ArrowRight,
@@ -70,7 +71,7 @@ export default function WelcomeSplash() {
     if (fromState && fromState !== '/' && fromState !== '/splash') {
       return fromState
     }
-    return user?.role === 'comercial' ? '/baixa-recebiveis' : '/dashboard'
+    return getRotaInicialPorPerfil(user?.role)
   }, [location.state, user?.role])
 
   // Busca dados públicos da consultoria como fallback rápido se necessário

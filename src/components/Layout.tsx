@@ -45,6 +45,7 @@ import {
   extrairTodosItensNavegaveis,
   type NavGroupConfig,
 } from '@/lib/menuNavigationConfig'
+import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
 import {
   MoreHorizontal,
   ChevronRight,
@@ -418,7 +419,7 @@ export default function Layout() {
                 {/* Logotipo clicável */}
                 <button
                   type="button"
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
                   className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
                 >
                   {logoUrl ? (
