@@ -397,5 +397,75 @@ describe('Análise de Despesas Variáveis - Cálculos e Regras de Negócio', () 
       expect(res.totalDespesasVariaveisPeriodo).toBe(0)
       expect(res.percentualTotalPeriodo).toBe(0)
     })
+
+    it('ordena contas agrupadas por Centro de Custo -> Tipo de Despesa -> Código Hierárquico', () => {
+      const contasOrdenacao: ContaRecord[] = [
+        {
+          id: 'cv-1',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '02.01.002',
+          nome: 'Frete sobre Vendas',
+          tipo: 'Despesa',
+          classificacao_dre: 'Despesa Variável',
+          tipo_despesa: 'td-log',
+          tipo_despesa_nome: 'Logística',
+          centro_custo: 'cc-com',
+          centro_custo_nome: 'Comercial',
+          created: '',
+        },
+        {
+          id: 'cv-2',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '02.01.001',
+          nome: 'Comissão Vendedores',
+          tipo: 'Despesa',
+          classificacao_dre: 'Despesa Variável',
+          tipo_despesa: 'td-com',
+          tipo_despesa_nome: 'Comissões',
+          centro_custo: 'cc-com',
+          centro_custo_nome: 'Comercial',
+          created: '',
+        },
+      ]
+
+      const lancs: LancamentoRecord[] = [
+        {
+          id: 'lv-1',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          conta: 'cv-1',
+          plano_conta: 'pv-1',
+          data: '2025-01-10',
+          valor: 500,
+          user: 'u-1',
+          created: '',
+        },
+        {
+          id: 'lv-2',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          conta: 'cv-2',
+          plano_conta: 'pv-2',
+          data: '2025-01-10',
+          valor: 1500,
+          user: 'u-1',
+          created: '',
+        },
+      ]
+
+      const res = calcularAnaliseDespesasVariaveis(lancs, contasOrdenacao, meses, [])
+      expect(res.contas).toHaveLength(2)
+      // Tipo 'Comissões' vem antes de 'Logística' dentro do mesmo centro 'Comercial'
+      expect(res.contas[0].id).toBe('cv-2')
+      expect(res.contas[0].tipoDespesaNome).toBe('Comissões')
+      expect(res.contas[1].id).toBe('cv-1')
+      expect(res.contas[1].tipoDespesaNome).toBe('Logística')
+    })
   })
 })

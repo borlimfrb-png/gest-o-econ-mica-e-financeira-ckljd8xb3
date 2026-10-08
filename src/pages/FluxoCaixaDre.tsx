@@ -38,6 +38,7 @@ import {
   TrendingUp,
   AlertTriangle,
   Building,
+  Tag,
   RefreshCw,
   Wallet,
   ArrowDownRight,
@@ -749,55 +750,143 @@ export default function FluxoCaixaDre() {
                     </td>
                   </tr>
 
-                  {/* Contas de Saídas Operacionais */}
+                  {/* Contas de Saídas Operacionais (Agrupadas por Centro de Custo e Tipo de Despesa) */}
                   {gruposExpandidos.saidasOperacionais &&
-                    fluxo.contasSaidasOperacionais.map((conta) => (
-                      <tr
-                        key={conta.id}
-                        className="hover:bg-rose-50/20 text-slate-700 transition-colors text-[11px]"
-                      >
-                        <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                          <div className="flex items-center gap-1.5 truncate flex-wrap">
-                            {conta.centroNome && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
-                                {conta.centroNome}
-                              </span>
-                            )}
-                            {conta.tipoDespesaNome && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-rose-50 text-rose-800 rounded border border-rose-200 shrink-0">
-                                {conta.tipoDespesaNome}
-                              </span>
-                            )}
-                            {conta.codigo && (
-                              <span className="font-mono text-[10px] text-rose-600 font-semibold shrink-0">
-                                {conta.codigo}
-                              </span>
-                            )}
-                            <span className="truncate font-medium">{conta.nome}</span>
-                          </div>
-                        </td>
+                    fluxo.contasSaidasOperacionais.map((conta, idx, arr) => {
+                      const centroKey = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
+                      const centroAnteriorKey =
+                        idx > 0
+                          ? arr[idx - 1].centroId || arr[idx - 1].centroNome || '__SEM_CENTRO__'
+                          : null
+                      const mudouCentro = idx === 0 || centroKey !== centroAnteriorKey
+                      const centroNomeExibicao =
+                        conta.centroNome?.trim() ||
+                        (conta.centroId ? `Centro ${conta.centroId}` : 'Sem Centro de Custo')
+                      const qtdContasNoCentro = arr.filter(
+                        (c) => (c.centroId || c.centroNome || '__SEM_CENTRO__') === centroKey,
+                      ).length
 
-                        {meses.map((m) => {
-                          const val = conta.valoresPorMes[m.chave] || 0
-                          return (
-                            <td
-                              key={m.chave}
-                              className="py-2 px-2 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap"
-                            >
-                              {val !== 0 ? (
-                                formatBrl(val)
-                              ) : (
-                                <span className="text-slate-300">—</span>
-                              )}
+                      const tipoKey = `${centroKey}__${conta.tipoDespesaId || conta.tipoDespesaNome || '__SEM_TIPO__'}`
+                      const tipoAnteriorKey =
+                        idx > 0
+                          ? `${arr[idx - 1].centroId || arr[idx - 1].centroNome || '__SEM_CENTRO__'}__${arr[idx - 1].tipoDespesaId || arr[idx - 1].tipoDespesaNome || '__SEM_TIPO__'}`
+                          : null
+                      const mudouTipo = idx === 0 || mudouCentro || tipoKey !== tipoAnteriorKey
+                      const tipoNomeExibicao =
+                        conta.tipoDespesaNome?.trim() ||
+                        (conta.tipoDespesaId
+                          ? `Tipo ${conta.tipoDespesaId}`
+                          : 'Sem Tipo de Despesa')
+                      const qtdContasNoTipo = arr.filter(
+                        (c) =>
+                          `${c.centroId || c.centroNome || '__SEM_CENTRO__'}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}` ===
+                          tipoKey,
+                      ).length
+
+                      return (
+                        <React.Fragment key={conta.id}>
+                          {/* Cabeçalho de Centro de Custo em Saídas Operacionais */}
+                          {mudouCentro && (
+                            <tr className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none">
+                              <td className="py-2 px-3 sticky left-0 bg-slate-100 z-10 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-rose-700 text-white shadow-xs">
+                                    <Building className="w-3 h-3" />
+                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] uppercase tracking-wider text-rose-900 font-black">
+                                      Centro de Custo:
+                                    </span>
+                                    <span className="font-bold text-slate-900 text-xs">
+                                      {centroNomeExibicao}
+                                    </span>
+                                    <span className="text-[9.5px] font-normal text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                                      {qtdContasNoCentro} conta{qtdContasNoCentro > 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td
+                                colSpan={meses.length + 1}
+                                className="py-2 px-3 text-[10px] text-slate-500 font-medium tracking-wide bg-slate-100"
+                              >
+                                <span>Contas operacionais vinculadas a este Centro de Custo</span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Cabeçalho de Tipo de Despesa em Saídas Operacionais */}
+                          {mudouTipo && (
+                            <tr className="bg-rose-50/70 border-b border-rose-200 font-semibold text-rose-950 text-[11px] select-none">
+                              <td className="py-1.5 px-3 pl-6 sticky left-0 bg-rose-50/90 z-10 border-r border-rose-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-rose-600 text-white shadow-xs">
+                                    <Tag className="w-2.5 h-2.5" />
+                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[9.5px] uppercase tracking-wider text-rose-800 font-extrabold">
+                                      Tipo de Despesa:
+                                    </span>
+                                    <span className="font-bold text-rose-950 text-[11.5px]">
+                                      {tipoNomeExibicao}
+                                    </span>
+                                    <span className="text-[9px] font-medium text-rose-700 bg-white/80 px-1.5 py-0.2 rounded border border-rose-200">
+                                      {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td
+                                colSpan={meses.length + 1}
+                                className="py-1.5 px-3 text-[9.5px] text-rose-700/80 font-medium bg-rose-50/50"
+                              >
+                                <span>Classificação do gasto</span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Linha individual da conta sem badges repetidos */}
+                          <tr className="hover:bg-rose-50/20 text-slate-700 transition-colors text-[11px]">
+                            <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                              <div className="flex items-center gap-2 truncate">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                {conta.codigo && (
+                                  <span className="font-mono text-[10px] text-rose-600 font-semibold shrink-0">
+                                    {conta.codigo}
+                                  </span>
+                                )}
+                                <span
+                                  className="truncate font-medium text-slate-900"
+                                  title={conta.nome}
+                                >
+                                  {conta.nome}
+                                </span>
+                              </div>
                             </td>
-                          )
-                        })}
 
-                        <td className="py-2 px-4 text-right font-semibold bg-slate-50/50 text-slate-800">
-                          {formatBrl(conta.totalPeriodo)}
-                        </td>
-                      </tr>
-                    ))}
+                            {meses.map((m) => {
+                              const val = conta.valoresPorMes[m.chave] || 0
+                              return (
+                                <td
+                                  key={m.chave}
+                                  className="py-2 px-2 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap"
+                                >
+                                  {val !== 0 ? (
+                                    formatBrl(val)
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </td>
+                              )
+                            })}
+
+                            <td className="py-2 px-4 text-right font-semibold bg-slate-50/50 text-slate-800">
+                              {formatBrl(conta.totalPeriodo)}
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      )
+                    })}
 
                   {/* ================= 3. = GERAÇÃO OPERACIONAL DE CAIXA ================= */}
                   <tr className="bg-slate-100 text-slate-900 font-bold border-y-2 border-slate-300">
@@ -963,55 +1052,143 @@ export default function FluxoCaixaDre() {
                     </td>
                   </tr>
 
-                  {/* Contas de Saídas Financeiras */}
+                  {/* Contas de Saídas Financeiras (Agrupadas por Centro de Custo e Tipo de Despesa) */}
                   {gruposExpandidos.saidasFinanceiras &&
-                    fluxo.contasSaidasFinanceiras.map((conta) => (
-                      <tr
-                        key={conta.id}
-                        className="hover:bg-purple-50/20 text-slate-700 transition-colors text-[11px]"
-                      >
-                        <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                          <div className="flex items-center gap-1.5 truncate flex-wrap">
-                            {conta.centroNome && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
-                                {conta.centroNome}
-                              </span>
-                            )}
-                            {conta.tipoDespesaNome && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-purple-50 text-purple-800 rounded border border-purple-200 shrink-0">
-                                {conta.tipoDespesaNome}
-                              </span>
-                            )}
-                            {conta.codigo && (
-                              <span className="font-mono text-[10px] text-purple-600 font-semibold shrink-0">
-                                {conta.codigo}
-                              </span>
-                            )}
-                            <span className="truncate font-medium">{conta.nome}</span>
-                          </div>
-                        </td>
+                    fluxo.contasSaidasFinanceiras.map((conta, idx, arr) => {
+                      const centroKey = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
+                      const centroAnteriorKey =
+                        idx > 0
+                          ? arr[idx - 1].centroId || arr[idx - 1].centroNome || '__SEM_CENTRO__'
+                          : null
+                      const mudouCentro = idx === 0 || centroKey !== centroAnteriorKey
+                      const centroNomeExibicao =
+                        conta.centroNome?.trim() ||
+                        (conta.centroId ? `Centro ${conta.centroId}` : 'Sem Centro de Custo')
+                      const qtdContasNoCentro = arr.filter(
+                        (c) => (c.centroId || c.centroNome || '__SEM_CENTRO__') === centroKey,
+                      ).length
 
-                        {meses.map((m) => {
-                          const val = conta.valoresPorMes[m.chave] || 0
-                          return (
-                            <td
-                              key={m.chave}
-                              className="py-2 px-2 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap"
-                            >
-                              {val !== 0 ? (
-                                formatBrl(val)
-                              ) : (
-                                <span className="text-slate-300">—</span>
-                              )}
+                      const tipoKey = `${centroKey}__${conta.tipoDespesaId || conta.tipoDespesaNome || '__SEM_TIPO__'}`
+                      const tipoAnteriorKey =
+                        idx > 0
+                          ? `${arr[idx - 1].centroId || arr[idx - 1].centroNome || '__SEM_CENTRO__'}__${arr[idx - 1].tipoDespesaId || arr[idx - 1].tipoDespesaNome || '__SEM_TIPO__'}`
+                          : null
+                      const mudouTipo = idx === 0 || mudouCentro || tipoKey !== tipoAnteriorKey
+                      const tipoNomeExibicao =
+                        conta.tipoDespesaNome?.trim() ||
+                        (conta.tipoDespesaId
+                          ? `Tipo ${conta.tipoDespesaId}`
+                          : 'Sem Tipo de Despesa')
+                      const qtdContasNoTipo = arr.filter(
+                        (c) =>
+                          `${c.centroId || c.centroNome || '__SEM_CENTRO__'}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}` ===
+                          tipoKey,
+                      ).length
+
+                      return (
+                        <React.Fragment key={conta.id}>
+                          {/* Cabeçalho de Centro de Custo em Saídas Financeiras */}
+                          {mudouCentro && (
+                            <tr className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none">
+                              <td className="py-2 px-3 sticky left-0 bg-slate-100 z-10 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-purple-700 text-white shadow-xs">
+                                    <Building className="w-3 h-3" />
+                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] uppercase tracking-wider text-purple-900 font-black">
+                                      Centro de Custo:
+                                    </span>
+                                    <span className="font-bold text-slate-900 text-xs">
+                                      {centroNomeExibicao}
+                                    </span>
+                                    <span className="text-[9.5px] font-normal text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                                      {qtdContasNoCentro} conta{qtdContasNoCentro > 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td
+                                colSpan={meses.length + 1}
+                                className="py-2 px-3 text-[10px] text-slate-500 font-medium tracking-wide bg-slate-100"
+                              >
+                                <span>Contas financeiras vinculadas a este Centro de Custo</span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Cabeçalho de Tipo de Despesa em Saídas Financeiras */}
+                          {mudouTipo && (
+                            <tr className="bg-purple-50/70 border-b border-purple-200 font-semibold text-purple-950 text-[11px] select-none">
+                              <td className="py-1.5 px-3 pl-6 sticky left-0 bg-purple-50/90 z-10 border-r border-purple-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                <div className="flex items-center gap-2">
+                                  <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-purple-600 text-white shadow-xs">
+                                    <Tag className="w-2.5 h-2.5" />
+                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[9.5px] uppercase tracking-wider text-purple-800 font-extrabold">
+                                      Tipo de Despesa:
+                                    </span>
+                                    <span className="font-bold text-purple-950 text-[11.5px]">
+                                      {tipoNomeExibicao}
+                                    </span>
+                                    <span className="text-[9px] font-medium text-purple-700 bg-white/80 px-1.5 py-0.2 rounded border border-purple-200">
+                                      {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td
+                                colSpan={meses.length + 1}
+                                className="py-1.5 px-3 text-[9.5px] text-purple-700/80 font-medium bg-purple-50/50"
+                              >
+                                <span>Classificação da despesa financeira</span>
+                              </td>
+                            </tr>
+                          )}
+
+                          {/* Linha individual da conta sem badges repetidos */}
+                          <tr className="hover:bg-purple-50/20 text-slate-700 transition-colors text-[11px]">
+                            <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                              <div className="flex items-center gap-2 truncate">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                {conta.codigo && (
+                                  <span className="font-mono text-[10px] text-purple-600 font-semibold shrink-0">
+                                    {conta.codigo}
+                                  </span>
+                                )}
+                                <span
+                                  className="truncate font-medium text-slate-900"
+                                  title={conta.nome}
+                                >
+                                  {conta.nome}
+                                </span>
+                              </div>
                             </td>
-                          )
-                        })}
 
-                        <td className="py-2 px-4 text-right font-semibold bg-slate-50/50 text-slate-800">
-                          {formatBrl(conta.totalPeriodo)}
-                        </td>
-                      </tr>
-                    ))}
+                            {meses.map((m) => {
+                              const val = conta.valoresPorMes[m.chave] || 0
+                              return (
+                                <td
+                                  key={m.chave}
+                                  className="py-2 px-2 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap"
+                                >
+                                  {val !== 0 ? (
+                                    formatBrl(val)
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </td>
+                              )
+                            })}
+
+                            <td className="py-2 px-4 text-right font-semibold bg-slate-50/50 text-slate-800">
+                              {formatBrl(conta.totalPeriodo)}
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      )
+                    })}
 
                   {/* ================= 6. = GERAÇÃO FINANCEIRA DE CAIXA ================= */}
                   <tr className="bg-slate-100 text-slate-900 font-bold border-y-2 border-slate-300">

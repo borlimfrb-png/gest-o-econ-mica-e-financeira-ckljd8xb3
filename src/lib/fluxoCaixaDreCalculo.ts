@@ -132,6 +132,10 @@ export function calcularFluxoCaixaDre(
     ...(grupoDespFix?.contas || []),
   ].sort(compararCentroTipoConta)
 
+  const contasSaidasFin: ContaMatrizItem[] = [...(grupoDespFin?.contas || [])].sort(
+    compararCentroTipoConta,
+  )
+
   const saidasOperacionais: LinhaFluxoDreItem = {
     chave: 'saidasOperacionais',
     titulo: '(–) Saídas Operacionais (Desp. Variáveis e Fixas)',
@@ -268,6 +272,6 @@ export function calcularFluxoCaixaDre(
     contasEntradasOperacionais: grupoReceitas?.contas || [],
     contasSaidasOperacionais: contasSaidasOp,
     contasEntradasFinanceiras: grupoRecFin?.contas || [],
-    contasSaidasFinanceiras: grupoDespFin?.contas || [],
+    contasSaidasFinanceiras: contasSaidasFin,
   }
 }

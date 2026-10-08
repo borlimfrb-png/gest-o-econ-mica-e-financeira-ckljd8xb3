@@ -653,4 +653,84 @@ describe('Fluxo de Caixa por grupo DRE', () => {
       { centro: 'Centro B', tipo: 'Geral', codigo: '3.1' },
     ])
   })
+
+  it('ordena saídas financeiras por Centro de Custo -> Tipo de Despesa -> Código Hierárquico', () => {
+    const contasFin: ContaRecord[] = [
+      {
+        id: 'c-fin-banc',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '04.01.002',
+        nome: 'Tarifas Bancárias',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Financeira',
+        tipo_despesa: 'td-tarifas',
+        tipo_despesa_nome: 'Tarifas',
+        centro_custo: 'cc-adm',
+        centro_custo_nome: 'Administrativo',
+        created: '',
+      },
+      {
+        id: 'c-fin-juros',
+        collectionId: 'contas',
+        collectionName: 'contas',
+        user: 'u-1',
+        codigo: '04.01.001',
+        nome: 'Juros Passivos',
+        tipo: 'Despesa',
+        classificacao_dre: 'Despesa Financeira',
+        tipo_despesa: 'td-juros',
+        tipo_despesa_nome: 'Juros',
+        centro_custo: 'cc-adm',
+        centro_custo_nome: 'Administrativo',
+        created: '',
+      },
+    ]
+
+    const lancsFin: LancamentoRecord[] = [
+      {
+        id: 'l-fin-1',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'emp-1',
+        conta: 'c-fin-banc',
+        plano_conta: 'p-fin-1',
+        data: '2025-01-10',
+        valor: 100,
+        user: 'u-1',
+        created: '',
+      },
+      {
+        id: 'l-fin-2',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        empresa: 'emp-1',
+        conta: 'c-fin-juros',
+        plano_conta: 'p-fin-2',
+        data: '2025-01-10',
+        valor: 200,
+        user: 'u-1',
+        created: '',
+      },
+    ]
+
+    const meses = [
+      {
+        ano: 2025,
+        mes: 1,
+        chave: '2025-01',
+        rotulo: 'Jan/2025',
+        rotuloCurto: 'Jan/25',
+        rotuloCompleto: 'Janeiro/2025',
+      },
+    ]
+    const fluxo = calcularFluxoCaixaDre(lancsFin, contasFin, meses, [])
+    expect(fluxo.contasSaidasFinanceiras).toHaveLength(2)
+    // 'Juros' vem antes de 'Tarifas'
+    expect(fluxo.contasSaidasFinanceiras[0].id).toBe('c-fin-juros')
+    expect(fluxo.contasSaidasFinanceiras[0].tipoDespesaNome).toBe('Juros')
+    expect(fluxo.contasSaidasFinanceiras[1].id).toBe('c-fin-banc')
+    expect(fluxo.contasSaidasFinanceiras[1].tipoDespesaNome).toBe('Tarifas')
+  })
 })

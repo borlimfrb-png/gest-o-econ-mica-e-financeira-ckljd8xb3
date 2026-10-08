@@ -53,23 +53,55 @@ export function exportarFluxoCaixaDreExcel(
     )
   }
 
-  // 2. Saídas Operacionais
+  // 2. Saídas Operacionais (com cabeçalhos de Centro de Custo e Tipo de Despesa)
   adicionarLinha(
     fluxo.saidasOperacionais.titulo,
     'Grupo (Saída)',
     fluxo.saidasOperacionais.valoresPorMes,
     fluxo.saidasOperacionais.totalPeriodo,
   )
+  let ultimoCentroXlsxOp: string | null = null
+  let ultimoTipoXlsxOp: string | null = null
+
   for (const c of fluxo.contasSaidasOperacionais) {
-    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
-    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const centroAtual =
+      c.centroNome?.trim() || (c.centroId ? `Centro ${c.centroId}` : 'Sem Centro de Custo')
+    const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+
+    const tipoAtual =
+      c.tipoDespesaNome?.trim() ||
+      (c.tipoDespesaId ? `Tipo ${c.tipoDespesaId}` : 'Sem Tipo de Despesa')
+    const tipoKey = `${centroKey}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}`
+
+    if (centroKey !== ultimoCentroXlsxOp) {
+      ultimoCentroXlsxOp = centroKey
+      ultimoTipoXlsxOp = null
+      const rowCentro: Record<string, any> = {
+        Estrutura: `▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`,
+        Tipo: 'Grupo Centro',
+      }
+      for (const m of fluxo.meses) {
+        rowCentro[m.rotuloCurto] = ''
+      }
+      rowCentro['Total do Período'] = ''
+      rows.push(rowCentro)
+    }
+
+    if (tipoKey !== ultimoTipoXlsxOp) {
+      ultimoTipoXlsxOp = tipoKey
+      const rowTipo: Record<string, any> = {
+        Estrutura: `    ▶ TIPO DE DESPESA: ${tipoAtual.toUpperCase()}`,
+        Tipo: 'Grupo Tipo',
+      }
+      for (const m of fluxo.meses) {
+        rowTipo[m.rotuloCurto] = ''
+      }
+      rowTipo['Total do Período'] = ''
+      rows.push(rowTipo)
+    }
+
     const cod = c.codigo ? `${c.codigo} — ` : ''
-    adicionarLinha(
-      `    ${centro}${tipo}${cod}${c.nome}`,
-      'Conta Operacional',
-      c.valoresPorMes,
-      c.totalPeriodo,
-    )
+    adicionarLinha(`        ${cod}${c.nome}`, 'Conta Operacional', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 3. = Geração Operacional
@@ -101,23 +133,55 @@ export function exportarFluxoCaixaDreExcel(
     )
   }
 
-  // 5. Saídas Financeiras
+  // 5. Saídas Financeiras (com cabeçalhos de Centro de Custo e Tipo de Despesa)
   adicionarLinha(
     fluxo.saidasFinanceiras.titulo,
     'Grupo (Saída)',
     fluxo.saidasFinanceiras.valoresPorMes,
     fluxo.saidasFinanceiras.totalPeriodo,
   )
+  let ultimoCentroXlsxFin: string | null = null
+  let ultimoTipoXlsxFin: string | null = null
+
   for (const c of fluxo.contasSaidasFinanceiras) {
-    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
-    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const centroAtual =
+      c.centroNome?.trim() || (c.centroId ? `Centro ${c.centroId}` : 'Sem Centro de Custo')
+    const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+
+    const tipoAtual =
+      c.tipoDespesaNome?.trim() ||
+      (c.tipoDespesaId ? `Tipo ${c.tipoDespesaId}` : 'Sem Tipo de Despesa')
+    const tipoKey = `${centroKey}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}`
+
+    if (centroKey !== ultimoCentroXlsxFin) {
+      ultimoCentroXlsxFin = centroKey
+      ultimoTipoXlsxFin = null
+      const rowCentro: Record<string, any> = {
+        Estrutura: `▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`,
+        Tipo: 'Grupo Centro',
+      }
+      for (const m of fluxo.meses) {
+        rowCentro[m.rotuloCurto] = ''
+      }
+      rowCentro['Total do Período'] = ''
+      rows.push(rowCentro)
+    }
+
+    if (tipoKey !== ultimoTipoXlsxFin) {
+      ultimoTipoXlsxFin = tipoKey
+      const rowTipo: Record<string, any> = {
+        Estrutura: `    ▶ TIPO DE DESPESA: ${tipoAtual.toUpperCase()}`,
+        Tipo: 'Grupo Tipo',
+      }
+      for (const m of fluxo.meses) {
+        rowTipo[m.rotuloCurto] = ''
+      }
+      rowTipo['Total do Período'] = ''
+      rows.push(rowTipo)
+    }
+
     const cod = c.codigo ? `${c.codigo} — ` : ''
-    adicionarLinha(
-      `    ${centro}${tipo}${cod}${c.nome}`,
-      'Conta Financeira',
-      c.valoresPorMes,
-      c.totalPeriodo,
-    )
+    adicionarLinha(`        ${cod}${c.nome}`, 'Conta Financeira', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 6. = Geração Financeira
@@ -227,18 +291,49 @@ export function exportarFluxoCaixaDreCsv(
     pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
-  // 2. Saídas Operacionais
+  // 2. Saídas Operacionais (com cabeçalhos de Centro de Custo e Tipo de Despesa)
   pushLinha(
     fluxo.saidasOperacionais.titulo,
     'Saída',
     fluxo.saidasOperacionais.valoresPorMes,
     fluxo.saidasOperacionais.totalPeriodo,
   )
+  let ultimoCentroCsvOp: string | null = null
+  let ultimoTipoCsvOp: string | null = null
+
   for (const c of fluxo.contasSaidasOperacionais) {
-    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
-    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const centroAtual =
+      c.centroNome?.trim() || (c.centroId ? `Centro ${c.centroId}` : 'Sem Centro de Custo')
+    const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+
+    const tipoAtual =
+      c.tipoDespesaNome?.trim() ||
+      (c.tipoDespesaId ? `Tipo ${c.tipoDespesaId}` : 'Sem Tipo de Despesa')
+    const tipoKey = `${centroKey}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}`
+
+    if (centroKey !== ultimoCentroCsvOp) {
+      ultimoCentroCsvOp = centroKey
+      ultimoTipoCsvOp = null
+      const linhaCentro = [`▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`, 'Grupo Centro']
+      for (let i = 0; i < fluxo.meses.length; i++) {
+        linhaCentro.push('')
+      }
+      linhaCentro.push('')
+      linhas.push(linhaCentro.map(escapeCsv).join(';'))
+    }
+
+    if (tipoKey !== ultimoTipoCsvOp) {
+      ultimoTipoCsvOp = tipoKey
+      const linhaTipo = [`    ▶ TIPO DE DESPESA: ${tipoAtual.toUpperCase()}`, 'Grupo Tipo']
+      for (let i = 0; i < fluxo.meses.length; i++) {
+        linhaTipo.push('')
+      }
+      linhaTipo.push('')
+      linhas.push(linhaTipo.map(escapeCsv).join(';'))
+    }
+
     const cod = c.codigo ? `${c.codigo} — ` : ''
-    pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+    pushLinha(`        ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 3. = Geração Operacional
@@ -263,18 +358,49 @@ export function exportarFluxoCaixaDreCsv(
     pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
-  // 5. Saídas Financeiras
+  // 5. Saídas Financeiras (com cabeçalhos de Centro de Custo e Tipo de Despesa)
   pushLinha(
     fluxo.saidasFinanceiras.titulo,
     'Saída',
     fluxo.saidasFinanceiras.valoresPorMes,
     fluxo.saidasFinanceiras.totalPeriodo,
   )
+  let ultimoCentroCsvFin: string | null = null
+  let ultimoTipoCsvFin: string | null = null
+
   for (const c of fluxo.contasSaidasFinanceiras) {
-    const centro = c.centroNome ? `[${c.centroNome}] ` : ''
-    const tipo = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const centroAtual =
+      c.centroNome?.trim() || (c.centroId ? `Centro ${c.centroId}` : 'Sem Centro de Custo')
+    const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+
+    const tipoAtual =
+      c.tipoDespesaNome?.trim() ||
+      (c.tipoDespesaId ? `Tipo ${c.tipoDespesaId}` : 'Sem Tipo de Despesa')
+    const tipoKey = `${centroKey}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}`
+
+    if (centroKey !== ultimoCentroCsvFin) {
+      ultimoCentroCsvFin = centroKey
+      ultimoTipoCsvFin = null
+      const linhaCentro = [`▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`, 'Grupo Centro']
+      for (let i = 0; i < fluxo.meses.length; i++) {
+        linhaCentro.push('')
+      }
+      linhaCentro.push('')
+      linhas.push(linhaCentro.map(escapeCsv).join(';'))
+    }
+
+    if (tipoKey !== ultimoTipoCsvFin) {
+      ultimoTipoCsvFin = tipoKey
+      const linhaTipo = [`    ▶ TIPO DE DESPESA: ${tipoAtual.toUpperCase()}`, 'Grupo Tipo']
+      for (let i = 0; i < fluxo.meses.length; i++) {
+        linhaTipo.push('')
+      }
+      linhaTipo.push('')
+      linhas.push(linhaTipo.map(escapeCsv).join(';'))
+    }
+
     const cod = c.codigo ? `${c.codigo} — ` : ''
-    pushLinha(`  ${centro}${tipo}${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
+    pushLinha(`        ${cod}${c.nome}`, 'Conta', c.valoresPorMes, c.totalPeriodo)
   }
 
   // 6. = Geração Financeira

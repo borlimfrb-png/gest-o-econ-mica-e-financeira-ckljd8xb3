@@ -41,6 +41,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import {
   Tags,
+  Tag,
   Calendar,
   Download,
   FileSpreadsheet,
@@ -698,7 +699,7 @@ export default function DespesasFixasAnalise() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {/* Linhas das Contas Agrupadas por Centro de Custo */}
+                  {/* Linhas das Contas Agrupadas por Centro de Custo e Tipo de Despesa */}
                   {analise.contas.map((conta, idx, arr) => {
                     const centroKey = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
                     const centroAnteriorKey =
@@ -713,6 +714,23 @@ export default function DespesasFixasAnalise() {
                     // Quantidade de contas no grupo do centro
                     const qtdContasNoCentro = arr.filter(
                       (c) => (c.centroId || c.centroNome || '__SEM_CENTRO__') === centroKey,
+                    ).length
+
+                    const tipoKey = `${centroKey}__${conta.tipoDespesaId || conta.tipoDespesaNome || '__SEM_TIPO__'}`
+                    const tipoAnteriorKey =
+                      idx > 0
+                        ? `${arr[idx - 1].centroId || arr[idx - 1].centroNome || '__SEM_CENTRO__'}__${arr[idx - 1].tipoDespesaId || arr[idx - 1].tipoDespesaNome || '__SEM_TIPO__'}`
+                        : null
+                    const mudouTipo = idx === 0 || mudouCentro || tipoKey !== tipoAnteriorKey
+                    const tipoNomeExibicao =
+                      conta.tipoDespesaNome?.trim() ||
+                      (conta.tipoDespesaId ? `Tipo ${conta.tipoDespesaId}` : 'Sem Tipo de Despesa')
+
+                    // Quantidade de contas no grupo do tipo dentro deste centro
+                    const qtdContasNoTipo = arr.filter(
+                      (c) =>
+                        `${c.centroId || c.centroNome || '__SEM_CENTRO__'}__${c.tipoDespesaId || c.tipoDespesaNome || '__SEM_TIPO__'}` ===
+                        tipoKey,
                     ).length
 
                     return (
@@ -755,10 +773,41 @@ export default function DespesasFixasAnalise() {
                           </tr>
                         )}
 
-                        {/* Linha da Conta Individual (limpa, sem badge repetido de centro) */}
+                        {/* Linha / Cabeçalho de Grupo do Tipo de Despesa (aparece UMA única vez por tipo dentro do centro) */}
+                        {mudouTipo && (
+                          <tr className="bg-blue-50/70 border-b border-blue-200 font-semibold text-blue-950 text-[11px] select-none">
+                            <td className="py-1.5 px-3 pl-6 sticky left-0 bg-blue-50/90 z-10 border-r border-blue-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-blue-600 text-white shadow-xs">
+                                  <Tag className="w-2.5 h-2.5" />
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[9.5px] uppercase tracking-wider text-blue-800 font-extrabold">
+                                    Tipo de Despesa:
+                                  </span>
+                                  <span className="font-bold text-blue-950 text-[11.5px]">
+                                    {tipoNomeExibicao}
+                                  </span>
+                                  <span className="text-[9px] font-medium text-blue-700 bg-white/80 px-1.5 py-0.2 rounded border border-blue-200">
+                                    {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td
+                              colSpan={meses.length * 2 + 2}
+                              className="py-1.5 px-3 text-[9.5px] text-blue-700/80 font-medium bg-blue-50/50"
+                            >
+                              <span>Classificação de gasto deste tipo de despesa</span>
+                            </td>
+                          </tr>
+                        )}
+
+                        {/* Linha da Conta Individual (limpa, sem badge repetido de centro nem de tipo) */}
                         <tr className="hover:bg-blue-50/40 text-slate-700 transition-colors text-[11px]">
-                          {/* Coluna Fixa à Esquerda com recuo visual elegante */}
-                          <td className="py-2 px-3 pl-6 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                          {/* Coluna Fixa à Esquerda com recuo hierárquico elegante (Centro -> Tipo -> Conta) */}
+                          <td className="py-2 px-3 pl-9 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                             <div className="flex items-center gap-2 truncate">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
                               {conta.codigo && (

@@ -389,5 +389,113 @@ describe('Análise de Despesas Fixas - Cálculos e Regras de Negócio', () => {
       expect(res.totalDespesasFixasPeriodo).toBe(0)
       expect(res.percentualTotalPeriodo).toBe(0)
     })
+
+    it('ordena contas agrupadas por Centro de Custo -> Tipo de Despesa -> Código Hierárquico', () => {
+      const contasOrdenacao: ContaRecord[] = [
+        {
+          id: 'c-1',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '03.01.002',
+          nome: 'Internet e Telefonia',
+          tipo: 'Despesa',
+          classificacao_dre: 'Despesa Fixa',
+          tipo_despesa: 'td-ti',
+          tipo_despesa_nome: 'Tecnologia',
+          centro_custo: 'cc-adm',
+          centro_custo_nome: 'Administrativo',
+          created: '',
+        },
+        {
+          id: 'c-2',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '03.01.001',
+          nome: 'Aluguel Escritório',
+          tipo: 'Despesa',
+          classificacao_dre: 'Despesa Fixa',
+          tipo_despesa: 'td-adm',
+          tipo_despesa_nome: 'Administrativo',
+          centro_custo: 'cc-adm',
+          centro_custo_nome: 'Administrativo',
+          created: '',
+        },
+        {
+          id: 'c-3',
+          collectionId: 'contas',
+          collectionName: 'contas',
+          user: 'u-1',
+          codigo: '03.02.001',
+          nome: 'Segurança Fábrica',
+          tipo: 'Despesa',
+          classificacao_dre: 'Despesa Fixa',
+          tipo_despesa: 'td-op',
+          tipo_despesa_nome: 'Operacional',
+          centro_custo: 'cc-fab',
+          centro_custo_nome: 'Fábrica',
+          created: '',
+        },
+      ]
+
+      const lancs: LancamentoRecord[] = [
+        {
+          id: 'l-1',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          conta: 'c-1',
+          plano_conta: 'p-1',
+          data: '2025-01-10',
+          valor: 1000,
+          user: 'u-1',
+          created: '',
+        },
+        {
+          id: 'l-2',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          conta: 'c-2',
+          plano_conta: 'p-2',
+          data: '2025-01-10',
+          valor: 2000,
+          user: 'u-1',
+          created: '',
+        },
+        {
+          id: 'l-3',
+          collectionId: 'lancamentos',
+          collectionName: 'lancamentos',
+          empresa: 'emp-1',
+          conta: 'c-3',
+          plano_conta: 'p-3',
+          data: '2025-01-10',
+          valor: 3000,
+          user: 'u-1',
+          created: '',
+        },
+      ]
+
+      const res = calcularAnaliseDespesasFixas(lancs, contasOrdenacao, meses, [])
+      expect(res.contas).toHaveLength(3)
+
+      // Ordem:
+      // 1. Centro 'Administrativo' / Tipo 'Administrativo' -> c-2
+      // 2. Centro 'Administrativo' / Tipo 'Tecnologia' -> c-1
+      // 3. Centro 'Fábrica' / Tipo 'Operacional' -> c-3
+      expect(res.contas[0].id).toBe('c-2')
+      expect(res.contas[0].centroNome).toBe('Administrativo')
+      expect(res.contas[0].tipoDespesaNome).toBe('Administrativo')
+
+      expect(res.contas[1].id).toBe('c-1')
+      expect(res.contas[1].centroNome).toBe('Administrativo')
+      expect(res.contas[1].tipoDespesaNome).toBe('Tecnologia')
+
+      expect(res.contas[2].id).toBe('c-3')
+      expect(res.contas[2].centroNome).toBe('Fábrica')
+      expect(res.contas[2].tipoDespesaNome).toBe('Operacional')
+    })
   })
 })
