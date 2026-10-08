@@ -1938,7 +1938,7 @@ export default function Lancamentos() {
                       </tr>
                     </tfoot>
                   </table>
-                </div>
+                </DoubleHorizontalScroll>
               )}
             </CardContent>
           </Card>

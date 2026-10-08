@@ -92,6 +92,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -1104,7 +1105,7 @@ export default function PlanoContas() {
                 Nenhum item encontrado para a busca.
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <DoubleHorizontalScroll>
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -1251,7 +1252,7 @@ export default function PlanoContas() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              </DoubleHorizontalScroll>
             )}
           </CardContent>
         </Card>

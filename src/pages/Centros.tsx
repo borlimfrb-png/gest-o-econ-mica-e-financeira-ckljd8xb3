@@ -66,6 +66,7 @@ import {
   CalendarDays,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import {
   BarChart,
   Bar,
@@ -1038,7 +1039,7 @@ export default function Centros() {
                   Nenhum centro cadastrado. Use o formulário acima para criar o primeiro.
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <DoubleHorizontalScroll>
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -1140,7 +1141,7 @@ export default function Centros() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </DoubleHorizontalScroll>
               )}
             </CardContent>
           </Card>
@@ -1667,7 +1668,7 @@ export default function Centros() {
                       Nenhum lançamento encontrado para o filtro selecionado.
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <DoubleHorizontalScroll>
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -1757,7 +1758,7 @@ export default function Centros() {
                           })}
                         </tbody>
                       </table>
-                    </div>
+                    </DoubleHorizontalScroll>
                   )}
                 </CardContent>
               </Card>

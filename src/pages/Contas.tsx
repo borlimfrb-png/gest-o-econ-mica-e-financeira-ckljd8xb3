@@ -52,6 +52,7 @@ import {
   ChevronsUpDown,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_PLANO_ORDEM: TipoConta[] = [
@@ -770,7 +771,7 @@ export default function Contas() {
                     Nenhuma conta encontrada para os filtros selecionados.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
+                  <DoubleHorizontalScroll>
                     <table className="w-full text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -905,7 +906,7 @@ export default function Contas() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </DoubleHorizontalScroll>
                 )}
               </CardContent>
             </Card>
