@@ -550,7 +550,12 @@
   article,
   figure,
   .break-inside-avoid,
-  .print-break-inside-avoid {
+  .print-break-inside-avoid,
+  .relatorio-ia-container table,
+  .relatorio-ia-container tr,
+  .relatorio-ia-container [class*='rounded-xl'],
+  .relatorio-ia-container [class*='SpecializedCardBlock'],
+  .relatorio-ia-container [class*='PlanoAcaoTimelineBlock'] {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }

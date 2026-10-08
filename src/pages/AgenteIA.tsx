@@ -23,6 +23,7 @@ import {
 } from '@/lib/financeCalculations'
 import { analisarAlertasProativos, type AlertaProativoItem } from '@/lib/alertasProativos'
 import { ModalPdfDiagnosticoA4 } from '@/components/ModalPdfDiagnosticoA4'
+import { RelatorioIARenderer } from '@/components/RelatorioIARenderer'
 import type { DisplayMessage, AgentCitation } from '@/lib/skipAi'
 import type { BalancoRecord, DreRecord } from '@/types/finance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -944,8 +945,22 @@ export default function AgenteIA() {
                       </div>
                     )}
 
-                    {/* Conteúdo formatado */}
-                    <div className="whitespace-pre-wrap font-sans">{m.content}</div>
+                    {/* Conteúdo formatado com RelatorioIARenderer para o assistente e texto padrão para usuário */}
+                    {isUser ? (
+                      <div className="whitespace-pre-wrap font-sans">{m.content}</div>
+                    ) : (
+                      <RelatorioIARenderer
+                        content={m.content}
+                        empresaNome={selectedEmpresa?.nome}
+                        periodo={
+                          selectedAno
+                            ? `${selectedAno}${modoComparacao ? ` vs ${anoComparacao}` : ''}`
+                            : undefined
+                        }
+                        dataGeracao={m.created}
+                        mostrarCabecalhoExecutivo={false}
+                      />
+                    )}
 
                     {/* Exibição de Citações / Fontes se houver */}
                     {m.citations && m.citations.length > 0 && (
@@ -1010,7 +1025,17 @@ export default function AgenteIA() {
                   )}
 
                   {streamDelta ? (
-                    <div className="whitespace-pre-wrap font-sans">{streamDelta}</div>
+                    <RelatorioIARenderer
+                      content={streamDelta}
+                      isStreaming={true}
+                      empresaNome={selectedEmpresa?.nome}
+                      periodo={
+                        selectedAno
+                          ? `${selectedAno}${modoComparacao ? ` vs ${anoComparacao}` : ''}`
+                          : undefined
+                      }
+                      mostrarCabecalhoExecutivo={false}
+                    />
                   ) : (
                     <div className="flex items-center gap-2 text-slate-500 text-xs py-1">
                       <div className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" />

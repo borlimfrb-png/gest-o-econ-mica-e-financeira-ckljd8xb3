@@ -31,6 +31,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { Link } from 'react-router-dom'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { RelatorioIARenderer } from '@/components/RelatorioIARenderer'
 import type { EmpresaRecord, MinhaEmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import {
   formatCurrency,
@@ -435,9 +436,20 @@ export function ModalPdfDiagnosticoA4({
                 </Badge>
               </div>
 
-              {/* Texto do Diagnóstico Formatado */}
-              <div className="bg-slate-50/50 rounded-xl p-5 border border-slate-200 text-slate-800 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap font-sans space-y-3">
-                {diagnosticoTexto}
+              {/* Texto do Diagnóstico Estruturado e Formatado */}
+              <div className="bg-slate-50/40 rounded-xl p-5 border border-slate-200 text-slate-800 text-xs sm:text-sm leading-relaxed font-sans space-y-3 print:bg-white print:p-0 print:border-none">
+                <RelatorioIARenderer
+                  content={diagnosticoTexto}
+                  empresaNome={selectedEmpresa?.nome}
+                  periodo={
+                    selectedAno
+                      ? `${selectedAno}${anoComparacao ? ` vs ${anoComparacao}` : ''}`
+                      : undefined
+                  }
+                  dataGeracao={dataGeracao}
+                  mostrarCabecalhoExecutivo={false}
+                  modoImpressao={true}
+                />
               </div>
 
               {/* Citações e Fontes consultadas */}
