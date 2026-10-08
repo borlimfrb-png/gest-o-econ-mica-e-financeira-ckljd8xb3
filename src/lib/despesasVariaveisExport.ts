@@ -37,13 +37,34 @@ export function exportarDespesasVariaveisExcel(
 
   const rows: Array<Record<string, any>> = []
 
-  // 1. Linhas de contas de despesas variáveis
+  // 1. Linhas de contas de despesas variáveis agrupadas por Centro de Custo
+  let ultimoCentroIdOuNome: string | null = null
+
   for (const c of resultado.contas) {
-    const centroStr = c.centroNome ? `[${c.centroNome}] ` : ''
-    const tipoStr = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const centroAtual =
+      c.centroNome?.trim() || (c.centroId ? `Centro ${c.centroId}` : 'Sem Centro de Custo')
+    const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+
+    // Quando o Centro de Custo muda, adiciona UMA linha de cabeçalho de grupo
+    if (centroKey !== ultimoCentroIdOuNome) {
+      ultimoCentroIdOuNome = centroKey
+      const rowGrupo: Record<string, any> = {
+        Conta: `▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`,
+        'Centro de Custo': centroAtual,
+        'Tipo de Despesa': '',
+      }
+      for (const m of resultado.meses) {
+        rowGrupo[`${m.rotuloCurto} (R$)`] = ''
+        rowGrupo[`${m.rotuloCurto} (%)`] = ''
+      }
+      rowGrupo['Total Período (R$)'] = ''
+      rowGrupo['Total Período (%)'] = ''
+      rows.push(rowGrupo)
+    }
+
     const codStr = c.codigo ? `${c.codigo} — ` : ''
     const row: Record<string, any> = {
-      Conta: `${centroStr}${tipoStr}${codStr}${c.nome}`,
+      Conta: `    ${codStr}${c.nome}`,
       'Centro de Custo': c.centroNome || '—',
       'Tipo de Despesa': c.tipoDespesaNome || '—',
     }
@@ -162,17 +183,34 @@ export function exportarDespesasVariaveisCsv(
 
   const linhas: string[] = [cabecalhos.map(escapeCsv).join(';')]
 
-  // 1. Linhas de contas
+  // 1. Linhas de contas agrupadas por Centro de Custo
+  let ultimoCentroCsv: string | null = null
+
   for (const c of resultado.contas) {
-    const centroStr = c.centroNome ? `[${c.centroNome}] ` : ''
-    const tipoStr = c.tipoDespesaNome ? `[${c.tipoDespesaNome}] ` : ''
+    const centroAtual =
+      c.centroNome?.trim() || (c.centroId ? `Centro ${c.centroId}` : 'Sem Centro de Custo')
+    const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+
+    // Quando o Centro de Custo muda, adiciona UMA linha de cabeçalho de grupo
+    if (centroKey !== ultimoCentroCsv) {
+      ultimoCentroCsv = centroKey
+      const linhaGrupo: string[] = [
+        `▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`,
+        centroAtual,
+        '',
+      ]
+      for (let i = 0; i < resultado.meses.length; i++) {
+        linhaGrupo.push('')
+        linhaGrupo.push('')
+      }
+      linhaGrupo.push('')
+      linhaGrupo.push('')
+      linhas.push(linhaGrupo.map(escapeCsv).join(';'))
+    }
+
     const codStr = c.codigo ? `${c.codigo} — ` : ''
 
-    const linha: string[] = [
-      `${centroStr}${tipoStr}${codStr}${c.nome}`,
-      c.centroNome || '',
-      c.tipoDespesaNome || '',
-    ]
+    const linha: string[] = [`    ${codStr}${c.nome}`, c.centroNome || '', c.tipoDespesaNome || '']
 
     for (const m of resultado.meses) {
       linha.push(formatMoedaCsv(c.valoresPorMes[m.chave] || 0))

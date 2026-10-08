@@ -697,81 +697,124 @@ export default function DespesasFixasAnalise() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {/* Linhas das Contas Individuais */}
-                  {analise.contas.map((conta) => (
-                    <tr
-                      key={conta.id}
-                      className="hover:bg-slate-50/80 text-slate-700 transition-colors text-[11px]"
-                    >
-                      {/* Coluna Fixa à Esquerda com Badges de Centro de Custo, Tipo de Despesa e Código */}
-                      <td className="py-2 px-3 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                        <div className="flex items-center gap-1.5 truncate flex-wrap">
-                          {conta.centroNome && (
-                            <span
-                              className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0"
-                              title={`Centro de Custo: ${conta.centroNome}`}
-                            >
-                              {conta.centroNome}
-                            </span>
-                          )}
-                          {conta.tipoDespesaNome && (
-                            <span
-                              className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-blue-50 text-blue-800 rounded border border-blue-200 shrink-0"
-                              title={`Tipo de Despesa: ${conta.tipoDespesaNome}`}
-                            >
-                              {conta.tipoDespesaNome}
-                            </span>
-                          )}
-                          {conta.codigo && (
-                            <span className="font-mono text-[10px] text-blue-700 font-semibold shrink-0">
-                              {conta.codigo}
-                            </span>
-                          )}
-                          <span className="truncate font-medium text-slate-900" title={conta.nome}>
-                            {conta.nome}
-                          </span>
-                        </div>
-                      </td>
+                  {/* Linhas das Contas Agrupadas por Centro de Custo */}
+                  {analise.contas.map((conta, idx, arr) => {
+                    const centroKey = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
+                    const centroAnteriorKey =
+                      idx > 0
+                        ? arr[idx - 1].centroId || arr[idx - 1].centroNome || '__SEM_CENTRO__'
+                        : null
+                    const mudouCentro = idx === 0 || centroKey !== centroAnteriorKey
+                    const centroNomeExibicao =
+                      conta.centroNome?.trim() ||
+                      (conta.centroId ? `Centro ${conta.centroId}` : 'Sem Centro de Custo')
 
-                      {/* Colunas dos Meses */}
-                      {meses.map((m) => {
-                        const val = conta.valoresPorMes[m.chave] || 0
-                        const pct = conta.percentuaisPorMes[m.chave]
-                        const classesSemaforo = getClassesSemaforoPercentual(pct)
+                    // Quantidade de contas no grupo do centro
+                    const qtdContasNoCentro = arr.filter(
+                      (c) => (c.centroId || c.centroNome || '__SEM_CENTRO__') === centroKey,
+                    ).length
 
-                        return (
-                          <React.Fragment key={`val-${conta.id}-${m.chave}`}>
-                            {/* Valor R$ */}
-                            <td className="py-2 px-1.5 text-right border-r border-slate-100 text-slate-700 whitespace-nowrap font-mono">
-                              {val !== 0 ? (
-                                formatBrl(val)
-                              ) : (
-                                <span className="text-slate-300">—</span>
-                              )}
+                    return (
+                      <React.Fragment key={conta.id}>
+                        {/* Linha / Cabeçalho de Grupo do Centro de Custo (aparece UMA única vez por centro) */}
+                        {mudouCentro && (
+                          <tr className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none">
+                            {/* Coluna fixa à esquerda */}
+                            <td className="py-2 px-3 sticky left-0 bg-slate-100 z-10 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-blue-700 text-white shadow-xs">
+                                  <Building className="w-3 h-3" />
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] uppercase tracking-wider text-blue-900 font-black">
+                                    Centro de Custo:
+                                  </span>
+                                  <span className="font-bold text-slate-900 text-xs">
+                                    {centroNomeExibicao}
+                                  </span>
+                                  <span className="text-[9.5px] font-normal text-slate-500 bg-white px-1.5 py-0.2 rounded border border-slate-200">
+                                    {qtdContasNoCentro} conta{qtdContasNoCentro > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              </div>
                             </td>
-                            {/* % Fat. */}
+
+                            {/* Colspan para cobrir todos os meses (2 colunas por mês) + 2 colunas do total do período */}
                             <td
-                              className={`py-2 px-1.5 text-right border-r border-slate-200 whitespace-nowrap text-[10.5px] bg-slate-50/40 ${classesSemaforo}`}
+                              colSpan={meses.length * 2 + 2}
+                              className="py-2 px-3 text-[10px] text-slate-500 font-medium tracking-wide bg-slate-100"
                             >
-                              {formatarPercentualExport(pct)}
+                              <div className="flex items-center justify-between">
+                                <span>Contas vinculadas a este Centro de Custo</span>
+                                <span className="text-[9.5px] text-slate-400 font-mono">
+                                  {meses.length} meses apurados
+                                </span>
+                              </div>
                             </td>
-                          </React.Fragment>
-                        )
-                      })}
+                          </tr>
+                        )}
 
-                      {/* Total do Período para a conta */}
-                      <td className="py-2 px-2 text-right font-semibold bg-slate-100/60 text-slate-900 border-r border-slate-200 whitespace-nowrap font-mono">
-                        {formatBrl(conta.totalPeriodo)}
-                      </td>
-                      <td
-                        className={`py-2 px-2 text-right font-semibold bg-slate-100/90 whitespace-nowrap text-[10.5px] ${getClassesSemaforoPercentual(
-                          conta.percentualPeriodo,
-                        )}`}
-                      >
-                        {formatarPercentualExport(conta.percentualPeriodo)}
-                      </td>
-                    </tr>
-                  ))}
+                        {/* Linha da Conta Individual (limpa, sem badge repetido de centro) */}
+                        <tr className="hover:bg-blue-50/40 text-slate-700 transition-colors text-[11px]">
+                          {/* Coluna Fixa à Esquerda com recuo visual elegante */}
+                          <td className="py-2 px-3 pl-6 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                            <div className="flex items-center gap-2 truncate">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                              {conta.codigo && (
+                                <span className="font-mono text-[10.5px] text-blue-700 font-semibold shrink-0">
+                                  {conta.codigo}
+                                </span>
+                              )}
+                              <span
+                                className="truncate font-medium text-slate-900"
+                                title={conta.nome}
+                              >
+                                {conta.nome}
+                              </span>
+                            </div>
+                          </td>
+
+                          {/* Colunas dos Meses */}
+                          {meses.map((m) => {
+                            const val = conta.valoresPorMes[m.chave] || 0
+                            const pct = conta.percentuaisPorMes[m.chave]
+                            const classesSemaforo = getClassesSemaforoPercentual(pct)
+
+                            return (
+                              <React.Fragment key={`val-${conta.id}-${m.chave}`}>
+                                {/* Valor R$ */}
+                                <td className="py-2 px-1.5 text-right border-r border-slate-100 text-slate-700 whitespace-nowrap font-mono">
+                                  {val !== 0 ? (
+                                    formatBrl(val)
+                                  ) : (
+                                    <span className="text-slate-300">—</span>
+                                  )}
+                                </td>
+                                {/* % Fat. */}
+                                <td
+                                  className={`py-2 px-1.5 text-right border-r border-slate-200 whitespace-nowrap text-[10.5px] bg-slate-50/40 ${classesSemaforo}`}
+                                >
+                                  {formatarPercentualExport(pct)}
+                                </td>
+                              </React.Fragment>
+                            )
+                          })}
+
+                          {/* Total do Período para a conta */}
+                          <td className="py-2 px-2 text-right font-semibold bg-slate-100/60 text-slate-900 border-r border-slate-200 whitespace-nowrap font-mono">
+                            {formatBrl(conta.totalPeriodo)}
+                          </td>
+                          <td
+                            className={`py-2 px-2 text-right font-semibold bg-slate-100/90 whitespace-nowrap text-[10.5px] ${getClassesSemaforoPercentual(
+                              conta.percentualPeriodo,
+                            )}`}
+                          >
+                            {formatarPercentualExport(conta.percentualPeriodo)}
+                          </td>
+                        </tr>
+                      </React.Fragment>
+                    )
+                  })}
 
                   {/* ================= LINHA DE TOTAL DE DESPESAS FIXAS ================= */}
                   <tr className="bg-rose-50/80 text-rose-950 font-bold border-t-2 border-rose-300 text-xs">

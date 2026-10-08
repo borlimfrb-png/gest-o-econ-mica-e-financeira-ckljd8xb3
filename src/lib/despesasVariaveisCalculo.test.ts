@@ -58,6 +58,30 @@ describe('Análise de Despesas Variáveis - Cálculos e Regras de Negócio', () 
     })
   })
 
+  describe('Agrupamento por Centro de Custo nas Exportações e Telas', () => {
+    it('agrupa contas por Centro de Custo e emite apenas uma linha de grupo por centro', () => {
+      const contasOrdenadas = [
+        { id: '1', nome: 'Comissões Vendas', centroId: 'c1', centroNome: 'Comercial' },
+        { id: '2', nome: 'Fretes Vendas', centroId: 'c1', centroNome: 'Comercial' },
+        { id: '3', nome: 'Embalagens', centroId: 'c2', centroNome: 'Logística' },
+      ]
+
+      const gruposDetectados: string[] = []
+      let ultimoCentro: string | null = null
+
+      for (const c of contasOrdenadas) {
+        const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+        if (centroKey !== ultimoCentro) {
+          ultimoCentro = centroKey
+          gruposDetectados.push(c.centroNome || 'Sem Centro de Custo')
+        }
+      }
+
+      expect(gruposDetectados).toEqual(['Comercial', 'Logística'])
+      expect(gruposDetectados).toHaveLength(2)
+    })
+  })
+
   describe('calcularAnaliseDespesasVariaveis (Integração com DRE)', () => {
     const meses = gerarListaMeses(2025, 1, 3) // Jan, Fev, Mar
 

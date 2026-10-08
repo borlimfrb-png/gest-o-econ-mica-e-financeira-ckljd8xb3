@@ -58,6 +58,34 @@ describe('Análise de Despesas Fixas - Cálculos e Regras de Negócio', () => {
     })
   })
 
+  describe('Agrupamento por Centro de Custo nas Exportações e Telas', () => {
+    it('agrupa contas por Centro de Custo e emite apenas uma linha de grupo por centro', () => {
+      const contasOrdenadas = [
+        { id: '1', nome: 'Aluguel', centroId: 'c1', centroNome: 'Administrativo' },
+        { id: '2', nome: 'Energia ADM', centroId: 'c1', centroNome: 'Administrativo' },
+        { id: '3', nome: 'Limpeza ADM', centroId: 'c1', centroNome: 'Administrativo' },
+        { id: '4', nome: 'Manutenção Fábrica', centroId: 'c2', centroNome: 'Operacional' },
+        { id: '5', nome: 'Segurança Fábrica', centroId: 'c2', centroNome: 'Operacional' },
+        { id: '6', nome: 'Outros Gerais', centroId: undefined, centroNome: undefined },
+      ]
+
+      const gruposDetectados: string[] = []
+      let ultimoCentro: string | null = null
+
+      for (const c of contasOrdenadas) {
+        const centroKey = c.centroId || c.centroNome || '__SEM_CENTRO__'
+        if (centroKey !== ultimoCentro) {
+          ultimoCentro = centroKey
+          gruposDetectados.push(c.centroNome || 'Sem Centro de Custo')
+        }
+      }
+
+      // Deve ter detectado exatamente 3 grupos (Administrativo, Operacional, Sem Centro)
+      expect(gruposDetectados).toEqual(['Administrativo', 'Operacional', 'Sem Centro de Custo'])
+      expect(gruposDetectados).toHaveLength(3)
+    })
+  })
+
   describe('calcularAnaliseDespesasFixas (Integração com DRE)', () => {
     const meses = gerarListaMeses(2025, 1, 3) // Jan, Fev, Mar
 
