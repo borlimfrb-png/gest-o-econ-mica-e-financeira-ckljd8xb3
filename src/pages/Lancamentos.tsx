@@ -23,6 +23,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalAuditoriaLancamentos } from '@/components/ModalAuditoriaLancamentos'
 import {
   SeletorPlanoContaCombobox,
@@ -1396,7 +1397,7 @@ export default function Lancamentos() {
                       </p>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
+                    <DoubleHorizontalScroll>
                       <table className="w-full text-left text-xs border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -1551,7 +1552,7 @@ export default function Lancamentos() {
                           </tr>
                         </tfoot>
                       </table>
-                    </div>
+                    </DoubleHorizontalScroll>
                   )}
                 </CardContent>
               </Card>
@@ -1758,7 +1759,7 @@ export default function Lancamentos() {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <DoubleHorizontalScroll>
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -2049,7 +2050,7 @@ export default function Lancamentos() {
                   </Button>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <DoubleHorizontalScroll>
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
@@ -2195,13 +2196,12 @@ export default function Lancamentos() {
                       })}
                     </tbody>
                   </table>
-                </div>
+                </DoubleHorizontalScroll>
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
       {/* ============ MODAL DE EDIÇÃO DE LANÇAMENTO ============ */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[580px] bg-white">

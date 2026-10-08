@@ -15,6 +15,7 @@ import {
   exportarDreComparativoCsv,
 } from '@/lib/dreGerencialExport'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { ModalImportarDreGerencial } from '@/components/ModalImportarDreGerencial'
 import {
@@ -1069,7 +1070,7 @@ export default function DreGerencial() {
             </div>
           ) : modoVisualizacao === 'unico' ? (
             /* TABELA PERÍODO ÚNICO (Matriz mês a mês) */
-            <div className="overflow-x-auto w-full max-w-full scrollbar-thin scrollbar-thumb-slate-300 touch-pan-x">
+            <DoubleHorizontalScroll scrollClassName="scrollbar-thin scrollbar-thumb-slate-300">
               <table
                 className="text-xs border-collapse w-full"
                 style={{ minWidth: `${Math.max(800, 260 + meses.length * 105 + 130)}px` }}
@@ -1437,10 +1438,10 @@ export default function DreGerencial() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </DoubleHorizontalScroll>
           ) : (
             /* TABELA COMPARATIVA LADO A LADO */
-            <div className="overflow-x-auto w-full max-w-full scrollbar-thin scrollbar-thumb-slate-300 touch-pan-x">
+            <DoubleHorizontalScroll scrollClassName="scrollbar-thin scrollbar-thumb-slate-300">
               <table className="text-xs border-collapse w-full min-w-[760px]">
                 <thead>
                   <tr className="bg-slate-100 text-[#0B1F3A] border-b border-slate-200 font-bold text-left">
@@ -1875,7 +1876,7 @@ export default function DreGerencial() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </DoubleHorizontalScroll>
           )}
         </CardContent>
       </Card>

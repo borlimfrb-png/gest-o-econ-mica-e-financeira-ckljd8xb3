@@ -19,6 +19,7 @@ import {
   formatarPercentualExport,
 } from '@/lib/analiseFaturamentoExport'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -601,7 +602,7 @@ export default function AnaliseFaturamento() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto w-full max-w-full">
+            <DoubleHorizontalScroll>
               <table
                 className="text-xs border-collapse w-full"
                 style={{
@@ -782,7 +783,7 @@ export default function AnaliseFaturamento() {
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </DoubleHorizontalScroll>
           )}
         </CardContent>
       </Card>

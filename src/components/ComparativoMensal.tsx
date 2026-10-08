@@ -27,6 +27,7 @@ import {
   Layers,
   FileSpreadsheet,
 } from 'lucide-react'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -570,7 +571,7 @@ export function ComparativoMensal({
           </div>
         </CardHeader>
 
-        <div className="overflow-x-auto">
+        <DoubleHorizontalScroll>
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-100/80 text-slate-700 font-semibold">
@@ -755,7 +756,7 @@ export function ComparativoMensal({
               </tr>
             </tfoot>
           </table>
-        </div>
+        </DoubleHorizontalScroll>
       </Card>
 
       {/* =========================================================================

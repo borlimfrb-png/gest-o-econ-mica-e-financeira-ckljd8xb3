@@ -18,6 +18,7 @@ import {
   formatarPercentualExport,
 } from '@/lib/comparativoDespesasExport'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -906,7 +907,7 @@ export default function ComparativoDespesasAnalise() {
               </div>
             </div>
           ) : (
-            <div className="overflow-x-auto w-full max-w-full">
+            <DoubleHorizontalScroll>
               <table
                 className="text-xs border-collapse w-full"
                 style={{
@@ -1428,7 +1429,7 @@ export default function ComparativoDespesasAnalise() {
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </DoubleHorizontalScroll>
           )}
         </CardContent>
       </Card>

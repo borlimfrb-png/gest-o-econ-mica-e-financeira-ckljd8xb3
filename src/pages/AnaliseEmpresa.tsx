@@ -78,6 +78,7 @@ import {
   CalendarRange,
 } from 'lucide-react'
 import { ComparativoMensal } from '@/components/ComparativoMensal'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import {
   PieChart,
@@ -1213,7 +1214,7 @@ export default function AnaliseEmpresa() {
           </div>
 
           <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
+            <DoubleHorizontalScroll>
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100/80 text-slate-700 font-semibold">
@@ -1770,7 +1771,7 @@ export default function AnaliseEmpresa() {
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </DoubleHorizontalScroll>
           </Card>
         </TabsContent>
         {/* =========================================================================
@@ -1811,7 +1812,7 @@ export default function AnaliseEmpresa() {
           </div>
 
           <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
+            <DoubleHorizontalScroll>
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-100/80 text-slate-700 font-semibold">
@@ -2057,7 +2058,7 @@ export default function AnaliseEmpresa() {
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </DoubleHorizontalScroll>
           </Card>
           <p className="text-[11px] text-slate-500 italic">
             * Nota: EBITDA calculado como Lucro Líquido + Imposto de Renda + Despesas Financeiras
