@@ -562,8 +562,8 @@ export function ModalEmitirNfseNacional({
         })
       } else {
         const respEmissao = await notasFiscaisService.emitirNfse(inputNfse)
-        if (respEmissao?.nota) {
-          registroCriado = respEmissao.nota
+        if (respEmissao?.nota?.id) {
+          registroCriado = { id: respEmissao.nota.id } as NotaFiscalRecord
         }
 
         toast({
