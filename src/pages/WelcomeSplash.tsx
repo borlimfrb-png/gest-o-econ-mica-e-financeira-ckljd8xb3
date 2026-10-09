@@ -626,7 +626,7 @@ export default function WelcomeSplash() {
 
             <Button
               type="button"
-              disabled={!selecionadoLocal && empresas.length > 0}
+              disabled={!selecionadoLocal && empresas.length > 0 && grupos.length > 0}
               onClick={() => confirmarEAcessar()}
               className="w-full sm:w-auto h-10 px-6 text-xs sm:text-sm font-semibold bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-600/30 hover:shadow-blue-500/40 cursor-pointer group transition-all shrink-0"
             >

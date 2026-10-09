@@ -139,9 +139,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/" replace />
   }
 
-  // Se o usuário autenticado acabou de acessar a aplicação ou recarregou e ainda não viu a splash inicial nesta sessão, redireciona para a tela inicial com logomarca
+  // Se o usuário autenticado acabou de acessar a aplicação ou recarregou e ainda não viu a splash inicial nesta sessão, redireciona para a tela inicial com logomarca preservando o destino
   if (!hasSeenSplashThisSession()) {
-    return <Navigate to="/splash" replace />
+    return <Navigate to="/splash" state={{ from: window.location.pathname }} replace />
   }
 
   return <>{children}</>

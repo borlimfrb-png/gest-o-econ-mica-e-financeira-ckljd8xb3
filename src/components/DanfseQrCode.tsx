@@ -28,7 +28,14 @@ export const DanfseQrCode: React.FC<DanfseQrCodeProps> = ({
   }, [chaveAcesso, urlConsulta])
 
   const matrix = useMemo(() => {
-    return generateQrMatrix(qrUrl)
+    try {
+      const mat = generateQrMatrix(qrUrl)
+      if (Array.isArray(mat) && mat.length > 0) return mat
+      return generateQrMatrix('https://www.nfse.gov.br')
+    } catch (err) {
+      console.error('[DanfseQrCode] Erro ao gerar matriz QR:', err)
+      return generateQrMatrix('https://www.nfse.gov.br')
+    }
   }, [qrUrl])
 
   const count = matrix.length || 25
