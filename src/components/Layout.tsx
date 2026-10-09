@@ -335,6 +335,7 @@ export default function Layout() {
     location.pathname === '/indicadores/apresentacao' ||
     location.pathname === '/gerencial/dre' ||
     location.pathname === '/gerencial/fluxo-caixa' ||
+    location.pathname === '/gerencial/indicador-crescimento' ||
     location.pathname.startsWith('/empresas/') ||
     location.pathname.startsWith('/formacao-preco')
 
@@ -1268,6 +1269,8 @@ export default function Layout() {
                 {location.pathname === '/gerencial/dre' && 'DRE Gerencial por Período'}
                 {location.pathname === '/gerencial/fluxo-caixa' &&
                   'Fluxo de Caixa Estruturado (DRE)'}
+                {location.pathname === '/gerencial/indicador-crescimento' &&
+                  'Indicador de Crescimento'}
                 {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
               </h1>
               <p className="text-[11px] text-[#5B6B7F] line-clamp-1">
@@ -1301,6 +1304,8 @@ export default function Layout() {
                   'Demonstração estruturada em 6 níveis contábeis com visão matricial mês a mês ou comparativa'}
                 {location.pathname === '/gerencial/fluxo-caixa' &&
                   'Demonstração do fluxo de caixa estruturado por grupos DRE: operacional, financeiro e acumulado'}
+                {location.pathname === '/gerencial/indicador-crescimento' &&
+                  'Simulação dinâmica de crescimento de faturamento, elasticidade de custos fixos e variáveis e impacto no lucro'}
                 {location.pathname.startsWith('/empresas/') &&
                   'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
               </p>

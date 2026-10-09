@@ -34,6 +34,7 @@ const DespesasVariaveisAnalise = lazy(() => import('./pages/DespesasVariaveisAna
 const AnaliseFaturamento = lazy(() => import('./pages/AnaliseFaturamento'))
 const ComparativoDespesasAnalise = lazy(() => import('./pages/ComparativoDespesasAnalise'))
 const FluxoCaixaDre = lazy(() => import('./pages/FluxoCaixaDre'))
+const IndicadorCrescimento = lazy(() => import('./pages/IndicadorCrescimento'))
 const Financeiro = lazy(() => import('./pages/Financeiro'))
 const BaixaRecebiveis = lazy(() => import('./pages/BaixaRecebiveis'))
 const Contratos = lazy(() => import('./pages/Contratos'))
@@ -353,6 +354,14 @@ const App = () => (
                     element={
                       <ModuloRoute modulo="gerencial_fluxo_caixa">
                         <FluxoCaixaDre />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/gerencial/indicador-crescimento"
+                    element={
+                      <ModuloRoute modulo="gerencial_indicador_crescimento">
+                        <IndicadorCrescimento />
                       </ModuloRoute>
                     }
                   />
