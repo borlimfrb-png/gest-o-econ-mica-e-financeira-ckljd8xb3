@@ -39,6 +39,7 @@ const Financeiro = lazy(() => import('./pages/Financeiro'))
 const BaixaRecebiveis = lazy(() => import('./pages/BaixaRecebiveis'))
 const Contratos = lazy(() => import('./pages/Contratos'))
 const NotasFiscais = lazy(() => import('./pages/NotasFiscais'))
+const ValidacaoNfse = lazy(() => import('./pages/ValidacaoNfse'))
 const Relatorios = lazy(() => import('./pages/Relatorios'))
 const CadastroProdutos = lazy(() => import('./pages/CadastroProdutos'))
 const CadastroMateriaPrima = lazy(() => import('./pages/CadastroMateriaPrima'))
@@ -394,6 +395,14 @@ const App = () => (
                     element={
                       <ModuloRoute modulo="notas_fiscais">
                         <NotasFiscais />
+                      </ModuloRoute>
+                    }
+                  />
+                  <Route
+                    path="/notas-fiscais/validacao"
+                    element={
+                      <ModuloRoute modulo="notas_fiscais">
+                        <ValidacaoNfse />
                       </ModuloRoute>
                     }
                   />

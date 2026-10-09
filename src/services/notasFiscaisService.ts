@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { gerarChaveAcessoNfseNacional } from '@/lib/nfseChaveAcesso'
 import type {
   NotaFiscalRecord,
   EmpresaRecord,
@@ -250,7 +251,7 @@ export const notasFiscaisService = {
    */
   async emitirNfse(input: EmitirNfseInput): Promise<EmitirNfseResponse> {
     try {
-      return await pb.send<EmitirNfseResponse>('/api/nfse/emitir', {
+      return await pb.send<EmitirNfseResponse>('/backend/v1/nfse/emitir', {
         method: 'POST',
         body: input,
       })
@@ -422,26 +423,21 @@ export const notasFiscaisService = {
 
     // Tenta chamar o endpoint de backend
     try {
-      const response = await fetch(`${pb.baseUrl}/api/nfse/cancelar`, {
+      const data = await pb.send<{
+        success: boolean
+        message: string
+        nota: Partial<NotaFiscalRecord>
+      }>('/backend/v1/nfse/cancelar', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: pb.authStore.token,
-        },
-        body: JSON.stringify({
+        body: {
           notaId,
           motivo: motivo.trim(),
           codigoCancelamento: codigoCancelamento || '1',
-        }),
+        },
       })
-
-      const data = await response.json()
-      if (!response.ok || !data.success) {
-        throw new Error(
-          data.error || data.message || 'Falha ao processar cancelamento via gateway.',
-        )
+      if (!data || !data.success) {
+        throw new Error((data as any)?.error || data?.message || 'Falha ao processar cancelamento.')
       }
-
       return data
     } catch (err: any) {
       console.warn('Fallback cancelamento client-side:', err)

@@ -250,7 +250,8 @@ export default function Layout() {
         location.pathname === '/financeiro' ||
         location.pathname === '/baixa-recebiveis' ||
         location.pathname === '/contratos' ||
-        location.pathname === '/notas-fiscais'
+        location.pathname === '/notas-fiscais' ||
+        location.pathname === '/notas-fiscais/validacao'
       )
     }
 
@@ -332,6 +333,7 @@ export default function Layout() {
     location.pathname === '/analise-tributaria' ||
     location.pathname === '/planejamento/bsc' ||
     location.pathname === '/notas-fiscais' ||
+    location.pathname === '/notas-fiscais/validacao' ||
     location.pathname === '/indicadores/apresentacao' ||
     location.pathname === '/gerencial/dre' ||
     location.pathname === '/gerencial/fluxo-caixa' ||
@@ -1257,6 +1259,8 @@ export default function Layout() {
                 {location.pathname === '/planejamento/bsc' && 'Balanced Scorecard (BSC)'}
                 {location.pathname === '/analise-tributaria' && 'Análise Tributária e Planejamento'}
                 {location.pathname === '/notas-fiscais' && 'Emissão de Nota Fiscal (NFS-e)'}
+                {location.pathname === '/notas-fiscais/validacao' &&
+                  'Validação de NFS-e (Padrão Nacional)'}
                 {location.pathname === '/formacao-preco/produtos' && 'Cadastro de Produtos'}
                 {location.pathname === '/formacao-preco/materia-prima' &&
                   'Cadastro de Matéria Prima'}
@@ -1290,6 +1294,8 @@ export default function Layout() {
                   'Comparativo entre Simples Nacional, Lucro Presumido e Lucro Real'}
                 {location.pathname === '/notas-fiscais' &&
                   'Emita NFS-e, gere DANFSE em PDF/XML e envie para clientes por e-mail'}
+                {location.pathname === '/notas-fiscais/validacao' &&
+                  'Validação automática de notas emitidas, checagem de regras SEFIN/ADN e correção de chaves'}
                 {location.pathname === '/formacao-preco/produtos' &&
                   'Gerencie os produtos comercializados, custos, preços de venda e margens de lucro'}
                 {location.pathname === '/formacao-preco/materia-prima' &&

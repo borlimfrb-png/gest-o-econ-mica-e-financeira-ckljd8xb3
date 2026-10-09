@@ -670,10 +670,52 @@ export default function NotasFiscais() {
 
     setEnviandoEmail(true)
     try {
+      // Prepara o XML e o documento PDF (DANFSE) para envio como anexos no hook
+      let xmlEnvio = notaParaEmail.xml_conteudo
+      if (!xmlEnvio) {
+        if (notaParaEmail.dps_payload) {
+          try {
+            const { gerarXmlDpsNacional } = await import('@/lib/nfseNacionalDps')
+            xmlEnvio = gerarXmlDpsNacional(notaParaEmail.dps_payload)
+          } catch {
+            /* fallback */
+          }
+        }
+        if (!xmlEnvio) {
+          const dadosDanfse = prepararDadosDanfseLegado(notaParaEmail)
+          xmlEnvio = gerarXmlNfse(dadosDanfse)
+        }
+      }
+
+      // Converte o DANFSE canônico em PDF base64 compatível com Goja/MailerMessage
+      const { gerarDanfsePdfBase64 } = await import('@/lib/nfsePdfGenerator')
+      const pdfBase64 = gerarDanfsePdfBase64({
+        nota: notaParaEmail,
+        prestador: {
+          razaoSocial:
+            notaParaEmail.prestador_razao_social ||
+            minhaEmpresa?.razao_social ||
+            minhaEmpresa?.nome_fantasia ||
+            'Borlim Consultoria',
+          cnpj: notaParaEmail.prestador_cnpj || minhaEmpresa?.cnpj || '00.000.000/0001-00',
+          inscricaoMunicipal:
+            notaParaEmail.prestador_inscricao_municipal || minhaEmpresa?.inscricao_municipal,
+          cidade: minhaEmpresa?.cidade,
+          estado: minhaEmpresa?.estado,
+        },
+        tomador: {
+          razaoSocial: notaParaEmail.tomador_razao_social || 'Cliente',
+          cnpj: notaParaEmail.tomador_cnpj || '',
+          email: emailDestinatarioInput.trim(),
+        },
+      })
+
       const res = await notasFiscaisService.enviarEmail({
         nota_id: notaParaEmail.id,
         destinatario_email: emailDestinatarioInput.trim(),
         mensagem_personalizada: emailMensagemInput.trim(),
+        xml_conteudo: xmlEnvio,
+        pdf_base64: pdfBase64,
       })
 
       if (res.success) {
@@ -913,6 +955,19 @@ export default function NotasFiscais() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Botão de Validação Automática de NFS-e */}
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="text-xs font-semibold text-indigo-700 bg-indigo-50/50 border-indigo-200 hover:bg-indigo-100 hover:text-indigo-800 shadow-2xs gap-1.5 h-9"
+          >
+            <Link to="/notas-fiscais/validacao" title="Abrir Central de Validação Automática">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              Validação Automática
+            </Link>
+          </Button>
+
           {/* Botão de Gestão de Tomadores */}
           <Button
             variant="outline"
