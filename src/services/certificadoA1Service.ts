@@ -180,7 +180,14 @@ export const certificadoA1Service = {
       })
       return response
     } catch (err: any) {
-      const msg = err?.data?.message || err?.message || 'Erro ao salvar certificado digital.'
+      let msg = 'Erro ao salvar certificado digital.'
+      if (err?.data?.message) {
+        msg = err.data.message
+      } else if (err?.response?.message) {
+        msg = err.response.message
+      } else if (err?.message) {
+        msg = err.message
+      }
       throw new Error(msg)
     }
   },

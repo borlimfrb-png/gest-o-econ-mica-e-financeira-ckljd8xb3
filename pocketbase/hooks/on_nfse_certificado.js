@@ -173,12 +173,15 @@ routerAdd(
         })
       }
 
-      // Chave de criptografia interna derivada do token de segurança da plataforma
-      // ou chave simétrica segura de 32 bytes
-      const secretKey =
+      // Chave de criptografia interna derivada do secret da plataforma
+      // AES exige estritamente 16, 24 ou 32 bytes (256 bits).
+      // Usamos sha256 (32 bytes em ASCII hex tem 64 chars, então pegamos os primeiros 32 chars ASCII
+      // garantindo exatamente 32 bytes válidos para AES-256).
+      const rawSecret =
         $os.getenv('PB_SUPERUSER_TOKEN') ||
         $os.getenv('SKIP_AI_GATEWAY_API_KEY') ||
         'skip-cloud-nfse-cert-vault-32bytes-k'
+      const secretKey = $security.sha256(rawSecret).slice(0, 32)
 
       const senhaCriptografada = $security.encrypt(senha, secretKey)
       const pfxCriptografado = $security.encrypt(arquivoBase64, secretKey)
@@ -219,24 +222,31 @@ routerAdd(
       try {
         const auditCol = $app.findCollectionByNameOrId('auditoria_cadastros')
         if (auditCol) {
-          const audit = new Record(auditCol, {
-            empresa: empresaId,
-            user: authRecord.id,
-            usuario_nome:
-              authRecord.getString('name') || authRecord.getString('email') || 'Administrador',
-            usuario_email: authRecord.getString('email') || '',
-            entidade: 'certificado_digital',
-            registro_id: certRecord.id,
-            acao: isNovo ? 'criacao' : 'edicao',
-            registro_descricao: `Certificado Digital A1 (${nomeArquivo}) ${isNovo ? 'cadastrado' : 'atualizado'} para a empresa ${empresaRecord.getString('nome')}`,
-            detalhes: JSON.stringify({
+          const audit = new Record(auditCol)
+          audit.set('empresa', empresaId)
+          audit.set('usuario', authRecord.id)
+          audit.set(
+            'usuario_nome',
+            authRecord.getString('name') || authRecord.getString('email') || 'Administrador',
+          )
+          audit.set('usuario_email', authRecord.getString('email') || '')
+          audit.set('entidade', 'certificado_digital')
+          audit.set('registro_id', certRecord.id)
+          audit.set('acao', isNovo ? 'criacao' : 'edicao')
+          audit.set(
+            'registro_descricao',
+            `Certificado Digital A1 (${nomeArquivo}) ${isNovo ? 'cadastrado' : 'atualizado'} para a empresa ${empresaRecord.getString('nome')}`,
+          )
+          audit.set(
+            'detalhes',
+            JSON.stringify({
               nome_arquivo: nomeArquivo,
               validade_fim: validadeFim,
               titular: titularNome,
               acao: isNovo ? 'upload_inicial' : 'substituicao_certificado',
               seguranca: 'Armazenado com criptografia em cofre restrito a superusers',
             }),
-          })
+          )
           $app.save(audit)
         }
       } catch (auditErr) {
@@ -315,21 +325,28 @@ routerAdd(
       try {
         const auditCol = $app.findCollectionByNameOrId('auditoria_cadastros')
         if (auditCol) {
-          const audit = new Record(auditCol, {
-            empresa: empresaId,
-            user: authRecord.id,
-            usuario_nome:
-              authRecord.getString('name') || authRecord.getString('email') || 'Administrador',
-            usuario_email: authRecord.getString('email') || '',
-            entidade: 'certificado_digital',
-            registro_id: empresaId,
-            acao: 'exclusao',
-            registro_descricao: `Certificado Digital A1 (${nomeArquivo}) removido da empresa`,
-            detalhes: JSON.stringify({
+          const audit = new Record(auditCol)
+          audit.set('empresa', empresaId)
+          audit.set('usuario', authRecord.id)
+          audit.set(
+            'usuario_nome',
+            authRecord.getString('name') || authRecord.getString('email') || 'Administrador',
+          )
+          audit.set('usuario_email', authRecord.getString('email') || '')
+          audit.set('entidade', 'certificado_digital')
+          audit.set('registro_id', empresaId)
+          audit.set('acao', 'exclusao')
+          audit.set(
+            'registro_descricao',
+            `Certificado Digital A1 (${nomeArquivo}) removido da empresa`,
+          )
+          audit.set(
+            'detalhes',
+            JSON.stringify({
               nome_arquivo_removido: nomeArquivo,
               data_remocao: new Date().toISOString(),
             }),
-          })
+          )
           $app.save(audit)
         }
       } catch (auditErr) {

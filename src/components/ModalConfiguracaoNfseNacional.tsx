@@ -249,18 +249,19 @@ export function ModalConfiguracaoNfseNacional({
 
     setSalvandoCert(true)
     try {
-      // Ler bytes e converter para base64
+      // Ler bytes e converter para base64 de forma robusta por blocos (chunking)
       const buffer = await certArquivo.arrayBuffer()
       const bytes = new Uint8Array(buffer)
 
       // Extrai metadados/validade do PFX de forma segura
       const { validadeFim, validadeInicio } = extrairValidadePfxLocal(bytes)
 
-      // Converte bytes para Base64
+      // Converte bytes para Base64 em chunks para evitar estouro de pilha
+      const CHUNK_SIZE = 8192
       let binary = ''
-      const len = bytes.byteLength
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i])
+      for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+        const chunk = bytes.subarray(i, i + CHUNK_SIZE)
+        binary += String.fromCharCode.apply(null, chunk as unknown as number[])
       }
       const base64 = btoa(binary)
 
@@ -268,7 +269,7 @@ export function ModalConfiguracaoNfseNacional({
         empresa_id: empresaId,
         nome_arquivo: certArquivo.name,
         arquivo_base64: base64,
-        senha: certSenha,
+        senha: certSenha.trim(),
         metadados: {
           validade_fim: validadeFim,
           validade_inicio: validadeInicio,
@@ -290,9 +291,13 @@ export function ModalConfiguracaoNfseNacional({
       // Recarrega status
       await carregarStatusCertificado(empresaId)
     } catch (err: any) {
+      const msg =
+        err?.message ||
+        err?.data?.message ||
+        'Falha ao transmitir o certificado para o cofre seguro.'
       toast({
         title: 'Erro ao salvar certificado',
-        description: err?.message || 'Falha ao transmitir o certificado para o cofre seguro.',
+        description: msg,
         variant: 'destructive',
       })
     } finally {
