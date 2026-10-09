@@ -503,6 +503,8 @@ export interface MinhaEmpresaRecord extends RecordModel {
   cidade?: string
   estado?: UfEmpresa
   codigo_ibge?: string // Código IBGE do município com 7 dígitos (ex: 3136702 Ubá/MG)
+  cnae_servicos?: string // CNAE / Atividade principal de serviços (ex: 6920-6/01)
+  codigo_tributacao_nacional?: string // Código de tributação nacional DPS / LC 116 (ex: 010701)
   pais?: string
   // Seção 3 — Contato
   telefone_comercial?: string

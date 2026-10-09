@@ -47,6 +47,9 @@ import {
   type DadosCertificadoA1,
 } from '@/services/certificadoA1Service'
 import { useAuth } from '@/contexts/AuthContext'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
+import { minhaEmpresaService } from '@/services/minhaEmpresaService'
+import { Building2, Save } from 'lucide-react'
 
 interface ModalConfiguracaoNfseNacionalProps {
   open: boolean
@@ -67,6 +70,7 @@ export function ModalConfiguracaoNfseNacional({
 }: ModalConfiguracaoNfseNacionalProps) {
   const { toast } = useToast()
   const { isAdmin } = useAuth()
+  const { minhaEmpresa, refetch: refetchMinhaEmpresa } = useMinhaEmpresa()
 
   const [serie, setSerie] = useState(serieAtual || '1')
   const [proximoNumero, setProximoNumero] = useState(proximoNumeroAtual || 1)
@@ -74,6 +78,24 @@ export function ModalConfiguracaoNfseNacional({
   const [versaoLayout, setVersaoLayout] = useState<'2.00' | '1.01'>('2.00')
   const [endpoint, setEndpoint] = useState('https://hom.nfse.fazenda.gov.br/portal')
   const [integrarLancamentos, setIntegrarLancamentos] = useState<boolean>(true)
+
+  // Estados dos Dados da Prestadora (Minha Empresa)
+  const [prestRazaoSocial, setPrestRazaoSocial] = useState('')
+  const [prestNomeFantasia, setPrestNomeFantasia] = useState('')
+  const [prestCnpj, setPrestCnpj] = useState('')
+  const [prestInscricaoMunicipal, setPrestInscricaoMunicipal] = useState('')
+  const [prestRegimeTributario, setPrestRegimeTributario] = useState('Simples Nacional')
+  const [prestCep, setPrestCep] = useState('')
+  const [prestLogradouro, setPrestLogradouro] = useState('')
+  const [prestNumero, setPrestNumero] = useState('')
+  const [prestComplemento, setPrestComplemento] = useState('')
+  const [prestBairro, setPrestBairro] = useState('')
+  const [prestCidade, setPrestCidade] = useState('')
+  const [prestEstado, setPrestEstado] = useState('SP')
+  const [prestCodigoIbge, setPrestCodigoIbge] = useState('')
+  const [prestCnaeServicos, setPrestCnaeServicos] = useState('6920-6/01')
+  const [prestCodigoTributacao, setPrestCodigoTributacao] = useState('010701')
+  const [salvandoPrestadora, setSalvandoPrestadora] = useState(false)
 
   // Estado do Certificado Digital A1
   const [certCarregando, setCertCarregando] = useState(false)
@@ -119,6 +141,25 @@ export function ModalConfiguracaoNfseNacional({
         setEndpoint(config.endpointCustomizado)
       }
 
+      // Sincroniza dados da prestadora com Minha Empresa
+      if (minhaEmpresa) {
+        setPrestRazaoSocial(minhaEmpresa.razao_social || '')
+        setPrestNomeFantasia(minhaEmpresa.nome_fantasia || '')
+        setPrestCnpj(minhaEmpresa.cnpj || '')
+        setPrestInscricaoMunicipal(minhaEmpresa.inscricao_municipal || '')
+        setPrestRegimeTributario(minhaEmpresa.regime_tributario || 'Simples Nacional')
+        setPrestCep(minhaEmpresa.cep || '')
+        setPrestLogradouro(minhaEmpresa.logradouro || '')
+        setPrestNumero(minhaEmpresa.numero || '')
+        setPrestComplemento(minhaEmpresa.complemento || '')
+        setPrestBairro(minhaEmpresa.bairro || '')
+        setPrestCidade(minhaEmpresa.cidade || '')
+        setPrestEstado(minhaEmpresa.estado || 'SP')
+        setPrestCodigoIbge(minhaEmpresa.codigo_ibge || '')
+        setPrestCnaeServicos(minhaEmpresa.cnae_servicos || '6920-6/01')
+        setPrestCodigoTributacao(minhaEmpresa.codigo_tributacao_nacional || '010701')
+      }
+
       // Reset dos campos de formulário de upload
       setCertArquivo(null)
       setCertSenha('')
@@ -138,6 +179,66 @@ export function ModalConfiguracaoNfseNacional({
       }
     }
   }, [open, serieAtual, proximoNumeroAtual, empresaId, isAdmin])
+
+  const handleSalvarDadosPrestadora = async () => {
+    if (!prestRazaoSocial.trim()) {
+      toast({
+        title: 'Razão Social obrigatória',
+        description: 'Informe a Razão Social da empresa prestadora.',
+        variant: 'destructive',
+      })
+      return
+    }
+    const cnpjLimpo = prestCnpj.replace(/\D/g, '')
+    if (cnpjLimpo.length !== 14) {
+      toast({
+        title: 'CNPJ inválido',
+        description: 'O CNPJ da empresa prestadora deve possuir 14 dígitos.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setSalvandoPrestadora(true)
+    try {
+      await minhaEmpresaService.save(
+        {
+          razao_social: prestRazaoSocial.trim(),
+          nome_fantasia: prestNomeFantasia.trim() || prestRazaoSocial.trim(),
+          cnpj: prestCnpj.trim(),
+          inscricao_municipal: prestInscricaoMunicipal.trim(),
+          regime_tributario: prestRegimeTributario as any,
+          cep: prestCep.trim(),
+          logradouro: prestLogradouro.trim(),
+          numero: prestNumero.trim(),
+          complemento: prestComplemento.trim(),
+          bairro: prestBairro.trim(),
+          cidade: prestCidade.trim(),
+          estado: prestEstado as any,
+          codigo_ibge: prestCodigoIbge.replace(/\D/g, '').slice(0, 7),
+          cnae_servicos: prestCnaeServicos.trim(),
+          codigo_tributacao_nacional: prestCodigoTributacao.trim(),
+        },
+        minhaEmpresa?.id,
+      )
+
+      await refetchMinhaEmpresa()
+
+      toast({
+        title: 'Dados da prestadora salvos!',
+        description:
+          'Os dados da sua empresa foram atualizados e serão fixados como emissora da NFS-e.',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao salvar prestadora',
+        description: err?.message || 'Falha ao salvar dados de Minha Empresa.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSalvandoPrestadora(false)
+    }
+  }
 
   const handleSalvar = async () => {
     const num = Number(proximoNumero)
@@ -358,6 +459,182 @@ export function ModalConfiguracaoNfseNacional({
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* SEÇÃO: DADOS DA EMPRESA PRESTADORA (MINHA EMPRESA) */}
+            <div className="border border-blue-200 dark:border-blue-900 bg-white dark:bg-slate-900 rounded-lg p-4 space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between border-b pb-2">
+                <div className="space-y-0.5">
+                  <h4 className="text-sm font-bold flex items-center gap-2 text-foreground">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    Empresa Prestadora de Serviços (Sua Empresa / Consultoria)
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Dados do emitente fixo das notas fiscais. São preenchidos automaticamente na
+                    emissão da NFS-e.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSalvarDadosPrestadora}
+                  disabled={salvandoPrestadora}
+                  className="h-8 text-xs gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-50"
+                >
+                  {salvandoPrestadora ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  Salvar Dados do Prestador
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div className="md:col-span-2">
+                  <Label className="text-xs font-semibold">Razão Social *</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestRazaoSocial}
+                    onChange={(e) => setPrestRazaoSocial(e.target.value)}
+                    placeholder="Nome empresarial da sua consultoria"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Nome Fantasia</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestNomeFantasia}
+                    onChange={(e) => setPrestNomeFantasia(e.target.value)}
+                    placeholder="Nome comercial / marca"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <Label className="text-xs font-semibold">CNPJ *</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    value={prestCnpj}
+                    onChange={(e) => setPrestCnpj(e.target.value)}
+                    placeholder="00.000.000/0000-00"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Inscrição Municipal</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    value={prestInscricaoMunicipal}
+                    onChange={(e) => setPrestInscricaoMunicipal(e.target.value)}
+                    placeholder="Ex: 7000-00/18"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-semibold">Regime Tributário</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestRegimeTributario}
+                    onChange={(e) => setPrestRegimeTributario(e.target.value)}
+                    placeholder="Simples Nacional / Lucro Presumido"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div className="md:col-span-2">
+                  <Label className="text-[11px] font-semibold">Logradouro / Endereço</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestLogradouro}
+                    onChange={(e) => setPrestLogradouro(e.target.value)}
+                    placeholder="Rua / Av"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] font-semibold">Número</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestNumero}
+                    onChange={(e) => setPrestNumero(e.target.value)}
+                    placeholder="1000"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] font-semibold">Bairro</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestBairro}
+                    onChange={(e) => setPrestBairro(e.target.value)}
+                    placeholder="Bairro"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                <div>
+                  <Label className="text-[11px] font-semibold">Cidade</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    value={prestCidade}
+                    onChange={(e) => setPrestCidade(e.target.value)}
+                    placeholder="Cidade"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] font-semibold">UF</Label>
+                  <Input
+                    className="h-8 text-xs"
+                    maxLength={2}
+                    value={prestEstado}
+                    onChange={(e) => setPrestEstado(e.target.value.toUpperCase())}
+                    placeholder="SP"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] font-semibold">Código IBGE Município</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    maxLength={7}
+                    value={prestCodigoIbge}
+                    onChange={(e) => setPrestCodigoIbge(e.target.value.replace(/\D/g, ''))}
+                    placeholder="7 dígitos (ex: 3524504)"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] font-semibold">CEP</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    value={prestCep}
+                    onChange={(e) => setPrestCep(e.target.value)}
+                    placeholder="00000-000"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs pt-1 border-t">
+                <div>
+                  <Label className="text-[11px] font-semibold">CNAE de Serviços Principal</Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    value={prestCnaeServicos}
+                    onChange={(e) => setPrestCnaeServicos(e.target.value)}
+                    placeholder="6920-6/01 (Atividades de contabilidade/consultoria)"
+                  />
+                </div>
+                <div>
+                  <Label className="text-[11px] font-semibold">
+                    Cód. Tributação Nacional DPS (LC 116)
+                  </Label>
+                  <Input
+                    className="h-8 text-xs font-mono"
+                    value={prestCodigoTributacao}
+                    onChange={(e) => setPrestCodigoTributacao(e.target.value)}
+                    placeholder="010701 (Suporte técnico / assessoria)"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Integração NFS-e com Lançamentos Rápidos */}
             <div className="border border-blue-200 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-950/20 rounded-lg p-4 space-y-2">
               <div className="flex items-center justify-between">

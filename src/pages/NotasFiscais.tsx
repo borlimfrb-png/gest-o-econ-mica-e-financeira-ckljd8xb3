@@ -393,41 +393,9 @@ export default function NotasFiscais() {
   }
 
   const openNewEmissaoModal = () => {
-    setContratoSelecionado(null)
-    setFormData({
-      empresa_id: clientesHabilitados[0]?.id || '',
-      contrato_id: '',
-      numero: proximoNumeroSugerido,
-      serie: '1',
-      discriminacao:
-        'Prestação de serviços contábeis, assessoria financeira e consultoria em gestão empresarial conforme contrato de prestação de serviços.',
-      item_cnae: '6920-6/01',
-      codigo_servico_municipal: '0107',
-      natureza_operacao: '1',
-      valor_servicos: 0,
-      aliquota_iss: 5.0,
-      valor_iss: 0,
-      iss_retido: false,
-      valor_pis: 0,
-      valor_cofins: 0,
-      valor_inss: 0,
-      valor_ir: 0,
-      valor_csll: 0,
-      outras_retencoes: 0,
-      desconto_incondicionado: 0,
-      valor_liquido: 0,
-      competencia: new Date().toISOString().slice(0, 10),
-      vencimento: '',
-      forcar_simulacao: false,
-    })
-
-    if (clientesHabilitados.length > 0) {
-      handleSelectCliente(clientesHabilitados[0].id)
-    }
-
-    setModalEmissaoOpen(true)
+    setNotaParaSubstituir(null)
+    setModalNacionalOpen(true)
   }
-
   const handleEmitirSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -1932,6 +1900,9 @@ export default function NotasFiscais() {
         onEmitida={() => {
           setNotaParaSubstituir(null)
           loadData()
+        }}
+        onAbrirConfiguracao={() => {
+          setModalConfigNacionalOpen(true)
         }}
       />
 

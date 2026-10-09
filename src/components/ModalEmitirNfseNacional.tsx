@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -27,22 +27,16 @@ import {
   Send,
   Loader2,
   FileCheck2,
-  UserPlus,
-  AlertTriangle,
   Building2,
-  Info,
   AlertCircle,
+  ShieldCheck,
+  MapPin,
+  ExternalLink,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
-import {
-  EmpresaRecord,
-  NfseTomadorRecord,
-  ItemServicoNfse,
-  NotaFiscalRecord,
-} from '@/types/finance'
-import { tomadoresService } from '@/services/tomadoresService'
+import { EmpresaRecord, ItemServicoNfse, NotaFiscalRecord } from '@/types/finance'
 import { notasFiscaisService, EmitirNfseInput } from '@/services/notasFiscaisService'
 import { servicoTransmissaoNfse } from '@/services/transmissaoNfseService'
 import {
@@ -51,7 +45,6 @@ import {
   GerarDpsNacionalOptions,
 } from '@/lib/nfseNacionalDps'
 import { formatBrlMoeda } from '@/lib/nfseXmlGenerator'
-import { ModalCadastroTomador } from './ModalCadastroTomador'
 
 interface ModalEmitirNfseNacionalProps {
   open: boolean
@@ -61,6 +54,7 @@ interface ModalEmitirNfseNacionalProps {
   seriePadrao: string
   proximoNumeroPadrao: number
   onEmitida: () => void
+  onAbrirConfiguracao?: () => void
   // Modo de reemissão corrigida
   notaParaSubstituir?: NotaFiscalRecord | null
 }
@@ -73,6 +67,7 @@ export function ModalEmitirNfseNacional({
   seriePadrao,
   proximoNumeroPadrao,
   onEmitida,
+  onAbrirConfiguracao,
   notaParaSubstituir,
 }: ModalEmitirNfseNacionalProps) {
   const { user } = useAuth()
@@ -81,19 +76,16 @@ export function ModalEmitirNfseNacional({
 
   // Controle de estados
   const [loading, setLoading] = useState(false)
-  const [modalTomadorOpen, setModalTomadorOpen] = useState(false)
-  const [tomadores, setTomadores] = useState<NfseTomadorRecord[]>([])
-  const [tomadorSelecionadoId, setTomadorSelecionadoId] = useState<string>('')
 
-  // Prestador selecionado (empresa)
-  const [empresaId, setEmpresaId] = useState<string>(empresaAtiva?.id || '')
+  // TOMADOR = Empresa Cliente selecionada da coleção "empresas"
+  const [empresaClienteId, setEmpresaClienteId] = useState<string>('')
 
   // DPS Cabeçalho
   const [serie, setSerie] = useState<string>(seriePadrao || '1')
   const [numeroDps, setNumeroDps] = useState<number>(proximoNumeroPadrao || 1)
   const [competencia, setCompetencia] = useState<string>(new Date().toISOString().slice(0, 10))
   const [codigoTributacao, setCodigoTributacao] = useState<string>('010701') // Suporte técnico/consultoria LC 116
-  const [municipioPrestacao, setMunicipioPrestacao] = useState<string>('3550308') // São Paulo
+  const [municipioPrestacao, setMunicipioPrestacao] = useState<string>('3550308') // Fallback inicial SP
 
   // Campo obrigatório para substituição
   const [justificativaCorrecao, setJustificativaCorrecao] = useState<string>('')
@@ -122,17 +114,82 @@ export function ModalEmitirNfseNacional({
   const [outrasRetencoes, setOutrasRetencoes] = useState<number>(0)
   const [descontoIncondicionado, setDescontoIncondicionado] = useState<number>(0)
 
-  // Atualizar quando abrir ou empresa mudar
-  useEffect(() => {
-    if (empresaAtiva?.id) {
-      setEmpresaId(empresaAtiva.id)
-    }
-  }, [empresaAtiva])
+  // Lista de empresas clientes disponíveis para seleção como tomador
+  const clientesDisponiveis = useMemo(() => {
+    return (empresasLista || []).slice().sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+  }, [empresasLista])
 
+  // Empresa Tomadora selecionada atualmente
+  const tomadorEmpresa = useMemo(() => {
+    return clientesDisponiveis.find((e) => e.id === empresaClienteId) || null
+  }, [clientesDisponiveis, empresaClienteId])
+
+  // Validação de dados obrigatórios do cadastro do Tomador (Empresa Cliente)
+  const validacaoTomador = useMemo(() => {
+    if (!tomadorEmpresa) {
+      return {
+        valido: false,
+        faltando: ['Selecione a empresa cliente tomadora dos serviços'],
+      }
+    }
+
+    const faltando: string[] = []
+    const cnpjLimpo = (tomadorEmpresa.cnpj || '').replace(/\D/g, '')
+
+    if (!tomadorEmpresa.nome?.trim()) {
+      faltando.push('Razão Social / Nome da empresa')
+    }
+    if (!cnpjLimpo || (cnpjLimpo.length !== 14 && cnpjLimpo.length !== 11)) {
+      faltando.push('CNPJ válido (14 dígitos) ou CPF (11 dígitos)')
+    }
+    if (!tomadorEmpresa.logradouro?.trim()) {
+      faltando.push('Logradouro / Endereço (Rua/Avenida)')
+    }
+    if (!tomadorEmpresa.cidade?.trim()) {
+      faltando.push('Cidade')
+    }
+    if (!tomadorEmpresa.estado?.trim()) {
+      faltando.push('UF / Estado')
+    }
+
+    return {
+      valido: faltando.length === 0,
+      faltando,
+    }
+  }, [tomadorEmpresa])
+
+  // Validação dos dados da Prestadora (Minha Empresa)
+  const validacaoPrestadora = useMemo(() => {
+    const faltando: string[] = []
+    if (!minhaEmpresa) {
+      faltando.push('Cadastro de Minha Empresa (abra Configurações para preencher)')
+      return { valido: false, faltando }
+    }
+    const cnpjLimpo = (minhaEmpresa.cnpj || '').replace(/\D/g, '')
+    if (!cnpjLimpo || cnpjLimpo.length !== 14) {
+      faltando.push('CNPJ da Prestadora (14 dígitos)')
+    }
+    if (!minhaEmpresa.razao_social?.trim() && !minhaEmpresa.nome_fantasia?.trim()) {
+      faltando.push('Razão Social da Prestadora')
+    }
+    return {
+      valido: faltando.length === 0,
+      faltando,
+    }
+  }, [minhaEmpresa])
+
+  // Inicialização ao abrir modal
   useEffect(() => {
     if (open) {
       setSerie(seriePadrao || '1')
       setNumeroDps(proximoNumeroPadrao || 1)
+
+      // Código de tributação nacional padrão de Minha Empresa
+      if (minhaEmpresa?.codigo_tributacao_nacional) {
+        setCodigoTributacao(minhaEmpresa.codigo_tributacao_nacional)
+      } else {
+        setCodigoTributacao('010701')
+      }
 
       // Se Minha Empresa possui Código IBGE cadastrado, inicializa o município de prestação com ele
       const ibgeMinhaEmpresa = (minhaEmpresa?.codigo_ibge || '').replace(/\D/g, '')
@@ -143,7 +200,9 @@ export function ModalEmitirNfseNacional({
       if (notaParaSubstituir) {
         // Pré-preencher com dados da nota original
         setJustificativaCorrecao('')
-        if (notaParaSubstituir.empresa) setEmpresaId(notaParaSubstituir.empresa)
+        if (notaParaSubstituir.empresa) {
+          setEmpresaClienteId(notaParaSubstituir.empresa)
+        }
         if (notaParaSubstituir.competencia) {
           setCompetencia(notaParaSubstituir.competencia.slice(0, 10))
         }
@@ -162,24 +221,6 @@ export function ModalEmitirNfseNacional({
         }
         if (notaParaSubstituir.desconto_incondicionado !== undefined) {
           setDescontoIncondicionado(notaParaSubstituir.desconto_incondicionado)
-        }
-
-        // Alíquotas aproximadas a partir dos valores se existirem
-        const valServ = notaParaSubstituir.valor_servicos || 1
-        if (notaParaSubstituir.valor_pis) {
-          setAliquotaPis(Number(((notaParaSubstituir.valor_pis / valServ) * 100).toFixed(2)))
-        }
-        if (notaParaSubstituir.valor_cofins) {
-          setAliquotaCofins(Number(((notaParaSubstituir.valor_cofins / valServ) * 100).toFixed(2)))
-        }
-        if (notaParaSubstituir.valor_inss) {
-          setAliquotaInss(Number(((notaParaSubstituir.valor_inss / valServ) * 100).toFixed(2)))
-        }
-        if (notaParaSubstituir.valor_ir) {
-          setAliquotaIr(Number(((notaParaSubstituir.valor_ir / valServ) * 100).toFixed(2)))
-        }
-        if (notaParaSubstituir.valor_csll) {
-          setAliquotaCsll(Number(((notaParaSubstituir.valor_csll / valServ) * 100).toFixed(2)))
         }
 
         // Itens
@@ -215,29 +256,27 @@ export function ModalEmitirNfseNacional({
             },
           ])
         }
-
-        if (notaParaSubstituir.tomador_ref) {
-          setTomadorSelecionadoId(notaParaSubstituir.tomador_ref)
-        }
       } else {
         setJustificativaCorrecao('')
+        // Se ainda não selecionou cliente, seleciona o padrão ativo ou o primeiro da lista
+        if (!empresaClienteId && clientesDisponiveis.length > 0) {
+          const padrao =
+            empresaAtiva?.id && clientesDisponiveis.some((c) => c.id === empresaAtiva.id)
+              ? empresaAtiva.id
+              : clientesDisponiveis[0].id
+          setEmpresaClienteId(padrao)
+        }
       }
-
-      carregarTomadores()
     }
-  }, [open, empresaId, seriePadrao, proximoNumeroPadrao, notaParaSubstituir])
-
-  const carregarTomadores = async () => {
-    try {
-      const lista = await tomadoresService.listar(empresaId || undefined)
-      setTomadores(lista)
-      if (lista.length > 0 && !tomadorSelecionadoId) {
-        setTomadorSelecionadoId(lista[0].id)
-      }
-    } catch (err) {
-      console.warn('Erro ao carregar tomadores:', err)
-    }
-  }
+  }, [
+    open,
+    seriePadrao,
+    proximoNumeroPadrao,
+    notaParaSubstituir,
+    minhaEmpresa,
+    clientesDisponiveis,
+    empresaAtiva,
+  ])
 
   // Cálculos automáticos dos itens e totais
   const valorServicosTotal = itens.reduce((acc, it) => acc + (Number(it.valor_total) || 0), 0)
@@ -301,16 +340,32 @@ export function ModalEmitirNfseNacional({
     setItens(filtrados)
   }
 
-  // Tomador atual
-  const tomadorAtual = tomadores.find((t) => t.id === tomadorSelecionadoId) || null
-  const prestadorAtual = empresasLista.find((e) => e.id === empresaId) || empresaAtiva
-
   // Transmissão / Emissão
   const handleEmitirNfse = async () => {
-    if (!tomadorAtual) {
+    // 1. Validação da Prestadora (Minha Empresa)
+    if (!validacaoPrestadora.valido) {
       toast({
-        title: 'Selecione um Tomador',
-        description: 'É necessário cadastrar ou selecionar o tomador dos serviços.',
+        title: 'Dados da Prestadora incompletos',
+        description: `Complete o cadastro em Configurações: ${validacaoPrestadora.faltando.join(', ')}.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
+    // 2. Validação do Tomador (Empresa Cliente)
+    if (!tomadorEmpresa) {
+      toast({
+        title: 'Selecione a empresa Tomadora',
+        description: 'É necessário selecionar uma empresa cliente como tomadora dos serviços.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (!validacaoTomador.valido) {
+      toast({
+        title: 'Dados obrigatórios do Tomador incompletos',
+        description: `Não é possível transmitir. Dados faltantes na empresa selecionada (${tomadorEmpresa.nome}): ${validacaoTomador.faltando.join('; ')}. Complete o cadastro na tela Empresas.`,
         variant: 'destructive',
       })
       return
@@ -336,51 +391,51 @@ export function ModalEmitirNfseNacional({
       return
     }
 
-    // 1. Montar payload do DPS Nacional
-    const configTransmissao = servicoTransmissaoNfse.obterConfiguracoes(empresaId)
+    // 3. Montar payload do DPS Nacional com papéis corretos:
+    // PRESTADOR = Minha Empresa (consultoria do usuário)
+    // TOMADOR = Empresa Cliente cadastrada na coleção "empresas"
+    const configTransmissao = servicoTransmissaoNfse.obterConfiguracoes(tomadorEmpresa.id)
     const versaoLayoutAtiva = configTransmissao.versaoLayout || '2.00'
 
-    // Código IBGE do prestador: prioriza Minha Empresa (consultoria sede), fallback para município da prestação
-    const codIbgeMinhaEmpresa = (minhaEmpresa?.codigo_ibge || '').replace(/\D/g, '')
+    const codIbgePrestador = (minhaEmpresa?.codigo_ibge || '').replace(/\D/g, '')
     const codMunPrestadorFinal =
-      codIbgeMinhaEmpresa.length === 7 ? codIbgeMinhaEmpresa : municipioPrestacao
+      codIbgePrestador.length === 7 ? codIbgePrestador : municipioPrestacao
 
     const optionsDps: GerarDpsNacionalOptions = {
-      tipoAmbiente: '2', // Homologação / Simulação Nacional
+      tipoAmbiente: configTransmissao.tipoAmbiente || '2',
       versaoLayout: versaoLayoutAtiva,
       serie,
       numeroDps,
       competencia,
       municipioPrestacao,
       prestador: {
-        cnpj: prestadorAtual?.cnpj || minhaEmpresa?.cnpj || '00.000.000/0001-00',
+        cnpj: minhaEmpresa?.cnpj || '30.915.624/0001-08',
         razaoSocial:
-          prestadorAtual?.nome || minhaEmpresa?.razao_social || 'Borlim Consultoria Financeira',
+          minhaEmpresa?.razao_social ||
+          minhaEmpresa?.nome_fantasia ||
+          'BORLIM CONSULTORIA EMPRESARIAL LTDA',
         nomeFantasia: minhaEmpresa?.nome_fantasia,
-        inscricaoMunicipal: minhaEmpresa?.inscricao_municipal || '12345678',
-        regimeTributario:
-          prestadorAtual?.regime_tributario ||
-          minhaEmpresa?.regime_tributario ||
-          'Simples Nacional',
+        inscricaoMunicipal: minhaEmpresa?.inscricao_municipal || '',
+        regimeTributario: minhaEmpresa?.regime_tributario || 'Simples Nacional',
         codigoMunicipio: codMunPrestadorFinal,
-        uf: minhaEmpresa?.estado || 'MG',
+        uf: minhaEmpresa?.estado || 'SP',
       },
       tomador: {
-        tipoPessoa: tomadorAtual.tipo_pessoa || 'PJ',
-        cpfCnpj: tomadorAtual.cpf_cnpj,
-        razaoSocial: tomadorAtual.razao_social,
-        nomeFantasia: tomadorAtual.nome_fantasia,
-        inscricaoMunicipal: tomadorAtual.inscricao_municipal,
-        email: tomadorAtual.email,
-        telefone: tomadorAtual.telefone,
-        logradouro: tomadorAtual.logradouro || 'RUA PRINCIPAL',
-        numero: tomadorAtual.numero || '100',
-        complemento: tomadorAtual.complemento,
-        bairro: tomadorAtual.bairro || 'CENTRO',
-        cidade: tomadorAtual.cidade || 'SÃO PAULO',
-        estado: tomadorAtual.estado || 'SP',
-        cep: tomadorAtual.cep || '01000-000',
-        codigoMunicipio: tomadorAtual.codigo_municipio || municipioPrestacao,
+        tipoPessoa: 'PJ',
+        cpfCnpj: tomadorEmpresa.cnpj || '',
+        razaoSocial: tomadorEmpresa.nome,
+        nomeFantasia: tomadorEmpresa.nome_fantasia || undefined,
+        inscricaoMunicipal: undefined,
+        email: tomadorEmpresa.email || undefined,
+        telefone: tomadorEmpresa.telefone || undefined,
+        logradouro: tomadorEmpresa.logradouro || '',
+        numero: tomadorEmpresa.numero || 'S/N',
+        complemento: tomadorEmpresa.complemento || undefined,
+        bairro: tomadorEmpresa.bairro || 'CENTRO',
+        cidade: tomadorEmpresa.cidade || '',
+        estado: tomadorEmpresa.estado || 'SP',
+        cep: tomadorEmpresa.cep || '',
+        codigoMunicipio: municipioPrestacao,
       },
       itens: itens.map((it) => ({
         item: it.item,
@@ -408,7 +463,7 @@ export function ModalEmitirNfseNacional({
       },
     }
 
-    // 2. Validação local do layout DPS Nacional
+    // 4. Validação local do layout DPS Nacional
     const validacao = validarDpsNacionalLocal(optionsDps)
     if (!validacao.valido) {
       toast({
@@ -421,10 +476,10 @@ export function ModalEmitirNfseNacional({
 
     setLoading(true)
     try {
-      // 3. Gerar JSON canônico
+      // 5. Gerar JSON canônico
       const { dpsId, payload: dpsPayload } = gerarPayloadDpsNacional(optionsDps)
 
-      // 4. Camada de transmissão desacoplada (Modo Homologação Nacional)
+      // 6. Camada de transmissão
       const retornoTransmissao = await servicoTransmissaoNfse.transmitirDps(
         dpsPayload,
         configTransmissao,
@@ -434,9 +489,9 @@ export function ModalEmitirNfseNacional({
         throw new Error(retornoTransmissao.mensagem || 'Falha ao processar DPS no Portal Nacional.')
       }
 
-      // 5. Salvar nota na base de dados com o DPS acoplado
+      // 7. Salvar nota na base de dados vinculada à empresa tomadora
       const inputNfse: EmitirNfseInput = {
-        empresa_id: empresaId,
+        empresa_id: tomadorEmpresa.id,
         numero: retornoTransmissao.numeroNfse || numeroDps,
         serie,
         competencia,
@@ -461,19 +516,20 @@ export function ModalEmitirNfseNacional({
         servicos_itens: itens,
         codigo_tributacao_nacional: codigoTributacao,
         codigo_municipio_prestacao: municipioPrestacao,
-        tipo_ambiente: '2 - Homologacao',
-        tomador_ref: tomadorAtual.id,
+        tipo_ambiente: (configTransmissao.tipoAmbiente === '1'
+          ? '1 - Producao'
+          : '2 - Homologacao') as any,
         tomador_dados: {
-          cpf_cnpj: tomadorAtual.cpf_cnpj,
-          razao_social: tomadorAtual.razao_social,
-          email: tomadorAtual.email,
-          tipo_pessoa: tomadorAtual.tipo_pessoa,
-          logradouro: tomadorAtual.logradouro,
-          numero: tomadorAtual.numero,
-          bairro: tomadorAtual.bairro,
-          cidade: tomadorAtual.cidade,
-          estado: tomadorAtual.estado,
-          cep: tomadorAtual.cep,
+          cpf_cnpj: tomadorEmpresa.cnpj || '',
+          razao_social: tomadorEmpresa.nome,
+          email: tomadorEmpresa.email || '',
+          tipo_pessoa: 'PJ',
+          logradouro: tomadorEmpresa.logradouro || '',
+          numero: tomadorEmpresa.numero || '',
+          bairro: tomadorEmpresa.bairro || '',
+          cidade: tomadorEmpresa.cidade || '',
+          estado: tomadorEmpresa.estado || '',
+          cep: tomadorEmpresa.cep || '',
         },
       }
 
@@ -485,7 +541,7 @@ export function ModalEmitirNfseNacional({
           justificativaCorrecao: justificativaCorrecao.trim(),
           novaNotaData: {
             ...inputNfse,
-            empresa: empresaId,
+            empresa: tomadorEmpresa.id,
             status: 'Emitida',
             chave_acesso: retornoTransmissao.chaveAcessoNfse,
             codigo_verificacao: retornoTransmissao.codigoVerificacao,
@@ -497,14 +553,14 @@ export function ModalEmitirNfseNacional({
 
         toast({
           title: 'NFS-e Reemitida e Corrigida com Sucesso!',
-          description: `Nova NFS-e Nº ${numeroDps} autorizada. Nota original nº ${notaParaSubstituir.numero} marcada como 'Substituída'.`,
+          description: `Nova NFS-e Nº ${numeroDps} autorizada para ${tomadorEmpresa.nome}. Nota original nº ${notaParaSubstituir.numero} marcada como 'Substituída'.`,
         })
       } else {
         await notasFiscaisService.emitirNfse(inputNfse)
 
         toast({
           title: 'NFS-e Nacional Emitida com Sucesso!',
-          description: `DPS Série ${serie} Nº ${numeroDps} protocolada e autorizada no ambiente de homologação.`,
+          description: `DPS Série ${serie} Nº ${numeroDps} autorizada para o cliente ${tomadorEmpresa.nome}.`,
         })
       }
 
@@ -589,25 +645,179 @@ export function ModalEmitirNfseNacional({
                 </div>
               </div>
             )}
-            {/* CABEÇALHO DO DPS / PRESTADOR */}
-            <div className="border rounded-lg p-3 bg-muted/20 space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div className="md:col-span-2">
-                  <Label>Empresa Prestadora (Emissor Ativo)</Label>
-                  <Select value={empresaId} onValueChange={setEmpresaId}>
+            {/* 1. PRESTADORA DE SERVIÇOS (MINHA EMPRESA - FIXO E AUTOMÁTICO) */}
+            <div className="border border-blue-200 dark:border-blue-900 bg-blue-50/40 dark:bg-blue-950/20 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-blue-600" />
+                  <span className="font-bold text-xs text-blue-950 dark:text-blue-200">
+                    Empresa Prestadora (Emitente Fixo: Sua Empresa / Consultoria)
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] bg-white border-blue-200 text-blue-700"
+                  >
+                    Fixado Automaticamente
+                  </Badge>
+                </div>
+                {onAbrirConfiguracao && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={onAbrirConfiguracao}
+                    className="h-6 text-[11px] text-blue-700 hover:text-blue-800 p-0 gap-1"
+                  >
+                    Editar dados da prestadora <ExternalLink className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+
+              {minhaEmpresa ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-white/80 dark:bg-slate-900/40 p-2.5 rounded border border-blue-100 dark:border-blue-900/60 text-xs">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-medium">
+                      Razão Social
+                    </span>
+                    <strong
+                      className="text-foreground truncate block"
+                      title={minhaEmpresa.razao_social}
+                    >
+                      {minhaEmpresa.razao_social ||
+                        minhaEmpresa.nome_fantasia ||
+                        'BORLIM CONSULTORIA'}
+                    </strong>
+                    {minhaEmpresa.nome_fantasia && (
+                      <span className="text-[10px] text-muted-foreground">
+                        ({minhaEmpresa.nome_fantasia})
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-medium">
+                      CNPJ / Inscrição Municipal
+                    </span>
+                    <span className="font-mono text-foreground font-semibold">
+                      {minhaEmpresa.cnpj || '30.915.624/0001-08'}
+                    </span>
+                    {minhaEmpresa.inscricao_municipal && (
+                      <span className="text-[10px] text-muted-foreground block font-mono">
+                        IM: {minhaEmpresa.inscricao_municipal}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block font-medium">
+                      Sede / Regime
+                    </span>
+                    <span className="text-foreground truncate block">
+                      {minhaEmpresa.cidade || 'Jaci'}/{minhaEmpresa.estado || 'SP'} ·{' '}
+                      {minhaEmpresa.regime_tributario || 'Simples Nacional'}
+                    </span>
+                    {minhaEmpresa.cnae_servicos && (
+                      <span className="text-[10px] text-muted-foreground block font-mono">
+                        CNAE: {minhaEmpresa.cnae_servicos}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 border border-amber-200 p-2 rounded text-xs text-amber-900 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>
+                    Dados da sua empresa não encontrados. Abra a Configuração da NFS-e para
+                    cadastrar a Razão Social e CNPJ.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* 2. TOMADOR DOS SERVIÇOS (CLIENTES JÁ CADASTRADOS EM EMPRESAS) */}
+            <div className="border rounded-lg p-3 bg-card space-y-3 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <Label className="font-semibold text-sm flex items-center gap-1.5 text-foreground">
+                  <Building2 className="w-4 h-4 text-primary" />
+                  Tomador dos Serviços (Empresa Cliente Cadastrada) *
+                </Label>
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-200"
+                >
+                  {clientesDisponiveis.length} clientes cadastrados
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-start">
+                <div className="md:col-span-2 space-y-1">
+                  <Select
+                    value={empresaClienteId}
+                    onValueChange={(val) => setEmpresaClienteId(val)}
+                  >
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Selecione a empresa" />
+                      <SelectValue placeholder="Selecione a empresa cliente tomadora" />
                     </SelectTrigger>
                     <SelectContent>
-                      {empresasLista.map((emp) => (
+                      {clientesDisponiveis.map((emp) => (
                         <SelectItem key={emp.id} value={emp.id}>
-                          {emp.nome} ({emp.cnpj || 'CNPJ n/d'})
+                          {emp.nome_fantasia ? `${emp.nome_fantasia} — ${emp.nome}` : emp.nome} (
+                          {emp.cnpj || 'Sem CNPJ'})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-[10px] text-muted-foreground">
+                    Lista diretamente as empresas cadastradas no módulo de Empresas (GIGA MÓVEIS,
+                    UNICLASS UNIFORMES, MOLARE...).
+                  </p>
                 </div>
 
+                {tomadorEmpresa && (
+                  <div className="text-[11px] bg-muted/30 border rounded p-2 space-y-0.5">
+                    <p className="font-bold text-foreground truncate" title={tomadorEmpresa.nome}>
+                      {tomadorEmpresa.nome}
+                    </p>
+                    <p className="font-mono text-muted-foreground">
+                      CNPJ: {tomadorEmpresa.cnpj || 'Não informado'}
+                    </p>
+                    <p className="text-muted-foreground truncate flex items-center gap-1">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      {tomadorEmpresa.cidade || '—'}/{tomadorEmpresa.estado || '—'} · CEP{' '}
+                      {tomadorEmpresa.cep || '—'}
+                    </p>
+                    {tomadorEmpresa.email && (
+                      <p className="text-muted-foreground truncate">{tomadorEmpresa.email}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Alerta impeditivo claro caso faltem dados obrigatórios no tomador */}
+              {!validacaoTomador.valido && (
+                <div className="rounded-md border border-red-300 bg-red-50 dark:bg-red-950/30 p-3 text-xs text-red-900 dark:text-red-200 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-red-950 dark:text-red-100">
+                      Cadastro do Tomador Incompleto — Transmissão Bloqueada
+                    </p>
+                    <p className="text-[11px] text-red-800 dark:text-red-300 leading-relaxed">
+                      O DPS Nacional exige os dados fiscais completos do tomador. Para emitir a nota
+                      fiscal para{' '}
+                      <strong>{tomadorEmpresa ? tomadorEmpresa.nome : 'esta empresa'}</strong>,
+                      preencha os seguintes campos no cadastro da empresa:
+                    </p>
+                    <ul className="list-disc list-inside text-[11px] font-semibold text-red-900 dark:text-red-200 pt-0.5">
+                      {validacaoTomador.faltando.map((campo, i) => (
+                        <li key={i}>{campo}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. CABEÇALHO DO DPS / NÚMERO / SÉRIE */}
+            <div className="border rounded-lg p-3 bg-muted/20 space-y-3">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                 <div>
                   <Label>Série da DPS</Label>
                   <Input
@@ -626,11 +836,9 @@ export function ModalEmitirNfseNacional({
                     onChange={(e) => setNumeroDps(Math.max(1, parseInt(e.target.value) || 1))}
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div>
-                  <Label>Data de Competência</Label>
+                  <Label>Competência</Label>
                   <Input
                     type="date"
                     className="h-9"
@@ -638,8 +846,9 @@ export function ModalEmitirNfseNacional({
                     onChange={(e) => setCompetencia(e.target.value)}
                   />
                 </div>
+
                 <div>
-                  <Label>Cód. Tributação Nacional (CNAE/LC 116)</Label>
+                  <Label>Cód. Trib. (LC 116)</Label>
                   <Input
                     className="h-9 font-mono"
                     placeholder="010701 ou 6920-6/01"
@@ -647,70 +856,15 @@ export function ModalEmitirNfseNacional({
                     onChange={(e) => setCodigoTributacao(e.target.value)}
                   />
                 </div>
+
                 <div>
-                  <Label>Município da Prestação (IBGE)</Label>
+                  <Label>Cód. IBGE Município</Label>
                   <Input
                     className="h-9 font-mono"
                     value={municipioPrestacao}
                     onChange={(e) => setMunicipioPrestacao(e.target.value)}
                   />
                 </div>
-              </div>
-            </div>
-
-            {/* SELEÇÃO DO TOMADOR COM BOTÃO DE CADASTRO RÁPIDO */}
-            <div className="border rounded-lg p-3 bg-card space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="font-semibold text-sm flex items-center gap-1.5 text-foreground">
-                  <Building2 className="w-4 h-4 text-primary" />
-                  Tomador dos Serviços (Cliente)
-                </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setModalTomadorOpen(true)}
-                  className="h-7 text-xs gap-1.5"
-                >
-                  <UserPlus className="w-3.5 h-3.5" /> Novo Tomador
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                <div className="md:col-span-2">
-                  <Select
-                    value={tomadorSelecionadoId}
-                    onValueChange={(val) => setTomadorSelecionadoId(val)}
-                  >
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder="Selecione o tomador já cadastrado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tomadores.map((t) => (
-                        <SelectItem key={t.id} value={t.id}>
-                          {t.razao_social} ({t.cpf_cnpj})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {tomadorAtual ? (
-                  <div className="text-[11px] text-muted-foreground border-l pl-3">
-                    <p className="font-semibold text-foreground truncate">
-                      {tomadorAtual.razao_social}
-                    </p>
-                    <p>Doc: {tomadorAtual.cpf_cnpj}</p>
-                    <p className="truncate">
-                      {tomadorAtual.cidade || 'São Paulo'}/{tomadorAtual.estado || 'SP'}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="text-[11px] text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                    Cadastre ou selecione um tomador para continuar.
-                  </div>
-                )}
               </div>
             </div>
 
@@ -939,7 +1093,16 @@ export function ModalEmitirNfseNacional({
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               Cancelar
             </Button>
-            <Button onClick={handleEmitirNfse} disabled={loading} className="gap-2">
+            <Button
+              onClick={handleEmitirNfse}
+              disabled={loading || !validacaoTomador.valido || !validacaoPrestadora.valido}
+              className="gap-2"
+              title={
+                !validacaoTomador.valido
+                  ? `Transmissão bloqueada: faltam dados no tomador (${validacaoTomador.faltando.join(', ')})`
+                  : undefined
+              }
+            >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />{' '}
@@ -955,17 +1118,6 @@ export function ModalEmitirNfseNacional({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Modal de Cadastro Rápido de Tomador */}
-      <ModalCadastroTomador
-        open={modalTomadorOpen}
-        onOpenChange={setModalTomadorOpen}
-        empresaId={empresaId}
-        onSalvo={(novo) => {
-          setTomadores((prev) => [novo, ...prev])
-          setTomadorSelecionadoId(novo.id)
-        }}
-      />
     </>
   )
 }
