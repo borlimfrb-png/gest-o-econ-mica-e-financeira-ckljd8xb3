@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useRef } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -8,63 +8,62 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import {
   Printer,
   Download,
   FileCode2,
   CheckCircle2,
   XCircle,
-  Building2,
-  Calendar,
-  CreditCard,
-  ShieldCheck,
   FileText,
-  Copy,
-  Info,
+  ExternalLink,
+  Layers,
 } from 'lucide-react'
 import { NotaFiscalRecord } from '@/types/finance'
-import { formatBrlMoeda, downloadArquivo } from '@/lib/nfseXmlGenerator'
+import { downloadArquivo } from '@/lib/nfseXmlGenerator'
 import { gerarXmlDpsNacional } from '@/lib/nfseNacionalDps'
-import { useToast } from '@/hooks/use-toast'
+import { DanfseA4Document } from '@/components/DanfseA4Document'
+import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 
 interface ModalVisualizarDanfseProps {
   nota: NotaFiscalRecord | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  empresaCliente?: any
+  tomadorRef?: any
 }
 
-export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisualizarDanfseProps) {
-  const { toast } = useToast()
-  const printRef = useRef<HTMLDivElement>(null)
-  const [copiado, setCopiado] = useState(false)
+/**
+ * Modal de Pré-visualização e Impressão Canônica A4 do DANFSE Nacional 2.0.
+ *
+ * Oferece:
+ * - Renderização da folha A4 em proporção fiel com sombra, margens e padding canônico.
+ * - Impressão direta via window.print() com estilos @media print aplicados via #danfse-nacional-a4-document.
+ * - Download do XML DPS Nacional (ou fallback estruturado).
+ * - Download do payload DPS JSON.
+ * - Consulta direta ao Portal Nacional da NFS-e.
+ * - Tarjas visuais para Homologação, Cancelada ou Substituída.
+ */
+export function ModalVisualizarDanfse({
+  nota,
+  open,
+  onOpenChange,
+  empresaCliente,
+  tomadorRef,
+}: ModalVisualizarDanfseProps) {
+  const { minhaEmpresa } = useMinhaEmpresa()
+  const printContainerRef = useRef<HTMLDivElement>(null)
 
   if (!nota) return null
 
-  const isNacional = Boolean(nota.padrao_nacional || nota.dps_payload || nota.chave_acesso)
-  const isCancelada = nota.status === 'Cancelada'
   const isHomologacao =
-    nota.modo_emissao?.includes('Homologação') || nota.tipo_ambiente?.includes('Homologacao')
+    nota.tipo_ambiente?.includes('2') ||
+    nota.tipo_ambiente?.toLowerCase().includes('homolog') ||
+    nota.modo_emissao?.toLowerCase().includes('homolog') ||
+    nota.modo_emissao?.toLowerCase().includes('simula') ||
+    !nota.tipo_ambiente
 
-  // Dados formatados
-  const formatData = (d?: string) => {
-    if (!d) return '-'
-    const str = d.slice(0, 10)
-    const [y, m, day] = str.split('-')
-    return `${day}/${m}/${y}`
-  }
-
-  const copiarChave = () => {
-    if (nota.chave_acesso) {
-      navigator.clipboard.writeText(nota.chave_acesso)
-      setCopiado(true)
-      toast({
-        title: 'Chave copiada',
-        description: 'Chave de acesso nacional copiada para a área de transferência.',
-      })
-      setTimeout(() => setCopiado(false), 2000)
-    }
-  }
+  const isCancelada = nota.status === 'Cancelada'
+  const isSubstituida = nota.status === 'Substituída'
 
   const handlePrint = () => {
     window.print()
@@ -92,55 +91,48 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
     downloadArquivo(`DANFSE-Nacional-${nota.numero}.xml`, xml, 'application/xml')
   }
 
-  const itens =
-    nota.servicos_itens && Array.isArray(nota.servicos_itens) && nota.servicos_itens.length > 0
-      ? nota.servicos_itens
-      : [
-          {
-            item: 1,
-            descricao: nota.discriminacao || 'Prestação de Serviços',
-            quantidade: 1,
-            valor_unitario: nota.valor_servicos,
-            valor_total: nota.valor_servicos,
-            codigo_tributacao_nacional: nota.codigo_tributacao_nacional || '010701',
-          },
-        ]
+  const chaveLimpa = (nota.chave_acesso || '').replace(/\D/g, '')
+  const urlConsultaPortal = chaveLimpa
+    ? `https://www.nfse.gov.br/consultapublica?chave=${chaveLimpa}`
+    : 'https://www.nfse.gov.br/consultapublica'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6 print:p-0 print:border-none print:shadow-none">
-        <DialogHeader className="print:hidden">
+      <DialogContent className="max-w-5xl w-[95vw] max-h-[95vh] overflow-y-auto p-3 sm:p-5 print:p-0 print:m-0 print:border-none print:shadow-none print:max-w-none print:w-full">
+        <DialogHeader className="print:hidden pb-2 border-b">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <DialogTitle className="flex items-center gap-2 text-lg">
-                <FileText className="w-5 h-5 text-primary" />
-                {isNacional
-                  ? 'DANFSE - Documento Auxiliar da NFS-e Nacional 2.0'
-                  : 'DANFSE Municipal'}
+              <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+                <FileText className="w-5 h-5 text-indigo-700" />
+                <span>DANFSE — Documento Auxiliar da NFS-e Nacional 2.0</span>
               </DialogTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Padrão Nacional Unificado — Layout 2.0 / DPS 2.0 (Decreto Federal / ADN - SEFIN
-                Nacional)
+                Visualização A4 canônica com QR Code vetorial e dados fiscais da Declaração de
+                Prestação de Serviços (DPS 2.0 / ADN)
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge className="bg-indigo-600 text-white font-semibold text-[11px]">
-                Padrão NFS-e Nacional 2.0
+              <Badge className="bg-indigo-700 text-white font-bold text-[11px]">
+                DPS 2.0 Nacional
               </Badge>
               {isHomologacao && (
                 <Badge
                   variant="outline"
-                  className="border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950/40 text-[11px]"
+                  className="border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950/40 text-[11px] font-semibold"
                 >
-                  Homologação / Simulação
+                  Homologação / Testes
                 </Badge>
               )}
               {isCancelada ? (
-                <Badge variant="destructive" className="gap-1">
+                <Badge variant="destructive" className="gap-1 font-semibold">
                   <XCircle className="w-3.5 h-3.5" /> Cancelada
                 </Badge>
+              ) : isSubstituida ? (
+                <Badge className="bg-amber-600 text-white gap-1 font-semibold">
+                  <Layers className="w-3.5 h-3.5" /> Substituída
+                </Badge>
               ) : (
-                <Badge variant="default" className="gap-1 bg-emerald-600 hover:bg-emerald-700">
+                <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-semibold">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Autorizada
                 </Badge>
               )}
@@ -148,358 +140,31 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
           </div>
         </DialogHeader>
 
-        {/* ÁREA DE IMPRESSÃO - LAYOUT DANFSE NACIONAL */}
+        {/* CONTAINER DE PRÉ-VISUALIZAÇÃO A4 */}
         <div
-          ref={printRef}
-          className="bg-background border rounded-lg p-5 text-xs text-foreground space-y-4 print:border-black print:text-black print:m-0"
+          ref={printContainerRef}
+          className="my-3 py-4 px-2 sm:px-6 bg-slate-100/90 dark:bg-slate-900/60 rounded-xl overflow-x-auto flex justify-center print:bg-white print:p-0 print:m-0 print:rounded-none"
         >
-          {/* Tarja de Homologação / Cancelada / Substituída */}
-          {isHomologacao && (
-            <div className="border border-dashed border-amber-500 bg-amber-500/10 p-2 text-center font-semibold text-amber-800 dark:text-amber-300 rounded uppercase tracking-wider text-[11px]">
-              Sem Valor Fiscal — Ambiente de Homologação / Testes do Novo Padrão Nacional
-            </div>
-          )}
-          {isCancelada && (
-            <div className="border-2 border-red-500 bg-red-500/10 p-2.5 text-center font-bold text-red-700 dark:text-red-400 rounded uppercase tracking-widest text-sm">
-              NOTA FISCAL CANCELADA - {nota.protocolo_cancelamento || 'CAN-0000'}
-            </div>
-          )}
-          {nota.status === 'Substituída' && (
-            <div className="border-2 border-amber-500 bg-amber-500/15 p-2.5 text-center font-bold text-amber-800 dark:text-amber-300 rounded uppercase tracking-widest text-sm">
-              NOTA FISCAL SUBSTITUÍDA — REEMITIDA POR CORREÇÃO
-            </div>
-          )}
-
-          {/* Destaque de Nota Substituída / Reemissão Corrigida */}
-          {(nota.nota_substituida || nota.expand?.nota_substituida) && (
-            <div className="border-2 border-amber-400 bg-amber-50 dark:bg-amber-950/30 rounded-lg p-3 space-y-1.5 text-xs text-amber-950 dark:text-amber-100">
-              <div className="flex items-center gap-1.5 font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-                <Info className="w-4 h-4 text-amber-600" />
-                NFS-e de Substituição / Reemissão Corrigida
-              </div>
-              <p className="text-[11px] leading-relaxed">
-                Esta nota substitui expressamente a{' '}
-                <strong>
-                  NFS-e anterior nº {nota.expand?.nota_substituida?.numero || nota.nota_substituida}
-                </strong>
-                {nota.expand?.nota_substituida?.chave_acesso && (
-                  <span>
-                    {' '}
-                    (Chave:{' '}
-                    <code className="font-mono text-[10px] bg-amber-100 dark:bg-amber-900/50 px-1 py-0.5 rounded">
-                      {nota.expand.nota_substituida.chave_acesso}
-                    </code>
-                    )
-                  </span>
-                )}
-                .
-              </p>
-              {nota.justificativa_correcao && (
-                <div className="bg-white/80 dark:bg-amber-900/30 p-2 rounded border border-amber-200 dark:border-amber-800/50 text-[11px] mt-1">
-                  <span className="font-semibold block text-amber-900 dark:text-amber-200">
-                    Justificativa / Motivo da Correção:
-                  </span>
-                  <span className="italic">{nota.justificativa_correcao}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* CABEÇALHO OFICIAL DANFSE NACIONAL */}
-          <div className="border border-foreground/20 rounded p-3 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-primary/10 rounded flex items-center justify-center font-bold text-primary text-xl border">
-                BR
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-sm tracking-wide uppercase">
-                    DANFSE - Documento Auxiliar da NFS-e Nacional
-                  </h3>
-                  <span className="text-[9px] px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold">
-                    Layout 2.0
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground font-medium">
-                  Nota Fiscal de Serviços Eletrônica Nacional (DPS 2.0)
-                </p>
-                <p className="text-[10px] text-muted-foreground">
-                  Emitida nos termos da Resolução CGSN e Convênio Nacional NFS-e
-                </p>
-              </div>
-            </div>
-
-            <div className="text-right border-t md:border-t-0 md:border-l pl-0 md:pl-4 pt-2 md:pt-0 border-foreground/20 space-y-1">
-              <div>
-                <span className="text-muted-foreground">Número da NFS-e: </span>
-                <span className="font-mono font-bold text-sm">
-                  {String(nota.numero).padStart(8, '0')}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">DPS: </span>
-                <span className="font-semibold">
-                  Série {nota.dps_serie || nota.serie || '1'} Nº {nota.dps_numero || nota.numero}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Emissão: </span>
-                <span className="font-semibold">{formatData(nota.data_emissao)}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Competência: </span>
-                <span className="font-semibold">
-                  {formatData(nota.competencia || nota.data_emissao)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* CHAVE DE ACESSO NACIONAL */}
-          <div className="border border-foreground/20 rounded p-2.5 bg-muted/20 flex flex-col md:flex-row items-center justify-between gap-2">
-            <div className="space-y-0.5 overflow-hidden w-full">
-              <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
-                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                Chave de Acesso da NFS-e Nacional (50 Dígitos)
-              </div>
-              <div className="font-mono text-xs tracking-wider break-all text-primary font-semibold select-all">
-                {nota.chave_acesso || 'NÃO GERADA'}
-              </div>
-            </div>
-            {nota.chave_acesso && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 text-xs gap-1.5 shrink-0 print:hidden"
-                onClick={copiarChave}
-              >
-                <Copy className="w-3.5 h-3.5" />
-                {copiado ? 'Copiado!' : 'Copiar'}
-              </Button>
-            )}
-          </div>
-
-          {/* PROTOCOLO E CÓDIGO DE VERIFICAÇÃO */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 border border-foreground/20 rounded p-2.5 text-[11px] bg-muted/10">
-            <div>
-              <span className="text-muted-foreground block text-[10px]">
-                Protocolo de Autorização
-              </span>
-              <span className="font-mono font-semibold">
-                {nota.protocolo_autorizacao || 'AUT-NAC-LOCAL'}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block text-[10px]">Cód. Verificação</span>
-              <span className="font-mono font-bold text-primary">
-                {nota.codigo_verificacao || '-'}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block text-[10px]">
-                Município da Prestação / Incidência
-              </span>
-              <span className="font-medium font-mono">
-                Cód. IBGE: {nota.codigo_municipio_prestacao || '3550308'}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block text-[10px]">Natureza da Operação</span>
-              <span className="font-medium">
-                {nota.natureza_operacao || 'Tributação no município'}
-              </span>
-            </div>
-          </div>
-
-          {/* PRESTADOR E TOMADOR */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {/* Prestador */}
-            <div className="border border-foreground/20 rounded p-3 space-y-1">
-              <div className="font-bold text-[11px] uppercase tracking-wide text-primary border-b pb-1 mb-1 flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5" /> Prestador dos Serviços
-              </div>
-              <div className="font-bold">{nota.prestador_razao_social || 'Borlim Consultoria'}</div>
-              <div>
-                <span className="text-muted-foreground">CNPJ: </span>
-                <span className="font-mono font-medium">{nota.prestador_cnpj || '-'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Inscrição Municipal: </span>
-                <span>{nota.prestador_inscricao_municipal || 'Isento / Não inf.'}</span>
-              </div>
-              <div className="text-[10px] text-muted-foreground pt-1">
-                Regime: Simples Nacional (Microempresa / EPP)
-              </div>
-            </div>
-
-            {/* Tomador */}
-            <div className="border border-foreground/20 rounded p-3 space-y-1">
-              <div className="font-bold text-[11px] uppercase tracking-wide text-primary border-b pb-1 mb-1 flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5" /> Tomador dos Serviços
-              </div>
-              <div className="font-bold">{nota.tomador_razao_social || 'Cliente'}</div>
-              <div>
-                <span className="text-muted-foreground">CPF/CNPJ: </span>
-                <span className="font-mono font-medium">{nota.tomador_cnpj || '-'}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">E-mail: </span>
-                <span>{nota.tomador_email || 'Não informado'}</span>
-              </div>
-              {nota.expand?.tomador_ref && (
-                <div className="text-[10px] text-muted-foreground pt-1">
-                  Endereço: {nota.expand.tomador_ref.logradouro}, {nota.expand.tomador_ref.numero} -{' '}
-                  {nota.expand.tomador_ref.cidade}/{nota.expand.tomador_ref.estado}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ITENS DE SERVIÇOS DETALHADOS */}
-          <div className="border border-foreground/20 rounded p-3 space-y-2">
-            <div className="font-bold text-[11px] uppercase tracking-wide text-primary border-b pb-1 flex items-center justify-between">
-              <span>Itens de Serviços Prestados (DPS Nacional)</span>
-              <span className="text-[10px] font-normal text-muted-foreground">
-                Cód. Tributação: {nota.codigo_tributacao_nacional || '010701'}
-              </span>
-            </div>
-
-            <table className="w-full text-left text-[11px]">
-              <thead>
-                <tr className="border-b text-muted-foreground">
-                  <th className="py-1 px-1 w-10">Item</th>
-                  <th className="py-1 px-2">Descrição dos Serviços</th>
-                  <th className="py-1 px-2 w-16 text-center">Qtd</th>
-                  <th className="py-1 px-2 w-24 text-right">Unitário</th>
-                  <th className="py-1 px-2 w-24 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-foreground/10">
-                {itens.map((it: any, idx: number) => (
-                  <tr key={idx} className="hover:bg-muted/10">
-                    <td className="py-1.5 px-1 font-mono text-muted-foreground">
-                      {it.item || idx + 1}
-                    </td>
-                    <td className="py-1.5 px-2 whitespace-pre-wrap">{it.descricao}</td>
-                    <td className="py-1.5 px-2 text-center font-mono">{it.quantidade || 1}</td>
-                    <td className="py-1.5 px-2 text-right font-mono">
-                      {formatBrlMoeda(Number(it.valor_unitario || it.valor_total || 0))}
-                    </td>
-                    <td className="py-1.5 px-2 text-right font-mono font-semibold">
-                      {formatBrlMoeda(Number(it.valor_total || 0))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* RETENÇÕES E TRIBUTOS FEDERAIS */}
-          <div className="border border-foreground/20 rounded p-3 space-y-2 bg-muted/10">
-            <div className="font-bold text-[11px] uppercase tracking-wide text-foreground border-b pb-1">
-              Tributos Federais e Retenções (R$)
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-center text-[11px]">
-              <div className="border rounded p-1.5 bg-background">
-                <span className="text-[10px] text-muted-foreground block">PIS</span>
-                <span className="font-mono font-medium">{formatBrlMoeda(nota.valor_pis || 0)}</span>
-              </div>
-              <div className="border rounded p-1.5 bg-background">
-                <span className="text-[10px] text-muted-foreground block">COFINS</span>
-                <span className="font-mono font-medium">
-                  {formatBrlMoeda(nota.valor_cofins || 0)}
-                </span>
-              </div>
-              <div className="border rounded p-1.5 bg-background">
-                <span className="text-[10px] text-muted-foreground block">INSS</span>
-                <span className="font-mono font-medium">
-                  {formatBrlMoeda(nota.valor_inss || 0)}
-                </span>
-              </div>
-              <div className="border rounded p-1.5 bg-background">
-                <span className="text-[10px] text-muted-foreground block">IR</span>
-                <span className="font-mono font-medium">{formatBrlMoeda(nota.valor_ir || 0)}</span>
-              </div>
-              <div className="border rounded p-1.5 bg-background">
-                <span className="text-[10px] text-muted-foreground block">CSLL</span>
-                <span className="font-mono font-medium">
-                  {formatBrlMoeda(nota.valor_csll || 0)}
-                </span>
-              </div>
-              <div className="border rounded p-1.5 bg-background">
-                <span className="text-[10px] text-muted-foreground block">Outras Ret.</span>
-                <span className="font-mono font-medium">
-                  {formatBrlMoeda(nota.outras_retencoes || 0)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* CÁLCULO DO ISSQN E TOTAIS */}
-          <div className="border border-foreground/20 rounded p-3 space-y-2">
-            <div className="font-bold text-[11px] uppercase tracking-wide text-primary border-b pb-1">
-              Cálculo do ISSQN e Total Líquido
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-[11px]">
-              <div>
-                <span className="text-muted-foreground block text-[10px]">Valor dos Serviços</span>
-                <span className="font-mono font-semibold text-sm">
-                  {formatBrlMoeda(nota.valor_servicos)}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[10px]">Alíquota ISS</span>
-                <span className="font-mono font-semibold">{nota.aliquota_iss || 0}%</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[10px]">Valor do ISS</span>
-                <span className="font-mono font-semibold">
-                  {formatBrlMoeda(nota.valor_iss || 0)}
-                </span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[10px]">ISS Retido?</span>
-                <span className="font-semibold">{nota.iss_retido ? 'SIM (Tomador)' : 'NÃO'}</span>
-              </div>
-              <div className="bg-primary/10 border border-primary/20 rounded p-2 text-right">
-                <span className="text-[10px] text-primary font-bold block uppercase">
-                  Valor Líquido da NFS-e
-                </span>
-                <span className="font-mono font-bold text-base text-primary">
-                  {formatBrlMoeda(nota.valor_liquido || nota.valor_servicos)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* INFORMAÇÕES ADICIONAIS / MENSAGEM DO PORTAL NACIONAL */}
-          <div className="border border-foreground/20 rounded p-2.5 text-[10px] text-muted-foreground space-y-1">
-            <div className="font-bold uppercase tracking-wider text-foreground">
-              Outras Informações
-            </div>
-            <p>
-              {nota.gateway_status_resposta ||
-                'Declaração de Prestação de Serviços (DPS) transmitida ao Sistema Nacional de NFS-e.'}
-            </p>
-            {nota.motivo_cancelamento && (
-              <p className="text-red-600 font-medium">
-                Motivo do cancelamento: {nota.motivo_cancelamento} (em {nota.cancelada_em})
-              </p>
-            )}
-            <div className="text-[9px] text-muted-foreground pt-1 border-t border-foreground/10 flex justify-between">
-              <span>Padrão Nacional NFS-e — Versão 2.0 / Layout ADN</span>
-              <span>Chave IBGE Prestador: {nota.codigo_municipio_prestacao || '3550308'}</span>
-            </div>
+          <div className="shadow-2xl border border-slate-300 rounded-sm bg-white print:shadow-none print:border-none w-full max-w-[210mm]">
+            <DanfseA4Document
+              nota={nota}
+              minhaEmpresa={minhaEmpresa}
+              empresaCliente={empresaCliente}
+              tomadorRef={tomadorRef}
+              id="danfse-nacional-a4-document"
+            />
           </div>
         </div>
-        {/* RODAPÉ E AÇÕES */}
-        <DialogFooter className="flex-col sm:flex-row items-center justify-between gap-2 pt-2 print:hidden">
-          <div className="flex items-center gap-2">
+
+        {/* RODAPÉ E AÇÕES DO USUÁRIO */}
+        <DialogFooter className="flex-col sm:flex-row items-center justify-between gap-2 pt-2 border-t print:hidden">
+          <div className="flex items-center gap-2 flex-wrap">
             <Button
               variant="outline"
               size="sm"
               onClick={handleBaixarDpsJson}
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs h-8"
+              title="Baixar Declaração de Prestação de Serviços em formato JSON"
             >
               <Download className="w-3.5 h-3.5" /> Baixar DPS (JSON)
             </Button>
@@ -507,18 +172,32 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
               variant="outline"
               size="sm"
               onClick={handleBaixarXml}
-              className="gap-1.5 text-xs"
+              className="gap-1.5 text-xs h-8"
+              title="Baixar XML Nacional da NFS-e"
             >
               <FileCode2 className="w-3.5 h-3.5" /> Baixar XML
+            </Button>
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="gap-1 text-xs h-8 text-indigo-700 hover:text-indigo-900"
+            >
+              <a href={urlConsultaPortal} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-3.5 h-3.5" /> Portal Nacional
+              </a>
             </Button>
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} className="h-8">
               Fechar
             </Button>
-            <Button onClick={handlePrint} className="gap-1.5 text-xs">
-              <Printer className="w-3.5 h-3.5" /> Imprimir DANFSE
+            <Button
+              onClick={handlePrint}
+              className="gap-1.5 text-xs h-8 bg-indigo-700 hover:bg-indigo-800 text-white shadow-sm font-semibold"
+            >
+              <Printer className="w-3.5 h-3.5" /> Imprimir / Salvar PDF
             </Button>
           </div>
         </DialogFooter>
@@ -526,3 +205,5 @@ export function ModalVisualizarDanfse({ nota, open, onOpenChange }: ModalVisuali
     </Dialog>
   )
 }
+
+export default ModalVisualizarDanfse

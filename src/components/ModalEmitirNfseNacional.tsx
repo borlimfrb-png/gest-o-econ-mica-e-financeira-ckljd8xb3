@@ -53,7 +53,7 @@ interface ModalEmitirNfseNacionalProps {
   empresasLista: EmpresaRecord[]
   seriePadrao: string
   proximoNumeroPadrao: number
-  onEmitida: () => void
+  onEmitida: (notaCriada?: NotaFiscalRecord) => void
   onAbrirConfiguracao?: () => void
   // Modo de reemissão corrigida
   notaParaSubstituir?: NotaFiscalRecord | null
@@ -533,10 +533,12 @@ export function ModalEmitirNfseNacional({
         },
       }
 
+      let registroCriado: NotaFiscalRecord | undefined
+
       if (notaParaSubstituir) {
         // Fluxo de Substituição / Reemissão Corrigida
         const { nfseLancamentosService } = await import('@/services/nfseLancamentosService')
-        await nfseLancamentosService.processarReemissaoCorrigida({
+        const resultadoSubst = await nfseLancamentosService.processarReemissaoCorrigida({
           notaOriginal: notaParaSubstituir,
           justificativaCorrecao: justificativaCorrecao.trim(),
           novaNotaData: {
@@ -550,13 +552,19 @@ export function ModalEmitirNfseNacional({
           userId: user?.id,
           userName: user?.name || user?.email,
         })
+        if (resultadoSubst?.novaNota) {
+          registroCriado = resultadoSubst.novaNota
+        }
 
         toast({
           title: 'NFS-e Reemitida e Corrigida com Sucesso!',
           description: `Nova NFS-e Nº ${numeroDps} autorizada para ${tomadorEmpresa.nome}. Nota original nº ${notaParaSubstituir.numero} marcada como 'Substituída'.`,
         })
       } else {
-        await notasFiscaisService.emitirNfse(inputNfse)
+        const respEmissao = await notasFiscaisService.emitirNfse(inputNfse)
+        if (respEmissao?.nota) {
+          registroCriado = respEmissao.nota
+        }
 
         toast({
           title: 'NFS-e Nacional Emitida com Sucesso!',
@@ -564,7 +572,7 @@ export function ModalEmitirNfseNacional({
         })
       }
 
-      onEmitida()
+      onEmitida(registroCriado)
       onOpenChange(false)
     } catch (err: any) {
       toast({

@@ -1303,10 +1303,10 @@ export default function NotasFiscais() {
                               size="sm"
                               variant="outline"
                               onClick={() => abrirVisualizacaoDanfse(nota)}
-                              className="h-7 px-2 text-[11px] font-semibold border-slate-200 hover:border-blue-300 hover:text-blue-600 bg-white"
-                              title="Visualizar DANFSE / Imprimir PDF"
+                              className="h-7 px-2.5 text-[11px] font-bold border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 bg-indigo-50/40 shadow-2xs"
+                              title="Visualizar DANFSE Nacional / Imprimir PDF Oficial"
                             >
-                              <Eye className="w-3.5 h-3.5 mr-1 text-blue-600" /> Ver PDF
+                              <FileText className="w-3.5 h-3.5 mr-1 text-indigo-700" /> PDF / DANFSE
                             </Button>
 
                             <Button
@@ -1854,6 +1854,14 @@ export default function NotasFiscais() {
           nota={notaVisualizando}
           open={modalDanfseOpen}
           onOpenChange={setModalDanfseOpen}
+          empresaCliente={
+            empresas.find((e) => e.id === notaVisualizando.empresa) ||
+            notaVisualizando.expand?.empresa
+          }
+          tomadorRef={
+            tomadoresCadastrados.find((t) => t.id === notaVisualizando.tomador_ref) ||
+            notaVisualizando.expand?.tomador_ref
+          }
         />
       )}
 
@@ -1897,9 +1905,17 @@ export default function NotasFiscais() {
         seriePadrao={serieConfig}
         proximoNumeroPadrao={proximoNumeroSugerido}
         notaParaSubstituir={notaParaSubstituir}
-        onEmitida={() => {
+        onEmitida={async (notaCriada) => {
           setNotaParaSubstituir(null)
-          loadData()
+          await loadData()
+          if (notaCriada?.id) {
+            try {
+              const completa = await notasFiscaisService.getById(notaCriada.id)
+              abrirVisualizacaoDanfse(completa || notaCriada)
+            } catch {
+              abrirVisualizacaoDanfse(notaCriada)
+            }
+          }
         }}
         onAbrirConfiguracao={() => {
           setModalConfigNacionalOpen(true)
