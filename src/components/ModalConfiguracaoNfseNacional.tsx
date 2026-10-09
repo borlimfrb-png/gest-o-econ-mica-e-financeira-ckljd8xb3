@@ -200,11 +200,11 @@ export function ModalConfiguracaoNfseNacional({
       return
     }
 
-    // Limite razoável de 100KB (certificados A1 costumam ter 5KB a 50KB)
-    if (file.size > 100 * 1024) {
+    // Limite de 500KB (certificados A1 costumam ter 5KB a 50KB, alguns com cadeias completas chegam a 100-200KB)
+    if (file.size > 500 * 1024) {
       toast({
         title: 'Arquivo muito grande',
-        description: `O arquivo tem ${(file.size / 1024).toFixed(0)}KB. O tamanho máximo permitido para o certificado A1 é de 100KB.`,
+        description: `O arquivo tem ${(file.size / 1024).toFixed(0)}KB. O tamanho máximo permitido para o certificado A1 é de 500KB.`,
         variant: 'destructive',
       })
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -668,7 +668,7 @@ export function ModalConfiguracaoNfseNacional({
                         : 'Enviar Certificado Digital (.pfx / .p12)'}
                     </Label>
                     <span className="text-[10px] text-muted-foreground">
-                      Aceita apenas .pfx ou .p12 (Máx. 100KB)
+                      Aceita apenas .pfx ou .p12 (Máx. 500KB)
                     </span>
                   </div>
 

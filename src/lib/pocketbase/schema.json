@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-09T13:57:03.899Z",
+  "generatedAt": "2026-10-09T14:19:40.615Z",
   "collections": [
     {
       "name": "users",
@@ -4690,13 +4690,15 @@
           "name": "pfx_base64_criptografado",
           "type": "text",
           "required": false,
-          "system": false
+          "system": false,
+          "max": 1000000
         },
         {
           "name": "senha_criptografada",
           "type": "text",
           "required": false,
-          "system": false
+          "system": false,
+          "max": 10000
         },
         {
           "name": "validade_fim",

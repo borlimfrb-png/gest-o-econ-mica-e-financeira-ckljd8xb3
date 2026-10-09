@@ -147,11 +147,11 @@ routerAdd(
         })
       }
 
-      // Validar tamanho máximo (máx. 100KB — o base64 terá até ~135KB)
-      if (arquivoBase64.length > 200000) {
+      // Validar tamanho máximo (certificados A1 costumam ter 5KB a 50KB, permitimos até 500KB — Base64 até ~700.000 chars)
+      if (arquivoBase64.length > 700000) {
         return e.json(400, {
           success: false,
-          message: 'Tamanho do arquivo excede o limite permitido (máximo 100KB).',
+          message: 'Tamanho do arquivo excede o limite permitido (máximo 500KB).',
         })
       }
 
@@ -269,9 +269,10 @@ routerAdd(
       })
     } catch (err) {
       console.log('[Certificado POST] Erro:', err)
+      const errStr = err?.message || String(err)
       return e.json(500, {
         success: false,
-        message: 'Falha ao salvar o certificado digital: ' + (err.message || String(err)),
+        message: 'Falha ao salvar o certificado digital: ' + errStr,
       })
     }
   },
