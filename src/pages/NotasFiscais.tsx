@@ -181,6 +181,7 @@ export default function NotasFiscais() {
   const [emailDestinatarioInput, setEmailDestinatarioInput] = useState('')
   const [emailMensagemInput, setEmailMensagemInput] = useState('')
   const [enviandoEmail, setEnviandoEmail] = useState(false)
+  const [erroSmtpEnvio, setErroSmtpEnvio] = useState<string | null>(null)
 
   // Modal de Cancelamento de NFSe
   const [cancelarModalOpen, setCancelarModalOpen] = useState(false)

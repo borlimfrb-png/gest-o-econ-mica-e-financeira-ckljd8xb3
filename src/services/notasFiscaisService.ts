@@ -151,6 +151,8 @@ export interface EnviarEmailNfseInput {
   nota_id: string
   destinatario_email?: string
   mensagem_personalizada?: string
+  xml_conteudo?: string
+  pdf_base64?: string
 }
 
 export interface EnviarEmailNfseResponse {
@@ -186,7 +188,7 @@ export const notasFiscaisService = {
    * Executa o processamento imediato dos agendamentos pendentes de NFSe.
    */
   async processarAgendados(recebivelId?: string): Promise<ProcessarAgendadosResponse> {
-    return await pb.send<ProcessarAgendadosResponse>('/api/nfse/processar-agendados', {
+    return await pb.send<ProcessarAgendadosResponse>('/backend/v1/nfse/processar-agendados', {
       method: 'POST',
       body: { recebivel_id: recebivelId || undefined },
     })
@@ -399,7 +401,7 @@ export const notasFiscaisService = {
    * Dispara o envio do e-mail com os dados da NFSe e anexo para o cliente.
    */
   async enviarEmail(input: EnviarEmailNfseInput): Promise<EnviarEmailNfseResponse> {
-    return await pb.send<EnviarEmailNfseResponse>('/api/nfse/enviar-email', {
+    return await pb.send<EnviarEmailNfseResponse>('/backend/v1/nfse/enviar-email', {
       method: 'POST',
       body: input,
     })

@@ -4,10 +4,10 @@
  * Gera numeração, protocolo nacional e registra auditoria.
  */
 onRecordAfterCreateSuccess((e) => {
-  const record = e.record
-  if (!record) return
-
   try {
+    const record = e.record
+    if (!record) return
+
     const status = record.get('status')
     const numero = record.getInt('numero')
     const dpsNumero = record.getInt('dps_numero') || numero
@@ -158,5 +158,7 @@ onRecordAfterCreateSuccess((e) => {
     }
   } catch (err) {
     console.log('Erro no hook on_nfse_emitir:', err)
+  } finally {
+    e.next()
   }
 }, 'notas_fiscais')

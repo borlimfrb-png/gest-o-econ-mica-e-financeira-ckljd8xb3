@@ -3,10 +3,10 @@
  * Detecta cancelamento de NFS-e Nacional / DPS e registra protocolo + auditoria.
  */
 onRecordAfterUpdateSuccess((e) => {
-  const record = e.record
-  if (!record) return
-
   try {
+    const record = e.record
+    if (!record) return
+
     const status = record.get('status')
     const motivoCancelamento = record.get('motivo_cancelamento')
 
@@ -75,5 +75,7 @@ onRecordAfterUpdateSuccess((e) => {
     }
   } catch (err) {
     console.log('Erro no hook on_nfse_cancelar:', err)
+  } finally {
+    e.next()
   }
 }, 'notas_fiscais')

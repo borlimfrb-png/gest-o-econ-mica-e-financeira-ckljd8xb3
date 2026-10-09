@@ -141,9 +141,31 @@ cronAdd('nfse_emissao_automatica_vencimento', '0 6 * * *', () => {
 
         const rnd = $security.randomString(8).toUpperCase()
         const codigoVerificacao = `${rnd.slice(0, 4)}-${rnd.slice(4, 8)}`
-        const cnpjLimpo = (prestadorCnpj || '00000000000000').replace(/\D/g, '').padEnd(14, '0')
         const anoMes = hojeYmd.slice(2, 4) + hojeYmd.slice(5, 7)
-        const chaveAcesso = `35${anoMes}${cnpjLimpo}55001${String(proximoNumero).padStart(9, '0')}1${$security.randomString(8, '1234567890')}`
+
+        // Geração da Chave Nacional de 50 dígitos oficial com DV Módulo 11
+        const mun7 = (prestadorCidade || '3550308').replace(/\D/g, '').padEnd(7, '0').slice(0, 7)
+        const docLimpo = (prestadorCnpj || '00000000000000')
+          .replace(/[^0-9A-Za-z]/g, '')
+          .toUpperCase()
+        const tpInsc = docLimpo.length <= 11 ? '1' : '2'
+        const insc14 = docLimpo.padStart(14, '0').slice(-14)
+        const nNfse13 = String(proximoNumero).replace(/\D/g, '').padStart(13, '0').slice(-13)
+        const rnd9 = String(Math.floor(100000000 + Math.random() * 900000000)).slice(0, 9)
+        const base49 = `${mun7}2${tpInsc}${insc14}${nNfse13}${anoMes}${rnd9}`
+
+        let somaDv = 0
+        let pesoDv = 2
+        for (let i = 48; i >= 0; i--) {
+          const code = base49.charCodeAt(i)
+          const valor = code - 48
+          somaDv += valor * pesoDv
+          pesoDv = pesoDv === 9 ? 2 : pesoDv + 1
+        }
+        const restoDv = somaDv % 11
+        const dv = restoDv === 0 || restoDv === 1 ? '0' : String(11 - restoDv)
+        const chaveAcesso = `${base49}${dv}`
+
         const protocoloAutorizacao = `AUT-AGEND-${anoMes}-${$security.randomString(6).toUpperCase()}`
 
         const discriminacao = `Prestação de serviços contábeis, assessoria financeira e consultoria em gestão empresarial — Parcela nº ${nroParcela} (Vencimento: ${vencimentoStr.split('-').reverse().join('/')}). Emissão automática agendada no vencimento do contrato.`
