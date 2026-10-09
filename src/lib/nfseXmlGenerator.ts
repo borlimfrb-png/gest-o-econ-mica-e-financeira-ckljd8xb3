@@ -1,5 +1,6 @@
 import type { NotaFiscalRecord } from '@/types/finance'
 import { formatCnpj } from './financeCalculations'
+import { gerarChaveAcessoNfseNacional } from './nfseChaveAcesso'
 
 export interface DadosDanfse {
   nota: NotaFiscalRecord
@@ -54,6 +55,21 @@ export function gerarXmlNfse(dados: DadosDanfse): string {
     : new Date().toISOString()
   const competencia = nota.competencia ? nota.competencia.slice(0, 10) : dtEmissao.slice(0, 10)
 
+  // Assegura que a chave de acesso possui 50 dígitos
+  let chaveAcessoFinal = (nota.chave_acesso || '').replace(/\D/g, '')
+  if (chaveAcessoFinal.length !== 50) {
+    try {
+      chaveAcessoFinal = gerarChaveAcessoNfseNacional({
+        codigoMunicipio: '3550308',
+        tipoAmbiente: '2',
+        cpfCnpjPrestador: prestador.cnpj,
+        numeroNfse: nota.numero,
+      })
+    } catch {
+      chaveAcessoFinal = nota.chave_acesso || ''
+    }
+  }
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <CompNfse xmlns="http://www.abrasf.org.br/nfse.xsd">
   <Nfse versao="2.03">
@@ -66,7 +82,7 @@ export function gerarXmlNfse(dados: DadosDanfse): string {
       <OptanteSimplesNacional>${prestador.regimeTributario?.includes('Simples') ? '1' : '2'}</OptanteSimplesNacional>
       <IncentivadorCultural>2</IncentivadorCultural>
       <Competencia>${competencia}</Competencia>
-      <ChaveAcesso>${nota.chave_acesso || ''}</ChaveAcesso>
+      <ChaveAcesso>${chaveAcessoFinal}</ChaveAcesso>
       <Servico>
         <Valores>
           <ValorServicos>${cleanNum(nota.valor_servicos)}</ValorServicos>

@@ -20,21 +20,49 @@ onRecordAfterCreateSuccess((e) => {
         record.set('codigo_verificacao', codVerif)
       }
 
-      // Se for padrão nacional e não tiver chave de acesso nacional ainda
-      if (!record.get('chave_acesso')) {
-        const prestCnpj = (record.get('prestador_cnpj') || '00000000000000')
+      // Se for padrão nacional e não tiver chave de acesso nacional válida (50 dígitos)
+      const chaveAtual = record.get('chave_acesso')
+      if (!chaveAtual || String(chaveAtual).replace(/\D/g, '').length !== 50) {
+        const mun7 = (record.get('codigo_municipio_prestacao') || '3550308')
           .replace(/\D/g, '')
-          .padStart(14, '0')
-        const ano = new Date().getFullYear().toString().slice(-2)
-        const mes = String(new Date().getMonth() + 1).padStart(2, '0')
-        const mun = (record.get('codigo_municipio_prestacao') || '3550308')
-          .padStart(7, '0')
+          .padEnd(7, '0')
           .slice(0, 7)
-        const nNfse = String(numero || dpsNumero || 1).padStart(15, '0')
-        const serie = (record.get('dps_serie') || record.get('serie') || '1').padStart(5, '0')
-        const randomHex = $security.randomString(2).toUpperCase()
-        const chaveAcesso = `${mun}${ano}${mes}${prestCnpj}00${serie}${nNfse}${randomHex}0`
-        record.set('chave_acesso', chaveAcesso)
+        const tpAmb = record.get('tipo_ambiente')?.includes('1') ? '1' : '2'
+        const docLimpo = (record.get('prestador_cnpj') || '00000000000000')
+          .replace(/[^0-9A-Za-z]/g, '')
+          .toUpperCase()
+        const tpInsc = docLimpo.length <= 11 ? '1' : '2'
+        const insc14 = docLimpo.padStart(14, '0').slice(-14)
+        const nNfse13 = String(numero || dpsNumero || 1)
+          .replace(/\D/g, '')
+          .padStart(13, '0')
+          .slice(-13)
+
+        const compDate = record.get('competencia') || record.get('data_emissao')
+        const d = compDate ? new Date(compDate) : new Date()
+        const ano2 = String(d.getFullYear()).slice(-2)
+        const mes2 = String(d.getMonth() + 1).padStart(2, '0')
+        const aamm = `${ano2}${mes2}`
+
+        // 9 dígitos aleatórios numéricos
+        const rnd9 = String(Math.floor(100000000 + Math.random() * 900000000)).slice(0, 9)
+
+        const base49 = `${mun7}${tpAmb}${tpInsc}${insc14}${nNfse13}${aamm}${rnd9}`
+
+        // Cálculo DV Módulo 11 oficial (pesos 2 a 9 da direita p/ esquerda)
+        let soma = 0
+        let peso = 2
+        for (let i = 48; i >= 0; i--) {
+          const code = base49.charCodeAt(i)
+          const valor = code - 48
+          soma += valor * peso
+          peso = peso === 9 ? 2 : peso + 1
+        }
+        const resto = soma % 11
+        const dv = resto === 0 || resto === 1 ? '0' : String(11 - resto)
+
+        const chaveAcesso50 = `${base49}${dv}`
+        record.set('chave_acesso', chaveAcesso50)
       }
 
       // Protocolo de Autorização

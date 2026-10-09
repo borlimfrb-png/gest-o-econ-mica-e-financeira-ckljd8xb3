@@ -3,8 +3,9 @@ import { generateQrMatrix } from './qrCodeUtil'
 
 describe('qrCodeUtil', () => {
   it('gera matriz bidimensional de booleanos para URL válida', () => {
+    // Chave de acesso Nacional com exatamente 50 dígitos
     const url =
-      'https://www.nfse.gov.br/consultapublica?chave=35240230915624000108000000000000000000000000000100'
+      'https://www.nfse.gov.br/consultapublica?chave=35503082230915624000108000000000000126101234567890'
     const matrix = generateQrMatrix(url)
     expect(Array.isArray(matrix)).toBe(true)
     expect(matrix.length).toBeGreaterThan(20)

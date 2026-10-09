@@ -87,21 +87,26 @@ export const servicoTransmissaoNfse = {
       }
     }
 
-    // Gerar Chave de Acesso Nacional de 50 dígitos:
-    // cMun(7) + aamm(4) + cnpj(14) + mod(2: '00') + serie(5) + num(15) + cNF(2) + cDV(1)
+    // Gerar Chave de Acesso Nacional de 50 dígitos (Padrão Nacional 2.0 com DV Módulo 11):
     const codMun = (infDPS.cLocEmi || '3550308').padEnd(7, '0').slice(0, 7)
-    const aamm = (infDPS.dCompet || '').replace(/-/g, '').slice(2, 6) || '2609'
-    const cnpj = (infDPS.prest?.CNPJ || '00000000000000').padStart(14, '0').slice(-14)
-    const mod = '00'
-    const serie = String(infDPS.serie || '1')
-      .padStart(5, '0')
-      .slice(-5)
+    const cnpj = (infDPS.prest?.CNPJ || '00000000000000')
+      .replace(/\D/g, '')
+      .padStart(14, '0')
+      .slice(-14)
     const nNfse = Number(infDPS.nDPS) || 1
-    const nNfseStr = String(nNfse).padStart(15, '0').slice(-15)
-    const random2 = String(Math.floor(10 + Math.random() * 89))
-    const chaveParcial = `${codMun}${aamm}${cnpj}${mod}${serie}${nNfseStr}${random2}`
-    const digitoVerificador = String(Math.floor(Math.random() * 9))
-    const chaveAcessoFinal = `${chaveParcial}${digitoVerificador}`
+    const competStr = (infDPS.dCompet || '').replace(/\D/g, '')
+    const anoCompet = competStr.length >= 4 ? competStr.slice(0, 4) : undefined
+    const mesCompet = competStr.length >= 6 ? competStr.slice(4, 6) : undefined
+
+    const { gerarChaveAcessoNfseNacional } = await import('@/lib/nfseChaveAcesso')
+    const chaveAcessoFinal = gerarChaveAcessoNfseNacional({
+      codigoMunicipio: codMun,
+      tipoAmbiente: _config.tipoAmbiente || '2',
+      cpfCnpjPrestador: cnpj,
+      numeroNfse: nNfse,
+      ano: anoCompet,
+      mes: mesCompet,
+    })
 
     // Protocolo de autorização padrão nacional: ANO + COD_MUN + NUM_SEQ
     const ano = new Date().getFullYear()

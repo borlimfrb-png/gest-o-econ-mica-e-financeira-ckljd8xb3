@@ -297,10 +297,19 @@ export const notasFiscaisService = {
       const codVerificacao = Math.random().toString(36).substring(2, 10).toUpperCase()
       const protocolo = `PRT-NAC-${new Date().getFullYear()}-${Math.floor(100000000 + Math.random() * 900000000)}`
       const munPrest = input.codigo_municipio_prestacao || '3550308'
-      const ano2 = new Date().getFullYear().toString().slice(-2)
-      const mes2 = String(new Date().getMonth() + 1).padStart(2, '0')
-      const doc14 = prestadorCnpj.replace(/\D/g, '').padStart(14, '0')
-      const chaveAcesso = `${munPrest}${ano2}${mes2}${doc14}00${dpsSerie.padStart(5, '0')}${String(proximoNum).padStart(15, '0')}18`
+
+      // Chave de acesso Nacional de 50 dígitos oficial
+      const compRaw = (input.competencia || hojeYmd).replace(/\D/g, '')
+      const anoComp = compRaw.length >= 4 ? compRaw.slice(0, 4) : undefined
+      const mesComp = compRaw.length >= 6 ? compRaw.slice(4, 6) : undefined
+      const chaveAcesso = gerarChaveAcessoNfseNacional({
+        codigoMunicipio: munPrest,
+        tipoAmbiente: input.tipo_ambiente?.includes('1') ? '1' : '2',
+        cpfCnpjPrestador: prestadorCnpj,
+        numeroNfse: proximoNum,
+        ano: anoComp,
+        mes: mesComp,
+      })
 
       const payloadNota: any = {
         user: userId,
