@@ -63,6 +63,8 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
+  XCircle,
   Clock,
   Building,
   DollarSign,
@@ -926,12 +928,73 @@ export default function NotasFiscais() {
     }
   }
 
+  const getPortalStatusBadge = (nota: NotaFiscalRecord) => {
+    const isProd =
+      nota.tipo_ambiente?.includes('1') ||
+      nota.modo_emissao?.toLowerCase().includes('produção') ||
+      nota.modo_emissao?.toLowerCase().includes('producao')
+
+    if (!nota.portal_status || nota.portal_status === 'nao_consultada') {
+      return (
+        <div className="flex flex-col items-center gap-0.5">
+          <Badge
+            variant="outline"
+            className="text-[9px] text-slate-500 bg-slate-50 border-slate-200"
+          >
+            Não consultada
+          </Badge>
+          <span className="text-[9px] text-slate-400">{isProd ? 'Produção' : 'Simulação'}</span>
+        </div>
+      )
+    }
+
+    if (nota.portal_status === 'autorizada') {
+      return (
+        <div className="flex flex-col items-center gap-0.5">
+          <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[9px] font-bold gap-1">
+            <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> No Governo: OK
+          </Badge>
+          <span className="text-[9px] text-emerald-700 font-medium">Escriturada SEFIN</span>
+        </div>
+      )
+    }
+
+    if (nota.portal_status === 'nao_encontrada') {
+      return (
+        <div
+          className="flex flex-col items-center gap-0.5"
+          title={nota.portal_motivo || 'Nota inexistente na base pública do governo'}
+        >
+          <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] font-bold gap-1">
+            <AlertTriangle className="w-2.5 h-2.5 text-amber-700" /> Inexistente no Portal
+          </Badge>
+          <span className="text-[8.5px] text-amber-800 font-semibold max-w-[110px] truncate">
+            {isProd ? 'Não localizada' : 'Modo Simulação'}
+          </span>
+        </div>
+      )
+    }
+
+    if (nota.portal_status === 'rejeitada') {
+      return (
+        <div className="flex flex-col items-center gap-0.5" title={nota.portal_motivo}>
+          <Badge className="bg-rose-100 text-rose-900 border-rose-300 text-[9px] font-bold gap-1">
+            <XCircle className="w-2.5 h-2.5 text-rose-700" /> Rejeitada no Governo
+          </Badge>
+        </div>
+      )
+    }
+
+    return null
+  }
+
   const handleAbrirReemissaoCorrigida = (nota: NotaFiscalRecord) => {
-    if (nota.status !== 'Emitida') {
+    // Permite reemitir tanto se Emitida quanto se Rejeitada/Inexistente no Portal
+    if (nota.status === 'Cancelada') {
       toast({
         variant: 'destructive',
         title: 'Ação não permitida',
-        description: 'Apenas notas com status "Emitida" podem ser reemitidas por correção.',
+        description: 'Notas já canceladas não podem ser reemitidas por substituição.',
       })
       return
     }
@@ -1230,7 +1293,8 @@ export default function NotasFiscais() {
                     <th className="py-3 px-4 text-right">Valor Serviços</th>
                     <th className="py-3 px-4 text-right">Valor Líquido</th>
                     <th className="py-3 px-4 text-center">Conciliação</th>
-                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-center">Status Sistema</th>
+                    <th className="py-3 px-4 text-center">Portal Nacional</th>
                     <th className="py-3 px-4 text-right">Ações</th>
                   </tr>
                 </thead>
@@ -1353,6 +1417,10 @@ export default function NotasFiscais() {
                           {getStatusBadge(nota.status)}
                         </td>
 
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          {getPortalStatusBadge(nota)}
+                        </td>
+
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1">
                             <Button
@@ -1375,19 +1443,29 @@ export default function NotasFiscais() {
                               <Download className="w-3.5 h-3.5" />
                             </Button>
 
-                            {/* Ação "Reemitir corrigida" APENAS para notas com status 'Emitida' e perfil com permissão de emitir */}
-                            {nota.status === 'Emitida' && podeEmitir && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAbrirReemissaoCorrigida(nota)}
-                                className="h-7 px-2 text-[11px] font-semibold border-amber-300 text-amber-800 hover:bg-amber-50 hover:text-amber-900 bg-white"
-                                title="Reemitir corrigida (substituição desta nota com novo sequencial DPS e sem duplicar lançamento)"
-                              >
-                                <RefreshCw className="w-3 h-3 mr-1 text-amber-600" /> Reemitir
-                                corrigida
-                              </Button>
-                            )}
+                            {/* Ação "Reemitir corrigida": disponível para notas Emitidas ou com rejeição/inexistência no governo */}
+                            {(nota.status === 'Emitida' ||
+                              nota.portal_status === 'nao_encontrada' ||
+                              nota.portal_status === 'rejeitada') &&
+                              nota.status !== 'Cancelada' &&
+                              podeEmitir && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleAbrirReemissaoCorrigida(nota)}
+                                  className={`h-7 px-2 text-[11px] font-semibold border-amber-300 hover:bg-amber-50 bg-white ${
+                                    nota.portal_status === 'nao_encontrada'
+                                      ? 'text-amber-900 border-amber-400 bg-amber-50/60 font-bold'
+                                      : 'text-amber-800'
+                                  }`}
+                                  title="Reemitir / Corrigir (substituição com novo sequencial DPS e envio em produção)"
+                                >
+                                  <RefreshCw className="w-3 h-3 mr-1 text-amber-600" />
+                                  {nota.portal_status === 'nao_encontrada'
+                                    ? 'Reemitir / Corrigir'
+                                    : 'Reemitir corrigida'}
+                                </Button>
+                              )}
 
                             {/* Botão de Cancelar NFSe (apenas para Emitida / Enviada) */}
                             {(nota.status === 'Emitida' || nota.status === 'Enviada') &&

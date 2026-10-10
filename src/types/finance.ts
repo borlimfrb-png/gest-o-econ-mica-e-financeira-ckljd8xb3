@@ -607,6 +607,7 @@ export type StatusNotaFiscal =
   | 'Cancelada'
   | 'Substituída'
   | 'Erro'
+export type StatusPortalNfse = 'nao_consultada' | 'autorizada' | 'rejeitada' | 'nao_encontrada'
 export type ModoEmissaoNFSe = 'Homologação / Simulação' | 'Produção SEFAZ / Gateway'
 export type TipoDocumentoFiscal = 'NFSe' | 'Debito' | 'Credito'
 
@@ -727,6 +728,11 @@ export interface NotaFiscalRecord extends RecordModel {
   nota_substituida?: string
   justificativa_correcao?: string
   lancamento_ref?: string
+
+  // Status de Consulta e Validação junto ao Portal Nacional / SEFIN
+  portal_status?: StatusPortalNfse
+  portal_motivo?: string
+  portal_consultado_em?: string
 
   expand?: {
     empresa?: EmpresaRecord

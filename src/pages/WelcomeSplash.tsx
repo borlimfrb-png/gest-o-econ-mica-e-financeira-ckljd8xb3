@@ -193,6 +193,30 @@ export default function WelcomeSplash() {
     navigate(destinoFinal, { replace: true })
   }
 
+  // Resolução imediata para perfil cliente: não deve ficar travado na splash
+  useEffect(() => {
+    if (user?.role === 'cliente') {
+      markSplashSeenThisSession()
+      navigate('/analise-economica-financeira', { replace: true })
+    }
+  }, [user?.role, navigate])
+
+  // Timeout de segurança: no preview com iframe ou caso de espera prolongada,
+  // se o carregamento demorar mais de 3.5s ou se uma empresa já estiver selecionada/disponível,
+  // garante que o usuário não fique preso indefinidamente na splash.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // Se já possui empresa ativa no FilterContext ou selecionada localmente
+      const idParaAvancar = selecionadoLocal || selectedEmpresaId || empresas[0]?.id
+      if (idParaAvancar) {
+        confirmarEAcessar(idParaAvancar)
+      } else if (!isLoadingEmpresas && (empresas.length > 0 || grupos.length > 0)) {
+        confirmarEAcessar(empresas[0]?.id || `grupo-${grupos[0]?.id}`)
+      }
+    }, 3500)
+    return () => clearTimeout(timer)
+  }, [isLoadingEmpresas, empresas, grupos, selecionadoLocal, selectedEmpresaId])
+
   // Atalho por tecla: Enter confirma o selecionado
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

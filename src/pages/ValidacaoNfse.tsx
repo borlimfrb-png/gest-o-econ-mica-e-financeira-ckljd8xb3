@@ -41,12 +41,15 @@ import { useToast } from '@/hooks/use-toast'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { notasFiscaisService } from '@/services/notasFiscaisService'
-import type { NotaFiscalRecord } from '@/types/finance'
+import { empresasService } from '@/services/financeService'
+import type { NotaFiscalRecord, EmpresaRecord } from '@/types/finance'
 import { validarNotaFiscalCompleta, type ResultadoValidacaoNfse } from '@/lib/nfseValidacaoEngine'
 import { calcularDvChaveNfseNacional, gerarChaveAcessoNfseNacional } from '@/lib/nfseChaveAcesso'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalVisualizarDanfse } from '@/components/ModalVisualizarDanfse'
+import { ModalEmitirNfseNacional } from '@/components/ModalEmitirNfseNacional'
 import { formatBrlMoeda, downloadArquivo } from '@/lib/nfseXmlGenerator'
+import { Globe, RotateCcw } from 'lucide-react'
 
 export default function ValidacaoNfse() {
   const { toast } = useToast()
@@ -55,9 +58,16 @@ export default function ValidacaoNfse() {
 
   const [loading, setLoading] = useState<boolean>(true)
   const [notas, setNotas] = useState<NotaFiscalRecord[]>([])
+  const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [validacoes, setValidacoes] = useState<Map<string, ResultadoValidacaoNfse>>(new Map())
   const [validandoTodas, setValidandoTodas] = useState<boolean>(false)
+  const [consultandoGovernoId, setConsultandoGovernoId] = useState<string | null>(null)
+  const [consultandoGovernoLote, setConsultandoGovernoLote] = useState<boolean>(false)
   const [corrigindoId, setCorrigindoId] = useState<string | null>(null)
+
+  // Modal de Reemissão / Substituição Corrigida
+  const [modalReemissaoOpen, setModalReemissaoOpen] = useState<boolean>(false)
+  const [notaParaReemitir, setNotaParaReemitir] = useState<NotaFiscalRecord | null>(null)
 
   // Filtros locais
   const [buscaTexto, setBuscaTexto] = useState<string>('')
@@ -81,8 +91,12 @@ export default function ValidacaoNfse() {
   const carregarNotas = useCallback(async () => {
     setLoading(true)
     try {
-      const lista = await notasFiscaisService.listar()
+      const [lista, empList] = await Promise.all([
+        notasFiscaisService.listar(),
+        empresasService.getAll().catch(() => [] as EmpresaRecord[]),
+      ])
       setNotas(lista)
+      setEmpresas(empList)
 
       // Validação automática de cada nota em memória
       const mapa = new Map<string, ResultadoValidacaoNfse>()
@@ -173,7 +187,7 @@ export default function ValidacaoNfse() {
     return { total, validas, comErros, comAvisos }
   }, [notasFiltradas, validacoes])
 
-  // Ação: Validar Nota Individualmente
+  // Ação: Validar Nota Individualmente (Local)
   const handleValidarIndividual = (nota: NotaFiscalRecord) => {
     const res = validarNotaFiscalCompleta(nota)
     setValidacoes((prev) => {
@@ -193,7 +207,96 @@ export default function ValidacaoNfse() {
     })
   }
 
-  // Ação: Validar Todas as Notas Filtradas em Lote
+  // Ação: Validar no Governo (SEFIN / Portal Nacional) Individual
+  const handleValidarGovernoIndividual = async (nota: NotaFiscalRecord) => {
+    setConsultandoGovernoId(nota.id)
+    try {
+      const res = await notasFiscaisService.consultarStatusPortal(nota.id, nota.chave_acesso)
+      const notaAtualizada: NotaFiscalRecord = {
+        ...nota,
+        portal_status: res.portal_status,
+        portal_motivo: res.portal_motivo,
+        portal_consultado_em: res.portal_consultado_em,
+      }
+
+      setNotas((prev) => prev.map((n) => (n.id === nota.id ? notaAtualizada : n)))
+
+      // Se o modal estiver aberto para esta nota, atualiza a seleção
+      if (notaSelecionada?.id === nota.id) {
+        setNotaSelecionada(notaAtualizada)
+      }
+
+      if (res.portal_status === 'autorizada') {
+        toast({
+          title: 'Confirmada no Portal Nacional!',
+          description: `NFS-e nº ${nota.numero} está escriturada na base oficial do governo.`,
+        })
+      } else if (res.portal_status === 'nao_encontrada') {
+        toast({
+          variant: 'destructive',
+          title: 'Nota Inexistente no Governo',
+          description: res.portal_motivo || 'O Portal Nacional respondeu que esta nota inexiste.',
+        })
+      } else {
+        toast({
+          title: 'Consulta realizada',
+          description: res.portal_motivo,
+        })
+      }
+    } catch (err: any) {
+      console.error('Erro ao consultar governo:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Falha na consulta ao portal',
+        description: err?.message || 'Não foi possível consultar o SEFIN.',
+      })
+    } finally {
+      setConsultandoGovernoId(null)
+    }
+  }
+
+  // Ação: Validar Todas no Governo (Lote)
+  const handleValidarGovernoEmLote = async () => {
+    if (notasFiltradas.length === 0) return
+    setConsultandoGovernoLote(true)
+    let sucessos = 0
+    let inexistentes = 0
+
+    try {
+      for (const nota of notasFiltradas) {
+        try {
+          const res = await notasFiscaisService.consultarStatusPortal(nota.id, nota.chave_acesso)
+          if (res.portal_status === 'autorizada') sucessos++
+          if (res.portal_status === 'nao_encontrada' || res.portal_status === 'rejeitada')
+            inexistentes++
+
+          setNotas((prev) =>
+            prev.map((n) =>
+              n.id === nota.id
+                ? {
+                    ...n,
+                    portal_status: res.portal_status,
+                    portal_motivo: res.portal_motivo,
+                    portal_consultado_em: res.portal_consultado_em,
+                  }
+                : n,
+            ),
+          )
+        } catch {
+          /* intentionally ignored */
+        }
+      }
+
+      toast({
+        title: 'Validação no governo concluída!',
+        description: `${sucessos} autorizada(s), ${inexistentes} inexistente(s)/rejeitada(s) de ${notasFiltradas.length} analisadas.`,
+      })
+    } finally {
+      setConsultandoGovernoLote(false)
+    }
+  }
+
+  // Ação: Validar Todas as Notas Filtradas em Lote (Local)
   const handleValidarTodas = () => {
     setValidandoTodas(true)
     try {
@@ -430,10 +533,21 @@ export default function ValidacaoNfse() {
           <Button
             onClick={handleValidarTodas}
             disabled={validandoTodas || loading || notasFiltradas.length === 0}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs h-9 shadow-sm gap-1.5"
+            variant="outline"
+            className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-semibold text-xs h-9 shadow-sm gap-1.5"
           >
             <FileCheck2 className={`w-4 h-4 ${validandoTodas ? 'animate-spin' : ''}`} />
-            Validar Todas ({notasFiltradas.length})
+            Validar Local ({notasFiltradas.length})
+          </Button>
+
+          <Button
+            onClick={handleValidarGovernoEmLote}
+            disabled={consultandoGovernoLote || loading || notasFiltradas.length === 0}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs h-9 shadow-sm gap-1.5"
+            title="Consulta a base de dados do Portal Nacional (SEFIN) para conferir se as notas existem de fato no governo"
+          >
+            <Globe className={`w-4 h-4 ${consultandoGovernoLote ? 'animate-spin' : ''}`} />
+            Validar no Governo ({notasFiltradas.length})
           </Button>
         </div>
       </div>
@@ -547,12 +661,13 @@ export default function ValidacaoNfse() {
                   <th className="py-3 px-3 w-10 text-center"></th>
                   <th className="py-3 px-3 w-28">NFS-e / DPS</th>
                   <th className="py-3 px-3 w-36">Status do Sistema</th>
-                  <th className="py-3 px-3 w-40">Diagnóstico SEFIN</th>
-                  <th className="py-3 px-3 w-56">Chave de Acesso Nacional</th>
+                  <th className="py-3 px-3 w-36">Validação Local</th>
+                  <th className="py-3 px-3 w-44">Portal Nacional (SEFIN)</th>
+                  <th className="py-3 px-3 w-52">Chave de Acesso</th>
                   <th className="py-3 px-3">Tomador dos Serviços</th>
                   <th className="py-3 px-3 w-28 text-right">Valor Líquido</th>
                   <th className="py-3 px-3 w-24">Emissão</th>
-                  <th className="py-3 px-3 w-44 text-right print:hidden">Ações</th>
+                  <th className="py-3 px-3 w-52 text-right print:hidden">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -609,12 +724,11 @@ export default function ValidacaoNfse() {
                             {res ? (
                               res.valida ? (
                                 <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-semibold gap-1">
-                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Válida no
-                                  SEFIN
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Regras OK
                                 </Badge>
                               ) : (
                                 <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-semibold gap-1">
-                                  <XCircle className="w-3 h-3 text-rose-600" /> Rejeição (
+                                  <XCircle className="w-3 h-3 text-rose-600" /> Falhas (
                                   {res.totalErros})
                                 </Badge>
                               )
@@ -622,6 +736,38 @@ export default function ValidacaoNfse() {
                               <Badge variant="secondary" className="text-[10px]">
                                 Pendente
                               </Badge>
+                            )}
+                          </td>
+
+                          {/* Coluna Portal Nacional (SEFIN) */}
+                          <td className="py-2.5 px-3">
+                            {nota.portal_status === 'autorizada' ? (
+                              <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-700" /> No Governo
+                                (OK)
+                              </Badge>
+                            ) : nota.portal_status === 'nao_encontrada' ? (
+                              <div className="flex flex-col gap-0.5" title={nota.portal_motivo}>
+                                <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold gap-1">
+                                  <AlertTriangle className="w-3 h-3 text-amber-700" /> Inexistente
+                                </Badge>
+                                <span className="text-[9px] text-amber-800 font-semibold truncate max-w-[140px]">
+                                  {nota.modo_emissao?.includes('Produção')
+                                    ? 'Não localizada'
+                                    : 'Modo Simulação'}
+                                </span>
+                              </div>
+                            ) : nota.portal_status === 'rejeitada' ? (
+                              <Badge
+                                className="bg-rose-100 text-rose-900 border-rose-300 text-[10px] font-bold gap-1"
+                                title={nota.portal_motivo}
+                              >
+                                <XCircle className="w-3 h-3 text-rose-700" /> Rejeitada
+                              </Badge>
+                            ) : (
+                              <span className="text-[10px] text-slate-400 italic">
+                                Não consultado
+                              </span>
                             )}
                           </td>
 
@@ -662,6 +808,40 @@ export default function ValidacaoNfse() {
                           </td>
 
                           <td className="py-2.5 px-3 text-right space-x-1 whitespace-nowrap print:hidden">
+                            {/* Botão de Validar no Governo Individual */}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleValidarGovernoIndividual(nota)}
+                              disabled={consultandoGovernoId === nota.id}
+                              className="h-7 text-[10px] px-2 text-indigo-700 border-indigo-200 hover:bg-indigo-50 font-semibold gap-1"
+                              title="Consultar status real do documento no Portal Nacional da NFS-e"
+                            >
+                              <Globe
+                                className={`w-3 h-3 ${consultandoGovernoId === nota.id ? 'animate-spin' : ''}`}
+                              />
+                              No Governo
+                            </Button>
+
+                            {/* Botão Reemitir / Corrigir quando inexistente ou com erro */}
+                            {(nota.portal_status === 'nao_encontrada' ||
+                              nota.portal_status === 'rejeitada' ||
+                              (res && !res.valida)) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setNotaParaReemitir(nota)
+                                  setModalReemissaoOpen(true)
+                                }}
+                                className="h-7 text-[10px] px-2 text-amber-800 border-amber-300 hover:bg-amber-50 bg-amber-50/50 font-bold gap-1"
+                                title="Reemitir em modo substituição com novo sequencial de DPS e justificativa"
+                              >
+                                <RotateCcw className="w-3 h-3 text-amber-700" />
+                                Reemitir / Corrigir
+                              </Button>
+                            )}
+
                             {res && res.podeRecalcularChave && (
                               <Button
                                 size="sm"
@@ -674,7 +854,7 @@ export default function ValidacaoNfse() {
                                 <Wrench
                                   className={`w-3 h-3 ${isCorrigindo ? 'animate-spin' : ''}`}
                                 />
-                                Corrigir Chave
+                                Chave 50
                               </Button>
                             )}
 
@@ -686,7 +866,7 @@ export default function ValidacaoNfse() {
                               title="Ver laudo analítico de checagens"
                             >
                               <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
-                              Checagens
+                              Laudo
                             </Button>
 
                             <Button
@@ -824,6 +1004,84 @@ export default function ValidacaoNfse() {
                 )}
               </div>
 
+              {/* SEÇÃO: Parecer do Portal Nacional / SEFIN */}
+              <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                    <Globe className="w-4 h-4 text-indigo-600" />
+                    Parecer do Portal Nacional (SEFIN / Receita Federal):
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleValidarGovernoIndividual(notaSelecionada)}
+                    disabled={consultandoGovernoId === notaSelecionada.id}
+                    className="h-7 text-xs text-indigo-700 border-indigo-200 hover:bg-indigo-50 font-semibold gap-1"
+                  >
+                    <Globe
+                      className={`w-3.5 h-3.5 ${consultandoGovernoId === notaSelecionada.id ? 'animate-spin' : ''}`}
+                    />
+                    Consultar SEFIN Agora
+                  </Button>
+                </div>
+
+                <div className="text-[11px] space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500">Status Governamental:</span>
+                    {notaSelecionada.portal_status === 'autorizada' ? (
+                      <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px] font-bold">
+                        Autorizada e Escriturada no SEFIN
+                      </Badge>
+                    ) : notaSelecionada.portal_status === 'nao_encontrada' ? (
+                      <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[10px] font-bold">
+                        Nota Fiscal Inexistente no Portal Nacional
+                      </Badge>
+                    ) : notaSelecionada.portal_status === 'rejeitada' ? (
+                      <Badge className="bg-rose-100 text-rose-900 border-rose-300 text-[10px] font-bold">
+                        Rejeitada pelo Governo
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] text-slate-500">
+                        Ainda não consultada
+                      </Badge>
+                    )}
+                    {notaSelecionada.portal_consultado_em && (
+                      <span className="text-[10px] text-slate-400">
+                        (última consulta:{' '}
+                        {new Date(notaSelecionada.portal_consultado_em).toLocaleString('pt-BR')})
+                      </span>
+                    )}
+                  </div>
+
+                  {notaSelecionada.portal_motivo && (
+                    <div className="p-2.5 rounded bg-white border border-slate-200 text-slate-700 leading-relaxed text-[11px]">
+                      <strong>Motivo / Diagnóstico Oficial:</strong> {notaSelecionada.portal_motivo}
+                    </div>
+                  )}
+
+                  {(notaSelecionada.portal_status === 'nao_encontrada' ||
+                    notaSelecionada.portal_status === 'rejeitada') && (
+                    <div className="pt-1 flex items-center justify-between">
+                      <span className="text-amber-800 font-semibold">
+                        Ação Recomendada: Reemitir em modo substituição com novo sequencial DPS.
+                      </span>
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setDetalheModalOpen(false)
+                          setNotaParaReemitir(notaSelecionada)
+                          setModalReemissaoOpen(true)
+                        }}
+                        className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold gap-1"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Reemitir / Corrigir
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Lista completa de regras checadas */}
               <div className="space-y-2">
                 <span className="font-bold text-slate-800 text-xs">
@@ -900,6 +1158,40 @@ export default function ValidacaoNfse() {
           open={modalDanfseOpen}
           onOpenChange={setModalDanfseOpen}
           nota={notaParaDanfse}
+        />
+      )}
+
+      {/* Modal de Reemissão / Substituição por Correção */}
+      {notaParaReemitir && (
+        <ModalEmitirNfseNacional
+          open={modalReemissaoOpen}
+          onOpenChange={(isOpen: boolean) => {
+            setModalReemissaoOpen(isOpen)
+            if (!isOpen) setNotaParaReemitir(null)
+          }}
+          empresaAtiva={
+            empresas.find((e) => e.id === notaParaReemitir.empresa) ||
+            empresas.find((e) => e.id === selectedEmpresaId) ||
+            empresas[0] ||
+            null
+          }
+          empresasLista={empresas}
+          seriePadrao={notaParaReemitir.dps_serie || notaParaReemitir.serie || '1'}
+          proximoNumeroPadrao={(notaParaReemitir.numero || 0) + 1}
+          notaParaSubstituir={notaParaReemitir}
+          onEmitida={async (notaNova?: NotaFiscalRecord) => {
+            setModalReemissaoOpen(false)
+            setNotaParaReemitir(null)
+            await carregarNotas()
+            if (notaNova?.id) {
+              try {
+                const completa = await notasFiscaisService.getById(notaNova.id)
+                abrirVisualizacaoDanfse(completa || notaNova)
+              } catch {
+                abrirVisualizacaoDanfse(notaNova)
+              }
+            }
+          }}
         />
       )}
     </div>

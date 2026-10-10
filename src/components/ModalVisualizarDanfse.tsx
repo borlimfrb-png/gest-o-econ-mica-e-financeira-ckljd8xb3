@@ -17,6 +17,7 @@ import {
   FileText,
   ExternalLink,
   Layers,
+  Info,
 } from 'lucide-react'
 import { NotaFiscalRecord } from '@/types/finance'
 import { downloadArquivo } from '@/lib/nfseXmlGenerator'
@@ -115,12 +116,20 @@ export function ModalVisualizarDanfse({
               <Badge className="bg-indigo-700 text-white font-bold text-[11px]">
                 DPS 2.0 Nacional
               </Badge>
-              {isHomologacao && (
+              {isHomologacao ? (
                 <Badge
                   variant="outline"
-                  className="border-amber-500 text-amber-700 bg-amber-50 dark:bg-amber-950/40 text-[11px] font-semibold"
+                  className="border-amber-500 text-amber-800 bg-amber-50 dark:bg-amber-950/40 text-[11px] font-bold"
+                  title="Modo Homologação / Simulação: o documento foi autorizado no ambiente local/teste e não está gravado na base do SEFIN Nacional de produção."
                 >
-                  Homologação / Testes
+                  Modo Homologação / Simulação
+                </Badge>
+              ) : (
+                <Badge
+                  variant="outline"
+                  className="border-emerald-500 text-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-[11px] font-bold"
+                >
+                  Produção SEFIN
                 </Badge>
               )}
               {isCancelada ? (
@@ -131,6 +140,10 @@ export function ModalVisualizarDanfse({
                 <Badge className="bg-amber-600 text-white gap-1 font-semibold">
                   <Layers className="w-3.5 h-3.5" /> Substituída
                 </Badge>
+              ) : isHomologacao ? (
+                <Badge className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1 font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Autorizada no Sistema
+                </Badge>
               ) : (
                 <Badge className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1 font-semibold">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Autorizada
@@ -139,6 +152,23 @@ export function ModalVisualizarDanfse({
             </div>
           </div>
         </DialogHeader>
+
+        {/* AVISO EXPLICATIVO QUANDO EM HOMOLOGAÇÃO */}
+        {isHomologacao && (
+          <div className="print:hidden mx-1 sm:mx-2 p-3 bg-amber-50/80 border border-amber-200 rounded-lg text-xs text-amber-900 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-bold">Aviso sobre o Portal Nacional (SEFIN):</span>
+              <p className="text-[11px] leading-relaxed text-amber-800">
+                Esta NFS-e foi gerada em <strong>Modo Homologação / Simulação</strong>. O link de
+                consulta pública do governo responderá como{' '}
+                <em>&ldquo;Nota fiscal inexistente&rdquo;</em> pois o ambiente de simulação não
+                escritura dados na base definitiva da Receita Federal (que exige transmissão em
+                Produção com Certificado Digital A1).
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* CONTAINER DE PRÉ-VISUALIZAÇÃO A4 */}
         <div

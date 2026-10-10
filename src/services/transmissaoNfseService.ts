@@ -137,7 +137,10 @@ export const servicoTransmissaoNfse = {
     return {
       sucesso: true,
       codigoRetorno: '100',
-      mensagem: 'DPS recebida com sucesso e convertida em NFS-e Nacional.',
+      mensagem:
+        _config.tipoAmbiente === '1'
+          ? 'DPS transmitida em ambiente de Produção e convertida em NFS-e Nacional.'
+          : 'DPS validada e autorizada no sistema em Modo Homologação / Simulação. Importante: notas emitidas em homologação não são escrituradas na base pública oficial do Portal Nacional.',
       protocoloAutorizacao: protocolo,
       chaveAcessoNfse: chaveAcessoFinal,
       numeroNfse: nNfse,
@@ -146,10 +149,18 @@ export const servicoTransmissaoNfse = {
       alertas: [
         _config.tipoAmbiente === '1'
           ? 'Transmissão em ambiente de Produção: Certificado Digital A1 verificado no cofre seguro do servidor.'
-          : 'Transmissão efetuada em Modo Homologação/Simulação Nacional.',
-        'Padrão Nacional NFS-e / DPS integrado ao Certificado Digital A1.',
+          : 'Transmissão efetuada em Modo Homologação/Simulação Nacional (não escreve na base nacional de produção).',
+        'Padrão Nacional NFS-e 2.0 / DPS integrado ao Certificado Digital A1.',
       ],
     }
+  },
+
+  /**
+   * Consulta o status real no Portal Nacional da NFS-e
+   */
+  async consultarPortalNacional(notaId: string, chaveAcesso?: string) {
+    const { notasFiscaisService } = await import('./notasFiscaisService')
+    return await notasFiscaisService.consultarStatusPortal(notaId, chaveAcesso)
   },
 
   /**

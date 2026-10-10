@@ -163,7 +163,48 @@ export interface EnviarEmailNfseResponse {
   data_envio?: string
 }
 
+export interface ConsultaPortalNfseResponse {
+  success: boolean
+  portal_status: 'nao_consultada' | 'autorizada' | 'rejeitada' | 'nao_encontrada'
+  portal_motivo: string
+  portal_consultado_em: string
+  modo_operacao: string
+  pode_reemitir: boolean
+  nota?: Partial<NotaFiscalRecord>
+}
+
 export const notasFiscaisService = {
+  /**
+   * Consulta o status real da nota fiscal junto ao Portal Nacional (SEFIN / Receita Federal)
+   */
+  async consultarStatusPortal(
+    notaId: string,
+    chaveAcesso?: string,
+  ): Promise<ConsultaPortalNfseResponse> {
+    try {
+      return await pb.send<ConsultaPortalNfseResponse>('/backend/v1/nfse/consultar-portal', {
+        method: 'POST',
+        body: {
+          nota_id: notaId,
+          chave_acesso: chaveAcesso,
+        },
+      })
+    } catch (err: any) {
+      console.warn('Fallback consulta portal:', err)
+      // Fallback em caso de erro de rede ou rota
+      const motivo =
+        'Não foi possível contatar o serviço de validação do portal governamental: ' +
+        (err?.message || String(err))
+      return {
+        success: false,
+        portal_status: 'nao_consultada',
+        portal_motivo: motivo,
+        portal_consultado_em: new Date().toISOString(),
+        modo_operacao: 'Homologação / Simulação',
+        pode_reemitir: false,
+      }
+    }
+  },
   /**
    * Lista todas as notas fiscais emitidas pelo usuário.
    */

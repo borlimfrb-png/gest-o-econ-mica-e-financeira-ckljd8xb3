@@ -126,7 +126,7 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
 
 // Componente para rotas protegidas
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth()
+  const { isAuthenticated, isLoading, user, empresaVinculadaId } = useAuth()
 
   if (isLoading) {
     return (
@@ -140,8 +140,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/" replace />
   }
 
-  // Se o usuário autenticado acabou de acessar a aplicação ou recarregou e ainda não viu a splash inicial nesta sessão, redireciona para a tela inicial com logomarca preservando o destino
+  // Se o usuário autenticado acabou de acessar a aplicação ou recarregou e ainda não viu a splash inicial nesta sessão,
+  // mas garantindo bypass seguro caso já possua contexto resolvido ou ambiente restrito a sessionStorage
   if (!hasSeenSplashThisSession()) {
+    // Clientes sempre vão para a análise econômica direta sem reter na splash
+    if (user?.role === 'cliente') {
+      return <>{children}</>
+    }
+    // Se o usuário não-admin tem empresa única vinculada, não obriga re-seleção na splash
+    if (empresaVinculadaId) {
+      return <>{children}</>
+    }
     return <Navigate to="/splash" state={{ from: window.location.pathname }} replace />
   }
 
