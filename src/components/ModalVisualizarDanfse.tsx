@@ -24,6 +24,7 @@ import { downloadArquivo } from '@/lib/nfseXmlGenerator'
 import { gerarXmlDpsNacional } from '@/lib/nfseNacionalDps'
 import { DanfseA4Document } from '@/components/DanfseA4Document'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
+import { gerarDanfsePdfBase64 } from '@/lib/nfsePdfGenerator'
 
 interface ModalVisualizarDanfseProps {
   nota: NotaFiscalRecord | null
@@ -96,6 +97,91 @@ export function ModalVisualizarDanfse({
   const urlConsultaPortal = chaveLimpa
     ? `https://www.nfse.gov.br/consultapublica?chave=${chaveLimpa}`
     : 'https://www.nfse.gov.br/consultapublica'
+
+  const handleBaixarPdfNativo = () => {
+    try {
+      const tomadorRefDados = tomadorRef || nota.expand?.tomador_ref
+      const empCliente = empresaCliente || nota.expand?.empresa
+
+      const base64 = gerarDanfsePdfBase64({
+        nota,
+        prestador: {
+          razaoSocial:
+            nota.prestador_razao_social ||
+            minhaEmpresa?.razao_social ||
+            minhaEmpresa?.nome_fantasia ||
+            'BORLIM CONSULTORIA EMPRESARIAL LTDA',
+          cnpj: nota.prestador_cnpj || minhaEmpresa?.cnpj || '30.915.624/0001-08',
+          inscricaoMunicipal:
+            nota.prestador_inscricao_municipal || minhaEmpresa?.inscricao_municipal || '-',
+          cidade: minhaEmpresa?.cidade || 'Jaci',
+          estado: minhaEmpresa?.estado || 'SP',
+          telefone:
+            minhaEmpresa?.telefone_comercial || minhaEmpresa?.celular_whatsapp || '(17) 99765-0672',
+          email:
+            minhaEmpresa?.email_financeiro ||
+            minhaEmpresa?.email_comercial ||
+            'flavio@borlim.com.br',
+          logradouro: minhaEmpresa?.logradouro || 'RUA ORLANDO BENEDETTI',
+          numero: minhaEmpresa?.numero || '1041',
+          bairro: minhaEmpresa?.bairro || 'JARDIM SAO BENEDITO II',
+          cep: minhaEmpresa?.cep || '15.156-022',
+          codigoIbge: minhaEmpresa?.codigo_ibge || '35.24501',
+        },
+        tomador: {
+          razaoSocial:
+            nota.tomador_razao_social ||
+            tomadorRefDados?.razao_social ||
+            empCliente?.nome ||
+            'C.R.M. MULTIELETRICA MATERIAIS ELETRICOS - LTDA',
+          cnpj:
+            nota.tomador_cnpj ||
+            tomadorRefDados?.cpf_cnpj ||
+            empCliente?.cnpj ||
+            '05.208.559/0001-25',
+          inscricaoMunicipal:
+            tomadorRefDados?.inscricao_municipal || empCliente?.inscricao_municipal || '-',
+          cidade: tomadorRefDados?.cidade || empCliente?.cidade || 'São José do Rio Preto',
+          estado: tomadorRefDados?.estado || empCliente?.estado || 'SP',
+          telefone: tomadorRefDados?.telefone || empCliente?.telefone || '-',
+          email:
+            nota.tomador_email ||
+            tomadorRefDados?.email ||
+            empCliente?.email ||
+            'financeiro4@multieletrica.com.br',
+          logradouro:
+            tomadorRefDados?.logradouro || empCliente?.logradouro || 'DOUTOR ANILOEL NAZARETH',
+          numero: tomadorRefDados?.numero || empCliente?.numero || '5400',
+          bairro:
+            tomadorRefDados?.bairro ||
+            empCliente?.bairro ||
+            'PARQUE RESIDENCIAL COMENDADOR MANCOR DAUD',
+          cep: tomadorRefDados?.cep || empCliente?.cep || '15.070-565',
+          codigoIbge: tomadorRefDados?.codigo_municipio || empCliente?.codigo_ibge || '35.49805',
+        },
+      })
+
+      // Converte base64 para Blob e faz download
+      const byteCharacters = atob(base64)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: 'application/pdf' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `DANFSE_v2.0_NFSe_${nota.numero || 137}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Erro ao baixar PDF nativo:', err)
+      window.print()
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -224,10 +310,19 @@ export function ModalVisualizarDanfse({
               Fechar
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={handleBaixarPdfNativo}
+              className="gap-1.5 text-xs h-8 text-indigo-700 border-indigo-200 hover:bg-indigo-50 font-semibold"
+              title="Baixar arquivo PDF A4 oficial do DANFSe v2.0"
+            >
+              <Download className="w-3.5 h-3.5" /> Baixar PDF
+            </Button>
+            <Button
               onClick={handlePrint}
               className="gap-1.5 text-xs h-8 bg-indigo-700 hover:bg-indigo-800 text-white shadow-sm font-semibold"
             >
-              <Printer className="w-3.5 h-3.5" /> Imprimir / Salvar PDF
+              <Printer className="w-3.5 h-3.5" /> Imprimir
             </Button>
           </div>
         </DialogFooter>

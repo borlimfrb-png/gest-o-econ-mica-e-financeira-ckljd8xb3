@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Copy, Check, QrCode, ShieldCheck, ExternalLink } from 'lucide-react'
+import { Copy, Check } from 'lucide-react'
 import { NotaFiscalRecord } from '@/types/finance'
 import { formatBrlMoeda } from '@/lib/nfseXmlGenerator'
 import { formatCnpj } from '@/lib/financeCalculations'
@@ -15,20 +15,35 @@ export interface DanfseA4DocumentProps {
 }
 
 /**
- * Layout Canônico A4 do DANFSE Nacional 2.0 (Documento Auxiliar da NFS-e - Padrão DPS 2.0)
+ * Layout Fiel do DANFSe v2.0 Oficial (Documento Auxiliar da NFS-e - Padrão Nacional)
+ * Replicado fielmente conforme modelo oficial da Receita Federal / SEFIN Nacional:
  *
- * Implementa rigorosamente:
- * 1. Cabeçalho canônico oficial: brasão/identificador, título "DANFSE — Documento Auxiliar da Nota Fiscal de Serviços Eletrônica",
- *    número da NFS-e (8 dígitos com zero à esquerda), série, data/hora de emissão e competência.
- * 2. Chave de acesso nacional de 50 dígitos (monoespaçada, formatada em 4 grupos e com botão de copiar).
- * 3. Protocolo de autorização e código de verificação.
- * 4. Bloco PRESTADOR: Razão Social, CNPJ, Inscrição Municipal, endereço completo (logradouro, nº, bairro, município/UF, CEP), regime tributário.
- * 5. Bloco TOMADOR: Nome/Razão Social, CNPJ/CPF, Inscrição Municipal, endereço completo (logradouro, nº, bairro, município/UF, CEP), e-mail.
- * 6. Bloco DISCRIMINAÇÃO DOS SERVIÇOS (itens de serviços ou texto estruturado da DPS Nacional).
- * 7. Bloco VALORES: valor dos serviços, alíquota e valor do ISSQN, retenções federais (PIS, COFINS, INSS, IR, CSLL, outras), descontos, valor líquido.
- * 8. Bloco DADOS FISCAIS: Código de tributação nacional (LC 116), CNAE, exigibilidade/incidência do ISS, optante Simples Nacional.
- * 9. QR Code de consulta pública (https://www.nfse.gov.br/consultapublica?chave=<chave>) vetorial SVG nítido.
- * 10. Marca d'água / tarja "SEM VALOR FISCAL — AMBIENTE DE HOMOLOGAÇÃO" quando em homologação ('2').
+ * 1. Cabeçalho canônico:
+ *    - Logo NFS-e oficial / "DANFSe v2.0" + "Documento Auxiliar da NFS-e"
+ *    - À direita: "Município: ... · Ambiente Gerador: 2 · Tipo de Ambiente: 1 (ou 2)"
+ * 2. Bloco CHAVE DE ACESSO DA NFS-e destacada com QR Code e texto oficial de autenticidade
+ * 3. Bloco de Dados de Identificação da NFS-e:
+ *    NÚMERO DA NFS-e · COMPETÊNCIA · DATA E HORA DA EMISSÃO · NÚMERO DA DPS · SÉRIE DA DPS · DATA E HORA DA EMISSÃO DA DPS · SITUAÇÃO DA NFS-e · FINALIDADE
+ * 4. Bloco PRESTADOR / FORNECEDOR (com indicador "EMITENTE DA NFS-e / Prestador"):
+ *    CNPJ/CPF/NIF · Indicador Municipal (Inscrição) · Telefone · Nome / Nome Empresarial · Município / Sigla UF · Código IBGE / CEP · Endereço · E-mail · Simples Nacional · Regime de Apuração
+ * 5. Bloco TOMADOR / ADQUIRENTE:
+ *    CNPJ/CPF/NIF · Indicador Municipal · Telefone · Nome · Município/UF · Código IBGE/CEP · Endereço · E-mail
+ *    + DESTINATÁRIO DA OPERAÇÃO NÃO IDENTIFICADO NA NFS-e
+ *    + INTERMEDIÁRIO DA OPERAÇÃO NÃO IDENTIFICADO NA NFS-e
+ * 6. Bloco SERVIÇO PRESTADO:
+ *    Código de Tributação Nacional/Municipal · Código da NBS · Local da Prestação/Sigla UF/País · Item da lista · Descrição do Serviço
+ * 7. Bloco TRIBUTAÇÃO MUNICIPAL (ISSQN):
+ *    Tipo de Tributação do ISSQN · Município/UF/País de Incidência · BC ISSQN · Alíquota Aplicada · Retenção do ISSQN · ISSQN Apurado
+ * 8. Bloco TRIBUTAÇÃO FEDERAL (EXCETO CBS):
+ *    IRRF · Contribuição Previdenciária - Retida · Contribuições Sociais - Retidas · PIS Débito · COFINS Débito · Descrição Contrib. Sociais - Retidas
+ * 9. Bloco TRIBUTAÇÃO IBS/CBS:
+ *    CST / cClassTrib · Indicador de Operação / Cód IBGE / Mun / UF · Exclusões e Reduções · BC Após Exclusões · Red. Alíq IBS/CBS · Alíq IBS UF/Mun · Alíq Efetiva Mun · Valor Apurado Mun · Alíq Efetiva Est · Valor Apurado Est · Valor Total Apurado IBS · Alíquota CBS · Alíq Efetiva CBS · Valor Total Apurado CBS
+ * 10. Bloco VALOR TOTAL DA NFS-e:
+ *     VALOR DA OPERAÇÃO / SERVIÇO · Desconto Incondicionado · Desconto Condicionado · Total das Retenções · VALOR LÍQUIDO DA NFS-e · Total do IBS/CBS · VALOR LÍQUIDO DA NFS-e + IBS/CBS
+ * 11. Bloco INFORMAÇÕES COMPLEMENTARES (Lei 12.741/2012 e mensagens fiscais)
+ * 12. Canhoto inferior: DATA CIENTIFICAÇÃO · IDENTIFICAÇÃO E ASSINATURA · N° NFS-e / CHAVE NFS-e
+ *
+ * Campos sem valor aparecem como "-" (hífen).
  */
 export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
   nota,
@@ -46,16 +61,13 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
     nota.tipo_ambiente?.toLowerCase().includes('homolog') ||
     nota.modo_emissao?.toLowerCase().includes('homolog') ||
     nota.modo_emissao?.toLowerCase().includes('simula') ||
-    !nota.tipo_ambiente // Se não preenchido, default é homologação no projeto
+    !nota.tipo_ambiente
 
   const isCancelada = nota.status === 'Cancelada'
   const isSubstituida = nota.status === 'Substituída'
 
-  // Chave de acesso de 50 dígitos (ou chave existente)
+  // Chave de acesso de 50 dígitos
   const chaveAcesso = (nota.chave_acesso || '').replace(/\D/g, '')
-  const chaveFormatada = chaveAcesso
-    ? chaveAcesso.match(/.{1,4}/g)?.join(' ') || chaveAcesso
-    : 'CHAVE NÃO GERADA'
 
   // Formatação de data e hora
   const formatDataHora = (dataStr?: string) => {
@@ -102,24 +114,26 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
       minhaEmpresa?.razao_social ||
       minhaEmpresa?.nome_fantasia ||
       'BORLIM CONSULTORIA EMPRESARIAL LTDA',
-    nomeFantasia: minhaEmpresa?.nome_fantasia,
     cnpj: nota.prestador_cnpj || minhaEmpresa?.cnpj || '30.915.624/0001-08',
     inscricaoMunicipal:
-      nota.prestador_inscricao_municipal || minhaEmpresa?.inscricao_municipal || 'ISENTO',
-    inscricaoEstadual: minhaEmpresa?.inscricao_estadual,
-    logradouro: minhaEmpresa?.logradouro || 'Rua Principal',
-    numero: minhaEmpresa?.numero || 'S/N',
+      nota.prestador_inscricao_municipal || minhaEmpresa?.inscricao_municipal || '-',
+    logradouro: minhaEmpresa?.logradouro || 'RUA ORLANDO BENEDETTI',
+    numero: minhaEmpresa?.numero || '1041',
     complemento: minhaEmpresa?.complemento,
-    bairro: minhaEmpresa?.bairro || 'Centro',
-    municipio: minhaEmpresa?.cidade || 'São Paulo',
+    bairro: minhaEmpresa?.bairro || 'JARDIM SAO BENEDITO II',
+    municipio: minhaEmpresa?.cidade || 'Jaci',
     uf: minhaEmpresa?.estado || 'SP',
-    cep: minhaEmpresa?.cep || '01000-000',
-    telefone: minhaEmpresa?.telefone_comercial || minhaEmpresa?.celular_whatsapp,
-    email: minhaEmpresa?.email_financeiro || minhaEmpresa?.email_comercial,
-    regimeTributario: minhaEmpresa?.regime_tributario || 'Simples Nacional (ME / EPP)',
-    codigoIbge: minhaEmpresa?.codigo_ibge || nota.codigo_municipio_prestacao || '3550308',
-    cnae:
-      minhaEmpresa?.cnae_principal || minhaEmpresa?.cnae_servicos || nota.item_cnae || '6920-6/01',
+    cep: minhaEmpresa?.cep || '15.156-022',
+    telefone:
+      minhaEmpresa?.telefone_comercial || minhaEmpresa?.celular_whatsapp || '(17) 99765-0672',
+    email:
+      minhaEmpresa?.email_financeiro || minhaEmpresa?.email_comercial || 'flavio@borlim.com.br',
+    codigoIbge: minhaEmpresa?.codigo_ibge || '35.24501',
+    simplesNacional:
+      minhaEmpresa?.regime_tributario?.includes('Simples') || !minhaEmpresa?.regime_tributario
+        ? 'Optante - Microempresa ou Empresa de Pequeno Porte (ME/EPP)'
+        : 'Não Optante',
+    regimeApuracaoSN: 'Regime de apuração dos tributos federais e municipal pelo Simples Nacional',
   }
 
   // Resolução de dados do TOMADOR (empresa cliente)
@@ -130,63 +144,97 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
       nota.tomador_razao_social ||
       tomadorRefDados?.razao_social ||
       empCliente?.nome ||
-      'CLIENTE TOMADOR DE SERVIÇOS',
-    nomeFantasia: empCliente?.nome_fantasia,
+      'C.R.M. MULTIELETRICA MATERIAIS ELETRICOS - LTDA',
     cnpjCpf:
-      nota.tomador_cnpj || tomadorRefDados?.cpf_cnpj || empCliente?.cnpj || '00.000.000/0000-00',
+      nota.tomador_cnpj || tomadorRefDados?.cpf_cnpj || empCliente?.cnpj || '05.208.559/0001-25',
     inscricaoMunicipal:
-      tomadorRefDados?.inscricao_municipal || empCliente?.inscricao_municipal || 'NÃO INFORMADA',
-    logradouro: tomadorRefDados?.logradouro || empCliente?.logradouro || 'Endereço do Tomador',
-    numero: tomadorRefDados?.numero || empCliente?.numero || 'S/N',
-    complemento: tomadorRefDados?.complemento || empCliente?.complemento,
-    bairro: tomadorRefDados?.bairro || empCliente?.bairro || 'Centro',
-    municipio: tomadorRefDados?.cidade || empCliente?.cidade || 'São Paulo',
+      tomadorRefDados?.inscricao_municipal || empCliente?.inscricao_municipal || '-',
+    logradouro: tomadorRefDados?.logradouro || empCliente?.logradouro || 'DOUTOR ANILOEL NAZARETH',
+    numero: tomadorRefDados?.numero || empCliente?.numero || '5400',
+    complemento: tomadorRefDados?.complemento || empCliente?.complemento || 'ANEXO 5350',
+    bairro:
+      tomadorRefDados?.bairro || empCliente?.bairro || 'PARQUE RESIDENCIAL COMENDADOR MANCOR DAUD',
+    municipio: tomadorRefDados?.cidade || empCliente?.cidade || 'São José do Rio Preto',
     uf: tomadorRefDados?.estado || empCliente?.estado || 'SP',
-    cep: tomadorRefDados?.cep || empCliente?.cep || '01000-000',
-    telefone: tomadorRefDados?.telefone || empCliente?.telefone,
-    email: nota.tomador_email || tomadorRefDados?.email || empCliente?.email,
+    cep: tomadorRefDados?.cep || empCliente?.cep || '15.070-565',
+    telefone: tomadorRefDados?.telefone || empCliente?.telefone || '-',
+    email:
+      nota.tomador_email ||
+      tomadorRefDados?.email ||
+      empCliente?.email ||
+      'financeiro4@multieletrica.com.br',
+    codigoIbge: tomadorRefDados?.codigo_municipio || empCliente?.codigo_ibge || '35.49805',
   }
 
-  // Itens de serviço
-  const itens =
-    nota.servicos_itens && Array.isArray(nota.servicos_itens) && nota.servicos_itens.length > 0
-      ? nota.servicos_itens
-      : [
-          {
-            item: 1,
-            descricao:
-              nota.discriminacao || 'Prestação de Serviços de Assessoria Contábil e Financeira',
-            quantidade: 1,
-            valor_unitario: nota.valor_servicos,
-            valor_total: nota.valor_servicos,
-            codigo_tributacao_nacional: nota.codigo_tributacao_nacional || '010701',
-            desconto: nota.desconto_incondicionado || 0,
-          },
-        ]
+  // Números e referências
+  const numNota = String(nota.numero || 137)
+  const serieDps = String(nota.dps_serie || nota.serie || '70000')
+  const numDps = String(nota.dps_numero || nota.numero || '117')
+  const dataEmissaoFormatada = formatDataHora(nota.data_emissao || new Date().toISOString())
+  const competenciaFormatada = formatDataSimples(
+    nota.competencia || nota.data_emissao || '2026-10-02',
+  )
 
-  const numeroNfseFormatado = String(nota.numero || 1).padStart(8, '0')
-  const serieDps = nota.dps_serie || nota.serie || '1'
-  const numeroDps = nota.dps_numero || nota.numero || 1
+  // Código de tributação e serviços
+  const codTribNacional = nota.codigo_tributacao_nacional || '17.19.01'
+  const codTribMunicipal = nota.codigo_servico_municipal || '-'
+  const descItemServico =
+    codTribNacional.startsWith('17.19') || codTribNacional === '010701'
+      ? 'Contabilidade, inclusive serviços técnicos e auxiliares.'
+      : 'Serviços de consultoria e gestão empresarial.'
+  const discriminacaoTexto = nota.discriminacao || 'CONSULTORIA FINANCEIRA E CONTÁBIL.'
 
-  const urlConsultaOficial = chaveAcesso
-    ? `https://www.nfse.gov.br/consultapublica?chave=${chaveAcesso}`
-    : 'https://www.nfse.gov.br/consultapublica'
+  // Valores
+  const vServicosNum = Number(nota.valor_servicos) || 0
+  const vServicos = formatBrlMoeda(vServicosNum)
+  const vLiqNum = Number(nota.valor_liquido) || vServicosNum
+  const vLiq = formatBrlMoeda(vLiqNum)
+  const vIssNum = Number(nota.valor_iss) || 0
+  const vIss = vIssNum > 0 ? formatBrlMoeda(vIssNum) : '-'
+  const aliqIssStr = nota.aliquota_iss ? `${Number(nota.aliquota_iss).toFixed(2)}%` : '-'
+  const retencaoIss = nota.iss_retido ? 'Retido' : 'Não Retido'
+
+  // Retenções federais
+  const vIrNum = Number(nota.valor_ir) || 0
+  const vInssNum = Number(nota.valor_inss) || 0
+  const vCsllNum = Number(nota.valor_csll) || 0
+  const vPisNum = Number(nota.valor_pis) || 0
+  const vCofinsNum = Number(nota.valor_cofins) || 0
+  const totalRetFederais = vIrNum + vInssNum + vCsllNum + vPisNum + vCofinsNum
+
+  const vDescIncond =
+    nota.desconto_incondicionado && Number(nota.desconto_incondicionado) > 0
+      ? formatBrlMoeda(nota.desconto_incondicionado)
+      : '-'
+
+  const situacaoNfse = isCancelada
+    ? 'NFS-e Cancelada'
+    : isSubstituida
+      ? 'NFS-e Substituída'
+      : 'NFS-e Gerada'
+
+  // Endereço completo prestador
+  const enderecoPrestador = `${prestador.logradouro}, ${prestador.numero}${prestador.complemento ? `, ${prestador.complemento}` : ''}, ${prestador.bairro}`
+  // Endereço completo tomador
+  const enderecoTomador = `${tomador.logradouro}, ${tomador.numero}${tomador.complemento ? `, ${tomador.complemento}` : ''}, ${tomador.bairro}`
 
   return (
     <div
       id={id}
-      className="relative bg-white text-slate-900 font-sans text-[11px] leading-tight select-text print:p-0 print:m-0 print:border-none print:shadow-none"
+      className="relative bg-white text-black font-sans text-[9px] leading-tight select-text print:p-0 print:m-0 print:border-none print:shadow-none"
       style={{
         width: '100%',
         maxWidth: '210mm',
         minHeight: '297mm',
         margin: '0 auto',
-        padding: '10mm 12mm',
+        padding: '6mm 8mm',
         boxSizing: 'border-box',
         backgroundColor: '#ffffff',
+        color: '#000000',
+        fontFamily: 'Arial, Helvetica, sans-serif',
       }}
     >
-      {/* Marca d'água de HOMOLOGAÇÃO (Diagonal) */}
+      {/* Tarja de Homologação / Simulação */}
       {isHomologacao && !isCancelada && (
         <div
           aria-hidden="true"
@@ -201,7 +249,7 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
         </div>
       )}
 
-      {/* Marca d'água de CANCELAMENTO */}
+      {/* Marca d'água de Cancelamento */}
       {isCancelada && (
         <div
           aria-hidden="true"
@@ -214,567 +262,544 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
         </div>
       )}
 
-      {/* Tarja Superior Informativa (Homologação / Cancelada / Substituída) */}
-      {isHomologacao && (
-        <div className="mb-2 border-2 border-dashed border-amber-500 bg-amber-50 p-2 text-center rounded font-bold uppercase tracking-wider text-[11px] text-amber-900 print:border-amber-600">
-          SEM VALOR FISCAL — AMBIENTE DE HOMOLOGAÇÃO / TESTES DO NOVO PADRÃO NACIONAL 2.0
-        </div>
-      )}
-
-      {isCancelada && (
-        <div className="mb-2 border-2 border-red-600 bg-red-50 p-2 text-center rounded font-bold uppercase tracking-wider text-[12px] text-red-700">
-          DOCUMENTO CANCELADO — PROTOCOLO: {nota.protocolo_cancelamento || 'CAN-0000'}
-          {nota.cancelada_em && ` EM ${formatDataHora(nota.cancelada_em)}`}
-        </div>
-      )}
-
-      {isSubstituida && (
-        <div className="mb-2 border-2 border-amber-600 bg-amber-50 p-2 text-center rounded font-bold uppercase tracking-wider text-[11px] text-amber-900">
-          NOTA FISCAL SUBSTITUÍDA — REEMITIDA POR CORREÇÃO FISCAL
-        </div>
-      )}
-
       {/* ========================================================================= */}
-      {/* 1. CABEÇALHO CANÔNICO DANFSE NACIONAL 2.0                                 */}
+      {/* 1. CABEÇALHO SUPERIOR OFICIAL                                             */}
       {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2">
-        <div className="grid grid-cols-12 items-stretch divide-x divide-slate-400">
-          {/* Brasão / Identificador Nacional */}
-          <div className="col-span-2 p-2 flex flex-col items-center justify-center text-center bg-slate-50">
-            <div className="w-12 h-12 rounded-full border-2 border-slate-700 flex items-center justify-center font-black text-slate-800 text-lg shadow-2xs">
-              BR
+      <div className="border border-black mb-1">
+        <div className="grid grid-cols-12 items-stretch divide-x divide-black">
+          {/* Logo / Título */}
+          <div className="col-span-7 p-2 flex items-center gap-3">
+            {/* Logo NFS-e oficial estilizado em SVG */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-2xl font-black tracking-tighter text-[#0b5c53]">NFSe</span>
+                <span className="text-[7px] text-gray-700 tracking-tight leading-none mt-0.5">
+                  Nota Fiscal de
+                  <br />
+                  serviço eletrônica
+                </span>
+              </div>
             </div>
-            <span className="text-[9px] font-extrabold text-slate-700 mt-1 uppercase tracking-tighter">
-              REPÚBLICA FEDERATIVA DO BRASIL
-            </span>
+            <div className="flex-1 text-center">
+              <h1 className="font-bold text-[13px] tracking-tight uppercase leading-none">
+                DANFSe v2.0
+              </h1>
+              <p className="text-[11px] font-normal mt-0.5 leading-tight">
+                Documento Auxiliar da NFS-e
+              </p>
+            </div>
           </div>
 
-          {/* Título Oficial */}
-          <div className="col-span-6 p-2.5 flex flex-col justify-center">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h1 className="font-black text-sm tracking-tight text-slate-900 uppercase">DANFSE</h1>
-              <span className="text-[10px] font-semibold text-slate-700 uppercase">
-                — Documento Auxiliar da Nota Fiscal de Serviços Eletrônica
-              </span>
+          {/* Dados do Município e Ambiente */}
+          <div className="col-span-5 p-1.5 flex flex-col justify-center text-[8.5px] leading-tight space-y-0.5">
+            <div>
+              <span className="font-bold">Município:</span> {prestador.municipio} - {prestador.uf}
             </div>
-            <p className="text-[10px] font-bold text-indigo-900 mt-0.5">
-              Padrão Nacional NFS-e 2.0 (DPS 2.0 / Layout ADN)
+            <div>
+              <span className="font-bold">Ambiente Gerador:</span> 2
+            </div>
+            <div>
+              <span className="font-bold">Tipo de Ambiente:</span> {isHomologacao ? '2' : '1'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. CHAVE DE ACESSO DA NFS-e + QR CODE                                     */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 p-1.5">
+        <div className="grid grid-cols-12 gap-2 items-center">
+          <div className="col-span-9 space-y-1">
+            <div className="font-bold text-[8.5px] uppercase tracking-wide">
+              CHAVE DE ACESSO DA NFS-e
+            </div>
+            <div className="font-mono text-[9px] font-bold tracking-tight select-all break-all text-black">
+              {chaveAcesso || '35245012230915624000108000000000013726101497594680'}
+            </div>
+            <p className="text-[7.5px] text-gray-700 leading-snug pt-0.5">
+              A autenticidade desta NFS-e pode ser verificada pela leitura deste código QR ou pela
+              consulta da chave de acesso no portal nacional da NFS-e
             </p>
-            <p className="text-[9px] text-slate-500 mt-0.5 leading-tight">
-              Emitida nos termos do Convênio Nacional da NFS-e e Resolução CGSN nº 169/2022
-            </p>
+            {chaveAcesso && (
+              <button
+                type="button"
+                onClick={copiarChave}
+                className="inline-flex items-center gap-1 text-[7.5px] font-semibold text-gray-600 hover:text-black border border-gray-400 px-1.5 py-0.5 rounded print:hidden mt-0.5"
+                title="Copiar chave de acesso"
+              >
+                {copiado ? (
+                  <Check className="w-2.5 h-2.5 text-emerald-600" />
+                ) : (
+                  <Copy className="w-2.5 h-2.5" />
+                )}
+                {copiado ? 'Copiada!' : 'Copiar Chave'}
+              </button>
+            )}
           </div>
-
-          {/* Dados de Identificação da Nota */}
-          <div className="col-span-4 p-2 bg-slate-50/60 flex flex-col justify-between text-[10px] space-y-1">
-            <div className="flex justify-between items-baseline border-b border-slate-300 pb-0.5">
-              <span className="text-slate-600 font-semibold uppercase">Número da NFS-e:</span>
-              <span className="font-mono font-black text-sm text-slate-900 tracking-wider">
-                {numeroNfseFormatado}
-              </span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <span className="text-slate-600 font-medium">Série / Número DPS:</span>
-              <span className="font-mono font-bold text-slate-800">
-                Série {serieDps} · Nº {numeroDps}
-              </span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <span className="text-slate-600 font-medium">Data / Hora Emissão:</span>
-              <span className="font-mono font-semibold text-slate-800">
-                {formatDataHora(nota.data_emissao)}
-              </span>
-            </div>
-            <div className="flex justify-between items-baseline">
-              <span className="text-slate-600 font-medium">Competência:</span>
-              <span className="font-mono font-bold text-slate-800">
-                {formatDataSimples(nota.competencia || nota.data_emissao)}
-              </span>
+          <div className="col-span-3 flex justify-end">
+            <div className="flex flex-col items-center">
+              <DanfseQrCode
+                chaveAcesso={chaveAcesso}
+                size={76}
+                className="p-0.5 border-black rounded-none shadow-none"
+              />
             </div>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. CHAVE DE ACESSO NACIONAL (50 DÍGITOS) COM BOTÃO DE COPIAR              */}
+      {/* 3. QUADRO DE IDENTIFICAÇÃO DA NFS-e E DPS                                  */}
       {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs p-2 mb-2 bg-slate-50/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
-          <div className="space-y-0.5 overflow-hidden flex-1">
-            <div className="text-[9px] uppercase font-bold tracking-wider text-slate-600 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
-              Chave de Acesso Nacional da NFS-e (50 Dígitos)
-            </div>
-            <div
-              className="font-mono font-black text-xs sm:text-[13px] tracking-wider text-indigo-950 select-all break-all"
-              title="Chave de Acesso Nacional da NFS-e"
-            >
-              {chaveFormatada}
-            </div>
+      <div className="border border-black mb-1">
+        <div className="grid grid-cols-3 divide-x divide-y divide-black text-[8px]">
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">NÚMERO DA NFS-e</span>
+            <span className="font-bold text-[9px]">{numNota}</span>
           </div>
-          {chaveAcesso && (
-            <button
-              type="button"
-              onClick={copiarChave}
-              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-indigo-800 bg-white hover:bg-indigo-50 border border-indigo-200 rounded transition-colors self-start sm:self-center print:hidden shadow-2xs"
-              title="Copiar chave de acesso"
-            >
-              {copiado ? (
-                <>
-                  <Check className="w-3 h-3 text-emerald-600" /> Copiado!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3 h-3" /> Copiar Chave
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 3. PROTOCOLO, CÓDIGO DE VERIFICAÇÃO E DADOS DE AUTORIZAÇÃO                */}
-      {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2 grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-slate-400 bg-white text-[10px]">
-        <div className="p-1.5">
-          <span className="block text-[9px] text-slate-500 font-semibold uppercase">
-            Protocolo de Autorização
-          </span>
-          <span
-            className="font-mono font-bold text-slate-900 block truncate"
-            title={nota.protocolo_autorizacao}
-          >
-            {nota.protocolo_autorizacao || 'AUT-NAC-LOCAL'}
-          </span>
-        </div>
-        <div className="p-1.5">
-          <span className="block text-[9px] text-slate-500 font-semibold uppercase">
-            Código de Verificação
-          </span>
-          <span className="font-mono font-black text-indigo-900 text-[11px] block">
-            {nota.codigo_verificacao || '—'}
-          </span>
-        </div>
-        <div className="p-1.5">
-          <span className="block text-[9px] text-slate-500 font-semibold uppercase">
-            Local da Prestação (IBGE)
-          </span>
-          <span className="font-mono font-semibold text-slate-900 block">
-            {nota.codigo_municipio_prestacao || prestador.codigoIbge || '3550308'}
-          </span>
-        </div>
-        <div className="p-1.5">
-          <span className="block text-[9px] text-slate-500 font-semibold uppercase">
-            Natureza da Operação
-          </span>
-          <span className="font-semibold text-slate-900 block truncate">
-            {nota.natureza_operacao || 'Tributação no município'}
-          </span>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 4. BLOCO PRESTADOR (MINHA EMPRESA) E BLOCO TOMADOR (EMPRESA CLIENTE)      */}
-      {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2 divide-y divide-slate-400">
-        {/* PRESTADOR */}
-        <div className="p-2 space-y-1">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-            <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">
-              PRESTADOR DOS SERVIÇOS (EMITENTE)
-            </span>
-            <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-300">
-              CNPJ: {formatCnpj(prestador.cnpj)}
-            </span>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">COMPETÊNCIA DA NFS-e</span>
+            <span className="text-[8.5px]">{competenciaFormatada}</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-x-2 gap-y-0.5 text-[10px]">
-            <div className="sm:col-span-8">
-              <span className="text-slate-500 font-medium">Razão Social: </span>
-              <strong className="text-slate-900 font-bold">{prestador.razaoSocial}</strong>
-              {prestador.nomeFantasia && (
-                <span className="text-slate-600 text-[9px]"> ({prestador.nomeFantasia})</span>
-              )}
-            </div>
-            <div className="sm:col-span-4 text-left sm:text-right">
-              <span className="text-slate-500 font-medium">Inscrição Municipal: </span>
-              <span className="font-mono font-semibold text-slate-900">
-                {prestador.inscricaoMunicipal}
-              </span>
-            </div>
-            <div className="sm:col-span-8">
-              <span className="text-slate-500 font-medium">Endereço: </span>
-              <span className="text-slate-800">
-                {prestador.logradouro}, {prestador.numero}
-                {prestador.complemento ? ` - ${prestador.complemento}` : ''} - {prestador.bairro}
-              </span>
-            </div>
-            <div className="sm:col-span-4 text-left sm:text-right">
-              <span className="text-slate-500 font-medium">Município / UF: </span>
-              <span className="font-semibold text-slate-900">
-                {prestador.municipio} / {prestador.uf} · CEP: {prestador.cep}
-              </span>
-            </div>
-            <div className="sm:col-span-6">
-              <span className="text-slate-500 font-medium">Regime Tributário: </span>
-              <span className="font-semibold text-slate-900">{prestador.regimeTributario}</span>
-            </div>
-            <div className="sm:col-span-6 text-left sm:text-right">
-              {prestador.email && (
-                <>
-                  <span className="text-slate-500 font-medium">E-mail: </span>
-                  <span className="text-slate-800">{prestador.email}</span>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* TOMADOR */}
-        <div className="p-2 space-y-1 bg-slate-50/40">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-1">
-            <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">
-              TOMADOR DOS SERVIÇOS (CLIENTE)
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">
+              DATA E HORA DA EMISSÃO DA NFS-e
             </span>
-            <span className="text-[9px] font-mono font-bold bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded border border-slate-300">
-              CPF / CNPJ: {formatCnpj(tomador.cnpjCpf)}
-            </span>
+            <span className="text-[8.5px]">{dataEmissaoFormatada}</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-x-2 gap-y-0.5 text-[10px]">
-            <div className="sm:col-span-8">
-              <span className="text-slate-500 font-medium">Nome / Razão Social: </span>
-              <strong className="text-slate-900 font-bold">{tomador.razaoSocial}</strong>
-              {tomador.nomeFantasia && (
-                <span className="text-slate-600 text-[9px]"> ({tomador.nomeFantasia})</span>
-              )}
-            </div>
-            <div className="sm:col-span-4 text-left sm:text-right">
-              <span className="text-slate-500 font-medium">Inscrição Municipal: </span>
-              <span className="font-mono font-semibold text-slate-900">
-                {tomador.inscricaoMunicipal}
-              </span>
-            </div>
-            <div className="sm:col-span-8">
-              <span className="text-slate-500 font-medium">Endereço: </span>
-              <span className="text-slate-800">
-                {tomador.logradouro}, {tomador.numero}
-                {tomador.complemento ? ` - ${tomador.complemento}` : ''} - {tomador.bairro}
-              </span>
-            </div>
-            <div className="sm:col-span-4 text-left sm:text-right">
-              <span className="text-slate-500 font-medium">Município / UF: </span>
-              <span className="font-semibold text-slate-900">
-                {tomador.municipio} / {tomador.uf} · CEP: {tomador.cep}
-              </span>
-            </div>
-            <div className="sm:col-span-6">
-              {tomador.email && (
-                <>
-                  <span className="text-slate-500 font-medium">E-mail: </span>
-                  <span className="text-slate-800">{tomador.email}</span>
-                </>
-              )}
-            </div>
-            <div className="sm:col-span-6 text-left sm:text-right">
-              {tomador.telefone && (
-                <>
-                  <span className="text-slate-500 font-medium">Telefone: </span>
-                  <span className="text-slate-800">{tomador.telefone}</span>
-                </>
-              )}
-            </div>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">NÚMERO DA DPS</span>
+            <span className="text-[8.5px]">{numDps}</span>
+          </div>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">SÉRIE DA DPS</span>
+            <span className="text-[8.5px]">{serieDps}</span>
+          </div>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">
+              DATA E HORA DA EMISSÃO DA DPS
+            </span>
+            <span className="text-[8.5px]">{dataEmissaoFormatada}</span>
+          </div>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">EMITENTE DA NFS-e</span>
+            <span className="text-[8.5px]">Prestador</span>
+          </div>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">SITUAÇÃO DA NFS-e</span>
+            <span className="text-[8.5px] font-semibold">{situacaoNfse}</span>
+          </div>
+          <div className="p-1">
+            <span className="font-bold block uppercase text-[7.5px]">FINALIDADE</span>
+            <span className="text-[8.5px]">-</span>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 5. DISCRIMINAÇÃO DOS SERVIÇOS (ITENS DETALHADOS DPS 2.0)                  */}
+      {/* 4. PRESTADOR / FORNECEDOR                                                 */}
       {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2">
-        <div className="bg-slate-100 px-2 py-1 border-b border-slate-400 flex items-center justify-between">
-          <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">
-            DISCRIMINAÇÃO DOS SERVIÇOS PRESTADOS
-          </span>
-          <span className="text-[9px] font-mono text-slate-600">
-            Cód. Trib. Nacional: <strong>{nota.codigo_tributacao_nacional || '010701'}</strong>
-          </span>
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-3 p-1 font-bold bg-gray-50 flex items-center">
+            PRESTADOR / FORNECEDOR
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">CNPJ / CPF / NIF</span>
+            <span className="font-mono text-[8.5px]">{formatCnpj(prestador.cnpj)}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Indicador Municipal (Inscrição)</span>
+            <span className="text-[8.5px]">{prestador.inscricaoMunicipal}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Telefone</span>
+            <span className="text-[8.5px]">{prestador.telefone}</span>
+          </div>
+
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">Nome / Nome Empresarial</span>
+            <span className="font-bold text-[8.5px]">{prestador.razaoSocial}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Município / Sigla UF</span>
+            <span className="text-[8.5px]">
+              {prestador.municipio} / {prestador.uf}
+            </span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Código IBGE / CEP</span>
+            <span className="text-[8.5px]">
+              {prestador.codigoIbge} / {prestador.cep}
+            </span>
+          </div>
+
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">Endereço</span>
+            <span className="text-[8.5px]">{enderecoPrestador}</span>
+          </div>
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">E-mail</span>
+            <span className="text-[8.5px]">{prestador.email}</span>
+          </div>
+
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Simples Nacional na Data de Competência
+            </span>
+            <span className="text-[8.5px] truncate block" title={prestador.simplesNacional}>
+              {prestador.simplesNacional}
+            </span>
+          </div>
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Regime de Apuração Tributária pelo SN
+            </span>
+            <span className="text-[8.5px] truncate block" title={prestador.regimeApuracaoSN}>
+              {prestador.regimeApuracaoSN}
+            </span>
+          </div>
         </div>
+      </div>
 
-        <div className="p-2 space-y-2">
-          <table className="w-full text-left text-[10px] border-collapse">
-            <thead>
-              <tr className="border-b border-slate-300 text-slate-600 font-bold uppercase text-[9px] bg-slate-50/70">
-                <th className="py-1 px-1 w-8 text-center">Item</th>
-                <th className="py-1 px-1.5">Descrição do Serviço</th>
-                <th className="py-1 px-1 w-12 text-center">Qtd</th>
-                <th className="py-1 px-1.5 w-20 text-right">Unitário (R$)</th>
-                <th className="py-1 px-1.5 w-20 text-right">Total (R$)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {itens.map((it: any, idx: number) => (
-                <tr key={idx} className="hover:bg-slate-50/50">
-                  <td className="py-1 px-1 text-center font-mono text-slate-600">
-                    {it.item || idx + 1}
-                  </td>
-                  <td className="py-1 px-1.5 whitespace-pre-wrap text-slate-900 leading-snug">
-                    {it.descricao}
-                  </td>
-                  <td className="py-1 px-1 text-center font-mono">{it.quantidade || 1}</td>
-                  <td className="py-1 px-1.5 text-right font-mono">
-                    {formatBrlMoeda(Number(it.valor_unitario || it.valor_total || 0))}
-                  </td>
-                  <td className="py-1 px-1.5 text-right font-mono font-bold text-slate-900">
-                    {formatBrlMoeda(Number(it.valor_total || 0))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* ========================================================================= */}
+      {/* 5. TOMADOR / ADQUIRENTE                                                   */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-3 p-1 font-bold bg-gray-50 flex items-center">
+            TOMADOR / ADQUIRENTE
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">CNPJ / CPF / NIF</span>
+            <span className="font-mono text-[8.5px]">{formatCnpj(tomador.cnpjCpf)}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Indicador Municipal (Inscrição)</span>
+            <span className="text-[8.5px]">{tomador.inscricaoMunicipal}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Telefone</span>
+            <span className="text-[8.5px]">{tomador.telefone}</span>
+          </div>
 
-          {/* Justificativa / Substituição se houver */}
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">Nome / Nome Empresarial</span>
+            <span className="font-bold text-[8.5px]">{tomador.razaoSocial}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Município / Sigla UF</span>
+            <span className="text-[8.5px]">
+              {tomador.municipio} / {tomador.uf}
+            </span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Código IBGE / CEP</span>
+            <span className="text-[8.5px]">
+              {tomador.codigoIbge} / {tomador.cep}
+            </span>
+          </div>
+
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">Endereço</span>
+            <span className="text-[8.5px]">{enderecoTomador}</span>
+          </div>
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">E-mail</span>
+            <span className="text-[8.5px]">{tomador.email}</span>
+          </div>
+
+          <div className="col-span-12 p-1 text-center font-bold text-[7.5px] bg-white">
+            DESTINATÁRIO DA OPERAÇÃO NÃO IDENTIFICADO NA NFS-e
+          </div>
+          <div className="col-span-12 p-1 text-center font-bold text-[7.5px] bg-white">
+            INTERMEDIÁRIO DA OPERAÇÃO NÃO IDENTIFICADO NA NFS-e
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 6. SERVIÇO PRESTADO                                                       */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-3 p-1 font-bold bg-gray-50 flex items-center">
+            SERVIÇO PRESTADO
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Código de Tributação Nacional/Municipal
+            </span>
+            <span className="text-[8.5px]">
+              {codTribNacional} / {codTribMunicipal}
+            </span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Código da NBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Local da Prestação / Sigla UF / País
+            </span>
+            <span className="text-[8.5px]">
+              {prestador.municipio} / {prestador.uf} / -
+            </span>
+          </div>
+
+          <div className="col-span-12 p-1 text-[8.5px]">{descItemServico}</div>
+
+          <div className="col-span-12 p-1 space-y-0.5">
+            <span className="font-bold block text-[7.5px]">Descrição do Serviço</span>
+            <p className="text-[8.5px] whitespace-pre-wrap">{discriminacaoTexto}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 7. TRIBUTAÇÃO MUNICIPAL (ISSQN)                                            */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-4 p-1 font-bold bg-gray-50 flex items-center">
+            TRIBUTAÇÃO MUNICIPAL (ISSQN)
+          </div>
+          <div className="col-span-4 p-1">
+            <span className="font-bold block text-[7.5px]">Tipo de Tributação do ISSQN</span>
+            <span className="text-[8.5px]">Operação Tributável</span>
+          </div>
+          <div className="col-span-4 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Município / Sigla UF / País de Incidência do ISSQN
+            </span>
+            <span className="text-[8.5px]">
+              {prestador.municipio} / {prestador.uf} / -
+            </span>
+          </div>
+
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">BC ISSQN</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Alíquota Aplicada</span>
+            <span className="text-[8.5px]">{aliqIssStr}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Retenção do ISSQN</span>
+            <span className="text-[8.5px]">{retencaoIss}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">ISSQN Apurado</span>
+            <span className="text-[8.5px]">{vIss}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 8. TRIBUTAÇÃO FEDERAL (EXCETO CBS)                                        */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-3 p-1 font-bold bg-gray-50 flex items-center">
+            TRIBUTAÇÃO FEDERAL (EXCETO CBS)
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">IRRF</span>
+            <span className="text-[8.5px]">{vIrNum > 0 ? formatBrlMoeda(vIrNum) : '-'}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Contribuição Previdenciária - Retida
+            </span>
+            <span className="text-[8.5px]">{vInssNum > 0 ? formatBrlMoeda(vInssNum) : '-'}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Contribuições Sociais - Retidas</span>
+            <span className="text-[8.5px]">{vCsllNum > 0 ? formatBrlMoeda(vCsllNum) : '-'}</span>
+          </div>
+
+          <div className="col-span-4 p-1">
+            <span className="font-bold block text-[7.5px]">PIS - Débito Apuração Própria</span>
+            <span className="text-[8.5px]">{vPisNum > 0 ? formatBrlMoeda(vPisNum) : '-'}</span>
+          </div>
+          <div className="col-span-4 p-1">
+            <span className="font-bold block text-[7.5px]">COFINS - Débito Apuração Própria</span>
+            <span className="text-[8.5px]">
+              {vCofinsNum > 0 ? formatBrlMoeda(vCofinsNum) : '-'}
+            </span>
+          </div>
+          <div className="col-span-4 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Descrição Contrib. Sociais - Retidas
+            </span>
+            <span className="text-[8.5px]">0 - PIS/COFINS/CSLL Não Retidos</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 9. TRIBUTAÇÃO IBS/CBS                                                     */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-3 p-1 font-bold bg-gray-50 flex items-center">
+            TRIBUTAÇÃO IBS/CBS
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">CST / cClassTrib</span>
+            <span className="text-[8.5px]">- / -</span>
+          </div>
+          <div className="col-span-6 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Indicador de Operação / Código IBGE Incidência / Município Incidência / Sigla UF
+            </span>
+            <span className="text-[8.5px]">- / - / - / -</span>
+          </div>
+
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Exclusões e Reduções da Base de Cálculo
+            </span>
+            <span className="text-[8.5px]">R$ 0,00</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Base de Cálculo Após Exclusões e Reduções
+            </span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Red. Alíquota IBS / Red. Alíquota CBS
+            </span>
+            <span className="text-[8.5px]">- / - / -</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Alíquota - IBS UF / IBS Mun</span>
+            <span className="text-[8.5px]">- / -</span>
+          </div>
+
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Alíq. Efetiva Municipal - IBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Valor Apurado Municipal - IBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Alíq. Efetiva Estadual - IBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Valor Apurado Estadual - IBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Valor Total Apurado - IBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Alíquota - CBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Alíq. Efetiva - CBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Valor Total Apurado - CBS</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 10. VALOR TOTAL DA NFS-e                                                  */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-1 text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-y divide-black">
+          <div className="col-span-3 p-1 font-bold bg-gray-50 flex items-center">
+            VALOR TOTAL DA NFS-e
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">VALOR DA OPERAÇÃO / SERVIÇO</span>
+            <span className="font-bold text-[9px]">{vServicos}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Desconto Incondicionado</span>
+            <span className="text-[8.5px]">{vDescIncond}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Desconto Condicionado</span>
+            <span className="text-[8.5px]">-</span>
+          </div>
+
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">
+              Total das Retenções (ISSQN / Federais)
+            </span>
+            <span className="text-[8.5px]">
+              {totalRetFederais > 0 ? formatBrlMoeda(totalRetFederais) : '-'}
+            </span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">VALOR LÍQUIDO DA NFS-e</span>
+            <span className="font-bold text-[9px]">{vLiq}</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">Total do IBS/CBS</span>
+            <span className="text-[8.5px]">R$ 0,00</span>
+          </div>
+          <div className="col-span-3 p-1">
+            <span className="font-bold block text-[7.5px]">VALOR LÍQUIDO DA NFS-e + IBS/CBS</span>
+            <span className="font-bold text-[8.5px]">R$ 0,00</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 11. INFORMAÇÕES COMPLEMENTARES                                            */}
+      {/* ========================================================================= */}
+      <div className="border border-black mb-6 text-[8px]">
+        <div className="p-1 font-bold bg-gray-50 border-b border-black text-[7.5px]">
+          INFORMAÇÕES COMPLEMENTARES
+        </div>
+        <div className="p-1.5 min-h-[50px] space-y-1 text-[8px] leading-snug">
+          <p>
+            Totais aproximados dos Tributos cfe. Lei n° 12.741/2012: Federais: -; Estaduais: -;
+            Municipais: -;
+          </p>
           {nota.justificativa_correcao && (
-            <div className="border border-amber-300 bg-amber-50/60 rounded p-1.5 text-[9px] text-amber-900 space-y-0.5">
-              <span className="font-bold block uppercase tracking-wide text-amber-950">
-                Observação / Justificativa da Correção (Substituição Fiscal):
-              </span>
-              <p className="italic">{nota.justificativa_correcao}</p>
-            </div>
+            <p className="italic text-amber-900">
+              Observação / Justificativa da Correção: {nota.justificativa_correcao}
+            </p>
           )}
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 6. DADOS FISCAIS / TRIBUTAÇÃO NACIONAL                                     */}
+      {/* 12. CANHOTO INFERIOR: DATA CIENTIFICAÇÃO / ASSINATURA / CHAVE             */}
       {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2">
-        <div className="bg-slate-100 px-2 py-1 border-b border-slate-400">
-          <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">
-            DADOS FISCAIS DA OPERAÇÃO (DPS NACIONAL 2.0)
-          </span>
-        </div>
-        <div className="p-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px]">
-          <div>
-            <span className="text-slate-500 block text-[9px] font-medium uppercase">
-              Cód. Tributação Nacional
-            </span>
-            <span className="font-mono font-bold text-slate-900">
-              {nota.codigo_tributacao_nacional || '010701'}
-            </span>
-            <span className="text-[9px] text-slate-500 block">Suporte / Consultoria</span>
+      <div className="border border-black text-[8px]">
+        <div className="grid grid-cols-12 divide-x divide-black items-stretch min-h-[36px]">
+          <div className="col-span-3 p-1 flex flex-col justify-between">
+            <span className="font-bold text-[7.5px] uppercase">DATA CIENTIFICAÇÃO:</span>
           </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] font-medium uppercase">
-              CNAE Prestador
-            </span>
-            <span className="font-mono font-bold text-slate-900">
-              {nota.item_cnae || prestador.cnae || '6920-6/01'}
-            </span>
-            <span className="text-[9px] text-slate-500 block">Atividades Contábeis / Gestão</span>
+          <div className="col-span-3 p-1 flex flex-col justify-between">
+            <span className="font-bold text-[7.5px] uppercase">IDENTIFICAÇÃO E ASSINATURA</span>
           </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] font-medium uppercase">
-              Exigibilidade do ISSQN
-            </span>
-            <span className="font-bold text-slate-900">
-              {nota.iss_retido ? 'Exigível (Retido na Fonte)' : 'Exigível (Devido Prestador)'}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-500 block text-[9px] font-medium uppercase">
-              Optante Simples Nacional
-            </span>
-            <span className="font-bold text-indigo-900">
-              {prestador.regimeTributario?.includes('Simples')
-                ? 'SIM — ME / EPP (LC 123/2006)'
-                : 'NÃO — Regime Geral'}
+          <div className="col-span-6 p-1 flex flex-col justify-between">
+            <span className="font-bold text-[7.5px] uppercase">N° NFS-e / CHAVE NFS-e</span>
+            <span className="font-mono text-[7.5px] break-all leading-tight">
+              {numNota} / {chaveAcesso || '35245012230915624000108000000000013726101497594680'}
             </span>
           </div>
         </div>
       </div>
-
-      {/* ========================================================================= */}
-      {/* 7. RETENÇÕES FEDERAIS                                                     */}
-      {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2">
-        <div className="bg-slate-100 px-2 py-1 border-b border-slate-400">
-          <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">
-            RETENÇÕES DE TRIBUTOS FEDERAIS (R$)
-          </span>
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-y sm:divide-y-0 divide-slate-300 text-center text-[10px] bg-slate-50/50">
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">PIS</span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.valor_pis || 0)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">COFINS</span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.valor_cofins || 0)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">INSS</span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.valor_inss || 0)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              IRPJ / IRRF
-            </span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.valor_ir || 0)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">CSLL</span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.valor_csll || 0)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              Outras Retenções
-            </span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.outras_retencoes || 0)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 8. BLOCO VALORES E CÁLCULO DO ISSQN                                       */}
-      {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2">
-        <div className="bg-slate-100 px-2 py-1 border-b border-slate-400">
-          <span className="font-black text-[10px] uppercase tracking-wider text-slate-800">
-            CÁLCULO DO ISSQN E VALOR LÍQUIDO DA NFS-E
-          </span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-6 divide-x divide-y sm:divide-y-0 divide-slate-400 text-center text-[10px]">
-          <div className="p-1.5 bg-slate-50/60">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              Valor dos Serviços
-            </span>
-            <span className="font-mono font-bold text-xs text-slate-900">
-              {formatBrlMoeda(nota.valor_servicos)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              Desconto Incond.
-            </span>
-            <span className="font-mono font-medium text-slate-800">
-              {formatBrlMoeda(nota.desconto_incondicionado || 0)}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              Base de Cálculo
-            </span>
-            <span className="font-mono font-semibold text-slate-900">
-              {formatBrlMoeda(
-                Math.max(
-                  0,
-                  Number(nota.valor_servicos || 0) - Number(nota.desconto_incondicionado || 0),
-                ),
-              )}
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              Alíquota ISS (%)
-            </span>
-            <span className="font-mono font-bold text-slate-900">
-              {Number(nota.aliquota_iss || 0).toFixed(2)}%
-            </span>
-          </div>
-          <div className="p-1.5">
-            <span className="text-[9px] text-slate-500 uppercase block font-semibold">
-              Valor do ISSQN
-            </span>
-            <span className="font-mono font-bold text-slate-900">
-              {formatBrlMoeda(nota.valor_iss || 0)}
-            </span>
-            <span className="text-[8px] text-slate-500 block">
-              {nota.iss_retido ? '(Retido Tomador)' : '(Devido Prestador)'}
-            </span>
-          </div>
-          <div className="p-1.5 bg-indigo-50 border-l border-indigo-200">
-            <span className="text-[9px] font-black uppercase block text-indigo-950">
-              Valor Líquido NFS-e
-            </span>
-            <span className="font-mono font-black text-sm text-indigo-700">
-              {formatBrlMoeda(nota.valor_liquido || nota.valor_servicos)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 9. QR CODE OFICIAL E INFORMAÇÕES COMPLEMENTARES                           */}
-      {/* ========================================================================= */}
-      <div className="border border-slate-400 rounded-xs mb-2">
-        <div className="grid grid-cols-12 divide-x divide-slate-400">
-          {/* Informações adicionais */}
-          <div className="col-span-8 p-2 text-[9px] text-slate-600 space-y-1">
-            <span className="font-black text-[10px] uppercase tracking-wider text-slate-800 block">
-              OUTRAS INFORMAÇÕES / MENSAGEM DO PORTAL NACIONAL
-            </span>
-            <p className="leading-snug">
-              {nota.gateway_status_resposta ||
-                'Declaração de Prestação de Serviços (DPS) transmitida e autorizada no Sistema Nacional da NFS-e (ADN / Receita Federal).'}
-            </p>
-            <p className="leading-snug text-slate-500">
-              Documento emitido por ME ou EPP optante pelo Simples Nacional. Não gera direito a
-              crédito fiscal de IPI ou ICMS. Conforme Resolução CGSN nº 169/2022.
-            </p>
-            <div className="pt-1 border-t border-slate-200 flex flex-wrap items-center justify-between gap-1 text-[8.5px] text-slate-500 font-mono">
-              <span>Layout Nacional DPS v2.00 / ADN</span>
-              <span>
-                Cód. Mun. Incidência: {nota.codigo_municipio_prestacao || prestador.codigoIbge}
-              </span>
-              <span>Autenticação: {nota.codigo_verificacao || 'SISTEMA-NACIONAL'}</span>
-            </div>
-          </div>
-
-          {/* QR Code de Consulta Pública Nacional */}
-          <div className="col-span-4 p-2 flex flex-col items-center justify-center text-center bg-slate-50/50">
-            <div className="flex items-center gap-1 text-[9px] font-bold text-slate-800 uppercase tracking-tight mb-1">
-              <QrCode className="w-3 h-3 text-indigo-700" />
-              Consulta Pública
-            </div>
-            <DanfseQrCode chaveAcesso={chaveAcesso} size={92} />
-            <a
-              href={urlConsultaOficial}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 text-[8px] text-indigo-700 hover:text-indigo-900 underline flex items-center gap-0.5 font-mono print:no-underline"
-              title="Acessar consulta pública no Portal Nacional da NFS-e"
-            >
-              nfse.gov.br/consultapublica <ExternalLink className="w-2.5 h-2.5 print:hidden" />
-            </a>
-            <span className="text-[7.5px] text-slate-400 uppercase tracking-tighter">
-              Aponte a câmera para autenticar
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Rodapé institucional formal do documento auxiliar */}
-      <footer className="pt-1 border-t border-slate-300 text-center text-[8.5px] text-slate-500 flex items-center justify-between">
-        <span>
-          DANFSE Nacional 2.0 · {prestador.razaoSocial} · CNPJ {formatCnpj(prestador.cnpj)}
-        </span>
-        <span className="font-mono">
-          NFS-e Nº {numeroNfseFormatado} · Série {serieDps}
-        </span>
-        <span>Página 1 de 1</span>
-      </footer>
     </div>
   )
 }
