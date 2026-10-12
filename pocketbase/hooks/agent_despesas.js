@@ -364,7 +364,7 @@ routerAdd(
         } catch (_) {}
       }
 
-      // 3. Monta prompt estrito para o Agente de IA gerar JSON puro com Conta Principal e Despesas Detalhadas
+      // 3. Monta prompt estrito para o Agente de IA extrair a hierarquia CONTA -> SUBCONTA -> DESPESAS
       const promptAgente = `Você é o Agente Especialista em Importação e Classificação de Despesas.
 O usuário anexou um arquivo PDF contendo um relatório de despesas, faturas ou extrato gerencial.
 
@@ -389,30 +389,50 @@ CONTEÚDO EXTRAÍDO DO PDF:
 ${markdownText.slice(0, 32000)}
 ---
 
-SUA TAREFA:
-1. Identificar a "conta_principal": a grande conta-mãe ou categoria agregadora sob a qual todas ou a maioria das despesas se agrupam neste documento (ex.: "Despesas Administrativas", "Custo dos Serviços Prestados", "Despesas Operacionais", "Despesas Comerciais & Marketing", "Despesas com Pessoal" ou "Despesas Financeiras").
-2. Identificar e extrair cada uma das "despesas" detalhadas contidas no documento.
-   Para cada despesa individual:
-   - "descricao": nome do fornecedor, serviço ou item do gasto, limpo e legível
+SUA TAREFA - EXTRAÇÃO HIERÁRQUICA:
+Analise detalhadamente a estrutura do documento e extraia os gastos na hierarquia CONTA → SUBCONTA → DESPESAS conforme vier no documento:
+1. "conta_principal": a grande conta agregadora macro no topo (ex.: "Despesas Administrativas", "Custos Operacionais", "Despesas Comerciais", "Despesas com Pessoal", "Despesas Financeiras").
+2. "contas": lista de contas/grupos contábeis encontrados. Cada "conta" possui:
+   - "nome": nome do grupo (ex: "Despesas Administrativas", "Custos das Instalações")
+   - "subcontas": lista de subcontas pertencentes a esta conta. Cada subconta possui:
+     - "nome": nome da subconta (ex: "Salários e Encargos", "Energia Elétrica", "Água e Telefone", "Serviços de TI")
+     - "despesas": lista dos itens de despesa detalhados contidos nessa subconta.
+   * REGRA DE DEGRADAÇÃO: Se o PDF não tiver divisões explícitas de subcontas, crie uma subconta única com o mesmo nome da conta ou agrupe as despesas diretamente.
+3. Para cada item individual em "despesas":
+   - "id": identificador único (ex: "item_1")
+   - "descricao": fornecedor, serviço ou item do gasto, limpo e legível
    - "valor": valor numérico estritamente positivo em float (ex: 1540.50)
-   - "competencia": mês/ano ou data do gasto no formato "YYYY-MM" ou "YYYY-MM-DD" se identificável no texto; se não estiver no documento, use o período do usuário ("${periodoInicio.slice(0, 7) || '2025-01'}")
-   - "categoria": grupo ou subcategoria do gasto (ex: "Serviços de Terceiros", "Material de Escritório", "TI & Softwares", "Encargos", "Tarifas Bancárias")
+   - "competencia": mês/ano ou data do gasto no formato "YYYY-MM" ou "YYYY-MM-DD" (se não especificado, use "${periodoInicio.slice(0, 7) || '2025-01'}")
+   - "categoria": categoria/subconta correspondente
    - "sugestao_plano_conta_id": se alguma conta da lista do plano acima casar claramente com a despesa, preencha o ID exato dela; caso contrário, use null.
 
 REGRAS DE RESPOSTA (OBRIGATÓRIO):
-- Retorne EXCLUSIVAMENTE um objeto JSON válido (sem tags markdown, sem blocos de código adicionais, sem texto antes ou depois).
+- Retorne EXCLUSIVAMENTE um objeto JSON válido (sem tags markdown, sem blocos de texto extras).
 - O formato DEVE ser rigorosamente:
 {
-  "conta_principal": "Nome da Conta-Mãe Agregadora",
-  "despesas": [
+  "conta_principal": "Nome da Conta Agregadora Geral",
+  "contas": [
     {
-      "id": "item_1",
-      "descricao": "Fornecedor ou Despesa",
-      "valor": 123.45,
-      "competencia": "YYYY-MM",
-      "categoria": "Categoria sugerida",
-      "sugestao_plano_conta_id": "id_da_conta_se_houver_ou_null"
+      "nome": "Despesas Administrativas",
+      "subcontas": [
+        {
+          "nome": "Energia e Utilidades",
+          "despesas": [
+            {
+              "id": "item_1",
+              "descricao": "Companhia Elétrica - Fornecimento",
+              "valor": 1250.80,
+              "competencia": "YYYY-MM",
+              "categoria": "Energia e Utilidades",
+              "sugestao_plano_conta_id": "id_da_conta_se_houver_ou_null"
+            }
+          ]
+        }
+      ]
     }
+  ],
+  "despesas": [
+    /* Lista plana de todos os itens de despesa para retrocompatibilidade */
   ],
   "observacoes": "Resumo objetivo da análise realizada pelo Agente de IA"
 }`
@@ -433,7 +453,7 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
               {
                 role: 'system',
                 content:
-                  'Você é um parser contábil especialista em extração de despesas de PDFs em JSON puro. Retorne estritamente o JSON solicitado.',
+                  'Você é um parser contábil especialista em extração hierárquica de despesas de PDFs (Conta -> Subconta -> Despesas) em JSON puro. Retorne estritamente o JSON solicitado.',
               },
               {
                 role: 'user',
@@ -469,46 +489,182 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
         }
       }
 
-      if (!parsedData || !parsedData.despesas || !Array.isArray(parsedData.despesas)) {
+      if (!parsedData) {
         return e.json(422, {
           error:
-            'O Agente de IA não conseguiu identificar despesas detalhadas estruturadas neste documento PDF. Verifique se o arquivo possui tabelas ou valores claros de despesas.',
+            'O Agente de IA não conseguiu identificar despesas estruturadas neste documento PDF. Verifique se o arquivo possui tabelas ou valores claros de despesas.',
           rawContent: agentResponseContent.slice(0, 500),
         })
       }
 
-      // Validação e normalização dos itens
-      const despesasProcessadas = parsedData.despesas
-        .map((d, idx) => {
-          const valNum = Math.abs(Number(d.valor) || 0)
-          return {
-            id: d.id || `desp_${idx + 1}_${Date.now().toString(36)}`,
-            descricao: String(d.descricao || `Despesa ${idx + 1}`).trim(),
-            valor: valNum,
-            competencia: String(d.competencia || periodoInicio || '').trim(),
-            categoria: String(d.categoria || 'Despesas Operacionais').trim(),
-            sugestao_plano_conta_id: d.sugestao_plano_conta_id || null,
-          }
-        })
-        .filter((d) => d.valor > 0 && d.descricao.length >= 2)
+      // 5. Normalização robusta da hierarquia Conta -> Subconta -> Despesas
+      let seqId = 1
+      const normalizarItemDespesa = (rawItem, nomeConta, nomeSubconta) => {
+        const valNum = Math.abs(Number(rawItem.valor) || 0)
+        const desc = String(rawItem.descricao || `Despesa ${seqId}`).trim()
+        if (valNum <= 0 || desc.length < 2) return null
 
-      if (despesasProcessadas.length === 0) {
+        const itemObj = {
+          id: rawItem.id || `desp_${seqId++}_${Date.now().toString(36)}`,
+          descricao: desc,
+          valor: valNum,
+          competencia: String(rawItem.competencia || periodoInicio || '').trim(),
+          categoria: String(rawItem.categoria || nomeSubconta || nomeConta || 'Despesas').trim(),
+          conta_hierarquia: nomeConta,
+          subconta_hierarquia: nomeSubconta,
+          sugestao_plano_conta_id: rawItem.sugestao_plano_conta_id || null,
+        }
+        return itemObj
+      }
+
+      const contasProcessadas = []
+      const todasDespesas = []
+
+      // Caso A: O modelo retornou a árvore "contas"
+      if (Array.isArray(parsedData.contas) && parsedData.contas.length > 0) {
+        for (const c of parsedData.contas) {
+          const nomeConta = String(c.nome || c.conta || 'Despesas Gerais').trim()
+          const subcontasProcessadas = []
+
+          // Se tem subcontas
+          if (Array.isArray(c.subcontas) && c.subcontas.length > 0) {
+            for (const sc of c.subcontas) {
+              const nomeSubconta = String(sc.nome || sc.subconta || nomeConta).trim()
+              const despesasDaSubconta = []
+
+              const rawList = Array.isArray(sc.despesas)
+                ? sc.despesas
+                : Array.isArray(sc.itens)
+                  ? sc.itens
+                  : []
+
+              for (const rawD of rawList) {
+                const itemNorm = normalizarItemDespesa(rawD, nomeConta, nomeSubconta)
+                if (itemNorm) {
+                  despesasDaSubconta.push(itemNorm)
+                  todasDespesas.push(itemNorm)
+                }
+              }
+
+              if (despesasDaSubconta.length > 0) {
+                const subtotalSubconta = despesasDaSubconta.reduce((acc, d) => acc + d.valor, 0)
+                subcontasProcessadas.push({
+                  id: `sub_${subcontasProcessadas.length + 1}_${Date.now().toString(36)}`,
+                  nome: nomeSubconta,
+                  despesas: despesasDaSubconta,
+                  total_despesas: despesasDaSubconta.length,
+                  valor_subtotal: subtotalSubconta,
+                })
+              }
+            }
+          } else if (Array.isArray(c.despesas) && c.despesas.length > 0) {
+            // Degradação graciosa: conta com despesas diretas sem subcontas
+            const despesasDiretas = []
+            for (const rawD of c.despesas) {
+              const itemNorm = normalizarItemDespesa(rawD, nomeConta, 'Geral')
+              if (itemNorm) {
+                despesasDiretas.push(itemNorm)
+                todasDespesas.push(itemNorm)
+              }
+            }
+            if (despesasDiretas.length > 0) {
+              const subtotal = despesasDiretas.reduce((acc, d) => acc + d.valor, 0)
+              subcontasProcessadas.push({
+                id: `sub_geral_${Date.now().toString(36)}`,
+                nome: 'Geral',
+                despesas: despesasDiretas,
+                total_despesas: despesasDiretas.length,
+                valor_subtotal: subtotal,
+              })
+            }
+          }
+
+          if (subcontasProcessadas.length > 0) {
+            const totalConta = subcontasProcessadas.reduce((acc, sc) => acc + sc.valor_subtotal, 0)
+            const totalItensConta = subcontasProcessadas.reduce(
+              (acc, sc) => acc + sc.total_despesas,
+              0,
+            )
+            contasProcessadas.push({
+              id: `conta_${contasProcessadas.length + 1}_${Date.now().toString(36)}`,
+              nome: nomeConta,
+              subcontas: subcontasProcessadas,
+              total_despesas: totalItensConta,
+              valor_total: totalConta,
+            })
+          }
+        }
+      }
+
+      // Caso B: Se o modelo não retornou "contas" estruturadas ou se a árvore ficou vazia,
+      // mas retornou a lista plana "despesas", constrói a árvore a partir de categoria/subconta
+      if (
+        contasProcessadas.length === 0 &&
+        Array.isArray(parsedData.despesas) &&
+        parsedData.despesas.length > 0
+      ) {
+        const contaMaeNome = parsedData.conta_principal || 'Despesas Gerais / Operacionais'
+        const gruposPorSubconta = new Map()
+
+        for (const rawD of parsedData.despesas) {
+          const nomeSub = String(rawD.subconta || rawD.categoria || 'Geral').trim()
+          const itemNorm = normalizarItemDespesa(rawD, contaMaeNome, nomeSub)
+          if (itemNorm) {
+            todasDespesas.push(itemNorm)
+            const list = gruposPorSubconta.get(nomeSub) || []
+            list.push(itemNorm)
+            gruposPorSubconta.set(nomeSub, list)
+          }
+        }
+
+        const subcontasArr = []
+        for (const [nomeSub, itens] of gruposPorSubconta.entries()) {
+          const subtotal = itens.reduce((acc, d) => acc + d.valor, 0)
+          subcontasArr.push({
+            id: `sub_${subcontasArr.length + 1}_${Date.now().toString(36)}`,
+            nome: nomeSub,
+            despesas: itens,
+            total_despesas: itens.length,
+            valor_subtotal: subtotal,
+          })
+        }
+
+        if (subcontasArr.length > 0) {
+          const totalConta = subcontasArr.reduce((acc, sc) => acc + sc.valor_subtotal, 0)
+          contasProcessadas.push({
+            id: `conta_1_${Date.now().toString(36)}`,
+            nome: contaMaeNome,
+            subcontas: subcontasArr,
+            total_despesas: todasDespesas.length,
+            valor_total: totalConta,
+          })
+        }
+      }
+
+      if (todasDespesas.length === 0) {
         return e.json(422, {
           error:
             'Nenhuma despesa com valor numérico positivo foi encontrada pelo Agente no PDF anexado.',
+          rawContent: agentResponseContent.slice(0, 500),
         })
       }
 
-      const valorTotal = despesasProcessadas.reduce((acc, curr) => acc + curr.valor, 0)
+      const valorTotalGeral = todasDespesas.reduce((acc, curr) => acc + curr.valor, 0)
+      const contaPrincipalFinal =
+        parsedData.conta_principal ||
+        (contasProcessadas.length === 1
+          ? contasProcessadas[0].nome
+          : 'Despesas Gerais / Operacionais')
 
       return e.json(200, {
-        conta_principal: parsedData.conta_principal || 'Despesas Gerais / Operacionais',
-        despesas: despesasProcessadas,
-        total_despesas: despesasProcessadas.length,
-        valor_total: valorTotal,
+        conta_principal: contaPrincipalFinal,
+        contas: contasProcessadas,
+        despesas: todasDespesas,
+        total_despesas: todasDespesas.length,
+        valor_total: valorTotalGeral,
         observacoes:
           parsedData.observacoes ||
-          `Agente de IA identificou ${despesasProcessadas.length} despesas sob a conta agregadora "${parsedData.conta_principal || 'Despesas Gerais'}".`,
+          `Agente de IA identificou ${todasDespesas.length} despesas distribuídas em ${contasProcessadas.length} contas e subtotais sob "${contaPrincipalFinal}".`,
         truncated: isTruncated,
       })
     } catch (err) {

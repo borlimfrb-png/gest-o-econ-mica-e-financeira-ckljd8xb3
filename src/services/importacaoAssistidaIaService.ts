@@ -14,6 +14,8 @@ export interface DespesaIaPropostaItem {
   valor: number
   competencia: string // YYYY-MM ou YYYY-MM-DD
   categoria?: string
+  conta_hierarquia?: string
+  subconta_hierarquia?: string
   sugestao_plano_conta_id?: string | null
 
   // Vínculo atribuído pelo usuário ou sugerido
@@ -24,8 +26,25 @@ export interface DespesaIaPropostaItem {
   origemSugestao?: 'ia' | 'memoria' | 'codigo_empresa' | 'similaridade' | 'manual'
 }
 
+export interface SubcontaIaProposta {
+  id: string
+  nome: string
+  despesas: DespesaIaPropostaItem[]
+  total_despesas: number
+  valor_subtotal: number
+}
+
+export interface ContaIaProposta {
+  id: string
+  nome: string
+  subcontas: SubcontaIaProposta[]
+  total_despesas: number
+  valor_total: number
+}
+
 export interface PropostaImportacaoIaResult {
   conta_principal: string
+  contas: ContaIaProposta[]
   despesas: DespesaIaPropostaItem[]
   total_despesas: number
   valor_total: number
@@ -55,9 +74,14 @@ export interface RascunhoImportacaoRecord {
   status: 'pendente' | 'confirmado' | 'descartado'
   proposta_json: {
     conta_principal: string
+    contas?: ContaIaProposta[]
     despesas: DespesaIaPropostaItem[]
     observacoes?: string
     valor_total: number
+  }
+  hierarquia_json?: {
+    conta_principal: string
+    contas: ContaIaProposta[]
   }
   total_despesas: number
   valor_total: number
@@ -236,7 +260,10 @@ export const importacaoAssistidaIaService = {
     const planoContas = input.planoContas || []
     const memorias = input.memorias || []
 
-    const despesasProcessadas: DespesaIaPropostaItem[] = rawDespesas.map((d) => {
+    // Mapa rápido dos itens processados para reconstruir ou atualizar árvore
+    const mapProcessadosPorId = new Map<string, DespesaIaPropostaItem>()
+
+    const despesasProcessadas: DespesaIaPropostaItem[] = rawDespesas.map((d: any) => {
       const sugestao = sugerirVinculoParaDespesa(
         d.descricao,
         planoContas,
@@ -245,12 +272,14 @@ export const importacaoAssistidaIaService = {
       )
 
       const pc = sugestao.planoConta
-      return {
+      const item: DespesaIaPropostaItem = {
         id: d.id,
         descricao: d.descricao,
         valor: Math.abs(Number(d.valor) || 0),
         competencia: d.competencia || input.periodoInicio,
         categoria: d.categoria,
+        conta_hierarquia: d.conta_hierarquia,
+        subconta_hierarquia: d.subconta_hierarquia,
         sugestao_plano_conta_id: d.sugestao_plano_conta_id,
         planoContaId: pc?.id,
         planoContaNome: pc?.expand?.conta?.nome,
@@ -258,10 +287,79 @@ export const importacaoAssistidaIaService = {
         statusVinculo: pc ? 'vinculada' : 'pendente',
         origemSugestao: sugestao.origem,
       }
+      mapProcessadosPorId.set(item.id, item)
+      return item
     })
+
+    // Reconstrói / sincroniza as contas hierárquicas com os itens que receberam vínculos sugeridos
+    const rawContas = Array.isArray(payload.contas) ? payload.contas : []
+    const contasProcessadas: ContaIaProposta[] = rawContas.map((c: any) => {
+      const subcontas: SubcontaIaProposta[] = (c.subcontas || []).map((sc: any) => {
+        const itensDaSubconta = (sc.despesas || []).map((d: any) => {
+          return (
+            mapProcessadosPorId.get(d.id) || {
+              ...d,
+              statusVinculo: d.planoContaId ? 'vinculada' : 'pendente',
+            }
+          )
+        })
+        const subtotal = itensDaSubconta.reduce(
+          (acc: number, cur: any) => acc + (cur.valor || 0),
+          0,
+        )
+        return {
+          id: sc.id || `sub_${sc.nome}`,
+          nome: sc.nome || 'Geral',
+          despesas: itensDaSubconta,
+          total_despesas: itensDaSubconta.length,
+          valor_subtotal: subtotal,
+        }
+      })
+      const totalConta = subcontas.reduce((acc, sc) => acc + sc.valor_subtotal, 0)
+      const totalItens = subcontas.reduce((acc, sc) => acc + sc.total_despesas, 0)
+      return {
+        id: c.id || `conta_${c.nome}`,
+        nome: c.nome || 'Despesas',
+        subcontas,
+        total_despesas: totalItens,
+        valor_total: totalConta,
+      }
+    })
+
+    // Se porventura contas veio vazio, constrói a árvore a partir de conta_hierarquia / subconta_hierarquia
+    if (contasProcessadas.length === 0 && despesasProcessadas.length > 0) {
+      const contaMae = payload.conta_principal || 'Despesas Gerais'
+      const gruposSub = new Map<string, DespesaIaPropostaItem[]>()
+      for (const item of despesasProcessadas) {
+        const sub = item.subconta_hierarquia || item.categoria || 'Geral'
+        const list = gruposSub.get(sub) || []
+        list.push(item)
+        gruposSub.set(sub, list)
+      }
+      const subcontas: SubcontaIaProposta[] = []
+      for (const [subNome, itens] of gruposSub.entries()) {
+        const subtotal = itens.reduce((acc, i) => acc + (i.valor || 0), 0)
+        subcontas.push({
+          id: `sub_${subNome}`,
+          nome: subNome,
+          despesas: itens,
+          total_despesas: itens.length,
+          valor_subtotal: subtotal,
+        })
+      }
+      const totalConta = subcontas.reduce((acc, sc) => acc + sc.valor_subtotal, 0)
+      contasProcessadas.push({
+        id: `conta_${contaMae}`,
+        nome: contaMae,
+        subcontas,
+        total_despesas: despesasProcessadas.length,
+        valor_total: totalConta,
+      })
+    }
 
     return {
       conta_principal: payload.conta_principal || 'Despesas Gerais e Operacionais',
+      contas: contasProcessadas,
       despesas: despesasProcessadas,
       total_despesas: despesasProcessadas.length,
       valor_total: Number(payload.valor_total) || 0,
@@ -280,6 +378,7 @@ export const importacaoAssistidaIaService = {
     periodoInicio: string
     periodoFim?: string
     contaPrincipal: string
+    contas?: ContaIaProposta[]
     despesas: DespesaIaPropostaItem[]
     observacoes?: string
   }): Promise<RascunhoImportacaoRecord | null> {
@@ -290,7 +389,15 @@ export const importacaoAssistidaIaService = {
     const periodoTipo =
       options.periodoFim && options.periodoFim !== options.periodoInicio ? 'faixa' : 'unico'
 
-    const payload = {
+    const propostaJson = {
+      conta_principal: options.contaPrincipal,
+      contas: options.contas || [],
+      despesas: options.despesas,
+      observacoes: options.observacoes,
+      valor_total: valorTotal,
+    }
+
+    const payload: any = {
       user: userId,
       empresa: options.empresaId || undefined,
       arquivo_nome: options.arquivoNome,
@@ -299,11 +406,10 @@ export const importacaoAssistidaIaService = {
       periodo_fim: options.periodoFim || options.periodoInicio,
       conta_principal: options.contaPrincipal,
       status: 'pendente',
-      proposta_json: {
+      proposta_json: propostaJson,
+      hierarquia_json: {
         conta_principal: options.contaPrincipal,
-        despesas: options.despesas,
-        observacoes: options.observacoes,
-        valor_total: valorTotal,
+        contas: options.contas || [],
       },
       total_despesas: options.despesas.length,
       valor_total: valorTotal,

@@ -50,6 +50,8 @@ import type {
 import {
   importacaoAssistidaIaService,
   type DespesaIaPropostaItem,
+  type ContaIaProposta,
+  type SubcontaIaProposta,
   type RascunhoImportacaoRecord,
 } from '@/services/importacaoAssistidaIaService'
 import { planoContasService, memoriaFornecedoresService } from '@/services/financeService'
@@ -152,6 +154,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
 
   // Resultado da Proposta do Agente de IA
   const [contaPrincipal, setContaPrincipal] = useState<string>('')
+  const [contasHierarquia, setContasHierarquia] = useState<ContaIaProposta[]>([])
   const [despesas, setDespesas] = useState<DespesaIaPropostaItem[]>([])
   const [observacoesIa, setObservacoesIa] = useState<string>('')
   const [isTruncatedDoc, setIsTruncatedDoc] = useState(false)
@@ -170,6 +173,83 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
     vinculosAprendidos: number
   } | null>(null)
 
+  // Reconstrói a árvore de contas/subcontas sempre que a lista de despesas ou contas originais for carregada
+  const arvoreContasSincronizada = useMemo<ContaIaProposta[]>(() => {
+    if (despesas.length === 0) return []
+
+    const despesasMap = new Map<string, DespesaIaPropostaItem>()
+    for (const d of despesas) {
+      despesasMap.set(d.id, d)
+    }
+
+    // Se temos contas estruturadas no estado, mapeia os itens atualizados nelas
+    if (contasHierarquia.length > 0) {
+      return contasHierarquia.map((c) => {
+        const subcontas = (c.subcontas || []).map((sc) => {
+          const itens = (sc.despesas || []).map((d) => despesasMap.get(d.id) || d)
+          const subtotal = itens.reduce((acc, i) => acc + (i.valor || 0), 0)
+          return {
+            ...sc,
+            despesas: itens,
+            total_despesas: itens.length,
+            valor_subtotal: subtotal,
+          }
+        })
+        const totalConta = subcontas.reduce((acc, sc) => acc + sc.valor_subtotal, 0)
+        const totalItens = subcontas.reduce((acc, sc) => acc + sc.total_despesas, 0)
+        return {
+          ...c,
+          subcontas,
+          total_despesas: totalItens,
+          valor_total: totalConta,
+        }
+      })
+    }
+
+    // Fallback: agrupa a partir dos atributos de cada despesa (conta_hierarquia -> subconta_hierarquia)
+    const contasMap = new Map<string, Map<string, DespesaIaPropostaItem[]>>()
+    for (const d of despesas) {
+      const cNome =
+        d.conta_hierarquia || contaPrincipal || 'Despesas Administrativas e Operacionais'
+      const scNome = d.subconta_hierarquia || d.categoria || 'Geral'
+
+      if (!contasMap.has(cNome)) {
+        contasMap.set(cNome, new Map())
+      }
+      const scMap = contasMap.get(cNome)!
+      const list = scMap.get(scNome) || []
+      list.push(d)
+      scMap.set(scNome, list)
+    }
+
+    const result: ContaIaProposta[] = []
+    let cIdx = 1
+    for (const [cNome, scMap] of contasMap.entries()) {
+      const subcontas: SubcontaIaProposta[] = []
+      let scIdx = 1
+      for (const [scNome, itens] of scMap.entries()) {
+        const subtotal = itens.reduce((acc, i) => acc + (i.valor || 0), 0)
+        subcontas.push({
+          id: `sc_${cIdx}_${scIdx++}`,
+          nome: scNome,
+          despesas: itens,
+          total_despesas: itens.length,
+          valor_subtotal: subtotal,
+        })
+      }
+      const totalConta = subcontas.reduce((acc, sc) => acc + sc.valor_subtotal, 0)
+      const totalItens = subcontas.reduce((acc, sc) => acc + sc.total_despesas, 0)
+      result.push({
+        id: `c_${cIdx++}`,
+        nome: cNome,
+        subcontas,
+        total_despesas: totalItens,
+        valor_total: totalConta,
+      })
+    }
+    return result
+  }, [despesas, contasHierarquia, contaPrincipal])
+
   // Carregar rascunho pendente inicial se existir
   useEffect(() => {
     async function checarRascunhoPendente() {
@@ -180,6 +260,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
           setRascunhoId(rasc.id)
           setContaPrincipal(rasc.conta_principal || rasc.proposta_json.conta_principal)
           setDespesas(rasc.proposta_json.despesas || [])
+          setContasHierarquia(rasc.proposta_json.contas || rasc.hierarquia_json?.contas || [])
           setObservacoesIa(rasc.proposta_json.observacoes || '')
           setPeriodoInicio(rasc.periodo_inicio)
           if (rasc.periodo_fim) setPeriodoFim(rasc.periodo_fim)
@@ -303,6 +384,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
       })
 
       setContaPrincipal(result.conta_principal)
+      setContasHierarquia(result.contas || [])
       setDespesas(result.despesas)
       setObservacoesIa(result.observacoes || '')
       setIsTruncatedDoc(Boolean(result.truncated))
@@ -315,6 +397,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
         periodoInicio,
         periodoFim: periodoTipo === 'faixa' ? periodoFim : periodoInicio,
         contaPrincipal: result.conta_principal,
+        contas: result.contas,
         despesas: result.despesas,
         observacoes: result.observacoes,
       })
@@ -385,12 +468,165 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
           periodoInicio,
           periodoFim: periodoTipo === 'faixa' ? periodoFim : periodoInicio,
           contaPrincipal,
+          contas: contasHierarquia,
           despesas: updated,
           observacoes: observacoesIa,
         })
       }
 
       return updated
+    })
+  }
+
+  // Vincular todas as despesas de uma Subconta inteira à mesma conta do plano
+  const handleVincularSubconta = (subconta: SubcontaIaProposta, planoContaId: string) => {
+    const pc = planoContas.find((p) => p.id === planoContaId)
+    const idsSubconta = new Set(subconta.despesas.map((d) => d.id))
+
+    setDespesas((prev) => {
+      const updated = prev.map((item) => {
+        if (idsSubconta.has(item.id)) {
+          if (!planoContaId) {
+            return {
+              ...item,
+              planoContaId: undefined,
+              planoContaNome: undefined,
+              planoContaCodigo: undefined,
+              statusVinculo: 'pendente' as const,
+              origemSugestao: 'manual' as const,
+            }
+          }
+          return {
+            ...item,
+            planoContaId: pc?.id,
+            planoContaNome: pc?.expand?.conta?.nome,
+            planoContaCodigo: pc?.codigo,
+            statusVinculo: 'vinculada' as const,
+            origemSugestao: 'manual' as const,
+          }
+        }
+        return item
+      })
+
+      if (selectedFile && activeEmpresaId) {
+        importacaoAssistidaIaService.salvarRascunho({
+          rascunhoId,
+          empresaId: activeEmpresaId,
+          arquivoNome: selectedFile.name,
+          periodoInicio,
+          periodoFim: periodoTipo === 'faixa' ? periodoFim : periodoInicio,
+          contaPrincipal,
+          contas: contasHierarquia,
+          despesas: updated,
+          observacoes: observacoesIa,
+        })
+      }
+
+      return updated
+    })
+
+    if (pc) {
+      toast({
+        title: 'Subconta vinculada!',
+        description: `Todas as ${subconta.despesas.length} despesas de "${subconta.nome}" foram vinculadas à conta "${pc.expand?.conta?.nome || pc.codigo}".`,
+      })
+    }
+  }
+
+  // Vincular todas as despesas de uma Conta inteira à mesma conta do plano
+  const handleVincularConta = (conta: ContaIaProposta, planoContaId: string) => {
+    const pc = planoContas.find((p) => p.id === planoContaId)
+    const idsConta = new Set<string>()
+    for (const sc of conta.subcontas) {
+      for (const d of sc.despesas) {
+        idsConta.add(d.id)
+      }
+    }
+
+    setDespesas((prev) => {
+      const updated = prev.map((item) => {
+        if (idsConta.has(item.id)) {
+          if (!planoContaId) {
+            return {
+              ...item,
+              planoContaId: undefined,
+              planoContaNome: undefined,
+              planoContaCodigo: undefined,
+              statusVinculo: 'pendente' as const,
+              origemSugestao: 'manual' as const,
+            }
+          }
+          return {
+            ...item,
+            planoContaId: pc?.id,
+            planoContaNome: pc?.expand?.conta?.nome,
+            planoContaCodigo: pc?.codigo,
+            statusVinculo: 'vinculada' as const,
+            origemSugestao: 'manual' as const,
+          }
+        }
+        return item
+      })
+
+      if (selectedFile && activeEmpresaId) {
+        importacaoAssistidaIaService.salvarRascunho({
+          rascunhoId,
+          empresaId: activeEmpresaId,
+          arquivoNome: selectedFile.name,
+          periodoInicio,
+          periodoFim: periodoTipo === 'faixa' ? periodoFim : periodoInicio,
+          contaPrincipal,
+          contas: contasHierarquia,
+          despesas: updated,
+          observacoes: observacoesIa,
+        })
+      }
+
+      return updated
+    })
+
+    if (pc) {
+      toast({
+        title: 'Grupo de Conta vinculado!',
+        description: `Todas as ${idsConta.size} despesas de "${conta.nome}" foram vinculadas à conta "${pc.expand?.conta?.nome || pc.codigo}".`,
+      })
+    }
+  }
+
+  // Selecionar / Deselecionar todos os itens de uma Subconta
+  const handleToggleSelectSubconta = (subconta: SubcontaIaProposta) => {
+    const subIds = subconta.despesas.map((d) => d.id)
+    const todosJaSelecionados = subIds.every((id) => selectedDespesaIds.has(id))
+
+    setSelectedDespesaIds((prev) => {
+      const next = new Set(prev)
+      if (todosJaSelecionados) {
+        subIds.forEach((id) => next.delete(id))
+      } else {
+        subIds.forEach((id) => next.add(id))
+      }
+      return next
+    })
+  }
+
+  // Selecionar / Deselecionar todos os itens de uma Conta
+  const handleToggleSelectConta = (conta: ContaIaProposta) => {
+    const contaIds: string[] = []
+    for (const sc of conta.subcontas) {
+      for (const d of sc.despesas) {
+        contaIds.push(d.id)
+      }
+    }
+    const todosJaSelecionados = contaIds.every((id) => selectedDespesaIds.has(id))
+
+    setSelectedDespesaIds((prev) => {
+      const next = new Set(prev)
+      if (todosJaSelecionados) {
+        contaIds.forEach((id) => next.delete(id))
+      } else {
+        contaIds.forEach((id) => next.add(id))
+      }
+      return next
     })
   }
 
@@ -430,6 +666,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
           periodoInicio,
           periodoFim: periodoTipo === 'faixa' ? periodoFim : periodoInicio,
           contaPrincipal,
+          contas: contasHierarquia,
           despesas: updated,
           observacoes: observacoesIa,
         })
@@ -516,7 +753,13 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
     return Array.from(map.values())
   }, [planoContasFiltrado])
 
-  // Exportação em Excel / CSV da proposta
+  // Conta selecionada na árvore do lado direito (para exibição do nome)
+  const contaPlanoSelecionadaNaArvore = useMemo(() => {
+    if (!selectedTreePlanoId) return null
+    return planoContas.find((p) => p.id === selectedTreePlanoId) || null
+  }, [planoContas, selectedTreePlanoId])
+
+  // Exportação em Excel / CSV da proposta com Hierarquia Estruturada (▶ CONTA:, ▶ SUBCONTA:, itens abaixo)
   const handleExportarExcel = (tipo: 'xlsx' | 'csv') => {
     if (despesas.length === 0) {
       toast({
@@ -526,24 +769,90 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
       return
     }
 
-    const rows = despesas.map((d, idx) => ({
-      Item: idx + 1,
-      'Conta Principal (Mãe)': contaPrincipal || 'Despesas Gerais',
-      Descrição: d.descricao,
-      Competência: d.competencia,
-      'Valor (R$)': d.valor,
-      'Status Vínculo': d.statusVinculo === 'vinculada' ? 'Vinculada' : 'Pendente',
-      'Conta Vinculada': d.planoContaNome || 'Não vinculada',
-      'Código Plano Contas': d.planoContaCodigo || '',
-      'Origem Sugestão': d.origemSugestao || 'ia',
-      Categoria: d.categoria || '',
-    }))
+    // Linhas hierárquicas refletindo:
+    // Linha ▶ CONTA: Nome (Total R$)
+    // Linha   ▶ SUBCONTA: Nome (Subtotal R$)
+    // Linhas    Itens de despesa indentados com detalhes
+    const hierarquiaRows: Array<{
+      Nível: string
+      'Conta / Grupo': string
+      'Subconta / Subgrupo': string
+      'Descrição / Fornecedor': string
+      Competência: string
+      'Valor (R$)': number | string
+      'Status Vínculo': string
+      'Conta Vinculada': string
+      'Código Plano Contas': string
+      'Origem Sugestão': string
+    }> = []
 
-    const ws = XLSX.utils.json_to_sheet(rows)
+    for (const conta of arvoreContasSincronizada) {
+      // Linha de cabeçalho da Conta
+      hierarquiaRows.push({
+        Nível: 'CONTA',
+        'Conta / Grupo': `▶ CONTA: ${conta.nome.toUpperCase()}`,
+        'Subconta / Subgrupo': '',
+        'Descrição / Fornecedor': `Total da Conta (${conta.total_despesas} itens)`,
+        Competência: '',
+        'Valor (R$)': conta.valor_total,
+        'Status Vínculo': '',
+        'Conta Vinculada': '',
+        'Código Plano Contas': '',
+        'Origem Sugestão': '',
+      })
+
+      for (const subconta of conta.subcontas) {
+        // Linha de cabeçalho da Subconta
+        hierarquiaRows.push({
+          Nível: 'SUBCONTA',
+          'Conta / Grupo': conta.nome,
+          'Subconta / Subgrupo': `  ▶ SUBCONTA: ${subconta.nome}`,
+          'Descrição / Fornecedor': `Subtotal da Subconta (${subconta.total_despesas} itens)`,
+          Competência: '',
+          'Valor (R$)': subconta.valor_subtotal,
+          'Status Vínculo': '',
+          'Conta Vinculada': '',
+          'Código Plano Contas': '',
+          'Origem Sugestão': '',
+        })
+
+        // Linhas de despesas detalhadas
+        for (const item of subconta.despesas) {
+          hierarquiaRows.push({
+            Nível: 'ITEM',
+            'Conta / Grupo': conta.nome,
+            'Subconta / Subgrupo': subconta.nome,
+            'Descrição / Fornecedor': `    • ${item.descricao}`,
+            Competência: item.competencia,
+            'Valor (R$)': item.valor,
+            'Status Vínculo': item.statusVinculo === 'vinculada' ? 'Vinculada' : 'Pendente',
+            'Conta Vinculada': item.planoContaNome || 'Não vinculada',
+            'Código Plano Contas': item.planoContaCodigo || '',
+            'Origem Sugestão': item.origemSugestao || 'ia',
+          })
+        }
+      }
+    }
+
+    // Linha de total geral no final
+    hierarquiaRows.push({
+      Nível: 'TOTAL GERAL',
+      'Conta / Grupo': `TOTAL GERAL CONFERIDO (${contaPrincipal})`,
+      'Subconta / Subgrupo': '',
+      'Descrição / Fornecedor': `Soma de ${despesas.length} despesas analisadas`,
+      Competência: periodoInicio,
+      'Valor (R$)': totalGeralConferido,
+      'Status Vínculo': `${despesasVinculadasCount}/${despesas.length} vinculadas`,
+      'Conta Vinculada': '',
+      'Código Plano Contas': '',
+      'Origem Sugestão': '',
+    })
+
+    const ws = XLSX.utils.json_to_sheet(hierarquiaRows)
     const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Proposta_Despesas_IA')
+    XLSX.utils.book_append_sheet(wb, ws, 'Hierarquia_Despesas_IA')
 
-    const nomeArquivo = `Proposta_Importacao_IA_${periodoInicio}_${new Date().toISOString().slice(0, 10)}.${tipo}`
+    const nomeArquivo = `Hierarquia_Despesas_IA_${periodoInicio}_${new Date().toISOString().slice(0, 10)}.${tipo}`
 
     if (tipo === 'csv') {
       XLSX.writeFile(wb, nomeArquivo, { bookType: 'csv' })
@@ -553,7 +862,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
 
     toast({
       title: 'Arquivo exportado!',
-      description: `O arquivo ${nomeArquivo} foi baixado com sucesso.`,
+      description: `O arquivo ${nomeArquivo} foi baixado com sucesso refletindo a hierarquia Conta → Subconta → Despesas.`,
     })
   }
 
@@ -974,7 +1283,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
           {/* Layout Principal em 2 Colunas */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* ========================================================================= */}
-            {/* COLUNA ESQUERDA (7 colunas): Lista de Despesas Detalhadas Extraídas do PDF */}
+            {/* COLUNA ESQUERDA (7 colunas): Árvore Hierárquica CONTA -> SUBCONTA -> DESPESAS */}
             {/* ========================================================================= */}
             <div className="lg:col-span-7 space-y-4">
               <Card className="border-slate-200 shadow-sm">
@@ -982,11 +1291,12 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
                       <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                        Despesas Detalhadas Extraídas ({despesas.length})
+                        <FolderTree className="w-4 h-4 text-blue-600" />
+                        Estrutura do Documento: Conta → Subconta → Despesas ({despesas.length})
                       </CardTitle>
                       <CardDescription className="text-xs">
-                        Vincule cada despesa individualmente ou selecione várias para vincular em
-                        lote.
+                        Cabeçalhos de grupo aparecem uma vez só com subtotais. Vincule itens,
+                        subcontas inteiras ou faça seleção em lote.
                       </CardDescription>
                     </div>
 
@@ -1003,17 +1313,25 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                             className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-7 px-2.5 font-medium gap-1"
                           >
                             <LinkIcon className="w-3 h-3" />
-                            Vincular à conta selecionada
+                            Vincular à conta do plano
                           </Button>
                         )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setSelectedDespesaIds(new Set())}
+                          className="text-slate-500 hover:text-slate-700 h-7 px-2 text-[11px]"
+                        >
+                          Limpar
+                        </Button>
                       </div>
                     )}
                   </div>
                 </CardHeader>
 
                 <CardContent className="p-0">
-                  {/* Cabeçalho da Tabela */}
-                  <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 grid grid-cols-12 text-[11px] font-semibold text-slate-600 uppercase tracking-wider items-center">
+                  {/* Cabeçalho Geral da Tabela */}
+                  <div className="bg-slate-100/90 px-4 py-2.5 border-b border-slate-200 grid grid-cols-12 text-[11px] font-semibold text-slate-700 uppercase tracking-wider items-center">
                     <div className="col-span-1 flex items-center">
                       <input
                         type="checkbox"
@@ -1022,83 +1340,201 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                         }
                         onChange={handleToggleSelectAll}
                         className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                        title="Selecionar todos os itens de despesa"
                       />
                     </div>
-                    <div className="col-span-5">Descrição / Fornecedor</div>
-                    <div className="col-span-2 text-right">Valor</div>
+                    <div className="col-span-5">Estrutura / Descrição</div>
+                    <div className="col-span-2 text-right">Valor / Subtotal</div>
                     <div className="col-span-4 text-center">Vínculo Plano de Contas</div>
                   </div>
 
-                  {/* Lista de Linhas */}
-                  <div className="divide-y divide-slate-100 max-h-[560px] overflow-y-auto">
-                    {despesas.map((item) => {
-                      const isSelected = selectedDespesaIds.has(item.id)
-                      const isVinculada = Boolean(item.planoContaId)
+                  {/* Renderização da Árvore Hierárquica: CONTA -> SUBCONTA -> DESPESAS */}
+                  <div className="divide-y divide-slate-100 max-h-[620px] overflow-y-auto">
+                    {arvoreContasSincronizada.map((conta) => {
+                      // Verifica se todos os itens da conta estão selecionados
+                      const contaItensIds: string[] = []
+                      for (const sc of conta.subcontas) {
+                        for (const d of sc.despesas) {
+                          contaItensIds.push(d.id)
+                        }
+                      }
+                      const allContaSelected =
+                        contaItensIds.length > 0 &&
+                        contaItensIds.every((id) => selectedDespesaIds.has(id))
 
                       return (
-                        <div
-                          key={item.id}
-                          className={`px-4 py-3 grid grid-cols-12 gap-2 text-xs items-center transition-colors ${
-                            isSelected
-                              ? 'bg-blue-50/70'
-                              : isVinculada
-                                ? 'hover:bg-slate-50/60'
-                                : 'bg-amber-50/30 hover:bg-amber-50/60'
-                          }`}
-                        >
-                          {/* Checkbox de seleção */}
-                          <div className="col-span-1 flex items-center">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => handleToggleSelectItem(item.id)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
-                            />
-                          </div>
+                        <div key={conta.id} className="bg-white">
+                          {/* 1. CABEÇALHO DE GRUPO: CONTA (Uma vez só, consistente com DRE / Despesas Fixas) */}
+                          <div className="bg-slate-800 text-white px-4 py-2 flex items-center justify-between text-xs font-bold tracking-wide shadow-xs">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={allContaSelected}
+                                onChange={() => handleToggleSelectConta(conta)}
+                                className="rounded border-slate-600 text-blue-500 focus:ring-blue-400 h-3.5 w-3.5 cursor-pointer bg-slate-700"
+                                title="Selecionar toda a Conta"
+                              />
+                              <Layers className="w-3.5 h-3.5 text-blue-300 shrink-0" />
+                              <span className="uppercase text-[11px] text-blue-200">CONTA:</span>
+                              <span className="text-slate-50 font-semibold">{conta.nome}</span>
+                              <Badge className="bg-slate-700 text-slate-300 border-0 text-[10px] px-1.5 py-0">
+                                {conta.total_despesas}{' '}
+                                {conta.total_despesas === 1 ? 'item' : 'itens'}
+                              </Badge>
+                            </div>
 
-                          {/* Descrição e Competência */}
-                          <div className="col-span-5 space-y-0.5 pr-2">
-                            <p className="font-semibold text-slate-800 line-clamp-2">
-                              {item.descricao}
-                            </p>
-                            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
-                              <span className="font-mono bg-slate-100 px-1.5 py-0.2 rounded text-[10px]">
-                                {item.competencia}
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono text-xs font-bold text-emerald-300">
+                                {formatMoeda(conta.valor_total)}
                               </span>
-                              {item.categoria && (
-                                <span className="text-slate-400">• {item.categoria}</span>
-                              )}
-                              {item.origemSugestao === 'memoria' && (
-                                <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] px-1 py-0 h-4">
-                                  🧠 Aprendido
-                                </Badge>
+
+                              {selectedTreePlanoId && (
+                                <Button
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => handleVincularConta(conta, selectedTreePlanoId)}
+                                  className="h-6 px-2 text-[10px] bg-blue-500/30 hover:bg-blue-500/50 text-blue-100 border border-blue-400/30"
+                                  title="Vincular todos os itens desta Conta à conta do plano selecionada à direita"
+                                >
+                                  <LinkIcon className="w-2.5 h-2.5 mr-1" />
+                                  Vincular Conta
+                                </Button>
                               )}
                             </div>
                           </div>
 
-                          {/* Valor Monetário */}
-                          <div className="col-span-2 text-right font-mono font-bold text-slate-900">
-                            {formatMoeda(item.valor)}
-                          </div>
+                          {/* 2. SUBCONTAS (Indentadas) */}
+                          {conta.subcontas.map((subconta) => {
+                            const subIds = subconta.despesas.map((d) => d.id)
+                            const allSubSelected =
+                              subIds.length > 0 && subIds.every((id) => selectedDespesaIds.has(id))
 
-                          {/* Seletor Combobox de Vínculo com o Plano de Contas */}
-                          <div className="col-span-4 pl-1">
-                            <SeletorPlanoContaCombobox
-                              value={item.planoContaId || ''}
-                              onValueChange={(val) => handleVincularItem(item.id, val)}
-                              planoContas={planoContas}
-                              placeholder="Vincular conta..."
-                              className="h-8 text-xs bg-white"
-                              empresaAtivaId={activeEmpresaId}
-                              allowClear
-                            />
-                            {item.statusVinculo === 'pendente' && (
-                              <p className="text-[10px] text-amber-700 font-medium mt-0.5 flex items-center gap-1">
-                                <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
-                                Pendente de vínculo
-                              </p>
-                            )}
-                          </div>
+                            return (
+                              <div
+                                key={subconta.id}
+                                className="border-b border-slate-100 last:border-b-0"
+                              >
+                                {/* CABEÇALHO DE SUBGRUPO: SUBCONTA (Indentado, uma vez só) */}
+                                <div className="bg-slate-100/90 pl-8 pr-4 py-1.5 flex items-center justify-between text-xs font-semibold text-slate-800 border-t border-slate-200">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={allSubSelected}
+                                      onChange={() => handleToggleSelectSubconta(subconta)}
+                                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                                      title="Selecionar toda a Subconta"
+                                    />
+                                    <ChevronRight className="w-3.5 h-3.5 text-blue-600" />
+                                    <span className="text-[11px] font-bold text-slate-600 uppercase">
+                                      SUBCONTA:
+                                    </span>
+                                    <span className="text-slate-900 font-semibold">
+                                      {subconta.nome}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500">
+                                      ({subconta.total_despesas}{' '}
+                                      {subconta.total_despesas === 1 ? 'despesa' : 'despesas'})
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-mono text-xs font-bold text-slate-800">
+                                      {formatMoeda(subconta.valor_subtotal)}
+                                    </span>
+
+                                    {selectedTreePlanoId && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() =>
+                                          handleVincularSubconta(subconta, selectedTreePlanoId)
+                                        }
+                                        className="h-5 px-1.5 text-[10px] border-blue-300 text-blue-700 hover:bg-blue-50 font-medium"
+                                        title="Vincular todos os itens desta subconta à conta selecionada à direita"
+                                      >
+                                        <LinkIcon className="w-2.5 h-2.5 mr-1" />
+                                        Vincular Subconta
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* 3. ITENS DE DESPESA INDENTADOS ABAIXO DA SUBCONTA */}
+                                <div className="divide-y divide-slate-100 bg-white">
+                                  {subconta.despesas.map((item) => {
+                                    const isSelected = selectedDespesaIds.has(item.id)
+                                    const isVinculada = Boolean(item.planoContaId)
+
+                                    return (
+                                      <div
+                                        key={item.id}
+                                        className={`pl-12 pr-4 py-2.5 grid grid-cols-12 gap-2 text-xs items-center transition-colors ${
+                                          isSelected
+                                            ? 'bg-blue-50/70'
+                                            : isVinculada
+                                              ? 'hover:bg-slate-50/60'
+                                              : 'bg-amber-50/30 hover:bg-amber-50/60'
+                                        }`}
+                                      >
+                                        {/* Checkbox individual */}
+                                        <div className="col-span-1 flex items-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={isSelected}
+                                            onChange={() => handleToggleSelectItem(item.id)}
+                                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5 cursor-pointer"
+                                          />
+                                        </div>
+
+                                        {/* Descrição e Metadados do item */}
+                                        <div className="col-span-5 space-y-0.5 pr-2">
+                                          <p className="font-semibold text-slate-800 line-clamp-2">
+                                            {item.descricao}
+                                          </p>
+                                          <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-500">
+                                            <span className="font-mono bg-slate-100 px-1.5 py-0.2 rounded text-[10px]">
+                                              {item.competencia}
+                                            </span>
+                                            {item.origemSugestao === 'memoria' && (
+                                              <Badge className="bg-purple-100 text-purple-700 border-purple-200 text-[10px] px-1 py-0 h-4">
+                                                🧠 Aprendido
+                                              </Badge>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        {/* Valor Monetário do Item */}
+                                        <div className="col-span-2 text-right font-mono font-bold text-slate-900">
+                                          {formatMoeda(item.valor)}
+                                        </div>
+
+                                        {/* Seletor Combobox de Vínculo com o Plano de Contas */}
+                                        <div className="col-span-4 pl-1">
+                                          <SeletorPlanoContaCombobox
+                                            value={item.planoContaId || ''}
+                                            onValueChange={(val) =>
+                                              handleVincularItem(item.id, val)
+                                            }
+                                            planoContas={planoContas}
+                                            placeholder="Vincular conta..."
+                                            className="h-8 text-xs bg-white"
+                                            empresaAtivaId={activeEmpresaId}
+                                            allowClear
+                                          />
+                                          {item.statusVinculo === 'pendente' && (
+                                            <p className="text-[10px] text-amber-700 font-medium mt-0.5 flex items-center gap-1">
+                                              <AlertCircle className="w-2.5 h-2.5 text-amber-500" />
+                                              Pendente de vínculo
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
                       )
                     })}
@@ -1120,13 +1556,40 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                         Plano de Contas da Empresa
                       </CardTitle>
                       <CardDescription className="text-xs">
-                        Pesquise e clique para vincular à(s) despesa(s) selecionada(s).
+                        Clique em uma conta para selecioná-la e ligar aos lançamentos da esquerda
+                        (individual ou em lote).
                       </CardDescription>
                     </div>
                     <Badge variant="outline" className="text-xs font-mono font-bold text-slate-700">
                       {planoContasFiltrado.length}
                     </Badge>
                   </div>
+
+                  {/* Detalhe da conta atualmente selecionada na árvore */}
+                  {contaPlanoSelecionadaNaArvore && (
+                    <div className="mt-2 p-2 bg-indigo-50 border border-indigo-200 rounded-lg flex items-center justify-between text-xs">
+                      <div className="min-w-0 pr-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 block">
+                          Conta ativa para ligação:
+                        </span>
+                        <p className="font-semibold text-indigo-950 truncate">
+                          {contaPlanoSelecionadaNaArvore.expand?.conta?.codigo ||
+                            contaPlanoSelecionadaNaArvore.codigo}{' '}
+                          - {contaPlanoSelecionadaNaArvore.expand?.conta?.nome || 'Conta'}
+                        </p>
+                      </div>
+                      {selectedDespesaIds.size > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleVincularEmLote(contaPlanoSelecionadaNaArvore.id)}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] h-7 px-2.5 shrink-0 gap-1"
+                        >
+                          <LinkIcon className="w-3 h-3" />
+                          Ligar ({selectedDespesaIds.size})
+                        </Button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Campo de Busca Rápida */}
                   <div className="relative mt-2">
@@ -1199,7 +1662,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                                         }}
                                         className="h-6 px-2 text-[10px] bg-blue-100 text-blue-800 hover:bg-blue-200 font-medium"
                                       >
-                                        Vincular ({selectedDespesaIds.size})
+                                        Ligar ({selectedDespesaIds.size})
                                       </Button>
                                     ) : (
                                       <ChevronRight className="w-3.5 h-3.5 text-slate-300" />

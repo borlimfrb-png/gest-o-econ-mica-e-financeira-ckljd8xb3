@@ -163,4 +163,67 @@ describe('importacaoAssistidaIaService - Vínculos e Sugestão Automática', () 
     expect(res.origem).toBe('manual')
     expect(res.planoConta).toBeUndefined()
   })
+
+  it('deve suportar estrutura hierárquica Conta -> Subconta -> Despesas em PropostaImportacaoIaResult', () => {
+    const item1: DespesaIaPropostaItem = {
+      id: 'd1',
+      descricao: 'Enel Distribuição',
+      valor: 850.5,
+      competencia: '2025-01',
+      categoria: 'Energia',
+      conta_hierarquia: 'Despesas Administrativas',
+      subconta_hierarquia: 'Energia e Água',
+      statusVinculo: 'vinculada',
+      planoContaId: 'pc_1',
+    }
+
+    const item2: DespesaIaPropostaItem = {
+      id: 'd2',
+      descricao: 'Licença Microsoft',
+      valor: 420.0,
+      competencia: '2025-01',
+      categoria: 'TI',
+      conta_hierarquia: 'Despesas Administrativas',
+      subconta_hierarquia: 'Softwares e TI',
+      statusVinculo: 'vinculada',
+      planoContaId: 'pc_2',
+    }
+
+    const proposta = {
+      conta_principal: 'Despesas Administrativas',
+      contas: [
+        {
+          id: 'c_1',
+          nome: 'Despesas Administrativas',
+          subcontas: [
+            {
+              id: 'sc_1',
+              nome: 'Energia e Água',
+              despesas: [item1],
+              total_despesas: 1,
+              valor_subtotal: 850.5,
+            },
+            {
+              id: 'sc_2',
+              nome: 'Softwares e TI',
+              despesas: [item2],
+              total_despesas: 1,
+              valor_subtotal: 420.0,
+            },
+          ],
+          total_despesas: 2,
+          valor_total: 1270.5,
+        },
+      ],
+      despesas: [item1, item2],
+      total_despesas: 2,
+      valor_total: 1270.5,
+    }
+
+    expect(proposta.contas.length).toBe(1)
+    expect(proposta.contas[0].subcontas.length).toBe(2)
+    expect(proposta.contas[0].subcontas[0].nome).toBe('Energia e Água')
+    expect(proposta.contas[0].subcontas[0].despesas[0].valor).toBe(850.5)
+    expect(proposta.valor_total).toBe(1270.5)
+  })
 })
