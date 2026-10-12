@@ -30,6 +30,8 @@ import {
 import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import { ImportarDespesasIA } from '@/components/ImportarDespesasIA'
 import { ImportarLancamentosExcelIA } from '@/components/ImportarLancamentosExcelIA'
+import { ImportacaoAssistidaIa } from '@/components/ImportacaoAssistidaIa'
+import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -98,6 +100,11 @@ import * as XLSX from 'xlsx'
 export default function Importacao() {
   const { toast } = useToast()
   const navigate = useNavigate()
+  const { user, isAdmin } = useAuth()
+
+  // Usuários com perfil cliente não devem acessar a importação assistida por IA
+  const isClientePerfil = user?.role === 'cliente'
+  const podeAcessarIaPdf = isAdmin || (!isClientePerfil && user?.role)
 
   // ----------------------------------------------------
   // Estados Compartilhados e Catálogos
@@ -1148,17 +1155,34 @@ export default function Importacao() {
         </div>
       </div>
 
-      {/* Abas Principais: Lançamentos (Excel + IA), Despesas (IA), Balancete, PDF para Excel, etc. */}
-      <Tabs defaultValue="lancamentos-excel-ia" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 max-w-5xl bg-slate-100 p-1 rounded-xl">
+      {/* Abas Principais: Importação com IA (PDF), Lançamentos (Excel + IA), Despesas (IA), Balancete, etc. */}
+      <Tabs
+        defaultValue={podeAcessarIaPdf ? 'importacao-ia-pdf' : 'lancamentos-excel-ia'}
+        className="space-y-6"
+      >
+        <TabsList
+          className={`grid w-full ${podeAcessarIaPdf ? 'grid-cols-2 md:grid-cols-7 max-w-6xl' : 'grid-cols-2 md:grid-cols-6 max-w-5xl'} bg-slate-100 p-1 rounded-xl`}
+        >
+          {podeAcessarIaPdf && (
+            <TabsTrigger
+              value="importacao-ia-pdf"
+              className="flex items-center gap-1.5 font-bold data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md rounded-lg text-xs sm:text-sm transition-all"
+            >
+              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+              Importação com IA
+              <span className="text-[10px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
+                PDF
+              </span>
+            </TabsTrigger>
+          )}
           <TabsTrigger
             value="lancamentos-excel-ia"
             className="flex items-center gap-1.5 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-lg text-xs sm:text-sm"
           >
-            <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+            <Sparkles className="w-4 h-4 text-blue-600" />
             Lançamentos (Excel + IA)
             <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
-              Novo
+              Excel
             </span>
           </TabsTrigger>
           <TabsTrigger
@@ -1203,6 +1227,21 @@ export default function Importacao() {
             Importar Excel
           </TabsTrigger>
         </TabsList>
+
+        {/* ========================================================================= */}
+        {/* ABA NOVA: IMPORTAÇÃO ASSISTIDA POR IA (PDF COM DUAS COLUNAS E VÍNCULOS)    */}
+        {/* ========================================================================= */}
+        {podeAcessarIaPdf && (
+          <TabsContent value="importacao-ia-pdf" className="space-y-6 focus:outline-none">
+            <ImportacaoAssistidaIa
+              empresas={empresas}
+              planoContas={planoContas}
+              centros={centros}
+              tiposDespesas={tiposDespesas}
+              onReloadCatalogs={loadInitialCatalogs}
+            />
+          </TabsContent>
+        )}
 
         {/* ========================================================================= */}
         {/* ABA NOVA: IMPORTAR LANÇAMENTOS (EXCEL + IA) MÊS A MÊS                     */}

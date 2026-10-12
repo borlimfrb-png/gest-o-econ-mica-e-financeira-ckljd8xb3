@@ -1,0 +1,166 @@
+import { describe, it, expect, vi } from 'vitest'
+import {
+  sugerirVinculoParaDespesa,
+  importacaoAssistidaIaService,
+  type DespesaIaPropostaItem,
+} from './importacaoAssistidaIaService'
+import type { PlanoContaRecord, MemoriaFornecedorRecord } from '@/types/finance'
+
+describe('importacaoAssistidaIaService - Vínculos e Sugestão Automática', () => {
+  const planoContasMock: PlanoContaRecord[] = [
+    {
+      id: 'pc_1',
+      codigo: '3.1.1.01',
+      codigo_empresa: '31101',
+      empresa: 'emp_1',
+      conta: 'c_energia',
+      centro: 'cc_adm',
+      tipo_despesa: 'td_fixa',
+      user: 'u1',
+      collectionId: 'pc_col',
+      collectionName: 'plano_contas',
+      created: '',
+      updated: '',
+      expand: {
+        conta: {
+          id: 'c_energia',
+          codigo: '3.1.1.01',
+          nome: 'Energia Elétrica',
+          tipo: 'Despesa',
+          user: 'u1',
+          collectionId: 'c1',
+          collectionName: 'contas',
+          created: '',
+          updated: '',
+        },
+        centro: {
+          id: 'cc_adm',
+          nome: 'Administrativo',
+          codigo: '1.01',
+          empresa: 'emp_1',
+          tipo: 'Despesa',
+          user: 'u1',
+          collectionId: 'c2',
+          collectionName: 'centros',
+          created: '',
+          updated: '',
+        },
+      },
+    },
+    {
+      id: 'pc_2',
+      codigo: '3.1.2.05',
+      codigo_empresa: '31205',
+      empresa: 'emp_1',
+      conta: 'c_ti',
+      centro: 'cc_ti',
+      tipo_despesa: 'td_fixa',
+      user: 'u1',
+      collectionId: 'pc_col',
+      collectionName: 'plano_contas',
+      created: '',
+      updated: '',
+      expand: {
+        conta: {
+          id: 'c_ti',
+          codigo: '3.1.2.05',
+          nome: 'Softwares e Licenças de TI',
+          tipo: 'Despesa',
+          user: 'u1',
+          collectionId: 'c1',
+          collectionName: 'contas',
+          created: '',
+          updated: '',
+        },
+        centro: {
+          id: 'cc_ti',
+          nome: 'Tecnologia da Informação',
+          codigo: '1.02',
+          empresa: 'emp_1',
+          tipo: 'Despesa',
+          user: 'u1',
+          collectionId: 'c2',
+          collectionName: 'centros',
+          created: '',
+          updated: '',
+        },
+      },
+    },
+  ]
+
+  const memoriasMock: MemoriaFornecedorRecord[] = [
+    {
+      id: 'mem_1',
+      user: 'u1',
+      fornecedor_padrao: 'Enel Distribuição São Paulo',
+      termo_busca: 'enel distribuicao',
+      plano_conta: 'pc_1',
+      empresa: 'emp_1',
+      total_utilizacoes: 5,
+      categoria_sugerida: 'Despesas Administrativas',
+      created: '',
+      updated: '',
+    },
+  ]
+
+  it('deve priorizar sugestão do Agente de IA quando o ID existir no plano', () => {
+    const res = sugerirVinculoParaDespesa(
+      'Fatura Microsoft Azure Cloud',
+      planoContasMock,
+      memoriasMock,
+      'pc_2',
+    )
+
+    expect(res.origem).toBe('ia')
+    expect(res.planoConta?.id).toBe('pc_2')
+  })
+
+  it('deve utilizar a Memória do Agente para fornecedores previamente vinculados', () => {
+    const res = sugerirVinculoParaDespesa(
+      'Pagamento Enel Distribuição ref mês 03',
+      planoContasMock,
+      memoriasMock,
+      null,
+    )
+
+    expect(res.origem).toBe('memoria')
+    expect(res.planoConta?.id).toBe('pc_1')
+    expect(res.planoConta?.expand?.conta?.nome).toBe('Energia Elétrica')
+  })
+
+  it('deve sugerir por similaridade com o nome da conta quando não houver memória', () => {
+    const res = sugerirVinculoParaDespesa(
+      'Licenças de TI e Softwares do setor',
+      planoContasMock,
+      [],
+      null,
+    )
+
+    expect(res.origem).toBe('similaridade')
+    expect(res.planoConta?.id).toBe('pc_2')
+  })
+
+  it('deve sugerir por código da empresa se contido na descrição', () => {
+    const res = sugerirVinculoParaDespesa(
+      'Despesa rateio código 31101 interna',
+      planoContasMock,
+      [],
+      null,
+    )
+
+    expect(res.origem).toBe('codigo_empresa')
+    expect(res.planoConta?.id).toBe('pc_1')
+  })
+
+  it('deve retornar status manual quando nenhuma heurística encontrar correspondência', () => {
+    const res = sugerirVinculoParaDespesa(
+      'Fornecedor Xpto Sem Nenhuma Relação Conhecida',
+      planoContasMock,
+      [],
+      null,
+    )
+
+    expect(res.origem).toBe('manual')
+    expect(res.planoConta).toBeUndefined()
+  })
+})

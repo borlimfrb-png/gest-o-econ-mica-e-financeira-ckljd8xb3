@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T10:22:23.597Z",
+  "generatedAt": "2026-10-12T13:58:37.864Z",
   "collections": [
     {
       "name": "users",
@@ -5283,6 +5283,109 @@
         "CREATE UNIQUE INDEX idx_setores_nome ON setores (nome)",
         "CREATE INDEX idx_setores_ativo ON setores (ativo)",
         "CREATE INDEX idx_setores_ordem ON setores (ordem)"
+      ]
+    },
+    {
+      "name": "importacao_rascunhos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && empresa = @request.auth.empresa) || user = @request.auth.id)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && empresa = @request.auth.empresa) || user = @request.auth.id)",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || user = @request.auth.id)",
+        "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || user = @request.auth.id)"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "arquivo_nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "periodo_tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["unico", "faixa"]
+        },
+        {
+          "name": "periodo_inicio",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "periodo_fim",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "conta_principal",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["pendente", "confirmado", "descartado"]
+        },
+        {
+          "name": "proposta_json",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_despesas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "valor_total",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_import_rascunho_user ON importacao_rascunhos (user)",
+        "CREATE INDEX idx_import_rascunho_empresa ON importacao_rascunhos (empresa)",
+        "CREATE INDEX idx_import_rascunho_status ON importacao_rascunhos (status)",
+        "CREATE INDEX idx_import_rascunho_created ON importacao_rascunhos (created DESC)"
       ]
     }
   ]
