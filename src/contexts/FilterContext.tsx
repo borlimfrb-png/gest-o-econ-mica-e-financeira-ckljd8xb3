@@ -34,6 +34,13 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined)
 
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isAdmin, empresaVinculadaId, user } = useAuth()
+
+  // Se for usuário de empresa (não admin), garante filtragem estrita pela empresa vinculada
+  const empresaFixada =
+    (!isAdmin && empresaVinculadaId) || (user?.role === 'cliente' && user?.empresa)
+      ? empresaVinculadaId || user?.empresa || null
+      : null
+
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
   const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('')
@@ -63,11 +70,6 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       // Se for usuário de empresa (não admin), garante filtragem estrita pela empresa vinculada
       let empresasFiltradas = listEmpresas
       let gruposFiltrados = listGrupos
-
-      const empresaFixada =
-        (!isAdmin && empresaVinculadaId) || (user?.role === 'cliente' && user?.empresa)
-          ? empresaVinculadaId || user?.empresa || null
-          : null
 
       if (empresaFixada) {
         empresasFiltradas = listEmpresas.filter((e) => e.id === empresaFixada)
@@ -259,12 +261,8 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         selectedEmpresaId,
         setSelectedEmpresaId: (id: string) => {
           // Se for usuário comum ou cliente, não permite trocar empresa para outra diferente da vinculada
-          const fixada =
-            (!isAdmin && empresaVinculadaId) || (user?.role === 'cliente' && user?.empresa)
-              ? empresaVinculadaId || user?.empresa
-              : null
-          if (fixada) {
-            setSelectedEmpresaId(fixada)
+          if (empresaFixada) {
+            setSelectedEmpresaId(empresaFixada)
             return
           }
           setSelectedEmpresaId(id)
