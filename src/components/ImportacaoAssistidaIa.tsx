@@ -53,6 +53,7 @@ import {
   type ContaIaProposta,
   type SubcontaIaProposta,
   type RascunhoImportacaoRecord,
+  type TruncamentoDetalhes,
 } from '@/services/importacaoAssistidaIaService'
 import { planoContasService, memoriaFornecedoresService } from '@/services/financeService'
 import { SeletorPlanoContaCombobox } from '@/components/SeletorPlanoContaCombobox'
@@ -158,6 +159,10 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
   const [despesas, setDespesas] = useState<DespesaIaPropostaItem[]>([])
   const [observacoesIa, setObservacoesIa] = useState<string>('')
   const [isTruncatedDoc, setIsTruncatedDoc] = useState(false)
+  const [truncamentoDetalhes, setTruncamentoDetalhes] = useState<TruncamentoDetalhes | null>(null)
+  const [totalContasIa, setTotalContasIa] = useState<number>(0)
+  const [totalSubcontasIa, setTotalSubcontasIa] = useState<number>(0)
+  const [totalEstimadoIa, setTotalEstimadoIa] = useState<number | undefined>(undefined)
   const [rascunhoId, setRascunhoId] = useState<string | undefined>(undefined)
 
   // Seleção e múltiplos vínculos
@@ -386,6 +391,10 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
       setContaPrincipal(result.conta_principal)
       setContasHierarquia(result.contas || [])
       setDespesas(result.despesas)
+      setTotalContasIa(result.total_contas || result.contas?.length || 0)
+      setTotalSubcontasIa(result.total_subcontas || 0)
+      setTotalEstimadoIa(result.total_estimado)
+      setTruncamentoDetalhes(result.truncamento_detalhes || null)
       setObservacoesIa(result.observacoes || '')
       setIsTruncatedDoc(Boolean(result.truncated))
 
@@ -945,6 +954,12 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
     setSelectedFile(null)
     setContaPrincipal('')
     setDespesas([])
+    setContasHierarquia([])
+    setTotalContasIa(0)
+    setTotalSubcontasIa(0)
+    setTotalEstimadoIa(undefined)
+    setTruncamentoDetalhes(null)
+    setIsTruncatedDoc(false)
     setObservacoesIa('')
     setRascunhoId(undefined)
     setResultadoConfirmacao(null)
@@ -986,9 +1001,9 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
               <Badge className="bg-blue-600 text-white border-0 text-xs font-semibold">PDF</Badge>
             </h2>
             <p className="text-slate-300 text-sm leading-relaxed">
-              Anexe relatórios, faturas ou extratos em PDF. O Agente de IA extrai as despesas,
-              identifica a conta-mãe agregadora e permite o vínculo visual com o Plano de Contas
-              para gravação direta na competência escolhida.
+              Anexe relatórios, faturas ou extratos em PDF. O Agente de IA extrai as despesas na
+              hierarquia completa (Conta → Subconta → Itens), identifica a conta-mãe agregadora e
+              permite o vínculo direto com o Plano de Contas.
             </p>
           </div>
 
@@ -1025,148 +1040,212 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
         </div>
       </div>
 
-      {/* 2. Card de Configuração: Período e Upload do Arquivo PDF */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg flex items-center gap-2 text-slate-900">
-            <Calendar className="w-5 h-5 text-blue-600" />
-            1. Período e Documento PDF
-          </CardTitle>
-          <CardDescription>
-            Escolha o período contábil de competência e anexe o relatório em PDF para análise.
-          </CardDescription>
+      {/* 2. Painel Unificado e Organizado em Linha Horizontal: Filtros de Competência + Área de Upload de PDF */}
+      <Card className="border-slate-200 shadow-sm overflow-hidden">
+        <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                Configuração da Importação & Documento
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Defina o período contábil, anexe o arquivo e dispare a análise pelo Agente de IA.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="hidden sm:inline">Servidor nativo $documents.toMarkdown</span>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Tipo de Período */}
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-700">Tipo de Período</Label>
-              <Select
-                value={periodoTipo}
-                onValueChange={(val: 'unico' | 'faixa') => setPeriodoTipo(val)}
-              >
-                <SelectTrigger className="h-10 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unico" className="text-xs">
-                    Mês Único (Ex: 2025-01)
-                  </SelectItem>
-                  <SelectItem value="faixa" className="text-xs">
-                    Faixa de Períodos (Ex: 2025-01 a 2025-03)
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+        <CardContent className="p-5 space-y-5">
+          {/* Linha 1: Controles de Período e Empresa em Linha Horizontal */}
+          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
+            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+              1. Parâmetros de Competência e Exercício
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
+              {/* Tipo de Período */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Tipo de Período</Label>
+                <Select
+                  value={periodoTipo}
+                  onValueChange={(val: 'unico' | 'faixa') => setPeriodoTipo(val)}
+                >
+                  <SelectTrigger className="h-9 text-xs bg-white border-slate-200">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unico" className="text-xs">
+                      Mês Único (Ex: 2025-01)
+                    </SelectItem>
+                    <SelectItem value="faixa" className="text-xs">
+                      Faixa de Períodos
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Período Início */}
-            <div className="space-y-2">
-              <Label className="text-xs font-semibold text-slate-700">
-                {periodoTipo === 'faixa'
-                  ? 'Competência Inicial (YYYY-MM)'
-                  : 'Competência (YYYY-MM)'}
-              </Label>
-              <Input
-                type="month"
-                value={periodoInicio}
-                onChange={(e) => setPeriodoInicio(e.target.value)}
-                className="h-10 text-xs font-medium"
-              />
-            </div>
-
-            {/* Período Fim (se faixa) */}
-            {periodoTipo === 'faixa' ? (
-              <div className="space-y-2">
+              {/* Período Início */}
+              <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-slate-700">
-                  Competência Final (YYYY-MM)
+                  {periodoTipo === 'faixa' ? 'Competência Inicial' : 'Competência (YYYY-MM)'}
                 </Label>
                 <Input
                   type="month"
-                  value={periodoFim}
-                  onChange={(e) => setPeriodoFim(e.target.value)}
-                  className="h-10 text-xs font-medium"
+                  value={periodoInicio}
+                  onChange={(e) => setPeriodoInicio(e.target.value)}
+                  className="h-9 text-xs font-medium bg-white border-slate-200"
                 />
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold text-slate-700">Ano de Exercício</Label>
-                <div className="h-10 px-3 flex items-center bg-slate-50 border border-slate-200 rounded-md text-xs font-semibold text-slate-700">
-                  {periodoInicio.split('-')[0] || anoPadrao}
+
+              {/* Período Fim (se faixa) ou Exercício */}
+              {periodoTipo === 'faixa' ? (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">
+                    Competência Final
+                  </Label>
+                  <Input
+                    type="month"
+                    value={periodoFim}
+                    onChange={(e) => setPeriodoFim(e.target.value)}
+                    className="h-9 text-xs font-medium bg-white border-slate-200"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">Ano de Exercício</Label>
+                  <div className="h-9 px-3 flex items-center bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-700">
+                    {periodoInicio.split('-')[0] || anoPadrao}
+                  </div>
+                </div>
+              )}
+
+              {/* Resumo da Empresa Selecionada */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-slate-700">Empresa Vinculada</Label>
+                <div className="h-9 px-3 flex items-center justify-between bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-800 truncate">
+                  <span className="truncate">{empresaObj?.nome || empresaObj?.razao_social || 'Nenhuma selecionada'}</span>
+                  <Badge variant="secondary" className="text-[10px] ml-1 shrink-0">
+                    {planoContas.length} contas
+                  </Badge>
                 </div>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Área de Upload Drag & Drop de PDF */}
-          <div
-            onDragOver={(e) => {
-              e.preventDefault()
-              setIsDragOver(true)
-            }}
-            onDragLeave={() => setIsDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer transition-all ${
-              isDragOver
-                ? 'border-blue-500 bg-blue-50/60 scale-[1.01]'
-                : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
-            }`}
-          >
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleFileChange}
-              accept=".pdf,application/pdf"
-              className="hidden"
-            />
-
-            <div className="w-14 h-14 rounded-full bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center mb-3 shadow-sm">
-              <FileText className="w-7 h-7" />
+          {/* Linha 2: Área de Upload do PDF Destacada e Botão de Ação Agrupado */}
+          <div className="space-y-3">
+            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5 text-blue-600" />
+                2. Seleção do Arquivo PDF
+              </span>
+              <span className="text-[11px] font-normal text-slate-500">
+                Formatos aceitos: PDF digital até 10 MB
+              </span>
             </div>
 
-            {selectedFile ? (
-              <div className="text-center space-y-1">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-semibold">
-                  <Check className="w-3.5 h-3.5" /> Arquivo Selecionado
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                setIsDragOver(true)
+              }}
+              onDragLeave={() => setIsDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+              className={`border-2 border-dashed rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 cursor-pointer transition-all ${
+                isDragOver
+                  ? 'border-blue-500 bg-blue-50/70 scale-[1.005]'
+                  : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
+              }`}
+            >
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".pdf,application/pdf"
+                className="hidden"
+              />
+
+              <div className="flex items-center gap-4 text-left">
+                <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <FileText className="w-6 h-6" />
                 </div>
-                <h4 className="text-base font-bold text-slate-900 mt-2">{selectedFile.name}</h4>
-                <p className="text-xs text-slate-500">
-                  Tamanho: {(selectedFile.size / 1024).toFixed(1)} KB • Tipo: PDF
-                </p>
+
+                {selectedFile ? (
+                  <div className="space-y-0.5">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-semibold">
+                      <Check className="w-3 h-3" /> Arquivo Pronto para Análise
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-900">{selectedFile.name}</h4>
+                    <p className="text-xs text-slate-500">
+                      Tamanho: {(selectedFile.size / 1024).toFixed(1)} KB • Tipo: Documento PDF
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    <h4 className="text-sm font-bold text-slate-800">
+                      Clique aqui ou arraste o arquivo PDF
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-lg">
+                      Extratos, relatórios de despesas, folhas de custos ou comprovantes contábeis
+                      em PDF.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Botões do Bloco de Upload */}
+              <div className="flex items-center gap-2 shrink-0">
+                {selectedFile ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setSelectedFile(null)
+                    }}
+                    className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-9 px-3"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Trocar
+                  </Button>
+                ) : (
+                  <span className="inline-flex items-center text-xs text-blue-600 font-semibold bg-white px-3.5 py-2 rounded-lg border border-slate-200 shadow-xs">
+                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Escolher Arquivo
+                  </span>
+                )}
+
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
                   onClick={(e) => {
                     e.stopPropagation()
-                    setSelectedFile(null)
+                    handleAnalisarComIa()
                   }}
-                  className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 mt-2"
+                  disabled={!selectedFile || isAnalyzing}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2 shadow-xs px-5 h-9 text-xs"
                 >
-                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Remover e trocar arquivo
+                  {isAnalyzing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      {processingStatus || 'Processando...'}
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Analisar com IA
+                    </>
+                  )}
                 </Button>
               </div>
-            ) : (
-              <div className="text-center space-y-1 max-w-md">
-                <h4 className="text-base font-bold text-slate-800">
-                  Arraste ou clique para anexar o arquivo PDF
-                </h4>
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  Extratos gerenciais, relatórios de despesas, folhas de custos ou comprovantes em
-                  PDF (máx. 10 MB com texto digital).
-                </p>
-                <div className="pt-2">
-                  <span className="inline-flex items-center text-xs text-blue-600 font-semibold bg-blue-50 px-3 py-1 rounded-full border border-blue-200">
-                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Selecionar PDF
-                  </span>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Alerta de erro se houver */}
           {errorMsg && (
-            <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-left flex items-start gap-3">
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-left flex items-start gap-3">
               <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
               <div className="space-y-1 text-xs text-rose-900 flex-1">
                 <p className="font-semibold text-rose-950">
@@ -1184,35 +1263,6 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
               </Button>
             </div>
           )}
-
-          {/* Botão de Disparo da Análise */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
-            <div className="text-xs text-slate-500 flex items-center gap-2">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>
-                Processamento em servidor com $documents.toMarkdown e Agente nativo
-                'importador-despesas'
-              </span>
-            </div>
-
-            <Button
-              onClick={handleAnalisarComIa}
-              disabled={!selectedFile || isAnalyzing}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2 shadow-sm px-6 h-11 w-full sm:w-auto"
-            >
-              {isAnalyzing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  {processingStatus || 'Analisando com IA...'}
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4" />
-                  Analisar com IA
-                </>
-              )}
-            </Button>
-          </div>
         </CardContent>
       </Card>
 
@@ -1222,16 +1272,17 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
           {/* Barra de Topo da Proposta: Conta Principal Agregadora & Ações Globais */}
           <Card className="border-blue-200 bg-blue-50/40 shadow-sm">
             <CardContent className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-semibold uppercase tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
                     Conta Principal Sugerida pela IA
                   </span>
                   {isTruncatedDoc && (
                     <Badge
                       variant="outline"
-                      className="text-[11px] text-amber-700 border-amber-300"
+                      className="text-[11px] text-amber-800 bg-amber-50 border-amber-300 font-semibold gap-1"
                     >
+                      <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
                       Documento parcialmente truncado (máx. páginas atingido)
                     </Badge>
                   )}
@@ -1240,8 +1291,54 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                   <Layers className="w-5 h-5 text-blue-600" />
                   {contaPrincipal || 'Despesas Gerais e Operacionais'}
                 </h3>
+
+                {/* Métricas de Leitura do Documento: Contas, Subcontas, Despesas lidas vs estimadas */}
+                <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-700">
+                  <span className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-blue-200 font-medium">
+                    <Check className="w-3.5 h-3.5 text-blue-600" />
+                    <strong>{despesas.length}</strong> despesas lidas
+                    {totalEstimadoIa && totalEstimadoIa > despesas.length && (
+                      <span className="text-slate-500 font-normal">
+                        (de ~{totalEstimadoIa} estimadas no PDF)
+                      </span>
+                    )}
+                  </span>
+
+                  <span className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-slate-200 font-medium">
+                    <FolderTree className="w-3.5 h-3.5 text-slate-600" />
+                    <strong>{totalContasIa || arvoreContasSincronizada.length}</strong> contas
+                  </span>
+
+                  <span className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-slate-200 font-medium">
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
+                    <strong>{totalSubcontasIa || arvoreContasSincronizada.reduce((a, c) => a + c.subcontas.length, 0)}</strong> subcontas
+                  </span>
+
+                  {truncamentoDetalhes?.caracteres_extraidos && (
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      {truncamentoDetalhes.caracteres_extraidos.toLocaleString('pt-BR')} caracteres processados
+                    </span>
+                  )}
+                </div>
+
+                {/* Alerta explícito de truncamento quando houver limite real atingido */}
+                {isTruncatedDoc && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1 mt-2">
+                    <div className="font-semibold flex items-center gap-1.5 text-amber-950">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      Aviso de Leitura Parcial do Documento
+                    </div>
+                    <p className="leading-relaxed">
+                      O arquivo PDF possui um volume extenso ({truncamentoDetalhes?.total_estimado || 'várias'} linhas estimadas com valores) que excedeu o limite máximo seguro de análise em uma única requisição. O Agente de IA extraiu com precisão <strong>{despesas.length} despesas</strong> nas primeiras seções/páginas do documento.
+                    </p>
+                    <p className="text-[11px] text-amber-800">
+                      💡 Dica: Para relatórios muito longos (acima de 30 páginas ou milhares de lançamentos), você também pode usar a aba <strong>Lançamentos (Excel + IA)</strong> ou <strong>PDF para Excel</strong> para importar por lotes mensais sem restrição de tamanho.
+                    </p>
+                  </div>
+                )}
+
                 {observacoesIa && (
-                  <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                  <p className="text-xs text-slate-600 max-w-3xl leading-relaxed pt-1">
                     💡 <em>{observacoesIa}</em>
                   </p>
                 )}

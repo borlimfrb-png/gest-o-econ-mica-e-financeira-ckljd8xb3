@@ -1160,73 +1160,75 @@ export default function Importacao() {
         defaultValue={podeAcessarIaPdf ? 'importacao-ia-pdf' : 'lancamentos-excel-ia'}
         className="space-y-6"
       >
-        <TabsList
-          className={`grid w-full ${podeAcessarIaPdf ? 'grid-cols-2 md:grid-cols-7 max-w-6xl' : 'grid-cols-2 md:grid-cols-6 max-w-5xl'} bg-slate-100 p-1 rounded-xl`}
-        >
-          {podeAcessarIaPdf && (
+        <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto">
+          <TabsList
+            className="inline-flex w-full min-w-max items-center justify-start gap-1 bg-transparent p-0 h-auto"
+          >
+            {podeAcessarIaPdf && (
+              <TabsTrigger
+                value="importacao-ia-pdf"
+                className="flex items-center gap-2 font-semibold px-4 py-2.5 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
+              >
+                <Sparkles className="w-4 h-4 text-amber-300 animate-pulse shrink-0" />
+                <span>Importação com IA</span>
+                <span className="text-[10px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                  PDF
+                </span>
+              </TabsTrigger>
+            )}
             <TabsTrigger
-              value="importacao-ia-pdf"
-              className="flex items-center gap-1.5 font-bold data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-md rounded-lg text-xs sm:text-sm transition-all"
+              value="lancamentos-excel-ia"
+              className="flex items-center gap-2 font-semibold px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
             >
-              <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
-              Importação com IA
-              <span className="text-[10px] bg-amber-400 text-slate-900 font-extrabold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
-                PDF
+              <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Lançamentos (Excel + IA)</span>
+              <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                Excel
               </span>
             </TabsTrigger>
-          )}
-          <TabsTrigger
-            value="lancamentos-excel-ia"
-            className="flex items-center gap-1.5 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-lg text-xs sm:text-sm"
-          >
-            <Sparkles className="w-4 h-4 text-blue-600" />
-            Lançamentos (Excel + IA)
-            <span className="text-[10px] bg-blue-600 text-white font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
-              Excel
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="despesas-ia"
-            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-lg text-xs sm:text-sm"
-          >
-            <Bot className="w-4 h-4 text-blue-600" />
-            Despesas (IA)
-          </TabsTrigger>
-          <TabsTrigger
-            value="balancete-mensal"
-            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
-          >
-            <BookOpen className="w-4 h-4 text-blue-600" />
-            Balancete Mensal
-            <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
-              Balanço/DRE
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="pdf-to-excel"
-            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-            PDF para Excel
-            <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider hidden sm:inline">
-              XLSX
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="pdf"
-            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
-          >
-            <FileText className="w-4 h-4 text-rose-500" />
-            Importar PDF
-          </TabsTrigger>
-          <TabsTrigger
-            value="excel"
-            className="flex items-center gap-1.5 font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg text-xs sm:text-sm"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            Importar Excel
-          </TabsTrigger>
-        </TabsList>
+            <TabsTrigger
+              value="despesas-ia"
+              className="flex items-center gap-2 font-medium px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
+            >
+              <Bot className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Despesas (IA)</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="balancete-mensal"
+              className="flex items-center gap-2 font-medium px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-blue-700 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
+            >
+              <BookOpen className="w-4 h-4 text-blue-600 shrink-0" />
+              <span>Balancete Mensal</span>
+              <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                Balanço/DRE
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="pdf-to-excel"
+              className="flex items-center gap-2 font-medium px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-indigo-700 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-indigo-600 shrink-0" />
+              <span>PDF para Excel</span>
+              <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                XLSX
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="pdf"
+              className="flex items-center gap-2 font-medium px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-rose-600 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
+            >
+              <FileText className="w-4 h-4 text-rose-500 shrink-0" />
+              <span>Importar PDF</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="excel"
+              className="flex items-center gap-2 font-medium px-4 py-2.5 data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-emerald-700 rounded-xl text-xs sm:text-sm transition-all whitespace-nowrap cursor-pointer text-slate-700"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Importar Excel</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* ========================================================================= */}
         {/* ABA NOVA: IMPORTAÇÃO ASSISTIDA POR IA (PDF COM DUAS COLUNAS E VÍNCULOS)    */}

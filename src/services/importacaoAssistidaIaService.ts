@@ -42,14 +42,28 @@ export interface ContaIaProposta {
   valor_total: number
 }
 
+export interface TruncamentoDetalhes {
+  doc_truncated?: boolean
+  text_truncated?: boolean
+  ai_truncated?: boolean
+  total_lido?: number
+  total_estimado?: number
+  caracteres_extraidos?: number
+}
+
 export interface PropostaImportacaoIaResult {
   conta_principal: string
   contas: ContaIaProposta[]
   despesas: DespesaIaPropostaItem[]
   total_despesas: number
+  total_contas?: number
+  total_subcontas?: number
+  total_estimado?: number
+  caracteres_extraidos?: number
   valor_total: number
   observacoes?: string
   truncated?: boolean
+  truncamento_detalhes?: TruncamentoDetalhes
 }
 
 export interface AnalisarPdfIaInput {
@@ -357,14 +371,24 @@ export const importacaoAssistidaIaService = {
       })
     }
 
+    const totalSubcontas = contasProcessadas.reduce(
+      (acc, c) => acc + (c.subcontas ? c.subcontas.length : 0),
+      0,
+    )
+
     return {
       conta_principal: payload.conta_principal || 'Despesas Gerais e Operacionais',
       contas: contasProcessadas,
       despesas: despesasProcessadas,
       total_despesas: despesasProcessadas.length,
+      total_contas: payload.total_contas || contasProcessadas.length,
+      total_subcontas: payload.total_subcontas || totalSubcontas,
+      total_estimado: payload.total_estimado,
+      caracteres_extraidos: payload.caracteres_extraidos,
       valor_total: Number(payload.valor_total) || 0,
       observacoes: payload.observacoes,
       truncated: payload.truncated,
+      truncamento_detalhes: payload.truncamento_detalhes,
     }
   },
 

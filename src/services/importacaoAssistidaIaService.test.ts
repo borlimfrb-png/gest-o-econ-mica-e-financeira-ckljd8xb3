@@ -226,4 +226,34 @@ describe('importacaoAssistidaIaService - Vínculos e Sugestão Automática', () 
     expect(proposta.contas[0].subcontas[0].despesas[0].valor).toBe(850.5)
     expect(proposta.valor_total).toBe(1270.5)
   })
+
+  it('deve refletir métricas completas de leitura, contagens e truncamento', () => {
+    const propostaCompleta = {
+      conta_principal: 'Custos e Despesas Gerais',
+      contas: [],
+      despesas: [],
+      total_despesas: 150,
+      total_contas: 8,
+      total_subcontas: 18,
+      total_estimado: 155,
+      caracteres_extraidos: 45000,
+      valor_total: 98000.5,
+      truncated: false,
+      truncamento_detalhes: {
+        doc_truncated: false,
+        text_truncated: false,
+        ai_truncated: false,
+        total_lido: 150,
+        total_estimado: 155,
+        caracteres_extraidos: 45000,
+      },
+    }
+
+    expect(propostaCompleta.total_despesas).toBe(150)
+    expect(propostaCompleta.total_contas).toBe(8)
+    expect(propostaCompleta.total_subcontas).toBe(18)
+    expect(propostaCompleta.total_estimado).toBe(155)
+    expect(propostaCompleta.truncated).toBe(false)
+    expect(propostaCompleta.truncamento_detalhes?.total_lido).toBe(150)
+  })
 })

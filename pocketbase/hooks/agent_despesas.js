@@ -292,11 +292,13 @@ routerAdd(
 
       // 1. Extração do texto e tabelas do PDF usando $documents.toMarkdown
       let markdownText = ''
-      let isTruncated = false
+      let isDocTruncated = false
+      let docPagesInfo = null
       try {
         const docResult = $documents.toMarkdown({ file: file })
         markdownText = docResult.markdown || ''
-        isTruncated = Boolean(docResult.truncated)
+        isDocTruncated = Boolean(docResult.truncated)
+        docPagesInfo = docResult.pages || null
       } catch (docErr) {
         if (docErr && docErr.status === 422) {
           return e.json(422, {
@@ -364,6 +366,39 @@ routerAdd(
         } catch (_) {}
       }
 
+      // 2.1 Heurística de estimativa do total de despesas e páginas no documento
+      const totalCaractereExtraido = markdownText.length
+      // Linhas com potenciais valores monetários no markdown
+      const linhasComValores = markdownText.split('\n').filter((l) => {
+        return /\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\b\d+\.\d{2}\b/i.test(l) && !/total|saldo\s*final/i.test(l)
+      })
+      const totalEstimadoLinhasDespesa = Math.max(linhasComValores.length, 1)
+
+      // 2.2 Pré-compactação inteligente do texto para não estourar tokens do modelo e não perder tabelas
+      // Remove linhas puramente decorativas (várias repetições de tracinhos, espaços vazios)
+      const compactarMarkdown = (txt) => {
+        const lines = txt.split('\n')
+        const filtered = []
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          // Pula separadores excessivos
+          if (/^[-=_*]{4,}$/.test(trimmed)) continue
+          filtered.push(trimmed)
+        }
+        return filtered.join('\n')
+      }
+
+      const markdownCompacto = compactarMarkdown(markdownText)
+      const CHUNK_SIZE = 48000 // suporta documentos médios/grandes
+      let textoParaAgente = markdownCompacto
+      let isTextTruncated = false
+
+      if (markdownCompacto.length > CHUNK_SIZE) {
+        textoParaAgente = markdownCompacto.slice(0, CHUNK_SIZE)
+        isTextTruncated = true
+      }
+
       // 3. Monta prompt estrito para o Agente de IA extrair a hierarquia CONTA -> SUBCONTA -> DESPESAS
       const promptAgente = `Você é o Agente Especialista em Importação e Classificação de Despesas.
 O usuário anexou um arquivo PDF contendo um relatório de despesas, faturas ou extrato gerencial.
@@ -375,7 +410,7 @@ PLANO DE CONTAS DISPONÍVEL NESTA EMPRESA (${planoResumo.length} contas cadastra
 ${
   planoResumo.length > 0
     ? planoResumo
-        .slice(0, 60)
+        .slice(0, 80)
         .map(
           (p) =>
             `- ID: "${p.id}" | Cód: "${p.codigo}"${p.codigo_empresa ? ' [Emp: ' + p.codigo_empresa + ']' : ''} | Conta: "${p.conta_nome}" | Centro: "${p.centro_nome}" | Tipo: "${p.tipo}"`,
@@ -386,17 +421,18 @@ ${
 
 CONTEÚDO EXTRAÍDO DO PDF:
 ---
-${markdownText.slice(0, 32000)}
+${textoParaAgente}
 ---
 
-SUA TAREFA - EXTRAÇÃO HIERÁRQUICA:
-Analise detalhadamente a estrutura do documento e extraia os gastos na hierarquia CONTA → SUBCONTA → DESPESAS conforme vier no documento:
+SUA TAREFA - EXTRAÇÃO HIERÁRQUICA COMPLETA:
+ATENÇÃO: Extraia TODAS as despesas encontradas no texto acima, SEM LIMITAR nem resumir os itens. Não omita linhas com valores!
+Analise detalhadamente a estrutura do documento e organize os gastos na hierarquia CONTA → SUBCONTA → DESPESAS conforme vier no documento:
 1. "conta_principal": a grande conta agregadora macro no topo (ex.: "Despesas Administrativas", "Custos Operacionais", "Despesas Comerciais", "Despesas com Pessoal", "Despesas Financeiras").
 2. "contas": lista de contas/grupos contábeis encontrados. Cada "conta" possui:
    - "nome": nome do grupo (ex: "Despesas Administrativas", "Custos das Instalações")
    - "subcontas": lista de subcontas pertencentes a esta conta. Cada subconta possui:
      - "nome": nome da subconta (ex: "Salários e Encargos", "Energia Elétrica", "Água e Telefone", "Serviços de TI")
-     - "despesas": lista dos itens de despesa detalhados contidos nessa subconta.
+     - "despesas": lista com TODOS os itens de despesa detalhados contidos nessa subconta.
    * REGRA DE DEGRADAÇÃO: Se o PDF não tiver divisões explícitas de subcontas, crie uma subconta única com o mesmo nome da conta ou agrupe as despesas diretamente.
 3. Para cada item individual em "despesas":
    - "id": identificador único (ex: "item_1")
@@ -471,8 +507,9 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
         }
       }
 
-      // 4. Limpa e faz parse do JSON retornado pelo Agente
+      // 4. Limpa e faz parse do JSON retornado pelo Agente com tolerância a respostas longas
       let parsedData = null
+      let isAiResponseTruncated = false
       try {
         const cleanJson = agentResponseContent
           .replace(/```json/gi, '')
@@ -486,6 +523,24 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
           try {
             parsedData = JSON.parse(jsonMatch[0])
           } catch (_) {}
+        }
+        // Se ainda falhar, pode ter havido corte prematuro na resposta da IA (JSON inacabado)
+        if (!parsedData && agentResponseContent.includes('"contas"')) {
+          isAiResponseTruncated = true
+          // Tenta fechar o JSON artificialmente para recuperar o máximo de dados
+          const candidateClose = agentResponseContent.replace(/```json/gi, '').replace(/```/g, '').trim()
+          const tryClose = [
+            candidateClose + ']}',
+            candidateClose + ']}]}',
+            candidateClose + ']}]}]}',
+            candidateClose + '"}]}]}]}',
+          ]
+          for (const tc of tryClose) {
+            try {
+              parsedData = JSON.parse(tc)
+              break
+            } catch (_) {}
+          }
         }
       }
 
@@ -656,16 +711,36 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
           ? contasProcessadas[0].nome
           : 'Despesas Gerais / Operacionais')
 
+      // Contagem total de subcontas
+      const totalSubcontas = contasProcessadas.reduce(
+        (acc, c) => acc + (c.subcontas ? c.subcontas.length : 0),
+        0,
+      )
+
+      const isTruncatedFinal = isDocTruncated || isTextTruncated || isAiResponseTruncated
+
       return e.json(200, {
         conta_principal: contaPrincipalFinal,
         contas: contasProcessadas,
         despesas: todasDespesas,
         total_despesas: todasDespesas.length,
+        total_contas: contasProcessadas.length,
+        total_subcontas: totalSubcontas,
+        total_estimado: totalEstimadoLinhasDespesa,
+        caracteres_extraidos: totalCaractereExtraido,
         valor_total: valorTotalGeral,
         observacoes:
           parsedData.observacoes ||
-          `Agente de IA identificou ${todasDespesas.length} despesas distribuídas em ${contasProcessadas.length} contas e subtotais sob "${contaPrincipalFinal}".`,
-        truncated: isTruncated,
+          `Agente de IA identificou ${todasDespesas.length} despesas distribuídas em ${contasProcessadas.length} contas e ${totalSubcontas} subcontas sob "${contaPrincipalFinal}".`,
+        truncated: isTruncatedFinal,
+        truncamento_detalhes: {
+          doc_truncated: isDocTruncated,
+          text_truncated: isTextTruncated,
+          ai_truncated: isAiResponseTruncated,
+          total_lido: todasDespesas.length,
+          total_estimado: totalEstimadoLinhasDespesa,
+          caracteres_extraidos: totalCaractereExtraido,
+        },
       })
     } catch (err) {
       return e.json(500, {
