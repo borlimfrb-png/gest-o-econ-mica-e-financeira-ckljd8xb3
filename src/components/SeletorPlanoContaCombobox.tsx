@@ -184,7 +184,16 @@ export const SeletorPlanoContaCombobox = forwardRef<
     // Itens base dependendo do modo (contas diretas ou plano de contas)
     const itensProcessados: RankedPlanoItem[] = useMemo(() => {
       if (isContaModo && contas) {
-        return contas.map((c) => {
+        // Restringe contas à empresa ativa se informada, excluindo órfãos e deduplicando por id
+        const contasFiltradas = empresaAtivaId
+          ? contas.filter((c) => c.empresa === empresaAtivaId)
+          : contas
+
+        const contasDeduplicadas = Array.from(
+          new Map(contasFiltradas.map((c) => [c.id, c])).values(),
+        )
+
+        return contasDeduplicadas.map((c) => {
           const codConta = (c.codigo || '').trim()
           const nomeConta = (c.nome || '').trim()
           const tipoConta = c.tipo
@@ -209,15 +218,17 @@ export const SeletorPlanoContaCombobox = forwardRef<
         })
       }
 
-      // Modo Plano de Contas
-      const listaEmpresa = !empresaAtivaId
+      // Modo Plano de Contas: restringe à empresa ativa e deduplica estritamente por ID
+      const listaBase = !empresaAtivaId
         ? planoContas
         : (() => {
             const daEmpresa = planoContas.filter((p) => p.empresa === empresaAtivaId)
             return daEmpresa.length > 0 ? daEmpresa : planoContas
           })()
 
-      return listaEmpresa.map((item) => {
+      const listaDeduplicada = Array.from(new Map(listaBase.map((p) => [p.id, p])).values())
+
+      return listaDeduplicada.map((item) => {
         const expandConta = item.expand?.conta
         const expandCentro = item.expand?.centro
         const expandTipo = item.expand?.tipo_despesa

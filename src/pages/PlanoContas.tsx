@@ -134,8 +134,14 @@ const TIPO_CENTRO_BADGE: Record<TipoCentro, string> = {
 export default function PlanoContas() {
   const { toast } = useToast()
   const { user, isAdmin } = useAuth()
-  const { selectedEmpresaId, setSelectedEmpresaId, selectedEmpresa, empresas, selectedAno } =
-    useFilter()
+  const {
+    selectedEmpresaId,
+    setSelectedEmpresaId,
+    selectedEmpresa,
+    empresas,
+    selectedAno,
+    empresasIdsAtivas,
+  } = useFilter()
   const { minhaEmpresa } = useMinhaEmpresa()
 
   const [itens, setItens] = useState<PlanoContaRecord[]>([])
@@ -182,17 +188,32 @@ export default function PlanoContas() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const empFilterOpts =
+        empresasIdsAtivas.length > 1
+          ? { empresasIds: empresasIdsAtivas }
+          : empresasIdsAtivas.length === 1
+            ? { empresaId: empresasIdsAtivas[0] }
+            : undefined
+
       const [list, contasList, centrosList, tiposList] = await Promise.all([
-        planoContasService.getAll(selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined),
-        contasService.getAll(),
-        centrosService.getAll(),
-        tiposDespesaService.getAll(),
+        planoContasService.getAll(empFilterOpts),
+        contasService.getAll(empFilterOpts),
+        centrosService.getAll(empFilterOpts),
+        tiposDespesaService.getAll(empFilterOpts),
       ])
-      setItens(list)
-      setContas(contasList)
-      setCentros(centrosList)
-      setTipos(tiposList)
-      setProximoCodigo(planoContasService.proximoCodigo(list.map((i) => i.codigo || '')))
+
+      const filtraOrfaos = <T extends { id: string; empresa?: string }>(lista: T[]): T[] => {
+        const porId = Array.from(new Map(lista.map((i) => [i.id, i])).values())
+        if (isAdmin) return porId
+        return porId.filter((item) => Boolean(item.empresa))
+      }
+
+      const itensFiltrados = filtraOrfaos(list)
+      setItens(itensFiltrados)
+      setContas(filtraOrfaos(contasList))
+      setCentros(filtraOrfaos(centrosList))
+      setTipos(filtraOrfaos(tiposList))
+      setProximoCodigo(planoContasService.proximoCodigo(itensFiltrados.map((i) => i.codigo || '')))
     } catch (err) {
       console.error('Erro ao carregar plano de contas:', err)
       toast({
@@ -209,9 +230,12 @@ export default function PlanoContas() {
     loadData()
     setForm((prev) => ({
       ...prev,
-      empresa: selectedEmpresaId || prev.empresa || (empresas.length > 0 ? empresas[0].id : ''),
+      empresa:
+        selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
+          ? selectedEmpresaId
+          : empresasIdsAtivas[0] || prev.empresa || (empresas.length > 0 ? empresas[0].id : ''),
     }))
-  }, [selectedEmpresaId, empresas])
+  }, [selectedEmpresaId, empresasIdsAtivas, empresas])
 
   useRealtime<PlanoContaRecord>('plano_contas', () => loadData())
 

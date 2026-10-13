@@ -127,6 +127,7 @@ export default function Dashboard() {
     isGrupoAtivo,
     grupoAtivo,
     isLoadingEmpresas,
+    empresasIdsAtivas,
   } = useFilter()
   const { user, isAdmin } = useAuth()
   const { minhaEmpresa, logoUrl } = useMinhaEmpresa()
@@ -225,6 +226,13 @@ export default function Dashboard() {
   const loadData = async () => {
     try {
       setLoadingData(true)
+      const empFilterOpts =
+        empresasIdsAtivas.length > 1
+          ? { empresasIds: empresasIdsAtivas }
+          : empresasIdsAtivas.length === 1
+            ? { empresaId: empresasIdsAtivas[0] }
+            : undefined
+
       const [
         allB,
         allD,
@@ -243,11 +251,11 @@ export default function Dashboard() {
       ] = await Promise.all([
         balancosService.getAll(),
         dreService.getAll(),
-        lancamentosCentroService.getAll(),
-        tiposDespesaService.getAll(),
-        centrosService.getAll(),
-        contasService.getAll(),
-        planoContasService.getAll(),
+        lancamentosCentroService.getAll(empFilterOpts),
+        tiposDespesaService.getAll(empFilterOpts),
+        centrosService.getAll(empFilterOpts),
+        contasService.getAll(empFilterOpts),
+        planoContasService.getAll(empFilterOpts),
         lancamentosService.getAll({ expandRelations: true }),
         metasLancamentosService.getAll({ expandRelations: true }),
         contratosService.listar().catch(() => [] as ContratoRecord[]),
@@ -258,11 +266,11 @@ export default function Dashboard() {
       ])
       setAllBalancos(allB)
       setAllDres(allD)
-      setLancamentosCentro(allL)
-      setTiposDespesa(allTd)
-      setCentros(allC)
-      setContas(allContas)
-      setPlanoContas(allPlano)
+      setLancamentosCentro(Array.from(new Map(allL.map((i) => [i.id, i])).values()))
+      setTiposDespesa(Array.from(new Map(allTd.map((i) => [i.id, i])).values()))
+      setCentros(Array.from(new Map(allC.map((i) => [i.id, i])).values()))
+      setContas(Array.from(new Map(allContas.map((i) => [i.id, i])).values()))
+      setPlanoContas(Array.from(new Map(allPlano.map((i) => [i.id, i])).values()))
       setLancamentosFinanceiros(allLancFin)
       setMetas(allMetas)
       setContratos(allContratos)
@@ -330,7 +338,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [selectedEmpresaId, empresasIdsAtivas])
 
   useRealtime<BalancoRecord>('balancos', () => {
     loadData()

@@ -89,8 +89,15 @@ function formatBrl(val: number | undefined | null): string {
 export default function DreGerencial() {
   const { toast } = useToast()
   const { user } = useAuth()
-  const { selectedEmpresaId, selectedEmpresa, empresas, selectedAno, isGrupoAtivo, grupoAtivo } =
-    useFilter()
+  const {
+    selectedEmpresaId,
+    selectedEmpresa,
+    empresas,
+    selectedAno,
+    isGrupoAtivo,
+    grupoAtivo,
+    empresasIdsAtivas,
+  } = useFilter()
   const isCliente = user?.role === 'cliente'
 
   // Estados de dados
@@ -205,15 +212,12 @@ export default function DreGerencial() {
       if (isGrupoAtivo && grupoAtivo && grupoAtivo.empresas && grupoAtivo.empresas.length > 0) {
         // Carrega lançamentos e cadastros de todas as empresas do grupo
         const empIds = new Set(grupoAtivo.empresas)
+        const opts = { empresasIds: grupoAtivo.empresas }
         lancsPromise = lancamentosService
           .getAll({ expandRelations: true })
           .then((list) => list.filter((l) => empIds.has(l.empresa)))
-        contasPromise = contasService
-          .getAll()
-          .then((list) => list.filter((c) => !c.empresa || empIds.has(c.empresa)))
-        planosPromise = planoContasService
-          .getAll()
-          .then((list) => list.filter((p) => !p.empresa || empIds.has(p.empresa)))
+        contasPromise = contasService.getAll(opts)
+        planosPromise = planoContasService.getAll(opts)
       } else if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
         lancsPromise = lancamentosService.getAll({
           empresaId: selectedEmpresaId,
@@ -222,10 +226,11 @@ export default function DreGerencial() {
         contasPromise = contasService.getAll({ empresaId: selectedEmpresaId })
         planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
       } else {
-        // Sem filtro ou consolidado geral
+        // Sem filtro ou restringe às empresas ativas
+        const empOpts = empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
         lancsPromise = lancamentosService.getAll({ expandRelations: true })
-        contasPromise = contasService.getAll()
-        planosPromise = planoContasService.getAll()
+        contasPromise = contasService.getAll(empOpts)
+        planosPromise = planoContasService.getAll(empOpts)
       }
 
       const [contasList, lancamentosList, planosList] = await Promise.all([
@@ -234,9 +239,9 @@ export default function DreGerencial() {
         planosPromise,
       ])
 
-      setContas(contasList)
+      setContas(Array.from(new Map(contasList.map((i) => [i.id, i])).values()))
       setLancamentos(lancamentosList)
-      setPlanoContas(planosList)
+      setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
     } catch (err: any) {
       console.error('Erro ao carregar dados da DRE:', err)
       toast({

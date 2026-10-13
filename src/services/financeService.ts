@@ -745,13 +745,58 @@ function currentUserId(): string {
   return id
 }
 
+/**
+ * Constrói filtro PocketBase seguro para empresa única ou grupo de empresas.
+ * - Empresa única: `empresa = 'id'`
+ * - Grupo com múltiplos IDs: `(empresa = 'id1' || empresa = 'id2')`
+ * - Sem empresa informada e não-admin: restringe à empresa padrão do usuário logado
+ * - Admin sem empresa informada: sem restrição (retorna tudo)
+ */
+export function buildEmpresasFilter(
+  empresaId?: string,
+  empresasIds?: string[],
+): string | undefined {
+  const idsLimpos = (empresasIds || [])
+    .map((id) => (id || '').trim())
+    .filter((id) => Boolean(id) && !id.startsWith('grupo-'))
+
+  if (idsLimpos.length > 1) {
+    const clausulas = idsLimpos.map((id) => `empresa = '${id}'`)
+    return `(${clausulas.join(' || ')})`
+  }
+
+  const idAlvo = (idsLimpos.length === 1 ? idsLimpos[0] : empresaId?.trim()) || ''
+
+  if (idAlvo && !idAlvo.startsWith('grupo-')) {
+    return `empresa = '${idAlvo}'`
+  }
+
+  // Sem empresa informada ou é grupo sem desagregação explícita:
+  // Se usuário não for admin, restringe à empresa padrão do perfil
+  const authRecord = pb.authStore.record
+  const isAdmin = authRecord?.role === 'admin'
+  const userEmpresa = (authRecord?.empresa as string | undefined)?.trim()
+
+  if (!isAdmin && userEmpresa) {
+    return `empresa = '${userEmpresa}'`
+  }
+
+  return undefined
+}
+
+export interface QueryEmpresasOptions {
+  empresaId?: string
+  empresasIds?: string[]
+}
+
 export const centrosService = {
-  async getAll(options?: { empresaId?: string }): Promise<CentroRecord[]> {
+  async getAll(options?: QueryEmpresasOptions): Promise<CentroRecord[]> {
     const params: Record<string, unknown> = {
       sort: 'nome',
     }
-    if (options?.empresaId) {
-      params.filter = `empresa = '${options.empresaId}'`
+    const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
+    if (filter) {
+      params.filter = filter
     }
     return await pb.collection('centros').getFullList<CentroRecord>(params)
   },
@@ -800,11 +845,12 @@ export const centrosService = {
 export const lancamentosCentroService = {
   async getByCentro(
     centroId: string,
-    options?: { empresaId?: string },
+    options?: QueryEmpresasOptions,
   ): Promise<LancamentoCentroRecord[]> {
     const filters = [`centro = '${centroId}'`]
-    if (options?.empresaId) {
-      filters.push(`empresa = '${options.empresaId}'`)
+    const empFilter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
+    if (empFilter) {
+      filters.push(empFilter)
     }
     return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>({
       filter: filters.join(' && '),
@@ -812,12 +858,13 @@ export const lancamentosCentroService = {
     })
   },
 
-  async getAll(options?: { empresaId?: string }): Promise<LancamentoCentroRecord[]> {
+  async getAll(options?: QueryEmpresasOptions): Promise<LancamentoCentroRecord[]> {
     const params: Record<string, unknown> = {
       sort: '-data',
     }
-    if (options?.empresaId) {
-      params.filter = `empresa = '${options.empresaId}'`
+    const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
+    if (filter) {
+      params.filter = filter
     }
     return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>(params)
   },
@@ -866,12 +913,13 @@ export const lancamentosCentroService = {
 }
 
 export const tiposDespesaService = {
-  async getAll(options?: { empresaId?: string }): Promise<TipoDespesaRecord[]> {
+  async getAll(options?: QueryEmpresasOptions): Promise<TipoDespesaRecord[]> {
     const params: Record<string, unknown> = {
       sort: 'nome',
     }
-    if (options?.empresaId) {
-      params.filter = `empresa = '${options.empresaId}'`
+    const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
+    if (filter) {
+      params.filter = filter
     }
     return await pb.collection('tipos_despesa').getFullList<TipoDespesaRecord>(params)
   },
@@ -914,12 +962,13 @@ export const tiposDespesaService = {
 }
 
 export const contasService = {
-  async getAll(options?: { empresaId?: string }): Promise<ContaRecord[]> {
+  async getAll(options?: QueryEmpresasOptions): Promise<ContaRecord[]> {
     const params: Record<string, unknown> = {
       sort: 'codigo',
     }
-    if (options?.empresaId) {
-      params.filter = `empresa = '${options.empresaId}'`
+    const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
+    if (filter) {
+      params.filter = filter
     }
     return await pb.collection('contas').getFullList<ContaRecord>(params)
   },
@@ -998,13 +1047,14 @@ export const contasService = {
 }
 
 export const planoContasService = {
-  async getAll(options?: { empresaId?: string }): Promise<PlanoContaRecord[]> {
+  async getAll(options?: QueryEmpresasOptions): Promise<PlanoContaRecord[]> {
     const params: Record<string, unknown> = {
       sort: 'codigo',
       expand: 'empresa,conta,centro,tipo_despesa',
     }
-    if (options?.empresaId) {
-      params.filter = `empresa = '${options.empresaId}'`
+    const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
+    if (filter) {
+      params.filter = filter
     }
     return await pb.collection('plano_contas').getFullList<PlanoContaRecord>(params)
   },

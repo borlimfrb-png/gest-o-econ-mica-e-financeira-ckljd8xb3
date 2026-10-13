@@ -141,10 +141,18 @@ function parseMeta(value: string): number | undefined {
 
 export default function Centros() {
   const { toast } = useToast()
-  const { selectedEmpresaId, selectedEmpresa, selectedAno } = useFilter()
+  const { selectedEmpresaId, selectedEmpresa, selectedAno, isGrupoAtivo, grupoAtivo } = useFilter()
   const { user, isAdmin } = useAuth()
   const { minhaEmpresa } = useMinhaEmpresa()
   const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
+
+  // Desagrega empresas do grupo para busca segura e sem duplicidades
+  const empresasIdsDoGrupo = useMemo(() => {
+    if (isGrupoAtivo && grupoAtivo && (grupoAtivo.empresas || []).length > 0) {
+      return grupoAtivo.empresas
+    }
+    return undefined
+  }, [isGrupoAtivo, grupoAtivo])
 
   // Perfil permitido para o Relatório A4: Admin e Empresa (ou qualquer perfil com acesso ao módulo)
   const userRole = user?.role || 'empresa'
@@ -200,17 +208,30 @@ export default function Centros() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
+      const opts = empresasIdsDoGrupo
+        ? { empresasIds: empresasIdsDoGrupo }
+        : effectiveEmpresaId && !effectiveEmpresaId.startsWith('grupo-')
+          ? { empresaId: effectiveEmpresaId }
+          : undefined
+
       const [cList, lList, tdList, contasList] = await Promise.all([
         centrosService.getAll(opts),
         lancamentosCentroService.getAll(opts),
         tiposDespesaService.getAll(opts),
         contasService.getAll(opts),
       ])
-      setCentros(cList)
-      setLancamentos(lList)
-      setTiposDespesa(tdList)
-      setContas(contasList)
+
+      // Deduplicação defensiva por ID e exclusão de órfãos (sem empresa para não-admin)
+      const filtraOrfaos = <T extends { id: string; empresa?: string }>(lista: T[]): T[] => {
+        const porId = Array.from(new Map(lista.map((i) => [i.id, i])).values())
+        if (isAdmin) return porId
+        return porId.filter((item) => Boolean(item.empresa))
+      }
+
+      setCentros(filtraOrfaos(cList))
+      setLancamentos(Array.from(new Map(lList.map((i) => [i.id, i])).values()))
+      setTiposDespesa(filtraOrfaos(tdList))
+      setContas(filtraOrfaos(contasList))
     } catch (err) {
       console.error('Erro ao carregar centros:', err)
       toast({
@@ -224,7 +245,7 @@ export default function Centros() {
   }
   useEffect(() => {
     loadData()
-  }, [effectiveEmpresaId])
+  }, [effectiveEmpresaId, empresasIdsDoGrupo])
 
   useRealtime<CentroRecord>('centros', () => loadData())
   useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => loadData())
@@ -425,13 +446,20 @@ export default function Centros() {
     if (!validateCentro(centroForm)) return
     setSavingCentro(true)
     try {
+      const empresaParaCriar =
+        effectiveEmpresaId && !effectiveEmpresaId.startsWith('grupo-')
+          ? effectiveEmpresaId
+          : empresasIdsDoGrupo && empresasIdsDoGrupo.length > 0
+            ? empresasIdsDoGrupo[0]
+            : user?.empresa || undefined
+
       const novo = await centrosService.create({
         nome: centroForm.nome,
         tipo: centroForm.tipo,
         descricao: centroForm.descricao,
         meta_mensal: parseMeta(centroForm.meta_mensal),
         meta_anual: parseMeta(centroForm.meta_anual),
-        empresa: effectiveEmpresaId || undefined,
+        empresa: empresaParaCriar,
       })
       toast({
         title: 'Centro de custo criado',
@@ -532,6 +560,13 @@ export default function Centros() {
     if (!selectedCentroId) return
     setSavingLanc(true)
     try {
+      const empresaParaLanc =
+        effectiveEmpresaId && !effectiveEmpresaId.startsWith('grupo-')
+          ? effectiveEmpresaId
+          : empresasIdsDoGrupo && empresasIdsDoGrupo.length > 0
+            ? empresasIdsDoGrupo[0]
+            : user?.empresa || undefined
+
       await lancamentosCentroService.create({
         centro: selectedCentroId,
         data: todayIso(),
@@ -540,7 +575,7 @@ export default function Centros() {
         tipo_despesa: lancForm.tipo_despesa || undefined,
         conta: lancForm.conta || undefined,
         concluido: lancForm.concluido,
-        empresa: effectiveEmpresaId || undefined,
+        empresa: empresaParaLanc,
       })
       toast({ title: 'Lançamento adicionado', description: 'O lançamento foi registrado.' })
       setLancForm(EMPTY_LANC)

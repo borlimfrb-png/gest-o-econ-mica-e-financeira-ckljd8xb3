@@ -22,6 +22,7 @@ interface FilterContextType {
   selectedEmpresa: EmpresaRecord | null
   isGrupoAtivo: boolean
   grupoAtivo: GrupoEmpresarialRecord | null
+  empresasIdsAtivas: string[]
   balancosEmpresa: BalancoRecord[]
   isLoadingEmpresas: boolean
   reloadEmpresas: () => Promise<void>
@@ -239,6 +240,16 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     empresas.find((e) => e.id === selectedEmpresaId) ||
     null
 
+  // Lista desagregada de IDs de empresas ativas (para empresa única ou membros do grupo)
+  const empresasIdsAtivas: string[] =
+    isGrupoAtivo && grupoAtivo && (grupoAtivo.empresas || []).length > 0
+      ? grupoAtivo.empresas || []
+      : selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
+        ? [selectedEmpresaId]
+        : empresaFixada
+          ? [empresaFixada]
+          : []
+
   return (
     <FilterContext.Provider
       value={{
@@ -264,6 +275,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         selectedEmpresa,
         isGrupoAtivo,
         grupoAtivo,
+        empresasIdsAtivas,
         balancosEmpresa,
         isLoadingEmpresas,
         reloadEmpresas: loadEmpresasEGrupos,

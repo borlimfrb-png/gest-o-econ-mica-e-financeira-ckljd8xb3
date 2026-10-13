@@ -160,7 +160,7 @@ function calcularProximoLancamento(diaMes: number): { dataIso: string; dataForma
 export default function Lancamentos() {
   const navigate = useNavigate()
   const { toast } = useToast()
-  const { selectedEmpresaId } = useFilter()
+  const { selectedEmpresaId, empresasIdsAtivas } = useFilter()
 
   // Aba ativa: 'lancamento' | 'historico' | 'recorrentes'
   const [activeTab, setActiveTab] = useState<string>('lancamento')
@@ -242,20 +242,31 @@ export default function Lancamentos() {
   const loadData = async () => {
     try {
       setLoading(true)
+      const empFilterOpts =
+        empresasIdsAtivas.length > 1
+          ? { empresasIds: empresasIdsAtivas }
+          : empresasIdsAtivas.length === 1
+            ? { empresaId: empresasIdsAtivas[0] }
+            : undefined
+
       const [empList, planoList, lancList, recList] = await Promise.all([
         empresasService.getAll(),
-        planoContasService.getAll(),
+        planoContasService.getAll(empFilterOpts),
         lancamentosService.getAll({ expandRelations: true }),
         lancamentosRecorrentesService.getAll({ expandRelations: true }),
       ])
       setEmpresas(empList)
-      setPlanoContas(planoList)
+      setPlanoContas(Array.from(new Map(planoList.map((i) => [i.id, i])).values()))
       setTodosLancamentos(lancList)
       setRecorrentes(recList)
 
       // Se ainda não selecionou empresa e existem empresas cadastradas, define a primeira como default
       if (!empresaFixaId && empList.length > 0) {
-        setEmpresaFixaId(empList[0].id)
+        const empAlvo =
+          selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
+            ? selectedEmpresaId
+            : empresasIdsAtivas[0] || empList[0].id
+        setEmpresaFixaId(empAlvo)
       }
     } catch (err) {
       console.error('Erro ao carregar dados de lançamentos:', err)
@@ -271,7 +282,7 @@ export default function Lancamentos() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [selectedEmpresaId, empresasIdsAtivas])
 
   // Atualização em tempo real para sincronizar múltiplos usuários/abas
   useRealtime<LancamentoRecord>('lancamentos', () => {

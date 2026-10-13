@@ -41,9 +41,17 @@ type FormErrors = Partial<Record<keyof TipoDespesaFormData | 'general', string>>
 
 export default function TiposDespesas() {
   const { toast } = useToast()
-  const { selectedEmpresaId } = useFilter()
+  const { selectedEmpresaId, isGrupoAtivo, grupoAtivo } = useFilter()
   const { user } = useAuth()
   const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
+
+  // Desagrega empresas do grupo para busca segura e sem duplicidades
+  const empresasIdsDoGrupo = useMemo(() => {
+    if (isGrupoAtivo && grupoAtivo && (grupoAtivo.empresas || []).length > 0) {
+      return grupoAtivo.empresas
+    }
+    return undefined
+  }, [isGrupoAtivo, grupoAtivo])
 
   const [tipos, setTipos] = useState<TipoDespesaRecord[]>([])
   const [contagemLancamentos, setContagemLancamentos] = useState<Record<string, number>>({})
@@ -66,12 +74,26 @@ export default function TiposDespesas() {
   const loadData = async () => {
     try {
       setLoading(true)
-      const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
+      const opts = empresasIdsDoGrupo
+        ? { empresasIds: empresasIdsDoGrupo }
+        : effectiveEmpresaId && !effectiveEmpresaId.startsWith('grupo-')
+          ? { empresaId: effectiveEmpresaId }
+          : undefined
+
       const [tList, lList] = await Promise.all([
         tiposDespesaService.getAll(opts),
         lancamentosCentroService.getAll(opts),
       ])
-      setTipos(tList)
+
+      // Deduplicação defensiva por ID e exclusão de órfãos (empresa vazio para não-admin)
+      const deduplicadosTipos = Array.from(new Map(tList.map((i) => [i.id, i])).values()).filter(
+        (t) => {
+          if (user?.role !== 'admin' && !t.empresa) return false
+          return true
+        },
+      )
+
+      setTipos(deduplicadosTipos)
       const counts: Record<string, number> = {}
       for (const l of lList) {
         if (l.tipo_despesa) {
@@ -93,7 +115,7 @@ export default function TiposDespesas() {
 
   useEffect(() => {
     loadData()
-  }, [effectiveEmpresaId])
+  }, [effectiveEmpresaId, empresasIdsDoGrupo])
 
   useRealtime<TipoDespesaRecord>('tipos_despesa', () => loadData())
   useRealtime('lancamentos_centro', () => loadData())
@@ -117,10 +139,17 @@ export default function TiposDespesas() {
     if (!validate(form)) return
     setSaving(true)
     try {
+      const empresaParaCriar =
+        effectiveEmpresaId && !effectiveEmpresaId.startsWith('grupo-')
+          ? effectiveEmpresaId
+          : empresasIdsDoGrupo && empresasIdsDoGrupo.length > 0
+            ? empresasIdsDoGrupo[0]
+            : user?.empresa || undefined
+
       const novo = await tiposDespesaService.create({
         nome: form.nome,
         descricao: form.descricao,
-        empresa: effectiveEmpresaId || undefined,
+        empresa: empresaParaCriar,
       })
       toast({
         title: 'Tipo de despesa criado',
