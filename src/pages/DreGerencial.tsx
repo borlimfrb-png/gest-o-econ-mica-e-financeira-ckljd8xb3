@@ -227,7 +227,8 @@ export default function DreGerencial() {
         planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
       } else {
         // Sem filtro ou restringe às empresas ativas
-        const empOpts = empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
+        const empOpts =
+          empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
         lancsPromise = lancamentosService.getAll({ expandRelations: true })
         contasPromise = contasService.getAll(empOpts)
         planosPromise = planoContasService.getAll(empOpts)
