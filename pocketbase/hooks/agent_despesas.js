@@ -370,7 +370,9 @@ routerAdd(
       const totalCaractereExtraido = markdownText.length
       // Linhas com potenciais valores monetários no markdown
       const linhasComValores = markdownText.split('\n').filter((l) => {
-        return /\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\b\d+\.\d{2}\b/i.test(l) && !/total|saldo\s*final/i.test(l)
+        return (
+          /\b\d{1,3}(?:\.\d{3})*,\d{2}\b|\b\d+\.\d{2}\b/i.test(l) && !/total|saldo\s*final/i.test(l)
+        )
       })
       const totalEstimadoLinhasDespesa = Math.max(linhasComValores.length, 1)
 
@@ -390,18 +392,105 @@ routerAdd(
       }
 
       const markdownCompacto = compactarMarkdown(markdownText)
-      const CHUNK_SIZE = 48000 // suporta documentos médios/grandes
-      let textoParaAgente = markdownCompacto
-      let isTextTruncated = false
 
-      if (markdownCompacto.length > CHUNK_SIZE) {
-        textoParaAgente = markdownCompacto.slice(0, CHUNK_SIZE)
-        isTextTruncated = true
+      // Divisão inteligente em Chunks para garantir que NENHUMA página ou trecho do PDF fique de fora
+      // Janela de ~35.000 caracteres por parte garante que o prompt caiba com folga no contexto
+      // e que o modelo consiga responder com o JSON completo sem cortar itens.
+      const CHUNK_SIZE = 36000
+      const chunks = []
+      if (markdownCompacto.length <= CHUNK_SIZE) {
+        chunks.push(markdownCompacto)
+      } else {
+        // Divide o markdown respeitando quebras de linha ou seções de tabelas
+        const lines = markdownCompacto.split('\n')
+        let currentChunk = ''
+        for (const line of lines) {
+          if ((currentChunk + '\n' + line).length > CHUNK_SIZE && currentChunk.trim().length > 0) {
+            chunks.push(currentChunk)
+            currentChunk = line
+          } else {
+            currentChunk = currentChunk ? currentChunk + '\n' + line : line
+          }
+        }
+        if (currentChunk.trim().length > 0) {
+          chunks.push(currentChunk)
+        }
       }
 
-      // 3. Monta prompt estrito para o Agente de IA extrair a hierarquia CONTA -> SUBCONTA -> DESPESAS
-      const promptAgente = `Você é o Agente Especialista em Importação e Classificação de Despesas.
-O usuário anexou um arquivo PDF contendo um relatório de despesas, faturas ou extrato gerencial.
+      // Função auxiliar para chamar o agente (com fallback para $ai.chat)
+      const executarChamadaAgente = (promptText) => {
+        try {
+          const res = $ai.agent('importador-despesas').chat({
+            user_id: userId,
+            message: promptText,
+          })
+          if (res && res.content) return res.content
+        } catch (_) {}
+
+        // Fallback robusto direto no $ai.chat fast
+        const chatRes = $ai.chat({
+          model: 'fast',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'Você é um parser contábil especialista em extração hierárquica de despesas de PDFs (Conta -> Subconta -> Despesas) em JSON puro estrito. Retorne estritamente o JSON sem tags markdown.',
+            },
+            {
+              role: 'user',
+              content: promptText,
+            },
+          ],
+        })
+        return chatRes?.choices?.[0]?.message?.content || ''
+      }
+
+      // Função de parse tolerante a respostas cortadas
+      const parsearJsonComRecuperacao = (rawContent) => {
+        if (!rawContent) return null
+        let clean = rawContent
+          .replace(/```json/gi, '')
+          .replace(/```/g, '')
+          .trim()
+        try {
+          return JSON.parse(clean)
+        } catch (_) {}
+
+        const match = clean.match(/\{[\s\S]*\}/)
+        if (match) {
+          try {
+            return JSON.parse(match[0])
+          } catch (_) {}
+        }
+
+        // Tenta fechar JSON inacabado
+        const tryClose = [
+          clean + ']}',
+          clean + ']}]}',
+          clean + ']}]}]}',
+          clean + '"}]}]}]}',
+          clean + '}]}]}}',
+        ]
+        for (const tc of tryClose) {
+          try {
+            return JSON.parse(tc)
+          } catch (_) {}
+        }
+        return null
+      }
+
+      // Processa cada Chunk e consolida a árvore de despesas
+      const resultadosPartes = []
+      let isAiResponseTruncated = false
+      let isTextTruncated = false
+
+      for (let i = 0; i < chunks.length; i++) {
+        const chunkContent = chunks[i]
+        const infoParte =
+          chunks.length > 1 ? ` (PARTE ${i + 1} DE ${chunks.length} DO DOCUMENTO)` : ''
+
+        const promptAgente = `Você é o Agente Especialista em Importação e Classificação de Despesas.
+O usuário anexou um arquivo PDF contendo um relatório de despesas, faturas ou extrato gerencial${infoParte}.
 
 PERÍODO ESCOLHIDO PELO USUÁRIO: ${periodoInicio}${periodoFim && periodoFim !== periodoInicio ? ' até ' + periodoFim : ''}
 EMPRESA ATIVA: ${empresaNome} (ID: ${empresaId || 'Geral'})
@@ -419,12 +508,12 @@ ${
     : '(Nenhuma conta cadastrada nesta empresa ainda)'
 }
 
-CONTEÚDO EXTRAÍDO DO PDF:
+CONTEÚDO EXTRAÍDO DO PDF${infoParte}:
 ---
-${textoParaAgente}
+${chunkContent}
 ---
 
-SUA TAREFA - EXTRAÇÃO HIERÁRQUICA COMPLETA:
+SUA TAREFA - EXTRAÇÃO HIERÁRQUICA COMPLETA DE TODAS AS LINHAS DESTA PARTE:
 ATENÇÃO: Extraia TODAS as despesas encontradas no texto acima, SEM LIMITAR nem resumir os itens. Não omita linhas com valores!
 Analise detalhadamente a estrutura do documento e organize os gastos na hierarquia CONTA → SUBCONTA → DESPESAS conforme vier no documento:
 1. "conta_principal": a grande conta agregadora macro no topo (ex.: "Despesas Administrativas", "Custos Operacionais", "Despesas Comerciais", "Despesas com Pessoal", "Despesas Financeiras").
@@ -435,7 +524,7 @@ Analise detalhadamente a estrutura do documento e organize os gastos na hierarqu
      - "despesas": lista com TODOS os itens de despesa detalhados contidos nessa subconta.
    * REGRA DE DEGRADAÇÃO: Se o PDF não tiver divisões explícitas de subcontas, crie uma subconta única com o mesmo nome da conta ou agrupe as despesas diretamente.
 3. Para cada item individual em "despesas":
-   - "id": identificador único (ex: "item_1")
+   - "id": identificador único (ex: "p${i + 1}_item_1")
    - "descricao": fornecedor, serviço ou item do gasto, limpo e legível
    - "valor": valor numérico estritamente positivo em float (ex: 1540.50)
    - "competencia": mês/ano ou data do gasto no formato "YYYY-MM" ou "YYYY-MM-DD" (se não especificado, use "${periodoInicio.slice(0, 7) || '2025-01'}")
@@ -455,7 +544,7 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
           "nome": "Energia e Utilidades",
           "despesas": [
             {
-              "id": "item_1",
+              "id": "p${i + 1}_item_1",
               "descricao": "Companhia Elétrica - Fornecimento",
               "valor": 1250.80,
               "competencia": "YYYY-MM",
@@ -468,87 +557,117 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
     }
   ],
   "despesas": [
-    /* Lista plana de todos os itens de despesa para retrocompatibilidade */
+    /* Lista plana de todos os itens de despesa desta parte */
   ],
-  "observacoes": "Resumo objetivo da análise realizada pelo Agente de IA"
+  "observacoes": "Resumo objetivo da análise desta parte"
 }`
 
-      let agentResponseContent = ''
-      try {
-        const agentResult = $ai.agent('importador-despesas').chat({
-          user_id: userId,
-          message: promptAgente,
-        })
-        agentResponseContent = agentResult.content || ''
-      } catch (agentErr) {
-        // Fallback: se o agente nativo falhar por limite temporário, tenta $ai.chat fast
-        try {
-          const directChat = $ai.chat({
-            model: 'fast',
-            messages: [
-              {
-                role: 'system',
-                content:
-                  'Você é um parser contábil especialista em extração hierárquica de despesas de PDFs (Conta -> Subconta -> Despesas) em JSON puro. Retorne estritamente o JSON solicitado.',
-              },
-              {
-                role: 'user',
-                content: promptAgente,
-              },
-            ],
-          })
-          agentResponseContent = directChat?.choices?.[0]?.message?.content || ''
-        } catch (chatErr) {
-          return e.json(500, {
-            error:
-              'Falha na análise do PDF pelo Agente de IA: ' +
-              (chatErr?.message || agentErr?.message || 'erro interno'),
-          })
+        const rawReply = executarChamadaAgente(promptAgente)
+        let parsed = parsearJsonComRecuperacao(rawReply)
+
+        // Se falhou parse por possível resposta incompleta, tenta uma segunda vez com pedido de recuperação
+        if (!parsed && rawReply.includes('"contas"')) {
+          isAiResponseTruncated = true
+          try {
+            const reparo = $ai.chat({
+              model: 'fast',
+              messages: [
+                {
+                  role: 'system',
+                  content:
+                    'Você é um reparador de JSON sintático. Complete ou feche o JSON contábil fornecido para torná-lo um JSON estritamente válido.',
+                },
+                {
+                  role: 'user',
+                  content: `Feche o seguinte JSON incompleto:\n${rawReply.slice(-4000)}`,
+                },
+              ],
+            })
+            const repContent = reparo?.choices?.[0]?.message?.content || ''
+            parsed = parsearJsonComRecuperacao(repContent)
+          } catch (_) {}
+        }
+
+        if (parsed) {
+          resultadosPartes.push(parsed)
         }
       }
 
-      // 4. Limpa e faz parse do JSON retornado pelo Agente com tolerância a respostas longas
-      let parsedData = null
-      let isAiResponseTruncated = false
-      try {
-        const cleanJson = agentResponseContent
-          .replace(/```json/gi, '')
-          .replace(/```/g, '')
-          .trim()
-        parsedData = JSON.parse(cleanJson)
-      } catch (parseErr) {
-        // Tenta regex para extrair bloco {...}
-        const jsonMatch = agentResponseContent.match(/\{[\s\S]*\}/)
-        if (jsonMatch) {
-          try {
-            parsedData = JSON.parse(jsonMatch[0])
-          } catch (_) {}
-        }
-        // Se ainda falhar, pode ter havido corte prematuro na resposta da IA (JSON inacabado)
-        if (!parsedData && agentResponseContent.includes('"contas"')) {
-          isAiResponseTruncated = true
-          // Tenta fechar o JSON artificialmente para recuperar o máximo de dados
-          const candidateClose = agentResponseContent.replace(/```json/gi, '').replace(/```/g, '').trim()
-          const tryClose = [
-            candidateClose + ']}',
-            candidateClose + ']}]}',
-            candidateClose + ']}]}]}',
-            candidateClose + '"}]}]}]}',
-          ]
-          for (const tc of tryClose) {
-            try {
-              parsedData = JSON.parse(tc)
-              break
-            } catch (_) {}
+      if (resultadosPartes.length === 0) {
+        return e.json(422, {
+          error:
+            'O Agente de IA não conseguiu identificar despesas estruturadas neste documento PDF. Verifique se o arquivo possui tabelas ou valores claros de despesas.',
+        })
+      }
+
+      // Consolidação de todas as partes em um único resultado estruturado
+      const parsedData = {
+        conta_principal: resultadosPartes[0]?.conta_principal || 'Despesas Gerais e Operacionais',
+        contas: [],
+        despesas: [],
+        observacoes: resultadosPartes
+          .map((p) => p.observacoes)
+          .filter(Boolean)
+          .join(' | '),
+      }
+
+      // Mescla as árvores de contas por nome de Conta e Subconta
+      const mapaContasConsolidadas = new Map()
+
+      for (const parte of resultadosPartes) {
+        // Se a parte tiver 'contas'
+        if (Array.isArray(parte.contas) && parte.contas.length > 0) {
+          for (const c of parte.contas) {
+            const nomeConta = String(c.nome || c.conta || 'Despesas Gerais').trim()
+            if (!mapaContasConsolidadas.has(nomeConta)) {
+              mapaContasConsolidadas.set(nomeConta, new Map())
+            }
+            const mapaSubs = mapaContasConsolidadas.get(nomeConta)
+
+            if (Array.isArray(c.subcontas) && c.subcontas.length > 0) {
+              for (const sc of c.subcontas) {
+                const nomeSub = String(sc.nome || sc.subconta || 'Geral').trim()
+                const list = mapaSubs.get(nomeSub) || []
+                const itens = Array.isArray(sc.despesas)
+                  ? sc.despesas
+                  : Array.isArray(sc.itens)
+                    ? sc.itens
+                    : []
+                mapaSubs.set(nomeSub, list.concat(itens))
+              }
+            } else if (Array.isArray(c.despesas) && c.despesas.length > 0) {
+              const list = mapaSubs.get('Geral') || []
+              mapaSubs.set('Geral', list.concat(c.despesas))
+            }
+          }
+        } else if (Array.isArray(parte.despesas) && parte.despesas.length > 0) {
+          // Fallback se a parte só mandou despesas planas
+          const nomeConta = parte.conta_principal || parsedData.conta_principal
+          if (!mapaContasConsolidadas.has(nomeConta)) {
+            mapaContasConsolidadas.set(nomeConta, new Map())
+          }
+          const mapaSubs = mapaContasConsolidadas.get(nomeConta)
+          for (const d of parte.despesas) {
+            const nomeSub = String(d.subconta || d.categoria || 'Geral').trim()
+            const list = mapaSubs.get(nomeSub) || []
+            list.push(d)
+            mapaSubs.set(nomeSub, list)
           }
         }
       }
 
-      if (!parsedData) {
-        return e.json(422, {
-          error:
-            'O Agente de IA não conseguiu identificar despesas estruturadas neste documento PDF. Verifique se o arquivo possui tabelas ou valores claros de despesas.',
-          rawContent: agentResponseContent.slice(0, 500),
+      // Reconstrói parsedData.contas estruturadas
+      for (const [nomeConta, mapaSubs] of mapaContasConsolidadas.entries()) {
+        const subcontasArr = []
+        for (const [nomeSub, itens] of mapaSubs.entries()) {
+          subcontasArr.push({
+            nome: nomeSub,
+            despesas: itens,
+          })
+        }
+        parsedData.contas.push({
+          nome: nomeConta,
+          subcontas: subcontasArr,
         })
       }
 

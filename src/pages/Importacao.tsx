@@ -1161,9 +1161,7 @@ export default function Importacao() {
         className="space-y-6"
       >
         <div className="bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200/80 shadow-xs overflow-x-auto">
-          <TabsList
-            className="inline-flex w-full min-w-max items-center justify-start gap-1 bg-transparent p-0 h-auto"
-          >
+          <TabsList className="inline-flex w-full min-w-max items-center justify-start gap-1 bg-transparent p-0 h-auto">
             {podeAcessarIaPdf && (
               <TabsTrigger
                 value="importacao-ia-pdf"

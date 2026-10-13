@@ -986,7 +986,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-28">
       {/* 1. Header do Módulo com Destaque do Agente de IA */}
       <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-6 shadow-md relative overflow-hidden">
         <div className="absolute right-0 top-0 -mt-8 -mr-8 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -1001,8 +1001,8 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
               <Badge className="bg-blue-600 text-white border-0 text-xs font-semibold">PDF</Badge>
             </h2>
             <p className="text-slate-300 text-sm leading-relaxed">
-              Anexe relatórios, faturas ou extratos em PDF. O Agente de IA extrai as despesas na
-              hierarquia completa (Conta → Subconta → Itens), identifica a conta-mãe agregadora e
+              Anexe relatórios, faturas ou extratos em PDF. O Agente de IA extrai todas as despesas
+              na hierarquia completa (Conta → Subconta → Itens), identifica a conta agregadora e
               permite o vínculo direto com o Plano de Contas.
             </p>
           </div>
@@ -1040,35 +1040,33 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
         </div>
       </div>
 
-      {/* 2. Painel Unificado e Organizado em Linha Horizontal: Filtros de Competência + Área de Upload de PDF */}
-      <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base font-bold flex items-center gap-2 text-slate-900">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                Configuração da Importação & Documento
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Defina o período contábil, anexe o arquivo e dispare a análise pelo Agente de IA.
-              </CardDescription>
+      {/* 2. Fluxo Ordenado de Entrada: PASSO 1 (Período) e PASSO 2 (Upload do PDF & Análise) lado a lado em desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+        {/* PASSO 1: Seleção de Competência e Empresa */}
+        <Card className="md:col-span-5 border-slate-200 shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/60">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  1
+                </span>
+                <div>
+                  <CardTitle className="text-sm font-bold text-slate-900">
+                    Período & Competência
+                  </CardTitle>
+                  <CardDescription className="text-[11px]">
+                    Defina o mês de competência das despesas
+                  </CardDescription>
+                </div>
+              </div>
+              <Badge variant="outline" className="text-[10px] text-slate-600 font-mono">
+                {periodoTipo === 'faixa' ? 'Faixa' : 'Único'}
+              </Badge>
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-              <span className="hidden sm:inline">Servidor nativo $documents.toMarkdown</span>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-5 space-y-5">
-          {/* Linha 1: Controles de Período e Empresa em Linha Horizontal */}
-          <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-blue-600" />
-              1. Parâmetros de Competência e Exercício
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-end">
-              {/* Tipo de Período */}
-              <div className="space-y-1.5">
+          </CardHeader>
+          <CardContent className="p-4 space-y-3.5 flex-1 flex flex-col justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Tipo de Período</Label>
                 <Select
                   value={periodoTipo}
@@ -1088,10 +1086,9 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                 </Select>
               </div>
 
-              {/* Período Início */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">
-                  {periodoTipo === 'faixa' ? 'Competência Inicial' : 'Competência (YYYY-MM)'}
+                  {periodoTipo === 'faixa' ? 'Competência Inicial' : 'Competência (Mês/Ano)'}
                 </Label>
                 <Input
                   type="month"
@@ -1101,12 +1098,9 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                 />
               </div>
 
-              {/* Período Fim (se faixa) ou Exercício */}
               {periodoTipo === 'faixa' ? (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">
-                    Competência Final
-                  </Label>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-xs font-semibold text-slate-700">Competência Final</Label>
                   <Input
                     type="month"
                     value={periodoFim}
@@ -1115,39 +1109,49 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                   />
                 </div>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-1 sm:col-span-2">
                   <Label className="text-xs font-semibold text-slate-700">Ano de Exercício</Label>
-                  <div className="h-9 px-3 flex items-center bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-700">
-                    {periodoInicio.split('-')[0] || anoPadrao}
+                  <div className="h-9 px-3 flex items-center justify-between bg-slate-50 border border-slate-200 rounded-md text-xs font-semibold text-slate-700">
+                    <span>{periodoInicio.split('-')[0] || anoPadrao}</span>
+                    <span className="text-[11px] font-normal text-slate-500">Exercício Fiscal</span>
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Resumo da Empresa Selecionada */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-slate-700">Empresa Vinculada</Label>
-                <div className="h-9 px-3 flex items-center justify-between bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-800 truncate">
-                  <span className="truncate">{empresaObj?.nome || empresaObj?.razao_social || 'Nenhuma selecionada'}</span>
-                  <Badge variant="secondary" className="text-[10px] ml-1 shrink-0">
-                    {planoContas.length} contas
-                  </Badge>
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-600">
+              <span className="truncate">
+                Empresa:{' '}
+                <strong>{empresaObj?.nome || empresaObj?.razao_social || 'Nenhuma'}</strong>
+              </span>
+              <span className="font-mono text-blue-700 bg-blue-50 px-2 py-0.5 rounded font-semibold shrink-0 ml-2">
+                {planoContas.length} contas no plano
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* PASSO 2: Upload do Arquivo PDF & Disparo da Análise */}
+        <Card className="md:col-span-7 border-slate-200 shadow-sm flex flex-col justify-between">
+          <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/60">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                  2
+                </span>
+                <div>
+                  <CardTitle className="text-sm font-bold text-slate-900">
+                    Upload & Análise com IA
+                  </CardTitle>
+                  <CardDescription className="text-[11px]">
+                    PDF com camada de texto (extratos, relatórios contábeis ou de custos)
+                  </CardDescription>
                 </div>
               </div>
+              <span className="text-[11px] text-slate-500 hidden sm:inline">Até 10 MB</span>
             </div>
-          </div>
-
-          {/* Linha 2: Área de Upload do PDF Destacada e Botão de Ação Agrupado */}
-          <div className="space-y-3">
-            <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5 text-blue-600" />
-                2. Seleção do Arquivo PDF
-              </span>
-              <span className="text-[11px] font-normal text-slate-500">
-                Formatos aceitos: PDF digital até 10 MB
-              </span>
-            </div>
-
+          </CardHeader>
+          <CardContent className="p-4 space-y-3 flex-1 flex flex-col justify-between">
             <div
               onDragOver={(e) => {
                 e.preventDefault()
@@ -1156,10 +1160,10 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
               onDragLeave={() => setIsDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-5 flex flex-col sm:flex-row items-center justify-between gap-4 cursor-pointer transition-all ${
+              className={`border-2 border-dashed rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 cursor-pointer transition-all flex-1 ${
                 isDragOver
                   ? 'border-blue-500 bg-blue-50/70 scale-[1.005]'
-                  : 'border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-blue-50/20'
+                  : 'border-slate-300 hover:border-blue-400 bg-slate-50/40 hover:bg-blue-50/20'
               }`}
             >
               <input
@@ -1170,35 +1174,35 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                 className="hidden"
               />
 
-              <div className="flex items-center gap-4 text-left">
-                <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-xs">
-                  <FileText className="w-6 h-6" />
+              <div className="flex items-center gap-3 text-left min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <FileText className="w-5 h-5" />
                 </div>
 
                 {selectedFile ? (
-                  <div className="space-y-0.5">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[11px] font-semibold">
-                      <Check className="w-3 h-3" /> Arquivo Pronto para Análise
+                  <div className="space-y-0.5 min-w-0">
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.2 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-semibold">
+                      <Check className="w-3 h-3" /> PDF Carregado
                     </div>
-                    <h4 className="text-sm font-bold text-slate-900">{selectedFile.name}</h4>
-                    <p className="text-xs text-slate-500">
-                      Tamanho: {(selectedFile.size / 1024).toFixed(1)} KB • Tipo: Documento PDF
+                    <h4 className="text-xs font-bold text-slate-900 truncate">
+                      {selectedFile.name}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      {(selectedFile.size / 1024).toFixed(1)} KB • Pronto para processamento
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-0.5">
-                    <h4 className="text-sm font-bold text-slate-800">
-                      Clique aqui ou arraste o arquivo PDF
+                  <div className="space-y-0.5 min-w-0">
+                    <h4 className="text-xs font-bold text-slate-800">
+                      Clique aqui ou arraste o PDF
                     </h4>
-                    <p className="text-xs text-slate-500 max-w-lg">
-                      Extratos, relatórios de despesas, folhas de custos ou comprovantes contábeis
-                      em PDF.
+                    <p className="text-[11px] text-slate-500 truncate">
+                      Extratos, demonstrativos contábeis ou relatórios de fornecedores
                     </p>
                   </div>
                 )}
               </div>
 
-              {/* Botões do Bloco de Upload */}
               <div className="flex items-center gap-2 shrink-0">
                 {selectedFile ? (
                   <Button
@@ -1209,13 +1213,13 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                       e.stopPropagation()
                       setSelectedFile(null)
                     }}
-                    className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-9 px-3"
+                    className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 h-8 px-2.5"
                   >
                     <Trash2 className="w-3.5 h-3.5 mr-1" /> Trocar
                   </Button>
                 ) : (
-                  <span className="inline-flex items-center text-xs text-blue-600 font-semibold bg-white px-3.5 py-2 rounded-lg border border-slate-200 shadow-xs">
-                    <Upload className="w-3.5 h-3.5 mr-1.5" /> Escolher Arquivo
+                  <span className="inline-flex items-center text-xs text-blue-600 font-semibold bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+                    <Upload className="w-3.5 h-3.5 mr-1" /> Selecionar
                   </span>
                 )}
 
@@ -1225,46 +1229,50 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                     handleAnalisarComIa()
                   }}
                   disabled={!selectedFile || isAnalyzing}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2 shadow-xs px-5 h-9 text-xs"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5 shadow-xs px-4 h-8 text-xs shrink-0"
                 >
                   {isAnalyzing ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      {processingStatus || 'Processando...'}
+                      Analisando...
                     </>
                   ) : (
                     <>
-                      <Sparkles className="w-3.5 h-3.5" />
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                       Analisar com IA
                     </>
                   )}
                 </Button>
               </div>
             </div>
-          </div>
 
-          {/* Alerta de erro se houver */}
-          {errorMsg && (
-            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl text-left flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <div className="space-y-1 text-xs text-rose-900 flex-1">
-                <p className="font-semibold text-rose-950">
-                  Falha na análise do PDF com o Agente de IA
-                </p>
-                <p className="text-rose-800 leading-relaxed">{errorMsg}</p>
+            {isAnalyzing && (
+              <p className="text-[11px] text-blue-700 animate-pulse flex items-center gap-1.5">
+                <RefreshCw className="w-3 h-3 animate-spin shrink-0" />
+                {processingStatus || 'Processando documento no servidor...'}
+              </p>
+            )}
+
+            {errorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-left flex items-start gap-2 text-xs text-rose-900">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-rose-950">Falha na análise do PDF</p>
+                  <p className="text-[11px] text-rose-800 leading-relaxed mt-0.5">{errorMsg}</p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setErrorMsg(null)}
+                  className="text-rose-600 hover:text-rose-800 h-6 px-1.5 text-xs"
+                >
+                  Fechar
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setErrorMsg(null)}
-                className="text-rose-600 hover:text-rose-800 h-7 px-2 text-xs"
-              >
-                Fechar
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* 3. Resultado Estruturado da Proposta (Duas Colunas: Despesas à esquerda vs. Plano de Contas à direita) */}
       {despesas.length > 0 && (
@@ -1311,12 +1319,17 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
 
                   <span className="inline-flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-md border border-slate-200 font-medium">
                     <ChevronRight className="w-3.5 h-3.5 text-slate-600" />
-                    <strong>{totalSubcontasIa || arvoreContasSincronizada.reduce((a, c) => a + c.subcontas.length, 0)}</strong> subcontas
+                    <strong>
+                      {totalSubcontasIa ||
+                        arvoreContasSincronizada.reduce((a, c) => a + c.subcontas.length, 0)}
+                    </strong>{' '}
+                    subcontas
                   </span>
 
                   {truncamentoDetalhes?.caracteres_extraidos && (
                     <span className="text-[11px] text-slate-500 font-mono">
-                      {truncamentoDetalhes.caracteres_extraidos.toLocaleString('pt-BR')} caracteres processados
+                      {truncamentoDetalhes.caracteres_extraidos.toLocaleString('pt-BR')} caracteres
+                      processados
                     </span>
                   )}
                 </div>
@@ -1329,10 +1342,18 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                       Aviso de Leitura Parcial do Documento
                     </div>
                     <p className="leading-relaxed">
-                      O arquivo PDF possui um volume extenso ({truncamentoDetalhes?.total_estimado || 'várias'} linhas estimadas com valores) que excedeu o limite máximo seguro de análise em uma única requisição. O Agente de IA extraiu com precisão <strong>{despesas.length} despesas</strong> nas primeiras seções/páginas do documento.
+                      O arquivo PDF possui um volume extenso (
+                      {truncamentoDetalhes?.total_estimado || 'várias'} linhas estimadas com
+                      valores) que excedeu o limite máximo seguro de análise em uma única
+                      requisição. O Agente de IA extraiu com precisão{' '}
+                      <strong>{despesas.length} despesas</strong> nas primeiras seções/páginas do
+                      documento.
                     </p>
                     <p className="text-[11px] text-amber-800">
-                      💡 Dica: Para relatórios muito longos (acima de 30 páginas ou milhares de lançamentos), você também pode usar a aba <strong>Lançamentos (Excel + IA)</strong> ou <strong>PDF para Excel</strong> para importar por lotes mensais sem restrição de tamanho.
+                      💡 Dica: Para relatórios muito longos (acima de 30 páginas ou milhares de
+                      lançamentos), você também pode usar a aba{' '}
+                      <strong>Lançamentos (Excel + IA)</strong> ou <strong>PDF para Excel</strong>{' '}
+                      para importar por lotes mensais sem restrição de tamanho.
                     </p>
                   </div>
                 )}
@@ -1780,59 +1801,83 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
 
           {/* ========================================================================= */}
           {/* BARRA DE CONFIRMAÇÃO FIXA INFERIOR COM TOTAIS E BOTÃO DE GRAVAÇÃO        */}
+          {/* Fixada ao rodapé para navegação confortável com alta visibilidade         */}
           {/* ========================================================================= */}
-          <div className="bg-white border-t-2 border-blue-600 rounded-xl p-5 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-6">
-              {/* Total Geral Conferido */}
-              <div>
-                <p className="text-xs text-slate-500 font-medium">Soma Geral Conferida:</p>
-                <p className="text-xl font-bold font-mono text-slate-900">
-                  {formatMoeda(totalGeralConferido)}
-                </p>
-              </div>
-
-              {/* Contador de Vinculadas vs. Pendentes */}
-              <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t-2 border-blue-600 shadow-2xl px-4 py-3 sm:px-6">
+            <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-4 sm:gap-8">
+                {/* Total Geral Conferido */}
                 <div>
-                  <p className="text-xs text-slate-500 font-medium">Despesas Vinculadas:</p>
-                  <p className="text-sm font-bold text-emerald-700 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    {despesasVinculadasCount} de {despesas.length}
+                  <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">
+                    Soma Geral Conferida
+                  </p>
+                  <p className="text-lg sm:text-xl font-bold font-mono text-slate-900 leading-tight">
+                    {formatMoeda(totalGeralConferido)}
                   </p>
                 </div>
 
-                {despesasPendentesCount > 0 && (
+                {/* Contador de Vinculadas vs. Pendentes */}
+                <div className="flex items-center gap-3 sm:border-l border-slate-200 sm:pl-5">
                   <div>
-                    <p className="text-xs text-slate-500 font-medium">Sem Vínculo (Pendentes):</p>
-                    <p className="text-sm font-bold text-amber-700 flex items-center gap-1">
-                      <AlertCircle className="w-4 h-4 text-amber-500" />
-                      {despesasPendentesCount}
+                    <p className="text-[11px] text-slate-500 font-medium">Vinculadas</p>
+                    <p className="text-xs sm:text-sm font-bold text-emerald-700 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      {despesasVinculadasCount} de {despesas.length}
                     </p>
                   </div>
-                )}
-              </div>
-            </div>
 
-            {/* Ações de Confirmação */}
-            <div className="flex items-center gap-3">
-              <Button
-                size="lg"
-                onClick={handleConfirmarImportacao}
-                disabled={isConfirming || despesasVinculadasCount === 0}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 shadow-md gap-2"
-              >
-                {isConfirming ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    Gravando Lançamentos...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-5 h-5" />
-                    Confirmar Importação ({despesasVinculadasCount})
-                  </>
+                  {despesasPendentesCount > 0 ? (
+                    <div className="border-l border-slate-200 pl-3">
+                      <p className="text-[11px] text-slate-500 font-medium">Pendentes</p>
+                      <p className="text-xs sm:text-sm font-bold text-amber-700 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                        {despesasPendentesCount}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border-l border-slate-200 pl-3">
+                      <p className="text-[11px] text-slate-500 font-medium">Status</p>
+                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                        <Check className="w-3 h-3" /> 100% Prontas
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Ações de Confirmação */}
+              <div className="flex items-center gap-2.5">
+                {selectedDespesaIds.size > 0 && selectedTreePlanoId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleVincularEmLote(selectedTreePlanoId)}
+                    className="border-blue-300 text-blue-700 hover:bg-blue-50 text-xs h-9 px-3 font-semibold gap-1.5 hidden md:inline-flex"
+                  >
+                    <LinkIcon className="w-3.5 h-3.5" />
+                    Vincular Selecionadas ({selectedDespesaIds.size})
+                  </Button>
                 )}
-              </Button>
+
+                <Button
+                  size="default"
+                  onClick={handleConfirmarImportacao}
+                  disabled={isConfirming || despesasVinculadasCount === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md gap-2 h-10 text-xs sm:text-sm cursor-pointer"
+                >
+                  {isConfirming ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Gravando Lançamentos...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Confirmar Importação ({despesasVinculadasCount})
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
 
