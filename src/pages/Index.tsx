@@ -299,15 +299,19 @@ export default function Index() {
             ) : null}
           </div>
 
-          {/* Card Principal */}
-          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl shadow-slate-200/60 border border-slate-200/90 p-6 sm:p-7">
+          {/* Card Principal Moderno com Elevação Suave e Borda Sutil */}
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl shadow-slate-300/40 border border-slate-200/80 p-6 sm:p-8 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500" />
             <div className="text-center mb-5">
-              <h2 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+              <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 mb-3">
+                <Scale className="w-5 h-5" />
+              </div>
+              <h2 className="text-xl font-extrabold text-[#0B1F3A] tracking-tight">
                 {activeTab === 'login' ? 'Acesse sua conta' : 'Criar nova conta'}
               </h2>
-              <p className="text-xs text-[#5B6B7F] mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 {activeTab === 'login'
-                  ? 'Informe suas credenciais para acessar a plataforma corporativa'
+                  ? 'Plataforma integrada de inteligência e diagnóstico financeiro'
                   : 'Preencha os dados abaixo para começar'}
               </p>
             </div>
@@ -421,9 +425,9 @@ export default function Index() {
                   <Button
                     type="submit"
                     disabled={submitting}
-                    className="w-full h-11 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md shadow-blue-600/20 active:scale-[0.99] transition-all"
+                    className="w-full h-11 text-sm font-bold bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl shadow-md shadow-blue-600/25 active:scale-[0.99] transition-all cursor-pointer"
                   >
-                    {submitting ? 'Entrando...' : 'Entrar no Sistema'}
+                    {submitting ? 'Entrando...' : 'Entrar na Plataforma'}
                     {!submitting && <ArrowRight className="ml-2 w-4 h-4" />}
                   </Button>
                 </form>

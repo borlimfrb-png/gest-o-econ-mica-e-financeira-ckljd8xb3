@@ -143,7 +143,7 @@ export const DoubleHorizontalScroll = React.forwardRef<HTMLDivElement, DoubleHor
             ref={topContainerRef}
             onScroll={handleTopScroll}
             className={cn(
-              'overflow-x-auto overflow-y-hidden w-full max-w-full print:hidden select-none bg-slate-50/60 border-b border-slate-200/80',
+              'overflow-x-auto overflow-y-hidden w-full max-w-full print:hidden select-none bg-slate-100/70 border-b border-slate-200/90 transition-colors',
               topScrollClassName,
             )}
             style={{

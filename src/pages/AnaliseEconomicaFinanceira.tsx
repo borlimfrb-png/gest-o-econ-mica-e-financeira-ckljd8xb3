@@ -125,9 +125,9 @@ export default function AnaliseEconomicaFinanceira() {
         badge: 'Balanço',
         badgeVariant: 'cyan',
         icon: Scale,
-        gradient: 'from-[#0F2D54] to-[#0B1F3A]',
-        borderGlow: 'hover:border-cyan-400/60 hover:shadow-cyan-500/10',
-        iconBg: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/30',
+        gradient: 'from-[#0B1F3A] via-[#0D294E] to-[#123668]',
+        borderGlow: 'hover:border-sky-400/70 hover:shadow-sky-500/15',
+        iconBg: 'bg-gradient-to-tr from-sky-500/25 to-blue-600/20 text-sky-300 border-sky-400/40',
         rota: (empId) => (empId ? `/empresas/${empId}?aba=balanco` : '/empresas'),
         metricasTexto: 'Ativo Circulante, Realizável L.P., Passivos e PL',
       },
@@ -140,9 +140,10 @@ export default function AnaliseEconomicaFinanceira() {
         badge: 'Gerencial',
         badgeVariant: 'emerald',
         icon: BarChart3,
-        gradient: 'from-[#0F354A] to-[#0B1F3A]',
-        borderGlow: 'hover:border-emerald-400/60 hover:shadow-emerald-500/10',
-        iconBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30',
+        gradient: 'from-[#0B1F3A] via-[#0C3042] to-[#11494F]',
+        borderGlow: 'hover:border-emerald-400/70 hover:shadow-emerald-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-emerald-500/25 to-teal-600/20 text-emerald-300 border-emerald-400/40',
         rota: () => '/gerencial/dre',
         metricasTexto: 'Receita Líquida, Margem de Contribuição e Resultado Líquido',
       },
@@ -155,9 +156,10 @@ export default function AnaliseEconomicaFinanceira() {
         badge: 'Fixas',
         badgeVariant: 'blue',
         icon: Tags,
-        gradient: 'from-[#142850] to-[#0B1F3A]',
-        borderGlow: 'hover:border-blue-400/60 hover:shadow-blue-500/10',
-        iconBg: 'bg-blue-500/20 text-blue-300 border-blue-400/30',
+        gradient: 'from-[#0B1F3A] via-[#102952] to-[#163870]',
+        borderGlow: 'hover:border-blue-400/70 hover:shadow-blue-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-blue-500/25 to-indigo-600/20 text-blue-300 border-blue-400/40',
         rota: () => '/gerencial/despesas-fixas',
         metricasTexto: 'Alocação por tipo de conta, centro de custo e matriz mensal',
       },
@@ -170,9 +172,10 @@ export default function AnaliseEconomicaFinanceira() {
         badge: 'Variáveis',
         badgeVariant: 'amber',
         icon: PieChart,
-        gradient: 'from-[#222E4A] to-[#0B1F3A]',
-        borderGlow: 'hover:border-amber-400/60 hover:shadow-amber-500/10',
-        iconBg: 'bg-amber-500/20 text-amber-300 border-amber-400/30',
+        gradient: 'from-[#0B1F3A] via-[#212745] to-[#2E284F]',
+        borderGlow: 'hover:border-amber-400/70 hover:shadow-amber-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-amber-500/25 to-orange-600/20 text-amber-300 border-amber-400/40',
         rota: () => '/gerencial/despesas-variaveis',
         metricasTexto: 'Comissões, fretes de entrega e alíquotas variáveis apuradas',
       },
@@ -185,9 +188,10 @@ export default function AnaliseEconomicaFinanceira() {
         badge: 'Faturamento',
         badgeVariant: 'emerald',
         icon: TrendingUp,
-        gradient: 'from-[#0A3644] to-[#0B1F3A]',
-        borderGlow: 'hover:border-teal-400/60 hover:shadow-teal-500/10',
-        iconBg: 'bg-teal-500/20 text-teal-300 border-teal-400/30',
+        gradient: 'from-[#0B1F3A] via-[#0B333E] to-[#0E494B]',
+        borderGlow: 'hover:border-teal-400/70 hover:shadow-teal-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-teal-500/25 to-emerald-600/20 text-teal-300 border-teal-400/40',
         rota: () => '/gerencial/analise-faturamento',
         metricasTexto: 'Sazonalidade Jan-Dez, participação percentual e comparativos',
       },
@@ -197,8 +201,8 @@ export default function AnaliseEconomicaFinanceira() {
 
   return (
     <div className="space-y-6 pb-8 animate-fadeIn">
-      {/* Banner Principal com Tema Azul-Marinho #0B1F3A e Glassmorphism */}
-      <div className="relative overflow-hidden rounded-3xl bg-[#0B1F3A] border border-blue-900/40 p-6 sm:p-8 text-white shadow-xl">
+      {/* Banner Principal com Tema Azul-Marinho Profundo e Gradiente Moderno */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0B1F3A] via-[#0E284E] to-[#143A6E] border border-blue-900/40 p-6 sm:p-8 text-white shadow-xl shadow-slate-900/10">
         {/* Luzes de fundo / Glassmorphism decorativo */}
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
@@ -292,18 +296,20 @@ export default function AnaliseEconomicaFinanceira() {
               <Card
                 key={item.id}
                 onClick={() => navigate(destino)}
-                className={`group relative overflow-hidden bg-gradient-to-br ${item.gradient} border border-slate-700/60 rounded-2xl p-6 text-white cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl ${item.borderGlow} flex flex-col justify-between min-h-[260px] backdrop-blur-md`}
+                className={`group relative overflow-hidden bg-gradient-to-br ${item.gradient} border border-slate-700/60 rounded-2xl p-6 text-white cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl ${item.borderGlow} flex flex-col justify-between min-h-[265px] backdrop-blur-md`}
               >
+                {/* Linha de acento no topo do card ao passar o mouse */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-sky-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                 {/* Efeito sutil de vidro reflexivo */}
-                <div className="absolute inset-0 bg-white/[0.03] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                <div className="absolute inset-0 bg-white/[0.04] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-                {/* Topo do Card: Ícone Grande + Badge */}
+                {/* Topo do Card: Medalhão do Ícone + Badge */}
                 <div className="space-y-4 relative z-10">
                   <div className="flex items-center justify-between">
                     <div
-                      className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all duration-300 group-hover:scale-110 shadow-lg ${item.iconBg}`}
+                      className={`w-13 h-13 rounded-2xl flex items-center justify-center border transition-all duration-300 group-hover:scale-108 shadow-lg shadow-black/20 ${item.iconBg}`}
                     >
-                      <Icon className="w-7 h-7" />
+                      <Icon className="w-6.5 h-6.5" />
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -312,7 +318,7 @@ export default function AnaliseEconomicaFinanceira() {
                       </span>
                       <Badge
                         variant="secondary"
-                        className="bg-white/10 text-white border-white/15 text-[10px] font-bold"
+                        className="bg-white/10 text-white border-white/20 text-[10.5px] font-bold backdrop-blur-xs px-2 py-0.5"
                       >
                         {item.badge}
                       </Badge>
@@ -320,13 +326,11 @@ export default function AnaliseEconomicaFinanceira() {
                   </div>
 
                   <div>
-                    <h3 className="text-lg font-bold text-white group-hover:text-cyan-200 transition-colors flex items-center gap-1.5">
+                    <h3 className="text-lg font-extrabold text-white group-hover:text-sky-300 transition-colors flex items-center gap-1.5">
                       {item.titulo}
                     </h3>
-                    <p className="text-xs font-semibold text-slate-300/80 mt-0.5">
-                      {item.subtitulo}
-                    </p>
-                    <p className="text-xs text-slate-300/70 mt-2.5 leading-relaxed line-clamp-3">
+                    <p className="text-xs font-semibold text-sky-200/90 mt-0.5">{item.subtitulo}</p>
+                    <p className="text-xs text-slate-300/80 mt-2.5 leading-relaxed line-clamp-3">
                       {item.descricao}
                     </p>
                   </div>
@@ -338,7 +342,7 @@ export default function AnaliseEconomicaFinanceira() {
                     {item.metricasTexto}
                   </span>
 
-                  <div className="flex items-center gap-1 font-semibold text-cyan-300 group-hover:text-cyan-200 transition-colors shrink-0">
+                  <div className="flex items-center gap-1.5 font-bold text-sky-300 group-hover:text-sky-200 transition-colors shrink-0 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10 group-hover:border-sky-400/40">
                     <span>Acessar</span>
                     <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
                   </div>

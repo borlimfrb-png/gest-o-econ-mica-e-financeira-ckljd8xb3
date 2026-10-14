@@ -400,12 +400,9 @@ export default function Layout() {
             em desktop (>=768px), o layout vertical ocupa a lateral e o main ocupa o restante.
       ======================================================== */}
       {menuOrientation === 'horizontal' ? (
-        <header
-          className="shrink-0 z-40 text-white shadow-md transition-colors border-b border-slate-800/40"
-          style={{ backgroundColor: corPrimaria }}
-        >
+        <header className="shrink-0 z-40 text-white shadow-lg transition-colors border-b border-slate-800/50 bg-gradient-to-r from-[#0B1F3A] via-[#0F274B] to-[#122A50]">
           {/* ---------------- LINHA 1: CABEÇALHO SUPERIOR (UTILITÁRIOS & MARCA) ---------------- */}
-          <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/20 backdrop-blur-md">
+          <div className="w-full px-3 lg:px-5 border-b border-white/10 bg-black/15 backdrop-blur-md">
             <div className="flex items-center justify-between h-12 md:h-13 gap-2 md:gap-4">
               {/* LADO ESQUERDO: Hambúrguer Mobile + Logotipo Borlim / Consultoria */}
               <div className="flex items-center gap-2 md:gap-3 shrink-0">
@@ -576,7 +573,7 @@ export default function Layout() {
                       className="flex items-center gap-1.5 pl-1.5 pr-2 py-1 rounded-xl hover:bg-white/10 transition-all cursor-pointer outline-hidden border border-white/10 focus:ring-2 focus:ring-blue-400/50"
                     >
                       <Avatar
-                        className="w-7 h-7 md:w-8 md:h-8 border border-white/20 text-white text-xs font-semibold shrink-0"
+                        className="w-8 h-8 border-2 border-white/30 shadow-xs ring-2 ring-sky-500/20"
                         style={{ backgroundColor: corSecundaria }}
                       >
                         {user?.avatar && (
@@ -584,11 +581,11 @@ export default function Layout() {
                         )}
                         <AvatarFallback
                           style={{ backgroundColor: corSecundaria }}
-                          className="text-white font-semibold text-xs"
+                          className="text-white font-bold text-xs"
                         >
                           {userInitial}
                         </AvatarFallback>
-                      </Avatar>
+                      </Avatar>{' '}
                       <div className="hidden xl:flex flex-col items-start text-left max-w-[130px] truncate">
                         <span className="text-xs font-semibold text-white truncate leading-tight block">
                           {userName}

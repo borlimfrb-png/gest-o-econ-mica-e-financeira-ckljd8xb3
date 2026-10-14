@@ -836,22 +836,39 @@ export default function AnaliseFaturamento() {
                     data={dadosGraficoAnual}
                     margin={{ top: 15, right: 15, left: 10, bottom: 5 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                    <XAxis dataKey="ano" tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                    <XAxis
+                      dataKey="ano"
+                      tick={{ fontSize: 11, fill: '#64748B' }}
+                      axisLine={{ stroke: '#CBD5E1' }}
+                      tickLine={false}
+                    />
                     <YAxis
                       tick={{ fontSize: 11, fill: '#64748B' }}
                       tickFormatter={(v) => formatBrlCompacto(v)}
+                      axisLine={false}
+                      tickLine={false}
                     />
                     <RechartsTooltip
+                      contentStyle={{
+                        backgroundColor: '#0B1F3A',
+                        borderRadius: '0.75rem',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        color: '#FFFFFF',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                        fontSize: '12px',
+                      }}
+                      itemStyle={{ color: '#E2E8F0' }}
+                      labelStyle={{ color: '#7DD3FC', fontWeight: 'bold' }}
                       formatter={(val: any, name: any) => [
                         formatBrl(Number(val)),
-                        name === 'faturamento' ? 'Faturamento Total do Ano' : name,
+                        name === 'faturamento' ? 'Faturamento Anual' : name,
                       ]}
                       labelFormatter={(label) => `Exercício ${label}`}
                     />
                     <Legend
                       formatter={() => (
-                        <span className="text-xs font-medium text-slate-700">
+                        <span className="text-xs font-semibold text-slate-700">
                           Faturamento Anual (Receitas DRE)
                         </span>
                       )}
@@ -859,8 +876,8 @@ export default function AnaliseFaturamento() {
                     <Bar
                       dataKey="faturamento"
                       name="faturamento"
-                      fill="#10B981"
-                      radius={[4, 4, 0, 0]}
+                      fill="#059669"
+                      radius={[6, 6, 0, 0]}
                     />
                   </BarChart>
                 ) : (
@@ -868,13 +885,30 @@ export default function AnaliseFaturamento() {
                     data={dadosGraficoMensal}
                     margin={{ top: 15, right: 20, left: 10, bottom: 5 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                    <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#64748B' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                    <XAxis
+                      dataKey="mes"
+                      tick={{ fontSize: 11, fill: '#64748B' }}
+                      axisLine={{ stroke: '#CBD5E1' }}
+                      tickLine={false}
+                    />
                     <YAxis
                       tick={{ fontSize: 11, fill: '#64748B' }}
                       tickFormatter={(v) => formatBrlCompacto(v)}
+                      axisLine={false}
+                      tickLine={false}
                     />
                     <RechartsTooltip
+                      contentStyle={{
+                        backgroundColor: '#0B1F3A',
+                        borderRadius: '0.75rem',
+                        border: '1px solid rgba(255,255,255,0.15)',
+                        color: '#FFFFFF',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                        fontSize: '12px',
+                      }}
+                      itemStyle={{ color: '#E2E8F0' }}
+                      labelStyle={{ color: '#7DD3FC', fontWeight: 'bold' }}
                       formatter={(val: any, name: any) => [
                         formatBrl(Number(val)),
                         `Ano ${String(name).replace('ano_', '')}`,
@@ -886,7 +920,7 @@ export default function AnaliseFaturamento() {
                     />
                     <Legend
                       formatter={(val) => (
-                        <span className="text-xs font-medium text-slate-700">
+                        <span className="text-xs font-semibold text-slate-700">
                           {String(val).replace('ano_', 'Ano ')}
                         </span>
                       )}

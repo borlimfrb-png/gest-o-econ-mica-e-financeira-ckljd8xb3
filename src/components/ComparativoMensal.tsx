@@ -396,8 +396,13 @@ export function ComparativoMensal({
             <ResponsiveContainer width="100%" height="100%">
               {metricaGrafico === 'receita_lucro' ? (
                 <BarChart data={chartData} margin={{ top: 15, right: 15, left: -15, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                  <XAxis dataKey="mesAbrev" tick={{ fontSize: 11, fill: '#64748B' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                  <XAxis
+                    dataKey="mesAbrev"
+                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    axisLine={{ stroke: '#CBD5E1' }}
+                    tickLine={false}
+                  />
                   <YAxis
                     tick={{ fontSize: 11, fill: '#64748B' }}
                     tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
@@ -448,13 +453,30 @@ export function ComparativoMensal({
                       <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                  <XAxis dataKey="mesAbrev" tick={{ fontSize: 11, fill: '#64748B' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                  <XAxis
+                    dataKey="mesAbrev"
+                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    axisLine={{ stroke: '#CBD5E1' }}
+                    tickLine={false}
+                  />
                   <YAxis
                     tick={{ fontSize: 11, fill: '#64748B' }}
                     tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: '#0B1F3A',
+                      borderRadius: '0.75rem',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#FFFFFF',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                      fontSize: '12px',
+                    }}
+                    itemStyle={{ color: '#E2E8F0' }}
+                    labelStyle={{ color: '#7DD3FC', fontWeight: 'bold' }}
                     formatter={(val: any) => [
                       val !== null ? formatBrlMil(Number(val)) : 'Sem balanço lançado',
                       'Patrimônio Líquido',
@@ -488,13 +510,30 @@ export function ComparativoMensal({
                 </AreaChart>
               ) : (
                 <LineChart data={chartData} margin={{ top: 15, right: 20, left: -15, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                  <XAxis dataKey="mesAbrev" tick={{ fontSize: 11, fill: '#64748B' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                  <XAxis
+                    dataKey="mesAbrev"
+                    tick={{ fontSize: 11, fill: '#64748B' }}
+                    axisLine={{ stroke: '#CBD5E1' }}
+                    tickLine={false}
+                  />
                   <YAxis
                     tick={{ fontSize: 11, fill: '#64748B' }}
                     tickFormatter={(v) => `R$ ${Math.round(v / 1000)}k`}
+                    axisLine={false}
+                    tickLine={false}
                   />
                   <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: '#0B1F3A',
+                      borderRadius: '0.75rem',
+                      border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#FFFFFF',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.25)',
+                      fontSize: '12px',
+                    }}
+                    itemStyle={{ color: '#E2E8F0' }}
+                    labelStyle={{ color: '#7DD3FC', fontWeight: 'bold' }}
                     formatter={(val: any, name: any) => [
                       val !== null ? formatBrlMil(Number(val)) : 'Sem lançamento',
                       name === 'ativoTotal' ? 'Ativo Total' : 'Patrimônio Líquido',

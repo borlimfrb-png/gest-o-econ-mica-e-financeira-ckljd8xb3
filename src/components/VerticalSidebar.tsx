@@ -173,16 +173,16 @@ export function VerticalSidebar({
         style={{ backgroundColor: corPrimaria }}
       >
         {/* ========================================================
-            TOPO DA SIDEBAR: LOGO + MARCA + CONTROLES DE LAYOUT
+            CABEÇALHO DA SIDEBAR: LOGO + BUSCA + SELETORES
         ======================================================== */}
-        <div className="shrink-0 border-b border-white/10 p-3">
+        <div className="shrink-0 p-3.5 border-b border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent">
           <div className="flex items-center justify-between gap-2">
             {/* Logotipo / Nome do Sistema */}
             <button
               type="button"
               onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
               className={cn(
-                'flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98] min-w-0',
+                'flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-all duration-150 active:scale-[0.98] min-w-0',
                 isCollapsed && 'justify-center w-full',
               )}
               title={
@@ -192,7 +192,7 @@ export function VerticalSidebar({
               }
             >
               {logoUrl ? (
-                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-sm overflow-hidden border border-white/20 group-hover:border-white/40 transition-all">
+                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md overflow-hidden border border-white/20 group-hover:border-blue-400/60 transition-all ring-1 ring-white/10">
                   <img
                     src={logoUrl}
                     alt={minhaEmpresa?.nome_fantasia || 'Logo'}
@@ -201,27 +201,26 @@ export function VerticalSidebar({
                 </div>
               ) : (
                 <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm border border-white/20"
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md border border-white/20 ring-1 ring-white/15"
                   style={{ backgroundColor: corSecundaria }}
                 >
-                  <Scale className="w-5 h-5" />
+                  <Scale className="w-5 h-5 text-white" />
                 </div>
               )}
 
               {!isCollapsed && (
                 <div className="truncate">
-                  <span className="font-bold text-xs text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
+                  <span className="font-extrabold text-xs text-white tracking-tight leading-tight block truncate group-hover:text-sky-300 transition-colors">
                     {minhaEmpresa?.nome_fantasia ||
                       minhaEmpresa?.razao_social ||
                       'Gestão Financeira'}
                   </span>
-                  <span className="text-[9.5px] text-blue-200/90 uppercase tracking-wider font-medium block truncate">
+                  <span className="text-[9.5px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
                     {minhaEmpresa?.razao_social ? 'Econômica & Financeira' : 'Análise de Balanço'}
                   </span>
                 </div>
               )}
             </button>
-
             {/* Ações do cabeçalho quando expandido: recolher sidebar */}
             {!isCollapsed && (
               <div className="flex items-center gap-1 shrink-0">
@@ -475,16 +474,19 @@ export function VerticalSidebar({
                   key={grupo.id}
                   to={grupo.path}
                   className={cn(
-                    'flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer',
+                    'group relative flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer',
                     isDirectActive
-                      ? 'bg-blue-600 text-white shadow-md ring-1 ring-blue-400/50'
-                      : 'text-slate-200 hover:text-white hover:bg-white/10',
+                      ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md ring-1 ring-white/20'
+                      : 'text-slate-200 hover:text-white hover:bg-white/[0.08]',
                   )}
                 >
+                  {isDirectActive && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-sky-300 shadow-sm" />
+                  )}
                   <div className="flex items-center gap-2.5 truncate">
                     <GroupIcon
                       className={cn(
-                        'w-4 h-4 shrink-0',
+                        'w-4 h-4 shrink-0 transition-transform group-hover:scale-105',
                         isDirectActive ? 'text-white' : 'text-blue-200',
                       )}
                     />
@@ -665,7 +667,7 @@ export function VerticalSidebar({
         {/* ========================================================
             RODAPÉ DA SIDEBAR: CARTÃO DO USUÁRIO + BOTÃO SAIR
         ======================================================== */}
-        <div className="shrink-0 border-t border-white/10 p-2.5 bg-black/15">
+        <div className="shrink-0 border-t border-white/10 p-2.5 bg-gradient-to-t from-black/25 to-transparent">
           {isCollapsed ? (
             <div className="flex flex-col items-center gap-2">
               <DropdownMenu>
@@ -674,10 +676,10 @@ export function VerticalSidebar({
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        className="cursor-pointer outline-none hover:ring-2 hover:ring-blue-400/50 rounded-full"
+                        className="cursor-pointer outline-none hover:ring-2 hover:ring-sky-400/70 rounded-full transition-all"
                       >
                         <Avatar
-                          className="w-8 h-8 border border-white/20 text-white text-xs font-semibold"
+                          className="w-8 h-8 border-2 border-white/30 text-white text-xs font-semibold shadow-md ring-2 ring-sky-500/20"
                           style={{ backgroundColor: corSecundaria }}
                         >
                           {user?.avatar && (
@@ -685,7 +687,7 @@ export function VerticalSidebar({
                           )}
                           <AvatarFallback
                             style={{ backgroundColor: corSecundaria }}
-                            className="text-white font-semibold text-xs"
+                            className="text-white font-bold text-xs"
                           >
                             {userInitial}
                           </AvatarFallback>
@@ -791,11 +793,11 @@ export function VerticalSidebar({
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/10 transition-colors text-left cursor-pointer outline-hidden group border border-transparent hover:border-white/15"
+                    className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/10 transition-all text-left cursor-pointer outline-hidden group border border-transparent hover:border-white/15"
                   >
                     <div className="flex items-center gap-2.5 overflow-hidden">
                       <Avatar
-                        className="w-8 h-8 border border-white/20 shrink-0"
+                        className="w-8 h-8 border-2 border-white/30 shrink-0 shadow-sm ring-2 ring-sky-500/20"
                         style={{ backgroundColor: corSecundaria }}
                       >
                         {user?.avatar && (
@@ -803,21 +805,21 @@ export function VerticalSidebar({
                         )}
                         <AvatarFallback
                           style={{ backgroundColor: corSecundaria }}
-                          className="text-white font-semibold text-xs"
+                          className="text-white font-bold text-xs"
                         >
                           {userInitial}
                         </AvatarFallback>
                       </Avatar>
                       <div className="overflow-hidden">
                         <div className="flex items-center gap-1.5">
-                          <p className="text-xs font-bold text-white truncate group-hover:text-blue-200 transition-colors">
+                          <p className="text-xs font-bold text-white truncate group-hover:text-sky-300 transition-colors">
                             {userName}
                           </p>
                         </div>
                         <p className="text-[10px] text-blue-200/80 truncate">{userEmail}</p>
                       </div>
                     </div>
-                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/70 shrink-0 group-hover:text-white" />
+                    <ChevronDown className="w-3.5 h-3.5 text-blue-200/70 shrink-0 group-hover:text-white transition-transform duration-150" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
