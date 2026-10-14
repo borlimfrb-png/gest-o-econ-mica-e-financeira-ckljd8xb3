@@ -19,6 +19,7 @@ import { lancamentosService, balancosService, dreService } from '@/services/fina
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { BorlimLogo } from '@/components/BorlimLogo'
 
 interface HubShortcut {
   id: string
@@ -208,8 +209,9 @@ export default function AnaliseEconomicaFinanceira() {
         <div className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2 max-w-3xl">
+          <div className="space-y-3 max-w-3xl">
             <div className="flex items-center gap-2.5 flex-wrap">
+              <BorlimLogo size="sm" variant="light" subtitle="Consultoria Estratégica" />
               <Badge className="bg-cyan-500/20 text-cyan-200 border-cyan-400/30 text-xs font-semibold px-2.5 py-0.5 backdrop-blur-md">
                 <Sparkles className="w-3 h-3 mr-1 text-cyan-300" />
                 Painel Executivo Integrado
@@ -226,7 +228,8 @@ export default function AnaliseEconomicaFinanceira() {
             </h1>
 
             <p className="text-sm text-slate-300/90 leading-relaxed">
-              Central estratégica de demonstrações contábeis e gerenciais. Acesse o Balanço
+              Central estratégica de demonstrações contábeis e gerenciais pela{' '}
+              <strong className="text-sky-300">Borlim Consultoria</strong>. Acesse o Balanço
               Patrimonial, DRE, acompanhamento minucioso de custos fixos e variáveis e histórico de
               faturamento da empresa selecionada.
             </p>
@@ -280,11 +283,13 @@ export default function AnaliseEconomicaFinanceira() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-[#0B1F3A]">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-[#0B1F3A] dark:text-slate-100">
               Módulos e Demonstrações Disponíveis
             </h2>
           </div>
-          <span className="text-xs text-slate-500 font-medium">5 demonstrativos estruturados</span>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            5 demonstrativos estruturados
+          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

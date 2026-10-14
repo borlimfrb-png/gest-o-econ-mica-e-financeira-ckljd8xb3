@@ -4,6 +4,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { ModalPerfil } from '@/components/ModalPerfil'
+import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import {
   Scale,
   LogOut,
@@ -347,7 +349,7 @@ export default function Layout() {
 
   return (
     <div
-      className={`h-screen w-full bg-[#F5F7FA] antialiased text-slate-800 overflow-hidden ${
+      className={`h-screen w-full bg-[#F5F7FA] dark:bg-slate-950 antialiased text-slate-800 dark:text-slate-100 overflow-hidden theme-transition ${
         menuOrientation === 'vertical' ? 'flex flex-row' : 'flex flex-col'
       }`}
     >
@@ -415,42 +417,31 @@ export default function Layout() {
                 >
                   <Menu className="w-5 h-5" />
                 </button>
-
-                {/* Logotipo clicável */}
+                {/* Logotipo Borlim clicável */}
                 <button
                   type="button"
                   onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
                   className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
                 >
-                  {logoUrl ? (
-                    <div className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-xs overflow-hidden border border-white/20 group-hover:border-white/40 transition-all">
-                      <img
-                        src={logoUrl}
-                        alt={minhaEmpresa?.nome_fantasia || 'Logo'}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className="w-8 h-8 md:w-8.5 md:h-8.5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs border border-white/20"
-                      style={{ backgroundColor: corSecundaria }}
-                    >
-                      <Scale className="w-4 h-4" />
-                    </div>
-                  )}
+                  <BorlimIcon
+                    size={34}
+                    variant="light"
+                    className="group-hover:scale-105 transition-transform"
+                  />
                   <div className="truncate max-w-[150px] sm:max-w-[220px] md:max-w-[280px]">
-                    <span className="font-bold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-blue-200 transition-colors">
-                      {minhaEmpresa?.nome_fantasia ||
-                        minhaEmpresa?.razao_social ||
-                        'Borlim · Gestão Financeira'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-sky-300 transition-colors">
+                        BORLIM
+                      </span>
+                      <span className="hidden sm:inline-block text-[9.5px] px-1.5 py-0.2 rounded font-semibold uppercase bg-sky-500/20 text-sky-200 border border-sky-400/30">
+                        Consultoria
+                      </span>
+                    </div>
                     <span className="text-[9px] md:text-[9.5px] text-blue-200/90 uppercase tracking-wider font-medium block truncate">
-                      {minhaEmpresa?.razao_social
-                        ? 'Gestão Financeira & Econômica'
-                        : 'Gestão Financeira'}
+                      Análise de Balanço
                     </span>
                   </div>
-                </button>
+                </button>{' '}
               </div>
 
               {/* LADO DIREITO: SELETORES GLOBAIS (EMPRESA/ANO) + BUSCA (Ctrl+K) + ALTERNADOR + AVATAR */}
@@ -539,6 +530,9 @@ export default function Layout() {
                     <span className="text-[8px]">⌘</span>K
                   </kbd>
                 </button>
+
+                {/* ALTERNADOR DE TEMA ESCURO / CLARO */}
+                <ThemeToggle size="sm" />
 
                 {/* ALTERNADOR DE ORIENTAÇÃO: Mudar para Vertical (Sidebar) */}
                 <TooltipProvider delayDuration={150}>
@@ -839,18 +833,18 @@ export default function Layout() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="truncate max-w-[200px]">
-              <span className="font-bold text-xs text-white truncate block">
-                {minhaEmpresa?.nome_fantasia || minhaEmpresa?.razao_social || 'Gestão Financeira'}
-              </span>
-              <span className="text-[9px] text-blue-200/90 truncate block">
-                {minhaEmpresa?.razao_social
-                  ? 'Gestão Financeira & Econômica'
-                  : 'Análise de Balanço'}
-              </span>
+            <div className="flex items-center gap-2 truncate max-w-[190px]">
+              <BorlimIcon size={26} variant="light" />
+              <div className="truncate">
+                <span className="font-bold text-xs text-white truncate block">BORLIM</span>
+                <span className="text-[9px] text-blue-200/90 truncate block uppercase tracking-wider">
+                  Análise de Balanço
+                </span>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
+            <ThemeToggle size="sm" />
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
@@ -899,41 +893,32 @@ export default function Layout() {
               {/* Cabeçalho do Drawer */}
               <div className="flex items-center justify-between pb-3.5 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5 overflow-hidden">
-                  {logoUrl ? (
-                    <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md">
-                      <img
-                        src={logoUrl}
-                        alt={minhaEmpresa?.nome_fantasia || 'Logo'}
-                        className="w-full h-full object-contain"
-                      />
-                    </div>
-                  ) : (
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md"
-                      style={{ backgroundColor: corSecundaria }}
-                    >
-                      <Scale className="w-5 h-5" />
-                    </div>
-                  )}
+                  <BorlimIcon size={36} variant="light" />
                   <div className="truncate">
-                    <span className="font-bold text-sm block leading-tight text-white truncate">
-                      {minhaEmpresa?.nome_fantasia ||
-                        minhaEmpresa?.razao_social ||
-                        'Análise de Balanço'}
-                    </span>
-                    <span className="text-[10px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
-                      {minhaEmpresa?.razao_social ? 'Consultoria Oficial' : 'Consultoria'}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm block leading-tight text-white truncate">
+                        BORLIM
+                      </span>
+                      <span className="text-[9px] uppercase tracking-wider px-1 rounded bg-sky-500/20 text-sky-200 font-bold">
+                        Consultoria
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-blue-200/90 uppercase tracking-wider font-semibold block truncate">
+                      Análise de Balanço
                     </span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setMobileDrawerOpen(false)}
-                  className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
-                  aria-label="Fechar menu"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <ThemeToggle size="sm" />
+                  <button
+                    type="button"
+                    onClick={() => setMobileDrawerOpen(false)}
+                    className="p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 cursor-pointer"
+                    aria-label="Fechar menu"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Seletores Globais no Drawer Mobile (Empresa + Exercício) */}
@@ -1208,23 +1193,24 @@ export default function Layout() {
             Exibe controle de alternar menu, atalhos de perfil e seleção quando o cabeçalho de filtros da página não estiver visível,
             ou integra botões contextuais perfeitamente */}
         {menuOrientation === 'vertical' && !showHeaderFilters && (
-          <div className="hidden md:flex items-center justify-between bg-white border-b border-slate-200 px-4 sm:px-6 py-2 shrink-0 shadow-xs">
+          <div className="hidden md:flex items-center justify-between bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 py-2 shrink-0 shadow-xs">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-[#0B1F3A] uppercase tracking-wider">
-                {minhaEmpresa?.nome_fantasia || 'Gestão Econômica e Financeira'}
+              <span className="text-xs font-bold text-[#0B1F3A] dark:text-slate-100 uppercase tracking-wider">
+                Borlim Consultoria · Análise de Balanço
               </span>
             </div>
             <div className="flex items-center gap-2">
+              <ThemeToggle size="sm" />
               <TooltipProvider delayDuration={150}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
                       type="button"
                       onClick={toggleMenuOrientation}
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 transition-colors cursor-pointer"
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
                       aria-label="Mudar para Menu Horizontal no topo"
                     >
-                      <Rows className="w-3.5 h-3.5 text-blue-600" />
+                      <Rows className="w-3.5 h-3.5 text-blue-600 dark:text-sky-400" />
                       <span>Menu Horizontal</span>
                     </button>
                   </TooltipTrigger>
@@ -1411,12 +1397,12 @@ export default function Layout() {
         )}
 
         {/* Page Body - Rolagem própria isolada na viewport */}
-        <main className="flex-1 overflow-y-auto min-h-0 p-3.5 sm:p-5 lg:p-6 bg-[#F5F7FA]">
+        <main className="flex-1 overflow-y-auto min-h-0 p-3.5 sm:p-5 lg:p-6 bg-[#F5F7FA] dark:bg-slate-950/60 theme-transition">
           <Outlet />
         </main>
 
         {/* Footer Slim e Tecnológico (fora da rolagem do main, fixo na base e oculto em impressão) */}
-        <footer className="bg-white border-t border-slate-200 py-2.5 px-6 text-center text-[11px] text-[#5B6B7F] flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 print:hidden">
+        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-2.5 px-6 text-center text-[11px] text-[#5B6B7F] dark:text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0 print:hidden">
           <span className="font-medium text-slate-600">
             GESTÃO ECONÔMICA E FINANCEIRA · Consultoria de Alta Performance
           </span>

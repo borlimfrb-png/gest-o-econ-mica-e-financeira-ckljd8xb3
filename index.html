@@ -8,7 +8,28 @@
     <meta name="author" content="Skip (https://goskip.dev)" />
     <meta property="og:image" content="/og-image.jpeg" />
     <meta property="og:title" content="GESTÃO: FINANCEIRA -  ECONÔMICA - TRIBUTÁRIA - CUSTO" />
-    <meta name="keywords" content="Borlim, Financeiro, Custo" />
+    <meta name="keywords" content="Borlim, Financeiro, Custo, Borlim Consultoria" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="alternate icon" type="image/x-icon" href="/favicon.ico" />
+    <script>
+      (function () {
+        try {
+          var key = 'borlim_theme_preference';
+          var stored = localStorage.getItem(key);
+          var systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = stored === 'dark' || (stored !== 'light' && systemDark);
+          if (isDark) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.setAttribute('data-theme', 'dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.setAttribute('data-theme', 'light');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
 
   <body>

@@ -37,6 +37,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { Link } from 'react-router-dom'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { BorlimIcon } from '@/components/BorlimLogo'
 import type { EmpresaRecord, MinhaEmpresaRecord, BalancoRecord, DreRecord } from '@/types/finance'
 import type { GrupoRadarItem, BenchmarkSetorValores } from '@/lib/benchmarks'
 import {
@@ -355,20 +356,18 @@ export function ModalPdfDashboardA4({
                       className="h-12 max-w-[160px] object-contain"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-[#0B1F3A] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                      {minhaEmpresa?.nome_fantasia?.charAt(0) || 'C'}
-                    </div>
+                    <BorlimIcon size={40} variant="dark" />
                   )}
                   <div>
                     <h4 className="text-sm font-extrabold text-[#0B1F3A]">
                       {minhaEmpresa?.razao_social ||
                         minhaEmpresa?.nome_fantasia ||
-                        'Consultoria & Gestão Financeira'}
+                        'Borlim Consultoria'}
                     </h4>
                     <p className="text-[11px] text-slate-500">
                       {minhaEmpresa?.cnpj
                         ? `CNPJ: ${formatCnpj(minhaEmpresa.cnpj)}`
-                        : 'Serviços Especializados de Diagnóstico e Controladoria'}
+                        : 'Borlim Consultoria · Serviços Especializados de Diagnóstico e Controladoria'}
                     </p>
                   </div>
                 </div>

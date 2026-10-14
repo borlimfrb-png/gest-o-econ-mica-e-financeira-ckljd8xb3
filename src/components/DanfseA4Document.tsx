@@ -221,7 +221,7 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
   return (
     <div
       id={id}
-      className="relative bg-white text-black font-sans text-[9px] leading-tight select-text print:p-0 print:m-0 print:border-none print:shadow-none"
+      className="relative bg-white text-black font-sans text-[9px] leading-tight select-text print:p-0 print:m-0 print:border-none print:shadow-none print-force-light"
       style={{
         width: '100%',
         maxWidth: '210mm',
@@ -229,8 +229,9 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
         margin: '0 auto',
         padding: '6mm 8mm',
         boxSizing: 'border-box',
-        backgroundColor: '#ffffff',
-        color: '#000000',
+        backgroundColor: '#ffffff !important',
+        color: '#000000 !important',
+        colorScheme: 'light',
         fontFamily: 'Arial, Helvetica, sans-serif',
       }}
     >

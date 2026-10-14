@@ -27,6 +27,8 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { minhaEmpresaService } from '@/services/minhaEmpresaService'
+import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import type { MinhaEmpresaRecord } from '@/types/finance'
 import pb from '@/lib/pocketbase/client'
 
@@ -176,48 +178,37 @@ export default function Index() {
         <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 shrink-0">
-              <Scale className="w-6 h-6" />
-            </div>
-            <div className="space-y-0.5">
-              <span className="text-xl font-bold tracking-tight text-white block leading-snug">
-                GESTÃO FINANCEIRA E ECONÔMICA
-              </span>
-              {/* Logo ou Nome da Empresa do Usuário logo abaixo do título */}
-              {empresaPublica?.logo ? (
-                <div className="pt-2 flex items-center gap-2">
-                  <img
-                    src={pb.files.getURL(empresaPublica, empresaPublica.logo)}
-                    alt={empresaPublica.nome_fantasia || empresaPublica.razao_social || 'Logo'}
-                    className="h-9 max-w-[170px] object-contain rounded bg-white/95 p-1 shadow-sm"
-                  />
-                  {(empresaPublica.nome_fantasia || empresaPublica.razao_social) && (
-                    <span className="text-xs font-semibold text-blue-200 tracking-wide uppercase">
-                      {empresaPublica.nome_fantasia || empresaPublica.razao_social}
-                    </span>
-                  )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <BorlimIcon size={46} variant="light" />
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-black tracking-tight text-white block leading-none">
+                    BORLIM
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-400/30">
+                    Consultoria
+                  </span>
                 </div>
-              ) : empresaPublica?.nome_fantasia || empresaPublica?.razao_social ? (
-                <span className="text-xs font-semibold tracking-wider text-blue-300 block uppercase">
-                  {empresaPublica.nome_fantasia || empresaPublica.razao_social}
+                <span className="text-xs font-semibold tracking-wider text-blue-200/90 block uppercase">
+                  Análise de Balanço & Gestão Financeira
                 </span>
-              ) : (
-                <span className="text-xs uppercase tracking-wider text-blue-300 font-medium block">
-                  Consultoria Financeira
-                </span>
-              )}
+              </div>
             </div>
+
+            <ThemeToggle size="sm" />
           </div>
 
-          <div className="mt-16 max-w-lg">
+          <div className="mt-14 max-w-lg">
             <h1 className="text-3xl lg:text-4xl font-extrabold text-white leading-tight tracking-tight">
               Análise financeira de precisão para tomada de decisões estratégicas.
             </h1>
             <p className="mt-4 text-blue-100/80 text-base leading-relaxed">
-              Plataforma completa de diagnóstico econômico-financeiro: Balanço Patrimonial, DRE,
-              indicadores de liquidez, endividamento, rentabilidade e estrutura de capital com
-              análise horizontal e vertical automática.
+              Plataforma desenvolvida pela{' '}
+              <strong className="text-sky-300">Borlim Consultoria</strong> para diagnóstico
+              econômico-financeiro: Balanço Patrimonial, DRE, indicadores de liquidez,
+              endividamento, rentabilidade e estrutura de capital com análise horizontal e vertical
+              automática.
             </p>
           </div>
         </div>
@@ -253,10 +244,7 @@ export default function Index() {
 
         <div className="relative z-10 pt-6 text-xs text-blue-300/60 flex items-center justify-between border-t border-white/10">
           <span>
-            © {new Date().getFullYear()}{' '}
-            {empresaPublica?.nome_fantasia ||
-              empresaPublica?.razao_social ||
-              'GESTÃO FINANCEIRA E ECONÔMICA'}
+            © {new Date().getFullYear()} Borlim Consultoria · www.borlimconsultoria.com.br
           </span>
           <span className="flex items-center gap-1">
             <ShieldCheck className="w-4 h-4 text-emerald-400" /> Ambiente Corporativo Seguro
@@ -264,54 +252,32 @@ export default function Index() {
         </div>
       </div>
 
-      {/* Coluna Direita - Formulário de Login / Cadastro */}
-      <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 bg-[#F5F7FA] text-slate-900 min-h-screen">
-        <div className="w-full max-w-[420px] py-4">
-          {/* Identificação Mobile */}
-          <div className="flex lg:hidden flex-col items-center justify-center gap-2 mb-4 text-center">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-xs shrink-0">
-                <Scale className="w-4.5 h-4.5" />
-              </div>
-              <span className="text-sm font-bold text-slate-900 tracking-tight leading-snug">
-                GESTÃO FINANCEIRA E ECONÔMICA
-              </span>
-            </div>
+      {/* Coluna Direita - Formulário de Login / Cadastro com suporte ao modo escuro */}
+      <div className="flex-1 flex flex-col justify-center items-center p-4 sm:p-8 bg-[#F5F7FA] dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen relative theme-transition">
+        {/* Toggle no topo direito do form em telas grandes/médias */}
+        <div className="absolute top-4 right-4 lg:hidden">
+          <ThemeToggle size="sm" />
+        </div>
 
-            {/* Logo ou Nome da Empresa do Usuário logo abaixo do título */}
-            {empresaPublica?.logo ? (
-              <div className="pt-0.5 flex flex-col items-center gap-1">
-                <img
-                  src={pb.files.getURL(empresaPublica, empresaPublica.logo)}
-                  alt={empresaPublica.nome_fantasia || empresaPublica.razao_social || 'Logo'}
-                  className="h-8 max-w-[150px] object-contain rounded bg-white p-1 border border-slate-200 shadow-xs"
-                />
-                {(empresaPublica.nome_fantasia || empresaPublica.razao_social) && (
-                  <span className="text-[10px] uppercase tracking-wider text-slate-600 font-semibold">
-                    {empresaPublica.nome_fantasia || empresaPublica.razao_social}
-                  </span>
-                )}
-              </div>
-            ) : empresaPublica?.nome_fantasia || empresaPublica?.razao_social ? (
-              <span className="text-xs uppercase tracking-wider text-slate-600 font-semibold">
-                {empresaPublica.nome_fantasia || empresaPublica.razao_social}
-              </span>
-            ) : null}
+        <div className="w-full max-w-[420px] py-4">
+          {/* Identificação Mobile com Logo Borlim */}
+          <div className="flex lg:hidden flex-col items-center justify-center gap-2 mb-4 text-center">
+            <BorlimLogo size="lg" />
           </div>
 
           {/* Card Principal Moderno com Elevação Suave e Borda Sutil */}
-          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl shadow-slate-300/40 border border-slate-200/80 p-6 sm:p-8 relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-500" />
+          <div className="bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl shadow-xl shadow-slate-300/40 dark:shadow-black/50 border border-slate-200/80 dark:border-slate-800 p-6 sm:p-8 relative overflow-hidden theme-transition">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-sky-500 to-indigo-600" />
             <div className="text-center mb-5">
-              <div className="inline-flex items-center justify-center w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 mb-3">
-                <Scale className="w-5 h-5" />
+              <div className="inline-flex items-center justify-center mb-3">
+                <BorlimIcon size={44} />
               </div>
-              <h2 className="text-xl font-extrabold text-[#0B1F3A] tracking-tight">
+              <h2 className="text-xl font-extrabold text-[#0B1F3A] dark:text-white tracking-tight">
                 {activeTab === 'login' ? 'Acesse sua conta' : 'Criar nova conta'}
               </h2>
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 {activeTab === 'login'
-                  ? 'Plataforma integrada de inteligência e diagnóstico financeiro'
+                  ? 'Borlim Consultoria · Plataforma Integrada de Inteligência Financeira'
                   : 'Preencha os dados abaixo para começar'}
               </p>
             </div>
@@ -536,8 +502,8 @@ export default function Index() {
             </Tabs>
           </div>
 
-          <p className="text-center text-xs text-slate-500 mt-6">
-            GESTÃO FINANCEIRA E ECONÔMICA &copy; {new Date().getFullYear()}
+          <p className="text-center text-xs text-slate-500 dark:text-slate-400 mt-6">
+            Borlim Consultoria &copy; {new Date().getFullYear()} · Análise de Balanço
             {empresaPublica?.nome_fantasia || empresaPublica?.razao_social
               ? ` · ${empresaPublica.nome_fantasia || empresaPublica.razao_social}`
               : ''}

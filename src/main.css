@@ -64,48 +64,55 @@
   }
 
   .dark {
-    /* Change the colors to match the design system consistent with the dark mode */
-    --background: 222.2 84% 4.9%;
+    /* Tema Escuro Elegante: Slate/Navy Ultramarino Profundo + Acento Ciano/Azul Vibrante */
+    --background: 222 47% 7%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 223 39% 10.5%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 223 39% 11.5%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 84% 4.9%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 222.2 84% 4.9%;
+    --secondary: 222 35% 16%;
     --secondary-foreground: 210 40% 98%;
 
-    --muted: 222.2 84% 4.9%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 222 35% 15%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 222.2 84% 4.9%;
+    --accent: 222 35% 18%;
     --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 222.2 84% 4.9%;
-    --input: 222.2 84% 4.9%;
-    --ring: 214.3 31.8% 91.4%;
-    --sidebar-background: 222.2 84% 4.9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 222.2 84% 4.9%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222.2 84% 4.9%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222.2 84% 4.9%;
-    --sidebar-ring: 222.2 84% 4.9%;
+    --border: 222 30% 19%;
+    --input: 222 30% 21%;
+    --ring: 217 91% 60%;
 
-    --chart-1: 270 100% 44%;
-    --chart-2: 164 100% 38%;
-    --chart-3: 43 100% 32%;
-    --chart-4: 340 100% 50%;
-    --chart-5: 10 100% 50%;
+    --sidebar-background: 224 50% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 35% 17%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 18%;
+    --sidebar-ring: 217 91% 60%;
+
+    --brand-primary: #071326;
+    --brand-primary-hsl: 216 69% 9%;
+    --brand-secondary: #3b82f6;
+    --brand-secondary-hsl: 217 91% 60%;
+    --brand-accent: #38bdf8;
+
+    --chart-1: 217 91% 60%;
+    --chart-2: 160 84% 45%;
+    --chart-3: 199 89% 55%;
+    --chart-4: 38 92% 58%;
+    --chart-5: 280 65% 68%;
   }
 
   /* NEVER REMOVE THIS */
@@ -155,17 +162,38 @@
     border-radius: 9999px;
   }
 
+  .dark ::-webkit-scrollbar-thumb {
+    background: #334155;
+  }
+
   ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #475569;
   }
 }
 
 @layer utilities {
+  /* Transição suave de tema ao alternar */
+  .theme-transition {
+    transition:
+      background-color 0.25s ease,
+      border-color 0.25s ease,
+      color 0.2s ease,
+      fill 0.2s ease;
+  }
+
   /* Utilitários modernos de profundidade e glassmorphism */
   .glass-navy {
     background: rgba(11, 31, 58, 0.85);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .glass-navy {
+    background: rgba(7, 19, 38, 0.88);
   }
 
   .glass-card {
@@ -174,12 +202,24 @@
     -webkit-backdrop-filter: blur(8px);
   }
 
+  .dark .glass-card {
+    background: rgba(15, 23, 42, 0.85);
+  }
+
   .glow-blue-sm {
     box-shadow: 0 0 15px -3px rgba(37, 99, 235, 0.25);
   }
 
+  .dark .glow-blue-sm {
+    box-shadow: 0 0 18px -2px rgba(56, 189, 248, 0.22);
+  }
+
   .glow-emerald-sm {
     box-shadow: 0 0 15px -3px rgba(16, 185, 129, 0.25);
+  }
+
+  .dark .glow-emerald-sm {
+    box-shadow: 0 0 18px -2px rgba(52, 211, 153, 0.22);
   }
 
   .tech-border {
@@ -187,9 +227,18 @@
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .dark .tech-border {
+    border-color: rgba(51, 65, 85, 0.85);
+  }
+
   .tech-border:hover {
     border-color: rgba(147, 197, 253, 0.7);
     box-shadow: 0 4px 14px -2px rgba(15, 23, 42, 0.05);
+  }
+
+  .dark .tech-border:hover {
+    border-color: rgba(56, 189, 248, 0.5);
+    box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.35);
   }
 
   /* Superfícies e elevações modernas em camadas */
@@ -202,11 +251,26 @@
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  .dark .card-premium {
+    background: hsl(223 39% 10.5%);
+    border-color: rgba(51, 65, 85, 0.8);
+    box-shadow:
+      0 1px 3px 0 rgba(0, 0, 0, 0.35),
+      0 1px 2px -1px rgba(0, 0, 0, 0.25);
+  }
+
   .card-premium:hover {
     box-shadow:
       0 8px 24px -4px rgba(15, 23, 42, 0.07),
       0 2px 6px -1px rgba(15, 23, 42, 0.04);
     border-color: rgba(203, 213, 225, 0.95);
+  }
+
+  .dark .card-premium:hover {
+    box-shadow:
+      0 8px 24px -4px rgba(0, 0, 0, 0.55),
+      0 2px 6px -1px rgba(0, 0, 0, 0.3);
+    border-color: rgba(71, 85, 105, 0.9);
   }
 
   .card-kpi-modern {
@@ -220,12 +284,25 @@
       border-color 0.18s ease;
   }
 
+  .dark .card-kpi-modern {
+    background: hsl(223 39% 10.5%);
+    border-color: rgba(51, 65, 85, 0.8);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.35);
+  }
+
   .card-kpi-modern:hover {
     transform: translateY(-2px);
     box-shadow:
       0 10px 25px -5px rgba(15, 23, 42, 0.08),
       0 4px 10px -2px rgba(15, 23, 42, 0.04);
     border-color: rgba(191, 219, 254, 0.9);
+  }
+
+  .dark .card-kpi-modern:hover {
+    box-shadow:
+      0 10px 25px -5px rgba(0, 0, 0, 0.6),
+      0 4px 10px -2px rgba(0, 0, 0, 0.35);
+    border-color: rgba(56, 189, 248, 0.5);
   }
 
   /* Medalhão moderno de ícones */
@@ -249,10 +326,22 @@
     border: 1px solid rgba(16, 185, 129, 0.25);
   }
 
+  .dark .badge-pill-success {
+    background-color: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border-color: rgba(52, 211, 153, 0.35);
+  }
+
   .badge-pill-warning {
     background-color: rgba(245, 158, 11, 0.1);
     color: #b45309;
     border: 1px solid rgba(245, 158, 11, 0.25);
+  }
+
+  .dark .badge-pill-warning {
+    background-color: rgba(245, 158, 11, 0.18);
+    color: #fbbf24;
+    border-color: rgba(251, 191, 36, 0.35);
   }
 
   .badge-pill-danger {
@@ -261,10 +350,22 @@
     border: 1px solid rgba(244, 63, 94, 0.25);
   }
 
+  .dark .badge-pill-danger {
+    background-color: rgba(244, 63, 94, 0.18);
+    color: #fb7185;
+    border-color: rgba(251, 113, 133, 0.35);
+  }
+
   .badge-pill-info {
     background-color: rgba(14, 165, 233, 0.1);
     color: #0369a1;
     border: 1px solid rgba(14, 165, 233, 0.25);
+  }
+
+  .dark .badge-pill-info {
+    background-color: rgba(14, 165, 233, 0.18);
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.35);
   }
   /* KEEP ALL THE ANIMATIONS CLASSES THAT ARE USED BELOW */
   @keyframes accordion-down {
@@ -458,12 +559,15 @@
 }
 
 @media print {
-  /* 1. Ajuste geral de página e tipografia */
+  /* 1. Ajuste geral de página e tipografia - FORÇA FUNDO CLARO E TEXTO ESCURO MESMO SE DARK ATIVO */
   html,
-  body {
+  body,
+  .dark,
+  [data-theme='dark'] {
     background-color: #ffffff !important;
     background: #ffffff !important;
     color: #0f172a !important;
+    color-scheme: light !important;
     width: 100% !important;
     height: auto !important;
     min-height: auto !important;
@@ -471,6 +575,20 @@
     margin: 0 !important;
     padding: 0 !important;
     font-size: 11pt;
+  }
+
+  /* Sobrescreve variáveis CSS para modo claro na impressão */
+  :root,
+  .dark {
+    --background: 0 0% 100% !important;
+    --foreground: 222.2 47% 11% !important;
+    --card: 0 0% 100% !important;
+    --card-foreground: 222.2 47% 11% !important;
+    --popover: 0 0% 100% !important;
+    --popover-foreground: 222.2 47% 11% !important;
+    --border: 216 22% 90% !important;
+    --muted: 215 25% 95% !important;
+    --muted-foreground: 215.4 16.3% 44% !important;
   }
 
   /* 2. Forçar preservação de cores, fundos gráficos (Recharts / Badges) e remover sombras pesadas */

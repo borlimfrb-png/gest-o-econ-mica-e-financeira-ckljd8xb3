@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { BorlimIcon } from '@/components/BorlimLogo'
 import type { EmpresaRecord, MinhaEmpresaRecord, TributoLancamentoRecord } from '@/types/finance'
 import type { AnaliseTributariaResultado } from '@/lib/taxCalculations'
 import { formatCurrency, formatPercent, formatCnpj } from '@/lib/financeCalculations'
@@ -177,20 +178,18 @@ export function ModalParecerExecutivo({
                       className="h-12 max-w-[160px] object-contain"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-[#0B1F3A] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                      {minhaEmpresa?.nome_fantasia?.charAt(0) || 'C'}
-                    </div>
+                    <BorlimIcon size={40} variant="dark" />
                   )}
                   <div>
                     <h4 className="text-sm font-extrabold text-[#0B1F3A]">
                       {minhaEmpresa?.razao_social ||
                         minhaEmpresa?.nome_fantasia ||
-                        'Consultoria & Planejamento Tributário'}
+                        'Borlim Consultoria'}
                     </h4>
                     <p className="text-[11px] text-slate-500">
                       {minhaEmpresa?.cnpj
                         ? `CNPJ: ${formatCnpj(minhaEmpresa.cnpj)}`
-                        : 'Serviços Especializados de Gestão Fiscal'}
+                        : 'Borlim Consultoria · Serviços Especializados de Gestão Fiscal e Tributária'}
                     </p>
                   </div>
                 </div>

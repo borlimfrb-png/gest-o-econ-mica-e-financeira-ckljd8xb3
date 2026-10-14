@@ -7,6 +7,8 @@ import { minhaEmpresaService } from '@/services/minhaEmpresaService'
 import type { MinhaEmpresaRecord } from '@/types/finance'
 import pb from '@/lib/pocketbase/client'
 import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
+import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import {
   Scale,
   ArrowRight,
@@ -255,10 +257,11 @@ export default function WelcomeSplash() {
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span className="font-semibold tracking-wide text-blue-100 uppercase text-[11px]">
-            Acesso Corporativo Seguro
+            Borlim Consultoria · Ambiente Corporativo
           </span>
         </div>
-        <div className="flex items-center gap-2 text-[11px]">
+        <div className="flex items-center gap-3 text-[11px]">
+          <ThemeToggle size="sm" />
           <span>Ano {anoAtual}</span>
           <span className="text-white/30">•</span>
           <span className="text-blue-300 font-medium">
@@ -270,49 +273,9 @@ export default function WelcomeSplash() {
       {/* Centro: Painel de Apresentação e Seleção de Contexto */}
       <main className="relative z-10 my-2 sm:my-4 w-full max-w-2xl flex flex-col items-center">
         <div className="w-full bg-white/[0.04] backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 rounded-2xl p-5 sm:p-7 flex flex-col items-center animate-in fade-in zoom-in-98 duration-300">
-          {/* TOPO: LOGOMARCA E IDENTIDADE */}
-          <div className="flex flex-col items-center justify-center min-h-[75px] w-full mb-2">
-            {logoUrlFinal ? (
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="max-w-[240px] sm:max-w-[280px] max-h-[75px] flex items-center justify-center p-2 rounded-xl bg-white/95 shadow-lg shadow-blue-950/40 border border-white">
-                  <img
-                    src={logoUrlFinal}
-                    alt={nomeExibicaoEmpresa || 'Logo da Consultoria'}
-                    className="max-h-[55px] w-auto max-w-full object-contain"
-                  />
-                </div>
-                {nomeExibicaoEmpresa && (
-                  <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-200/90 mt-0.5">
-                    {nomeExibicaoEmpresa}
-                  </span>
-                )}
-              </div>
-            ) : nomeExibicaoEmpresa ? (
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 border border-blue-400/30">
-                  <Building2 className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-center">
-                  <h2 className="text-base sm:text-lg font-extrabold text-white tracking-tight">
-                    {nomeExibicaoEmpresa}
-                  </h2>
-                  <span className="text-[10px] uppercase tracking-wider text-blue-300 font-medium block">
-                    Consultoria Empresarial & Financeira
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-12 h-12 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-600/30 border border-blue-400/30">
-                  <Scale className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-center">
-                  <span className="text-[11px] uppercase tracking-wider text-blue-300 font-medium block">
-                    Consultoria Financeira
-                  </span>
-                </div>
-              </div>
-            )}
+          {/* TOPO: LOGOMARCA BORLIM E IDENTIDADE */}
+          <div className="flex flex-col items-center justify-center min-h-[75px] w-full mb-3">
+            <BorlimLogo size="xl" variant="light" subtitle="Análise de Balanço & Consultoria" />
           </div>
 
           {/* Nome da Plataforma & Chamada de Seleção */}

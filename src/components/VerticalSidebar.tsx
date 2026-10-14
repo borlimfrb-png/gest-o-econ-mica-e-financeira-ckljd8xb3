@@ -34,6 +34,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
+import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import type { NavGroupConfig, NavItemConfig } from '@/lib/menuNavigationConfig'
 import { cn } from '@/lib/utils'
 import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
@@ -173,11 +175,11 @@ export function VerticalSidebar({
         style={{ backgroundColor: corPrimaria }}
       >
         {/* ========================================================
-            CABEÇALHO DA SIDEBAR: LOGO + BUSCA + SELETORES
+            CABEÇALHO DA SIDEBAR: LOGO BORLIM + TEMA + BUSCA + SELETORES
         ======================================================== */}
         <div className="shrink-0 p-3.5 border-b border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent">
           <div className="flex items-center justify-between gap-2">
-            {/* Logotipo / Nome do Sistema */}
+            {/* Logotipo Borlim */}
             <button
               type="button"
               onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
@@ -185,45 +187,34 @@ export function VerticalSidebar({
                 'flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-all duration-150 active:scale-[0.98] min-w-0',
                 isCollapsed && 'justify-center w-full',
               )}
-              title={
-                minhaEmpresa?.nome_fantasia ||
-                minhaEmpresa?.razao_social ||
-                'Gestão Econômica e Financeira'
-              }
+              title="Borlim Consultoria · Análise de Balanço"
             >
-              {logoUrl ? (
-                <div className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center p-1 shrink-0 shadow-md overflow-hidden border border-white/20 group-hover:border-blue-400/60 transition-all ring-1 ring-white/10">
-                  <img
-                    src={logoUrl}
-                    alt={minhaEmpresa?.nome_fantasia || 'Logo'}
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-              ) : (
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white shrink-0 shadow-md border border-white/20 ring-1 ring-white/15"
-                  style={{ backgroundColor: corSecundaria }}
-                >
-                  <Scale className="w-5 h-5 text-white" />
-                </div>
-              )}
+              <BorlimIcon
+                size={34}
+                variant="light"
+                className="group-hover:scale-105 transition-transform"
+              />
 
               {!isCollapsed && (
                 <div className="truncate">
-                  <span className="font-extrabold text-xs text-white tracking-tight leading-tight block truncate group-hover:text-sky-300 transition-colors">
-                    {minhaEmpresa?.nome_fantasia ||
-                      minhaEmpresa?.razao_social ||
-                      'Gestão Financeira'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-xs text-white tracking-tight leading-tight block truncate group-hover:text-sky-300 transition-colors">
+                      BORLIM
+                    </span>
+                    <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded font-bold bg-sky-500/20 text-sky-200 border border-sky-400/30">
+                      Consultoria
+                    </span>
+                  </div>
                   <span className="text-[9.5px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
-                    {minhaEmpresa?.razao_social ? 'Econômica & Financeira' : 'Análise de Balanço'}
+                    Análise de Balanço
                   </span>
                 </div>
               )}
             </button>
-            {/* Ações do cabeçalho quando expandido: recolher sidebar */}
+            {/* Ações do cabeçalho quando expandido: Tema escuro/claro e recolher sidebar */}
             {!isCollapsed && (
               <div className="flex items-center gap-1 shrink-0">
+                <ThemeToggle size="sm" />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
@@ -246,9 +237,10 @@ export function VerticalSidebar({
             )}
           </div>
 
-          {/* Botão de expandir quando colapsado */}
+          {/* Botão de expandir e ThemeToggle quando colapsado */}
           {isCollapsed && (
-            <div className="mt-2 flex justify-center">
+            <div className="mt-2 flex flex-col items-center gap-1.5">
+              <ThemeToggle size="sm" />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
