@@ -1,37 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <defs>
-    <linearGradient id="borlim-fav-bg" x1="4" y1="4" x2="60" y2="60" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#0B1F3A" />
-      <stop offset="50%" stop-color="#0E284E" />
-      <stop offset="100%" stop-color="#143A6E" />
+    <!-- Gradiente do arco superior (verde para azul) -->
+    <linearGradient id="fav-top-arc" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22C55E" />
+      <stop offset="60%" stop-color="#1565C0" />
+      <stop offset="100%" stop-color="#0D47A1" />
     </linearGradient>
-    <linearGradient id="borlim-fav-accent" x1="16" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#38BDF8" />
-      <stop offset="50%" stop-color="#2563EB" />
-      <stop offset="100%" stop-color="#1D4ED8" />
+
+    <!-- Gradiente do swoosh inferior (azul marinho para verde esmeralda) -->
+    <linearGradient id="fav-bot-swash" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0A1E3F" />
+      <stop offset="45%" stop-color="#1565C0" />
+      <stop offset="100%" stop-color="#22A63E" />
     </linearGradient>
-    <linearGradient id="borlim-fav-gold" x1="28" y1="20" x2="48" y2="40" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#60A5FA" />
-      <stop offset="100%" stop-color="#38BDF8" />
+
+    <!-- Gradiente suave da letra B -->
+    <linearGradient id="fav-b-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1976D2" />
+      <stop offset="100%" stop-color="#0D47A1" />
     </linearGradient>
   </defs>
 
-  <!-- Base arredondada moderna -->
-  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#borlim-fav-bg)" stroke="#38BDF8" stroke-width="1.5" stroke-opacity="0.35" />
+  <!-- Fundo branco suave arredondado para contraste perfeito em qualquer navegador/aba (dark ou light) -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="1.5" />
 
-  <!-- Monograma B Estilizado com Elemento de Crescimento Financeiro -->
-  <!-- Coluna esquerda firme do B -->
-  <rect x="15" y="14" width="7" height="36" rx="3.5" fill="url(#borlim-fav-accent)" />
+  <!-- Arco/Swash Superior Direito (Verde → Azul) fiel à marca -->
+  <path
+    d="M 33 11 C 41 7, 53 8, 59 13 C 54 11, 44 10, 36 13 Z"
+    fill="url(#fav-top-arc)"
+  />
+  <path
+    d="M 39 15 C 45 12, 53 13, 58 17 C 53 15, 46 15, 41 16.5 Z"
+    fill="#1976D2"
+    opacity="0.9"
+  />
 
-  <!-- Barra horizontal superior conectando ao arco -->
-  <path d="M19 14 H35 C41 14 45.5 17.5 45.5 23 C45.5 28 41.5 31.5 36 32 H19 Z" fill="url(#borlim-fav-gold)" />
-  <path d="M22 18.5 H34 C37.5 18.5 40.5 20 40.5 23 C40.5 26 37.5 27.5 34 27.5 H22 Z" fill="#0B1F3A" />
+  <!-- Letra "B" Oficial Borlim em Azul Royal (#1565C0) -->
+  <text
+    x="18"
+    y="44"
+    font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    font-size="36"
+    font-weight="900"
+    letter-spacing="-1"
+    fill="url(#fav-b-grad)"
+  >B</text>
 
-  <!-- Arco inferior com dinâmica de crescimento / expansão -->
-  <path d="M19 30 H37 C43.5 30 48.5 34 48.5 40.5 C48.5 47 43.5 50 36 50 H19 Z" fill="url(#borlim-fav-accent)" />
-  <path d="M22 34.5 H35.5 C39.5 34.5 43 36.8 43 40.5 C43 44.2 39.5 45.5 35.5 45.5 H22 Z" fill="#0B1F3A" />
-
-  <!-- Vetor dinâmico ascendente / indicador de crescimento na base do B -->
-  <circle cx="49" cy="17" r="3" fill="#38BDF8" />
-  <path d="M42 22 L48 18" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" />
+  <!-- Swoosh Duplo Inferior Esquerdo (Azul-Marinho → Verde Esmeralda) fiel à marca -->
+  <path
+    d="M 6 44 C 7 53, 14 57, 24 55 C 30 54, 35 48, 38 44 C 33 49, 27 52, 21 52 C 14 52, 10 48, 9 44 Z"
+    fill="url(#fav-bot-swash)"
+  />
+  <path
+    d="M 12 44 C 13 50, 18 53, 26 51 C 32 49, 36 44, 40 40 C 35 45, 29 48, 23 48 C 17 48, 14 45, 13 44 Z"
+    fill="#22A63E"
+  />
 </svg>

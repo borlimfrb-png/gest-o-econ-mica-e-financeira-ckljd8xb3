@@ -27,7 +27,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { minhaEmpresaService } from '@/services/minhaEmpresaService'
-import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { BorlimLogo } from '@/components/BorlimLogo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import type { MinhaEmpresaRecord } from '@/types/finance'
 import pb from '@/lib/pocketbase/client'
@@ -180,20 +180,13 @@ export default function Index() {
         <div className="relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <BorlimIcon size={46} variant="light" />
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl font-black tracking-tight text-white block leading-none">
-                    BORLIM
-                  </span>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 border border-sky-400/30">
-                    Consultoria
-                  </span>
-                </div>
-                <span className="text-xs font-semibold tracking-wider text-blue-200/90 block uppercase">
-                  Análise de Balanço & Gestão Financeira
-                </span>
-              </div>
+              <BorlimLogo
+                size="lg"
+                variant="light"
+                showSubtitle={true}
+                subtitle="Análise de Balanço & Gestão Financeira"
+                className="shadow-lg"
+              />
             </div>
 
             <ThemeToggle size="sm" />
@@ -270,14 +263,14 @@ export default function Index() {
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 via-sky-500 to-indigo-600" />
             <div className="text-center mb-5">
               <div className="inline-flex items-center justify-center mb-3">
-                <BorlimIcon size={44} />
+                <BorlimLogo size="md" variant="auto" />
               </div>
               <h2 className="text-xl font-extrabold text-[#0B1F3A] dark:text-white tracking-tight">
                 {activeTab === 'login' ? 'Acesse sua conta' : 'Criar nova conta'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 {activeTab === 'login'
-                  ? 'Borlim Consultoria · Plataforma Integrada de Inteligência Financeira'
+                  ? 'Borlim Consultoria Empresarial · Plataforma de Inteligência Financeira'
                   : 'Preencha os dados abaixo para começar'}
               </p>
             </div>

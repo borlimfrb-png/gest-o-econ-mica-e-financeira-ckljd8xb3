@@ -270,8 +270,8 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
         <div className="grid grid-cols-12 items-stretch divide-x divide-black">
           {/* Logo / Título */}
           <div className="col-span-7 p-2 flex items-center gap-3">
-            {/* Logo NFS-e oficial estilizado em SVG */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* Logo NFS-e oficial e Logo Borlim Consultoria */}
+            <div className="flex items-center gap-2.5 shrink-0">
               <div className="flex flex-col items-start leading-none">
                 <span className="text-2xl font-black tracking-tighter text-[#0b5c53]">NFSe</span>
                 <span className="text-[7px] text-gray-700 tracking-tight leading-none mt-0.5">
@@ -280,6 +280,12 @@ export const DanfseA4Document: React.FC<DanfseA4DocumentProps> = ({
                   serviço eletrônica
                 </span>
               </div>
+              <div className="h-7 w-px bg-slate-300" />
+              <img
+                src="/borlim-logo.png"
+                alt="Borlim Consultoria Empresarial"
+                className="h-6 w-auto max-w-[90px] object-contain pointer-events-none"
+              />
             </div>
             <div className="flex-1 text-center">
               <h1 className="font-bold text-[13px] tracking-tight uppercase leading-none">

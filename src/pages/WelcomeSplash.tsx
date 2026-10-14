@@ -7,7 +7,7 @@ import { minhaEmpresaService } from '@/services/minhaEmpresaService'
 import type { MinhaEmpresaRecord } from '@/types/finance'
 import pb from '@/lib/pocketbase/client'
 import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
-import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { BorlimLogo } from '@/components/BorlimLogo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import {
   Scale,
@@ -273,9 +273,15 @@ export default function WelcomeSplash() {
       {/* Centro: Painel de Apresentação e Seleção de Contexto */}
       <main className="relative z-10 my-2 sm:my-4 w-full max-w-2xl flex flex-col items-center">
         <div className="w-full bg-white/[0.04] backdrop-blur-xl border border-white/10 shadow-2xl shadow-black/50 rounded-2xl p-5 sm:p-7 flex flex-col items-center animate-in fade-in zoom-in-98 duration-300">
-          {/* TOPO: LOGOMARCA BORLIM E IDENTIDADE */}
+          {/* TOPO: LOGOMARCA BORLIM E IDENTIDADE OFICIAL */}
           <div className="flex flex-col items-center justify-center min-h-[75px] w-full mb-3">
-            <BorlimLogo size="xl" variant="light" subtitle="Análise de Balanço & Consultoria" />
+            <BorlimLogo
+              size="xl"
+              variant="light"
+              showSubtitle={true}
+              subtitle="Consultoria Empresarial · Controladoria & Finanças"
+              className="shadow-xl"
+            />
           </div>
 
           {/* Nome da Plataforma & Chamada de Seleção */}

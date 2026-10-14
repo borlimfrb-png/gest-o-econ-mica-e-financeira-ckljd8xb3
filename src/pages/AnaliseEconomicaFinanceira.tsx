@@ -211,7 +211,7 @@ export default function AnaliseEconomicaFinanceira() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3 max-w-3xl">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <BorlimLogo size="sm" variant="light" subtitle="Consultoria Estratégica" />
+              <BorlimLogo size="md" variant="light" showSubtitle={false} className="shadow-md" />
               <Badge className="bg-cyan-500/20 text-cyan-200 border-cyan-400/30 text-xs font-semibold px-2.5 py-0.5 backdrop-blur-md">
                 <Sparkles className="w-3 h-3 mr-1 text-cyan-300" />
                 Painel Executivo Integrado
@@ -378,6 +378,23 @@ export default function AnaliseEconomicaFinanceira() {
             </div>
           </Card>
         </div>
+      </div>
+
+      {/* Assinatura Oficial da Borlim Consultoria Empresarial */}
+      <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
+        <div className="flex items-center gap-3">
+          <BorlimLogo size="sm" variant="auto" className="shadow-xs scale-90 origin-left" />
+          <span className="font-semibold text-slate-700 dark:text-slate-300">
+            Borlim Consultoria Empresarial
+          </span>
+          <span className="hidden md:inline text-slate-400">·</span>
+          <span className="hidden md:inline">
+            Inteligência Estratégica, Controladoria & Finanças
+          </span>
+        </div>
+        <span className="text-[11px] text-slate-400">
+          Acesso Exclusivo Cliente · Exercício {selectedAno}
+        </span>
       </div>
     </div>
   )

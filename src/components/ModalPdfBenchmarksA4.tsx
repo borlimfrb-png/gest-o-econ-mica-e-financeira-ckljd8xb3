@@ -48,6 +48,7 @@ import {
   formatPercent,
 } from '@/lib/financeCalculations'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { BorlimLogo } from '@/components/BorlimLogo'
 import {
   BENCHMARKS_SETORIAIS,
   type BenchmarkSetorValores,
@@ -707,20 +708,18 @@ export function ModalPdfBenchmarksA4({
                       className="h-12 max-w-[160px] object-contain"
                     />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-[#0B1F3A] text-white flex items-center justify-center font-bold text-sm shadow-xs">
-                      {minhaEmpresa?.nome_fantasia?.charAt(0) || 'C'}
-                    </div>
+                    <BorlimLogo size="md" variant="auto" raw={true} />
                   )}
                   <div>
                     <h4 className="text-sm font-extrabold text-[#0B1F3A]">
                       {minhaEmpresa?.razao_social ||
                         minhaEmpresa?.nome_fantasia ||
-                        'Consultoria & Controladoria Financeira'}
+                        'Borlim Consultoria Empresarial'}
                     </h4>
                     <p className="text-[11px] text-slate-500">
                       {minhaEmpresa?.cnpj
                         ? `CNPJ: ${formatCnpj(minhaEmpresa.cnpj)}`
-                        : 'Serviços Especializados de Diagnóstico e Benchmarking'}
+                        : 'Borlim Consultoria Empresarial · Benchmarking & Inteligência Setorial'}
                     </p>
                   </div>
                 </div>

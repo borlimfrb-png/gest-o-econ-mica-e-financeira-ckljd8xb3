@@ -179,36 +179,28 @@ export function VerticalSidebar({
         ======================================================== */}
         <div className="shrink-0 p-3.5 border-b border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent">
           <div className="flex items-center justify-between gap-2">
-            {/* Logotipo Borlim */}
+            {/* Logotipo Borlim Oficial */}
             <button
               type="button"
               onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
               className={cn(
-                'flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-all duration-150 active:scale-[0.98] min-w-0',
-                isCollapsed && 'justify-center w-full',
+                'flex items-center text-left group focus:outline-hidden cursor-pointer transition-all duration-150 active:scale-[0.98] min-w-0',
+                isCollapsed ? 'justify-center w-full' : 'w-full',
               )}
-              title="Borlim Consultoria · Análise de Balanço"
+              title="Borlim Consultoria Empresarial"
             >
-              <BorlimIcon
-                size={34}
-                variant="light"
-                className="group-hover:scale-105 transition-transform"
-              />
-
-              {!isCollapsed && (
-                <div className="truncate">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-extrabold text-xs text-white tracking-tight leading-tight block truncate group-hover:text-sky-300 transition-colors">
-                      BORLIM
-                    </span>
-                    <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.2 rounded font-bold bg-sky-500/20 text-sky-200 border border-sky-400/30">
-                      Consultoria
-                    </span>
-                  </div>
-                  <span className="text-[9.5px] text-blue-200/80 uppercase tracking-wider font-semibold block truncate">
-                    Análise de Balanço
-                  </span>
-                </div>
+              {isCollapsed ? (
+                <BorlimIcon
+                  size={38}
+                  variant="light"
+                  className="group-hover:scale-105 transition-transform"
+                />
+              ) : (
+                <BorlimLogo
+                  size="sm"
+                  variant="light"
+                  className="w-full justify-center group-hover:scale-102 transition-transform shadow-xs"
+                />
               )}
             </button>
             {/* Ações do cabeçalho quando expandido: Tema escuro/claro e recolher sidebar */}

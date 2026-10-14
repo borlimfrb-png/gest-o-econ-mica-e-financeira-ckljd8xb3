@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { ModalPerfil } from '@/components/ModalPerfil'
-import { BorlimLogo, BorlimIcon } from '@/components/BorlimLogo'
+import { BorlimLogo } from '@/components/BorlimLogo'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import {
   Scale,
@@ -421,24 +421,17 @@ export default function Layout() {
                 <button
                   type="button"
                   onClick={() => navigate(getRotaInicialPorPerfil(user?.role))}
-                  className="flex items-center gap-2.5 text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
+                  className="flex items-center text-left group focus:outline-hidden cursor-pointer transition-transform duration-150 active:scale-[0.98]"
+                  title="Borlim Consultoria Empresarial · Início"
                 >
-                  <BorlimIcon
-                    size={34}
+                  <BorlimLogo
+                    size="sm"
                     variant="light"
-                    className="group-hover:scale-105 transition-transform"
+                    className="group-hover:scale-102 transition-transform shadow-xs"
                   />
-                  <div className="truncate max-w-[150px] sm:max-w-[220px] md:max-w-[280px]">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-extrabold text-xs md:text-sm text-white tracking-tight leading-tight block truncate group-hover:text-sky-300 transition-colors">
-                        BORLIM
-                      </span>
-                      <span className="hidden sm:inline-block text-[9.5px] px-1.5 py-0.2 rounded font-semibold uppercase bg-sky-500/20 text-sky-200 border border-sky-400/30">
-                        Consultoria
-                      </span>
-                    </div>
-                    <span className="text-[9px] md:text-[9.5px] text-blue-200/90 uppercase tracking-wider font-medium block truncate">
-                      Análise de Balanço
+                  <div className="hidden xl:flex flex-col ml-2 truncate max-w-[160px]">
+                    <span className="text-[9.5px] text-blue-200/90 uppercase tracking-wider font-semibold block truncate">
+                      Análise & Controladoria
                     </span>
                   </div>
                 </button>{' '}
@@ -833,14 +826,8 @@ export default function Layout() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2 truncate max-w-[190px]">
-              <BorlimIcon size={26} variant="light" />
-              <div className="truncate">
-                <span className="font-bold text-xs text-white truncate block">BORLIM</span>
-                <span className="text-[9px] text-blue-200/90 truncate block uppercase tracking-wider">
-                  Análise de Balanço
-                </span>
-              </div>
+            <div className="flex items-center gap-2 truncate max-w-[210px]">
+              <BorlimLogo size="sm" variant="light" className="shadow-xs scale-90 origin-left" />
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -893,20 +880,7 @@ export default function Layout() {
               {/* Cabeçalho do Drawer */}
               <div className="flex items-center justify-between pb-3.5 border-b border-white/10 shrink-0">
                 <div className="flex items-center gap-2.5 overflow-hidden">
-                  <BorlimIcon size={36} variant="light" />
-                  <div className="truncate">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-black text-sm block leading-tight text-white truncate">
-                        BORLIM
-                      </span>
-                      <span className="text-[9px] uppercase tracking-wider px-1 rounded bg-sky-500/20 text-sky-200 font-bold">
-                        Consultoria
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-blue-200/90 uppercase tracking-wider font-semibold block truncate">
-                      Análise de Balanço
-                    </span>
-                  </div>
+                  <BorlimLogo size="sm" variant="light" className="shadow-xs" />
                 </div>
                 <div className="flex items-center gap-1">
                   <ThemeToggle size="sm" />

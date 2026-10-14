@@ -64,7 +64,7 @@ export const DocumentPrintFooter: React.FC<DocumentPrintFooterProps> = ({
   const consultoriaNome =
     minhaEmpresa?.razao_social?.trim() ||
     minhaEmpresa?.nome_fantasia?.trim() ||
-    'Borlim Consultoria'
+    'Borlim Consultoria Empresarial'
 
   // Nome da empresa cliente
   const clienteNome = empresaNome || selectedEmpresa?.nome || 'Empresa Ativa'
