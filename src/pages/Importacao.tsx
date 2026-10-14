@@ -32,6 +32,8 @@ import { ImportarDespesasIA } from '@/components/ImportarDespesasIA'
 import { ImportarLancamentosExcelIA } from '@/components/ImportarLancamentosExcelIA'
 import { ImportacaoAssistidaIa } from '@/components/ImportacaoAssistidaIa'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFilter } from '@/contexts/FilterContext'
+import { useRealtime } from '@/hooks/use-realtime'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -101,10 +103,28 @@ export default function Importacao() {
   const { toast } = useToast()
   const navigate = useNavigate()
   const { user, isAdmin } = useAuth()
+  const { selectedEmpresaId, empresasIdsAtivas, isGrupoAtivo, grupoAtivo } = useFilter()
 
   // Usuários com perfil cliente não devem acessar a importação assistida por IA
   const isClientePerfil = user?.role === 'cliente'
   const podeAcessarIaPdf = isAdmin || (!isClientePerfil && user?.role)
+
+  // Opções de filtro de empresa respeitando seleção individual ou grupo econômico
+  const empFilterOpts = useMemo(() => {
+    if (isGrupoAtivo && grupoAtivo && (grupoAtivo.empresas || []).length > 0) {
+      return { empresasIds: grupoAtivo.empresas }
+    }
+    if (empresasIdsAtivas.length > 1) {
+      return { empresasIds: empresasIdsAtivas }
+    }
+    if (empresasIdsAtivas.length === 1) {
+      return { empresaId: empresasIdsAtivas[0] }
+    }
+    if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
+      return { empresaId: selectedEmpresaId }
+    }
+    return undefined
+  }, [isGrupoAtivo, grupoAtivo, empresasIdsAtivas, selectedEmpresaId])
 
   // ----------------------------------------------------
   // Estados Compartilhados e Catálogos
@@ -569,12 +589,16 @@ export default function Importacao() {
     setLoadingData(true)
     try {
       const empRes = await financeService.getEmpresas()
-      const empIdInicial = targetEmpresaId || (empRes.length > 0 ? empRes[0].id : '')
+      const empIdInicial =
+        targetEmpresaId ||
+        (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : '') ||
+        (empresasIdsAtivas.length > 0 ? empresasIdsAtivas[0] : '') ||
+        (empRes.length > 0 ? empRes[0].id : '')
 
       const [pcRes, ccRes, tdRes, mapRes] = await Promise.all([
-        financeService.getPlanoContas(),
-        financeService.getCentros(),
-        financeService.getTiposDespesas(),
+        financeService.getPlanoContas(empFilterOpts),
+        financeService.getCentros(empFilterOpts),
+        financeService.getTiposDespesas(empFilterOpts),
         empIdInicial ? planoContasMapeamentosService.getAll(empIdInicial) : Promise.resolve([]),
       ])
       setEmpresas(empRes)
@@ -586,8 +610,8 @@ export default function Importacao() {
       )
 
       if (empRes.length > 0) {
-        if (!excelEmpresaId) setExcelEmpresaId(empRes[0].id)
-        if (!targetEmpresaId) setTargetEmpresaId(empRes[0].id)
+        if (!excelEmpresaId) setExcelEmpresaId(empIdInicial || empRes[0].id)
+        if (!targetEmpresaId) setTargetEmpresaId(empIdInicial || empRes[0].id)
       }
     } catch (err) {
       console.error('Erro ao carregar dados:', err)
@@ -603,7 +627,15 @@ export default function Importacao() {
 
   useEffect(() => {
     loadInitialCatalogs()
-  }, [])
+  }, [empFilterOpts])
+
+  // Assinaturas realtime para manter os catálogos sempre atualizados
+  useRealtime<PlanoContaRecord>('plano_contas', () => {
+    loadInitialCatalogs()
+  })
+  useRealtime('contas', () => {
+    loadInitialCatalogs()
+  })
 
   // ----------------------------------------------------
   // Handlers do PDF (Aba Importar PDF -> Lançamentos)
@@ -789,7 +821,7 @@ export default function Importacao() {
 
   // Callback de sucesso ao cadastrar nova conta
   const handleQuickRegisterSuccess = async (newPlano: PlanoContaRecord) => {
-    const updatedPlanos = await financeService.getPlanoContas()
+    const updatedPlanos = await financeService.getPlanoContas(empFilterOpts)
     setPlanoContas(updatedPlanos)
 
     const populatedPlano = updatedPlanos.find((p) => p.id === newPlano.id) || newPlano
