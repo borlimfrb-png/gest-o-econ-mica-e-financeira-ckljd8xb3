@@ -879,51 +879,50 @@ export default function Importacao() {
     }
 
     setIsSubmittingLancamentos(true)
-    let createdCount = 0
-    const errors: string[] = []
 
     try {
-      for (const item of validItems) {
-        try {
-          await financeService.createLancamento({
-            empresa: targetEmpresaId,
-            plano_conta: item.planoContaId!,
-            data: targetData,
-            valor: Number(item.valor),
-            historico: `Importado do PDF - ${pdfFile?.name || 'Documento'} (Pág. ${item.pageNumber}: ${item.rawAccountName})`,
-          })
-          createdCount++
+      const loteParaGravar = validItems.map((item) => ({
+        plano_conta: item.planoContaId!,
+        data: targetData,
+        valor: Number(item.valor),
+        historico: `Importado do PDF - ${pdfFile?.name || 'Documento'} (Pág. ${item.pageNumber}: ${item.rawAccountName})`,
+      }))
 
-          // 1. APRENDIZAGEM AUTOMÁTICA DE MAPEAMENTO:
-          // Grava vínculo confirmado codigo_empresa -> plano_conta
-          const codEmp = item.matchedCodigoEmpresa || item.planoConta?.codigo_empresa
-          if (codEmp && item.planoContaId) {
-            planoContasMapeamentosService
-              .salvarOuAtualizar({
-                empresa: targetEmpresaId,
-                codigo_empresa: codEmp,
-                plano_conta: item.planoContaId,
-              })
-              .catch(() => {})
-          }
-        } catch (err: unknown) {
-          const error = err as Error
-          errors.push(
-            `Erro ao criar lançamento para ${item.rawAccountName}: ${error.message || 'Falha'}`,
-          )
+      // Gravação atômica em lote único: tudo ou nada
+      const resLote = await financeService.importarLancamentosLote({
+        empresaId: targetEmpresaId,
+        lancamentos: loteParaGravar,
+        origem: 'importacao_pdf_ocr',
+        arquivoNome: pdfFile?.name || 'Documento.pdf',
+        periodoInicio: targetData,
+        periodoFim: targetData,
+      })
+
+      // Aprendizagem de mapeamentos em segundo plano
+      for (const item of validItems) {
+        const codEmp = item.matchedCodigoEmpresa || item.planoConta?.codigo_empresa
+        if (codEmp && item.planoContaId) {
+          planoContasMapeamentosService
+            .salvarOuAtualizar({
+              empresa: targetEmpresaId,
+              codigo_empresa: codEmp,
+              plano_conta: item.planoContaId,
+            })
+            .catch(() => {})
         }
       }
 
       const empresaSelecionada =
         empresas.find((e) => e.id === targetEmpresaId)?.razao_social ||
         empresas.find((e) => e.id === targetEmpresaId)?.nome_fantasia ||
+        resLote.empresaNome ||
         'Empresa'
 
       const [ano, mes, dia] = targetData.split('-')
       const dataFormatada = `${dia}/${mes}/${ano}`
 
       setCreatedLancamentosSummary({
-        count: createdCount,
+        count: resLote.totalItens,
         empresaNome: empresaSelecionada,
         dataRef: dataFormatada,
       })
@@ -932,18 +931,16 @@ export default function Importacao() {
       setConfirmModalOpen(false)
 
       toast({
-        title: 'Lançamentos criados com sucesso!',
-        description: `${createdCount} lançamentos criados para ${empresaSelecionada} em ${dataFormatada}.`,
+        title: 'Lançamentos gravados com sucesso!',
+        description: `${resLote.totalItens} lançamentos gravados em lote único atômico para ${empresaSelecionada} em ${dataFormatada}.`,
       })
-
-      if (errors.length > 0) {
-        console.warn('Alguns lançamentos falharam:', errors)
-      }
     } catch (err: unknown) {
       const error = err as Error
       toast({
-        title: 'Erro ao processar lançamentos',
-        description: error.message || 'Ocorreu um erro durante a criação dos lançamentos.',
+        title: 'Falha na gravação do lote (Nenhum lançamento gravado)',
+        description:
+          error.message ||
+          'Ocorreu um erro durante a gravação atômica dos lançamentos. Seus dados continuam no rascunho.',
         variant: 'destructive',
       })
     } finally {
@@ -1091,37 +1088,36 @@ export default function Importacao() {
     }
 
     setExcelImporting(true)
-    let imported = 0
-    const errors: string[] = []
 
     try {
-      for (const row of validRows) {
-        try {
-          await financeService.createLancamento({
-            empresa: excelEmpresaId,
-            plano_conta: row.plano_conta_id!,
-            data: row.data,
-            valor: row.valor,
-            historico: row.historico || `Importado da planilha: ${excelFile?.name}`,
-          })
-          imported++
-        } catch (err: unknown) {
-          const error = err as Error
-          errors.push(`Linha ${imported + 1}: ${error.message}`)
-        }
-      }
+      const loteParaGravar = validRows.map((row) => ({
+        plano_conta: row.plano_conta_id!,
+        data: row.data,
+        valor: row.valor,
+        historico: row.historico || `Importado da planilha: ${excelFile?.name || 'arquivo.xlsx'}`,
+      }))
 
-      setExcelImportedCount(imported)
+      // Gravação atômica em lote único
+      const resLote = await financeService.importarLancamentosLote({
+        empresaId: excelEmpresaId,
+        lancamentos: loteParaGravar,
+        origem: 'importacao_excel_padrao',
+        arquivoNome: excelFile?.name || 'arquivo.xlsx',
+      })
+
+      setExcelImportedCount(resLote.totalItens)
       setExcelSuccess(true)
       toast({
-        title: 'Importação concluída!',
-        description: `${imported} lançamentos importados com sucesso.`,
+        title: 'Importação concluída com sucesso!',
+        description: `${resLote.totalItens} lançamentos importados em lote único atômico.`,
       })
     } catch (err: unknown) {
       const error = err as Error
       toast({
-        title: 'Erro na importação',
-        description: error.message || 'Ocorreu um erro durante o processo.',
+        title: 'Falha na importação do lote (Nenhum lançamento gravado)',
+        description:
+          error.message ||
+          'Ocorreu um erro no processamento do lote atômico. Nenhum lançamento foi gravado no banco.',
         variant: 'destructive',
       })
     } finally {
@@ -2993,7 +2989,7 @@ export default function Importacao() {
                     {excelImporting ? (
                       <>
                         <RefreshCw className="w-4 h-4 animate-spin" />
-                        Importando...
+                        Gravando lançamentos...
                       </>
                     ) : (
                       <>
@@ -3342,7 +3338,7 @@ export default function Importacao() {
               {isSubmittingLancamentos ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Criando Lançamentos...
+                  Gravando lançamentos...
                 </>
               ) : (
                 <>

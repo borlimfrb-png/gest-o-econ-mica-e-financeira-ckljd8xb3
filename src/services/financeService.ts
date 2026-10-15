@@ -1246,6 +1246,68 @@ export const lancamentosService = {
     })
   },
 
+  /**
+   * Grava múltiplos lançamentos em lote único e 100% atômico através do endpoint PocketBase
+   * /backend/v1/lancamentos/lote. Se algum item falhar, tudo é cancelado no backend.
+   */
+  async importarLote(input: {
+    empresaId: string
+    lancamentos: Array<{
+      plano_conta: string
+      data: string
+      valor: number
+      historico?: string
+      nota_fiscal_ref?: string
+    }>
+    origem?: string
+    arquivoNome?: string
+    periodoInicio?: string
+    periodoFim?: string
+    contaPrincipal?: string
+  }): Promise<{
+    sucesso: boolean
+    message: string
+    empresaId: string
+    empresaNome: string
+    totalItens: number
+    valorTotal: number
+    idsCriados: string[]
+  }> {
+    const backendUrl = import.meta.env.VITE_POCKETBASE_URL
+    const token = pb.authStore.token
+
+    if (!token) {
+      throw new Error('Usuário não autenticado no sistema.')
+    }
+    if (!input.empresaId) {
+      throw new Error('Empresa de destino é obrigatória para importar o lote.')
+    }
+    if (!input.lancamentos || input.lancamentos.length === 0) {
+      throw new Error('Nenhum lançamento fornecido para importação em lote.')
+    }
+
+    const response = await fetch(`${backendUrl}/backend/v1/lancamentos/lote`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token,
+      },
+      body: JSON.stringify(input),
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok || !data.sucesso) {
+      const errMsg =
+        data.error ||
+        data.message ||
+        `Falha ao processar lote no servidor (status HTTP ${response.status}). Nenhum lançamento foi gravado.`
+      throw new Error(errMsg)
+    }
+
+    return data
+  },
+
   async create(data: {
     empresa: string
     plano_conta: string
@@ -1535,6 +1597,7 @@ export const financeService = {
   createPlanoConta: planoContasService.create,
   getLancamentos: lancamentosService.getAll,
   createLancamento: lancamentosService.create,
+  importarLancamentosLote: lancamentosService.importarLote,
 }
 
 export const GRUPOS_POR_TIPO: Record<string, string[]> = {

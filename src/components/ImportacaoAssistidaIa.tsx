@@ -921,7 +921,7 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
 
         toast({
           title: 'Importação realizada com sucesso! 🎉',
-          description: `${res.lancamentosCriados} lançamentos foram gravados no período ${periodoInicio}. O Agente memorizou ${res.vinculosAprendidos} novos vínculos para futuras importações!`,
+          description: `${res.lancamentosCriados} lançamentos foram gravados em lote único atômico para o período ${periodoInicio}. O Agente memorizou ${res.vinculosAprendidos} novos vínculos!`,
         })
 
         if (onReloadCatalogs) {
@@ -936,9 +936,12 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
       }
     } catch (err: any) {
       console.error('Erro na confirmação da importação:', err)
+      // Tratamento de erro atômico: rascunho preservado para nova tentativa
       toast({
-        title: 'Falha na confirmação',
-        description: err?.message || 'Erro ao gravar os lançamentos.',
+        title: 'Falha na importação do lote (Nenhum lançamento gravado)',
+        description:
+          err?.message ||
+          'Ocorreu um erro no servidor ao gravar o lote atômico. Seus dados continuam preservados na tela para tentar novamente.',
         variant: 'destructive',
       })
     } finally {

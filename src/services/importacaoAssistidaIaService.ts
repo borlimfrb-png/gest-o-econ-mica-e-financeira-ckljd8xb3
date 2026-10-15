@@ -5,8 +5,7 @@ import type {
   EmpresaRecord,
   LancamentoRecord,
 } from '@/types/finance'
-import { auditoriaLancamentosService } from './auditoriaLancamentosService'
-import { memoriaFornecedoresService } from './financeService'
+import { memoriaFornecedoresService, lancamentosService } from './financeService'
 
 export interface DespesaIaPropostaItem {
   id: string
@@ -518,88 +517,57 @@ export const importacaoAssistidaIaService = {
       )
     }
 
-    let criadosCount = 0
-    let valorTotalLancado = 0
+    // Prepara a lista de lançamentos para a chamada ÚNICA ATÔMICA
+    const loteLancamentos = despesasComPlano.map((item) => {
+      let dataLancamento = item.competencia
+      if (!dataLancamento || dataLancamento.length < 7) {
+        dataLancamento = `${input.periodoInicio.slice(0, 7)}-01`
+      } else if (dataLancamento.length === 7) {
+        dataLancamento = `${dataLancamento}-01`
+      }
+
+      const historicoTexto = `[Importação IA PDF] ${item.descricao} | Conta-Mãe: ${input.contaPrincipal}`
+
+      return {
+        plano_conta: item.planoContaId!,
+        data: dataLancamento,
+        valor: item.valor,
+        historico: historicoTexto,
+      }
+    })
+
+    // Grava TODOS os lançamentos em LOTE ÚNICO ATÔMICO no backend
+    // Se houver qualquer erro, lança exceção e nada é gravado no banco (tudo ou nada)
+    const resultadoLote = await lancamentosService.importarLote({
+      empresaId: input.empresaId,
+      lancamentos: loteLancamentos,
+      origem: 'importacao_ia_pdf',
+      arquivoNome: input.arquivoNome,
+      periodoInicio: input.periodoInicio,
+      periodoFim: input.periodoFim,
+      contaPrincipal: input.contaPrincipal,
+    })
+
+    // Alimenta a Memória do Agente para aprendizado futuro com as despesas vinculadas
     let vinculosAprendidos = 0
-    const erros: string[] = []
-
     for (const item of despesasComPlano) {
-      try {
-        const pc = planoContas.find((p) => p.id === item.planoContaId)
-        const codConta = pc?.expand?.conta?.codigo || pc?.codigo || ''
-        const nomeConta = pc?.expand?.conta?.nome || 'Conta'
-        const contaInfoStr = `${codConta} - ${nomeConta}`.trim()
-
-        // Determina data válida (formato YYYY-MM-DD)
-        let dataLancamento = item.competencia
-        if (!dataLancamento || dataLancamento.length < 7) {
-          dataLancamento = `${input.periodoInicio.slice(0, 7)}-01`
-        } else if (dataLancamento.length === 7) {
-          // Apenas ano-mês: atribui dia 01
-          dataLancamento = `${dataLancamento}-01`
-        }
-
-        const historicoTexto = `[Importação IA PDF] ${item.descricao} | Conta-Mãe: ${input.contaPrincipal}`
-
-        // Grava na coleção 'lancamentos'
-        const recLanc = await pb.collection('lancamentos').create<LancamentoRecord>({
-          empresa: input.empresaId,
-          plano_conta: item.planoContaId,
-          data: dataLancamento,
-          valor: item.valor,
-          historico: historicoTexto,
-          user: userId,
-        })
-
-        criadosCount++
-        valorTotalLancado += item.valor
-
-        // Auditoria
+      if (item.planoContaId && item.descricao.trim().length >= 3) {
         try {
-          await auditoriaLancamentosService.registrar({
+          await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+            fornecedor_padrao: item.descricao.trim(),
+            termo_busca: item.descricao.trim(),
+            plano_conta: item.planoContaId,
             empresa: input.empresaId,
-            lancamento_id: recLanc.id,
-            acao: 'criacao',
-            valor: item.valor,
-            historico: historicoTexto,
-            conta_info: contaInfoStr,
-            detalhes: {
-              motivo: `Importação assistida por IA a partir do PDF "${input.arquivoNome}"`,
-              dados_novos: {
-                origem: 'importacao_ia_pdf',
-                arquivo: input.arquivoNome,
-                conta_principal: input.contaPrincipal,
-                competencia: item.competencia,
-              },
-            },
+            categoria_sugerida: input.contaPrincipal || item.categoria,
           })
+          vinculosAprendidos++
         } catch {
-          /* auditoria não bloqueia lançamento */
+          /* aprendizado não bloqueia importação */
         }
-
-        // 3. Alimenta a Memória do Agente para aprendizado futuro
-        if (item.planoContaId && item.descricao.trim().length >= 3) {
-          try {
-            await memoriaFornecedoresService.registrarOuAtualizarVinculo({
-              fornecedor_padrao: item.descricao.trim(),
-              termo_busca: item.descricao.trim(),
-              plano_conta: item.planoContaId,
-              empresa: input.empresaId,
-              categoria_sugerida: input.contaPrincipal || item.categoria,
-            })
-            vinculosAprendidos++
-          } catch {
-            /* aprendizado não bloqueia importação */
-          }
-        }
-      } catch (err: any) {
-        erros.push(
-          `Erro ao gravar despesa "${item.descricao}": ${err?.message || 'Falha no banco'}`,
-        )
       }
     }
 
-    // 4. Marca o rascunho como confirmado
+    // 4. Marca o rascunho como confirmado se houver rascunhoId
     if (input.rascunhoId) {
       try {
         await pb.collection('importacao_rascunhos').update(input.rascunhoId, {
@@ -611,11 +579,11 @@ export const importacaoAssistidaIaService = {
     }
 
     return {
-      sucesso: criadosCount > 0,
-      lancamentosCriados: criadosCount,
-      valorTotalLancado,
+      sucesso: resultadoLote.sucesso,
+      lancamentosCriados: resultadoLote.totalItens,
+      valorTotalLancado: resultadoLote.valorTotal,
       vinculosAprendidos,
-      erros,
+      erros: [],
     }
   },
 }

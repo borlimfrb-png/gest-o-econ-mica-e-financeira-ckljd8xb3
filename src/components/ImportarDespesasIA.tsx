@@ -820,63 +820,58 @@ export function ImportarDespesasIA({
     }
 
     setIsGeneratingLancamentos(true)
-    let gerados = 0
-    let valorTotal = 0
-    const errors: string[] = []
 
     try {
+      const loteParaGravar = itensParaLancamento.map((item) => ({
+        plano_conta: item.planoContaId!,
+        data: item.data,
+        valor: item.valor,
+        historico: `Importado via IA - ${item.sourceFile} (${item.categoriaSugerida}): ${item.descricao}`,
+      }))
+
+      // Gravação atômica em lote único
+      const resLote = await lancamentosService.importarLote({
+        empresaId: selectedEmpresaId,
+        lancamentos: loteParaGravar,
+        origem: 'importacao_despesas_ia',
+      })
+
+      // Reforça aprendizado na memória de fornecedores em segundo plano
       for (const item of itensParaLancamento) {
         try {
-          await lancamentosService.create({
-            empresa: selectedEmpresaId,
+          await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+            fornecedor_padrao: item.descricao,
+            termo_busca: item.descricao,
             plano_conta: item.planoContaId!,
-            data: item.data,
-            valor: item.valor,
-            historico: `Importado via IA - ${item.sourceFile} (${item.categoriaSugerida}): ${item.descricao}`,
+            empresa: selectedEmpresaId,
+            categoria_sugerida: item.categoriaSugerida,
           })
-          gerados++
-          valorTotal += item.valor
-
-          // Reforça aprendizado na memória de fornecedores
-          try {
-            await memoriaFornecedoresService.registrarOuAtualizarVinculo({
-              fornecedor_padrao: item.descricao,
-              termo_busca: item.descricao,
-              plano_conta: item.planoContaId!,
-              empresa: selectedEmpresaId,
-              categoria_sugerida: item.categoriaSugerida,
-            })
-          } catch {
-            /* intentionally ignored */
-          }
-        } catch (err: any) {
-          errors.push(`${item.descricao}: ${err?.message || 'Falha'}`)
+        } catch {
+          /* intentionally ignored */
         }
       }
 
       setGenerationSummary({
         totalItens: itensParaLancamento.length,
-        totalValor: valorTotal,
+        totalValor: resLote.valorTotal,
         novasContasCount: novasContasCriadas.length,
-        lancamentosCount: gerados,
-        empresaNome: empresaSelecionada?.nome || 'Empresa',
+        lancamentosCount: resLote.totalItens,
+        empresaNome: empresaSelecionada?.nome || resLote.empresaNome || 'Empresa',
       })
 
       setStep('sucesso')
 
       toast({
         title: 'Lançamentos gerados com sucesso! 🎉',
-        description: `${gerados} lançamentos foram gravados no sistema para ${empresaSelecionada?.nome}.`,
+        description: `${resLote.totalItens} lançamentos gravados em lote único atômico para ${empresaSelecionada?.nome || 'a empresa'}.`,
       })
-
-      if (errors.length > 0) {
-        console.warn('Alguns lançamentos apresentaram falha:', errors)
-      }
     } catch (err: any) {
-      console.error('Erro ao gerar lançamentos:', err)
+      console.error('Erro ao gerar lote de lançamentos:', err)
       toast({
-        title: 'Erro ao gerar lançamentos',
-        description: err?.message || 'Ocorreu um erro durante a criação dos lançamentos.',
+        title: 'Falha na gravação do lote (Nenhum lançamento gravado)',
+        description:
+          err?.message ||
+          'Ocorreu um erro ao processar o lote atômico no servidor. Seus dados continuam no rascunho.',
         variant: 'destructive',
       })
     } finally {
@@ -1859,7 +1854,7 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                   {isGeneratingLancamentos ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      Gravando Lançamentos...
+                      Gravando lançamentos...
                     </>
                   ) : (
                     <>
