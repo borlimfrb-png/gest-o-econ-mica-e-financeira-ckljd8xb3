@@ -102,11 +102,12 @@ export function calcularDreGerencialMatriz(
     if (!chavesMesesValidos.has(mesChave)) continue
 
     // Resolve o ID da Conta Contábil:
-    // 1. Diretamente de expand.plano_conta.expand.conta.id
-    // 2. De expand.plano_conta.conta (string id da conta)
-    // 3. Do mapa planoContasMap usando lanc.plano_conta
-    // 4. Se o lançamento tiver um campo legada .conta
-    // 5. Fallback para __sem_conta__
+    // 1. Diretamente de lanc.expand?.plano_conta?.expand?.conta?.id
+    // 2. De expandPlanoConta?.conta (string id da conta)
+    // 3. Do mapa planoContasMap.get(lanc.plano_conta)
+    // 4. Se o lançamento tiver um campo legado .conta
+    // 5. Fallback scan de planoContas matching por codigo / codigo_empresa
+    // 6. Fallback final para __sem_conta__
     const expandPlanoConta = lanc.expand?.plano_conta
     const planoDoMapa = lanc.plano_conta ? planoContasMap.get(lanc.plano_conta) : undefined
 
@@ -125,6 +126,39 @@ export function calcularDreGerencialMatriz(
       contaId = planoDoMapa.conta
     } else if ((lanc as any).conta) {
       contaId = (lanc as any).conta
+    }
+
+    // Se ainda não encontrou e temos planoContas / lanc.plano_conta ou histórico,
+    // tenta fallback scan em planoContas casando por id, codigo ou codigo_empresa
+    if (!contaId && planoContas && planoContas.length > 0) {
+      const planoCandidato =
+        planoContas.find(
+          (p) =>
+            p.id === lanc.plano_conta ||
+            (lanc.plano_conta && p.codigo && p.codigo.trim() === String(lanc.plano_conta).trim()) ||
+            (lanc.plano_conta &&
+              p.codigo_empresa &&
+              p.codigo_empresa.trim() === String(lanc.plano_conta).trim()),
+        ) ||
+        // Tenta scan também procurando código contábil citado no histórico ou na referência
+        planoContas.find((p) => {
+          if (!p.conta) return false
+          const cod = p.codigo?.trim()
+          const codEmp = p.codigo_empresa?.trim()
+          const hist = (lanc.historico || '').trim()
+          return (cod && hist.includes(cod)) || (codEmp && hist.includes(codEmp))
+        })
+
+      if (planoCandidato) {
+        if (planoCandidato.expand?.conta?.id) {
+          contaId = planoCandidato.expand.conta.id
+          if (!contaMap.has(contaId)) {
+            contaMap.set(contaId, planoCandidato.expand.conta)
+          }
+        } else if (planoCandidato.conta) {
+          contaId = planoCandidato.conta
+        }
+      }
     }
 
     if (!contaId) {

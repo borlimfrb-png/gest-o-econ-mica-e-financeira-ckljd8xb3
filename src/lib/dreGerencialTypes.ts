@@ -125,9 +125,9 @@ export function compararContasDre(
 
 /**
  * Ordenação conforme regra de negócio:
- * 1º Centro de Custo (nome ou código do centro; contas com centro vêm antes, vazias por último)
- * 2º Tipo de Despesa (nome ou código do tipo; tipos com valor vêm antes, vazios por último dentro do centro)
- * 3º Conta Contábil (código hierárquico contábil e desempate alfabético pelo nome via compararContasDre)
+ * 1º Conta Contábil (código hierárquico contábil e desempate alfabético pelo nome via compararContasDre) como critério PRINCIPAL
+ * 2º Centro de Custo (nome ou código do centro; contas com centro vêm antes, vazias por último) como desempate
+ * 3º Tipo de Despesa (nome ou código do tipo; tipos com valor vêm antes, vazios por último dentro do centro) como segundo desempate
  */
 export function compararCentroTipoConta(
   a: {
@@ -147,7 +147,13 @@ export function compararCentroTipoConta(
     tipoDespesaCodigo?: string | null
   },
 ): number {
-  // 1º Centro de Custo
+  // 1º Conta Contábil (Código hierárquico + Nome) - CRITÉRIO PRINCIPAL
+  const cmpConta = compararContasDre(a, b)
+  if (cmpConta !== 0) {
+    return cmpConta
+  }
+
+  // 2º Centro de Custo (desempate: preenchido antes de vazio, ordenado pt-BR)
   const centroA = (a.centroNome || a.centroCodigo || '').trim()
   const centroB = (b.centroNome || b.centroCodigo || '').trim()
 
@@ -160,7 +166,7 @@ export function compararCentroTipoConta(
     return 1
   }
 
-  // 2º Tipo de Despesa
+  // 3º Tipo de Despesa (segundo desempate: preenchido antes de vazio, ordenado pt-BR)
   const tipoA = (a.tipoDespesaNome || a.tipoDespesaCodigo || '').trim()
   const tipoB = (b.tipoDespesaNome || b.tipoDespesaCodigo || '').trim()
 
@@ -168,13 +174,12 @@ export function compararCentroTipoConta(
     const cmpTipo = tipoA.localeCompare(tipoB, 'pt-BR', { sensitivity: 'base' })
     if (cmpTipo !== 0) return cmpTipo
   } else if (tipoA && !tipoB) {
-    return -1 // preenchido vem antes de vazio dentro do mesmo centro
+    return -1 // preenchido vem antes de vazio
   } else if (!tipoA && tipoB) {
     return 1
   }
 
-  // 3º Conta (Código hierárquico + Nome)
-  return compararContasDre(a, b)
+  return 0
 }
 
 export interface GrupoMatrizItem {
