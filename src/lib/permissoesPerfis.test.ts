@@ -32,6 +32,7 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'gerencial_comparativo_despesas',
     'gerencial_fluxo_caixa',
     'gerencial_indicador_crescimento',
+    'gerencial_rentabilidade',
     'financeiro',
     'baixa_recebiveis',
     'contratos',
