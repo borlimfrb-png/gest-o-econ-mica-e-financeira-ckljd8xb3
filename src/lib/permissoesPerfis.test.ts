@@ -11,6 +11,7 @@ import {
 describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
   const modulosPermitidosCliente: ModuloSistema[] = [
     'analise_economica_financeira',
+    'cliente_rentabilidade',
     'gerencial_dre',
     'gerencial_despesas_fixas',
     'gerencial_despesas_variaveis',
@@ -61,7 +62,7 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(getRotaInicialPorPerfil(undefined)).toBe('/dashboard')
   })
 
-  it('deve permitir acesso do perfil cliente apenas aos módulos liberados (hub + 5 destinos)', () => {
+  it('deve permitir acesso do perfil cliente apenas aos módulos liberados (hub + 6 destinos)', () => {
     modulosPermitidosCliente.forEach((modulo) => {
       expect(
         perfilTemAcesso('cliente', modulo),
@@ -85,6 +86,14 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(config.nome).toBe('Cliente')
     expect(config.modulosPermitidos).toEqual(expect.arrayContaining(modulosPermitidosCliente))
     expect(config.modulosPermitidos.length).toBe(modulosPermitidosCliente.length)
+  })
+
+  it('garante que cliente_rentabilidade é exclusivo do perfil cliente', () => {
+    expect(perfilTemAcesso('cliente', 'cliente_rentabilidade')).toBe(true)
+    expect(perfilTemAcesso('admin', 'cliente_rentabilidade')).toBe(false)
+    expect(perfilTemAcesso('empresa', 'cliente_rentabilidade')).toBe(false)
+    expect(perfilTemAcesso('financeiro', 'cliente_rentabilidade')).toBe(false)
+    expect(perfilTemAcesso('comercial', 'cliente_rentabilidade')).toBe(false)
   })
 
   it('deve listar todos os perfis do sistema na LISTA_PERFIS incluindo cliente', () => {

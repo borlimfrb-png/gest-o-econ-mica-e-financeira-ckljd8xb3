@@ -341,6 +341,7 @@ export default function Layout() {
     location.pathname === '/gerencial/fluxo-caixa' ||
     location.pathname === '/gerencial/indicador-crescimento' ||
     location.pathname === '/gerencial/rentabilidade' ||
+    location.pathname === '/cliente/rentabilidade' ||
     location.pathname.startsWith('/empresas/') ||
     location.pathname.startsWith('/formacao-preco')
 
@@ -1234,6 +1235,8 @@ export default function Layout() {
                 {location.pathname === '/gerencial/indicador-crescimento' &&
                   'Indicador de Crescimento'}
                 {location.pathname === '/gerencial/rentabilidade' && 'Análise de Rentabilidade'}
+                {location.pathname === '/cliente/rentabilidade' &&
+                  'Análise de Rentabilidade (Cliente)'}
                 {location.pathname.startsWith('/empresas/') && 'Análise da Empresa'}
               </h1>
               <p className="text-[11px] text-[#5B6B7F] line-clamp-1">
@@ -1273,6 +1276,8 @@ export default function Layout() {
                   'Simulação dinâmica de crescimento de faturamento, elasticidade de custos fixos e variáveis e impacto no lucro'}
                 {location.pathname === '/gerencial/rentabilidade' &&
                   'Acompanhamento de faturamento e lucro apurado no DRE com margens percentuais e gráfico evolutivo'}
+                {location.pathname === '/cliente/rentabilidade' &&
+                  'Visão simplificada do faturamento, lucro apurado no DRE e margens de rentabilidade'}
                 {location.pathname.startsWith('/empresas/') &&
                   'Diagnóstico detalhado de Balanço, DRE e Indicadores'}
               </p>

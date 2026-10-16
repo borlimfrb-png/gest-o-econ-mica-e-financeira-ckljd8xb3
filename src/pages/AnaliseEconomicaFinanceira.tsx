@@ -6,6 +6,7 @@ import {
   Tags,
   PieChart,
   TrendingUp,
+  Percent,
   ArrowRight,
   Building2,
   Calendar,
@@ -196,8 +197,24 @@ export default function AnaliseEconomicaFinanceira() {
         rota: () => '/gerencial/analise-faturamento',
         metricasTexto: 'Sazonalidade Jan-Dez, participação percentual e comparativos',
       },
+      {
+        id: 'rentabilidade',
+        titulo: 'Análise de Rentabilidade',
+        subtitulo: 'Faturamento vs. Lucro & Margens',
+        descricao:
+          'Visão de rentabilidade gerencial com faturamento, lucro apurado no DRE, margens percentuais e gráfico evolutivo.',
+        badge: 'Rentabilidade',
+        badgeVariant: 'emerald',
+        icon: Percent,
+        gradient: 'from-[#0B1F3A] via-[#0E343D] to-[#124B40]',
+        borderGlow: 'hover:border-emerald-400/70 hover:shadow-emerald-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-emerald-500/25 to-teal-600/20 text-emerald-300 border-emerald-400/40',
+        rota: () => (isCliente ? '/cliente/rentabilidade' : '/gerencial/rentabilidade'),
+        metricasTexto: 'Faturamento, Lucro Apurado, Margem Líquida, Bruta e Operacional',
+      },
     ],
-    [],
+    [isCliente],
   )
 
   return (
@@ -230,8 +247,8 @@ export default function AnaliseEconomicaFinanceira() {
             <p className="text-sm text-slate-300/90 leading-relaxed">
               Central estratégica de demonstrações contábeis e gerenciais pela{' '}
               <strong className="text-sky-300">Borlim Consultoria</strong>. Acesse o Balanço
-              Patrimonial, DRE, acompanhamento minucioso de custos fixos e variáveis e histórico de
-              faturamento da empresa selecionada.
+              Patrimonial, DRE, Rentabilidade, custos fixos e variáveis e histórico de faturamento
+              da empresa selecionada.{' '}
             </p>
           </div>
 
@@ -288,7 +305,7 @@ export default function AnaliseEconomicaFinanceira() {
             </h2>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            5 demonstrativos estruturados
+            6 demonstrativos estruturados
           </span>
         </div>
 

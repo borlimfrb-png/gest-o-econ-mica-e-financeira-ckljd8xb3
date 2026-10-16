@@ -987,6 +987,17 @@ export function filtrarMenuPorPerfil(
             badge: 'Faturamento',
             badgeVariant: 'emerald',
           },
+          {
+            id: 'cliente-rentabilidade',
+            name: 'Análise de Rentabilidade',
+            path: '/cliente/rentabilidade',
+            icon: Percent,
+            descricao: 'Faturamento vs lucro apurado, margens de rentabilidade e gráficos',
+            modulo: 'cliente_rentabilidade',
+            badge: 'Rentabilidade',
+            badgeVariant: 'emerald',
+            destaque: true,
+          },
         ],
       },
     ]

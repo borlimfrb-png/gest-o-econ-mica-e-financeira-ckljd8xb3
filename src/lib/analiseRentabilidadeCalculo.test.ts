@@ -229,5 +229,8 @@ describe('Análise de Rentabilidade - Cálculos e Integração DRE', () => {
     expect(perfilTemAcesso('comercial', 'gerencial_rentabilidade')).toBe(false)
     // CLIENTE NÃO DEVE TER ACESSO (requisito fundamental 5)
     expect(perfilTemAcesso('cliente', 'gerencial_rentabilidade')).toBe(false)
+    // Mas o cliente possui acesso exclusivo à sua rota simplificada cliente_rentabilidade
+    expect(perfilTemAcesso('cliente', 'cliente_rentabilidade')).toBe(true)
+    expect(perfilTemAcesso('admin', 'cliente_rentabilidade')).toBe(false)
   })
 })
