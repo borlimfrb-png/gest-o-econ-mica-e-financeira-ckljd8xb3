@@ -1308,6 +1308,69 @@ export const lancamentosService = {
     return data
   },
 
+  /**
+   * Limpa ou pré-visualiza lançamentos de um período para uma determinada empresa.
+   * Endpoint protegido: POST /backend/v1/lancamentos/limpar-periodo
+   * Suporta modo 'contar' (preview) e modo 'executar' (exclusão atômica em transação).
+   */
+  async limparPeriodo(input: {
+    empresa: string
+    data_inicio: string
+    data_fim: string
+    modo?: 'contar' | 'executar'
+  }): Promise<{
+    sucesso: boolean
+    modo?: 'contar' | 'executar'
+    empresaId: string
+    empresaNome?: string
+    data_inicio: string
+    data_fim: string
+    total?: number
+    excluidos: number
+    valor_total: number
+    message?: string
+    error?: string
+  }> {
+    const backendUrl = import.meta.env.VITE_POCKETBASE_URL
+    const token = pb.authStore.token
+
+    if (!token) {
+      throw new Error('Usuário não autenticado no sistema.')
+    }
+    if (!input.empresa) {
+      throw new Error('Empresa é obrigatória para a limpeza de período.')
+    }
+    if (!input.data_inicio || !input.data_fim) {
+      throw new Error('Data inicial e data final são obrigatórias.')
+    }
+
+    const response = await fetch(`${backendUrl}/backend/v1/lancamentos/limpar-periodo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token,
+      },
+      body: JSON.stringify({
+        empresa: input.empresa,
+        data_inicio: input.data_inicio,
+        data_fim: input.data_fim,
+        modo: input.modo || 'executar',
+      }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok || !data.sucesso) {
+      const errMsg =
+        data.error ||
+        data.message ||
+        `Falha na operação de limpeza no servidor (status HTTP ${response.status}).`
+      throw new Error(errMsg)
+    }
+
+    return data
+  },
+
   async create(data: {
     empresa: string
     plano_conta: string
@@ -1598,6 +1661,7 @@ export const financeService = {
   getLancamentos: lancamentosService.getAll,
   createLancamento: lancamentosService.create,
   importarLancamentosLote: lancamentosService.importarLote,
+  limparPeriodoLancamentos: lancamentosService.limparPeriodo,
 }
 
 export const GRUPOS_POR_TIPO: Record<string, string[]> = {

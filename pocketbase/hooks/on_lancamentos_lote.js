@@ -229,3 +229,212 @@ routerAdd(
   },
   $apis.requireAuth(),
 )
+
+/**
+ * Endpoint: POST /backend/v1/lancamentos/limpar-periodo
+ *
+ * Limpa ou pré-visualiza lançamentos de uma empresa em determinado intervalo de datas.
+ * - Modo "contar": retorna { total, valor_total, excluidos } sem apagar nada.
+ * - Modo "executar": exclusão atômica em transação ($app.runInTransaction) e
+ *   gravação de registro consolidado em auditoria_lancamentos.
+ */
+routerAdd(
+  'POST',
+  '/backend/v1/lancamentos/limpar-periodo',
+  (e) => {
+    try {
+      const authRecord = e.auth
+      const userId = authRecord?.id
+      if (!userId) {
+        return e.unauthorizedError('Usuário não autenticado.')
+      }
+
+      // Validação de perfil: 'cliente' bloqueado
+      const role = authRecord.get ? authRecord.get('role') : authRecord.role
+      if (role === 'cliente') {
+        return e.forbiddenError(
+          'Acesso restrito: usuários com perfil cliente não possuem permissão para excluir lançamentos.',
+        )
+      }
+
+      const body = e.requestInfo().body || {}
+      const empresaId = String(body.empresa || body.empresaId || '').trim()
+      let dataInicio = String(body.data_inicio || body.dataInicio || '').trim()
+      let dataFim = String(body.data_fim || body.dataFim || '').trim()
+      const modo = String(body.modo || 'executar')
+        .trim()
+        .toLowerCase()
+
+      if (!empresaId) {
+        return e.badRequestError('O ID da empresa é obrigatório.')
+      }
+
+      if (!dataInicio || !dataFim) {
+        return e.badRequestError(
+          'O período informado é inválido. data_inicio e data_fim são obrigatórias.',
+        )
+      }
+
+      // Normaliza para formato YYYY-MM-DD se vier datetime
+      if (dataInicio.length > 10) {
+        dataInicio = dataInicio.slice(0, 10)
+      }
+      if (dataFim.length > 10) {
+        dataFim = dataFim.slice(0, 10)
+      }
+
+      if (dataInicio > dataFim) {
+        return e.badRequestError('A data inicial não pode ser superior à data final.')
+      }
+
+      // Validação de isolamento por empresa se não for admin
+      const authEmpresa = authRecord.get ? authRecord.get('empresa') : authRecord.empresa
+      if (role !== 'admin' && authEmpresa && authEmpresa !== empresaId) {
+        return e.forbiddenError(
+          'Permissão negada: você não possui permissão para gerenciar lançamentos desta empresa.',
+        )
+      }
+
+      // Valida existência da empresa
+      let empresaRecord
+      try {
+        empresaRecord = $app.findRecordById('empresas', empresaId)
+      } catch (empErr) {
+        return e.badRequestError('Empresa informada não foi encontrada no sistema.')
+      }
+
+      const empresaNome =
+        empresaRecord.getString('nome_fantasia') ||
+        empresaRecord.getString('razao_social') ||
+        empresaRecord.getString('nome') ||
+        'Empresa'
+
+      // Filtro para buscar apenas lançamentos da empresa dentro do intervalo de data
+      const startBound = `${dataInicio} 00:00:00.000Z`
+      const endBound = `${dataFim} 23:59:59.999Z`
+
+      const filterExpr = 'empresa = {:empresaId} && data >= {:startBound} && data <= {:endBound}'
+      const params = {
+        empresaId: empresaId,
+        startBound: startBound,
+        endBound: endBound,
+      }
+
+      const lancamentosParaExcluir = $app.findRecordsByFilter(
+        'lancamentos',
+        filterExpr,
+        'data',
+        0,
+        0,
+        params,
+      )
+
+      let totalRegistros = 0
+      let valorTotalSomado = 0
+
+      if (lancamentosParaExcluir && lancamentosParaExcluir.length > 0) {
+        totalRegistros = lancamentosParaExcluir.length
+        for (let i = 0; i < lancamentosParaExcluir.length; i++) {
+          const rec = lancamentosParaExcluir[i]
+          const val = rec.getFloat ? rec.getFloat('valor') : Number(rec.get('valor') || 0)
+          valorTotalSomado += val
+        }
+      }
+
+      valorTotalSomado = Math.round(valorTotalSomado * 100) / 100
+
+      // Modo "contar": retorna a contagem prévia sem apagar nada
+      if (modo === 'contar') {
+        return e.json(200, {
+          sucesso: true,
+          modo: 'contar',
+          empresaId,
+          empresaNome,
+          data_inicio: dataInicio,
+          data_fim: dataFim,
+          total: totalRegistros,
+          excluidos: totalRegistros,
+          valor_total: valorTotalSomado,
+        })
+      }
+
+      // Caso não existam lançamentos no período
+      if (totalRegistros === 0) {
+        return e.json(200, {
+          sucesso: true,
+          empresaId,
+          empresaNome,
+          data_inicio: dataInicio,
+          data_fim: dataFim,
+          excluidos: 0,
+          valor_total: 0,
+          message: 'Nenhum lançamento encontrado no período informado.',
+        })
+      }
+
+      const usuarioNome =
+        (authRecord.get ? authRecord.get('name') : authRecord.name) || 'Usuário do Sistema'
+      const usuarioEmail = (authRecord.get ? authRecord.get('email') : authRecord.email) || ''
+
+      const colAuditoria = $app.findCollectionByNameOrId('auditoria_lancamentos')
+
+      // Execução em transação atômica
+      $app.runInTransaction((txApp) => {
+        // 1. Exclui cada lançamento individualmente
+        for (let i = 0; i < lancamentosParaExcluir.length; i++) {
+          const lRec = lancamentosParaExcluir[i]
+          txApp.delete(lRec)
+        }
+
+        // 2. Grava registro consolidado de auditoria
+        if (colAuditoria) {
+          const auditRec = new Record(colAuditoria)
+          auditRec.set('empresa', empresaId)
+          auditRec.set('lancamento_id', `limpeza_${dataInicio}_${dataFim}`)
+          auditRec.set('acao', 'exclusao')
+          auditRec.set('usuario', userId)
+          auditRec.set('usuario_nome', usuarioNome)
+          auditRec.set('usuario_email', usuarioEmail)
+          auditRec.set('valor', valorTotalSomado)
+          auditRec.set(
+            'historico',
+            `[Limpeza de Período] Exclusão de ${totalRegistros} lançamentos (${dataInicio} a ${dataFim})`,
+          )
+          auditRec.set('conta_info', `Limpeza DRE Gerencial (${dataInicio} a ${dataFim})`)
+          auditRec.set('detalhes', {
+            origem: 'limpeza_periodo_dre',
+            empresa_id: empresaId,
+            empresaNome: empresaNome,
+            periodo_inicio: dataInicio,
+            periodo_fim: dataFim,
+            quantidade_apagada: totalRegistros,
+            valor_total: valorTotalSomado,
+            data_execucao: new Date().toISOString(),
+          })
+
+          txApp.save(auditRec)
+        }
+      })
+
+      return e.json(200, {
+        sucesso: true,
+        empresaId,
+        empresaNome,
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        excluidos: totalRegistros,
+        valor_total: valorTotalSomado,
+        message: `${totalRegistros} lançamentos excluídos permanentemente no período de ${dataInicio} a ${dataFim}.`,
+      })
+    } catch (err) {
+      console.log('[Limpar Período] Erro ao excluir lançamentos:', err)
+      return e.json(500, {
+        sucesso: false,
+        error:
+          err?.message ||
+          'Erro interno ao processar exclusão de lançamentos por período. Nenhuma alteração foi realizada.',
+      })
+    }
+  },
+  $apis.requireAuth(),
+)

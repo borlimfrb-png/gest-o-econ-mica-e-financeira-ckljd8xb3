@@ -18,6 +18,7 @@ import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { ModalImportarDreGerencial } from '@/components/ModalImportarDreGerencial'
+import { ModalLimparPeriodoDre } from '@/components/ModalLimparPeriodoDre'
 import {
   gerarPreviewImportacaoDre,
   type PreviewImportacaoDreResultado,
@@ -59,6 +60,7 @@ import {
   FolderOpen,
   Folder,
   Database,
+  Trash2,
 } from 'lucide-react'
 
 const MESES_OPCOES = [
@@ -152,6 +154,9 @@ export default function DreGerencial() {
     null,
   )
   const [gerandoPreview, setGerandoPreview] = useState(false)
+
+  // Modal para Limpar Período de Lançamentos
+  const [modalLimparPeriodoOpen, setModalLimparPeriodoOpen] = useState(false)
 
   const abrirClassificacaoLote = (preIds?: string[]) => {
     setModalPreFilteredIds(preIds && preIds.length > 0 ? preIds : undefined)
@@ -503,6 +508,22 @@ export default function DreGerencial() {
               </Badge>
             </button>
           </div>
+
+          {/* Botão de Limpar Período (Apenas para não-cliente: admin, consultor, empresa, financeiro) */}
+          {!isCliente && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalLimparPeriodoOpen(true)}
+              disabled={loading || !selectedEmpresaId}
+              className="h-8 text-xs font-semibold border-rose-200 hover:bg-rose-50 text-rose-700 hover:text-rose-800 gap-1.5"
+              title="Excluir lançamentos de um período selecionado para reimportação"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+              Limpar Período
+            </Button>
+          )}
 
           {/* Botão de Importar para DRE do Sistema */}
           <Button
@@ -2127,6 +2148,20 @@ export default function DreGerencial() {
           carregarDados()
         }}
       />
+
+      {/* Modal de Limpeza de Período de Lançamentos */}
+      {!isCliente && selectedEmpresaId && (
+        <ModalLimparPeriodoDre
+          open={modalLimparPeriodoOpen}
+          onOpenChange={setModalLimparPeriodoOpen}
+          empresaId={selectedEmpresaId}
+          empresaNome={selectedEmpresa?.nome || 'Empresa Selecionada'}
+          anoInicialPadrao={anoInicial}
+          onSucesso={() => {
+            carregarDados()
+          }}
+        />
+      )}
 
       {/* Rodapé fixo na impressão / PDF A4 */}
       <DocumentPrintFooter

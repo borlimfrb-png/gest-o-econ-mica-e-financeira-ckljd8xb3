@@ -104,7 +104,7 @@ export const auditoriaSegurancaService = {
    */
   async dispararVerificacaoManual(): Promise<DispararVerificacaoResponse> {
     const res = await pb.send<DispararVerificacaoResponse>(
-      '/api/admin/auditoria-seguranca/verificar',
+      '/backend/v1/admin/auditoria-seguranca/verificar',
       {
         method: 'POST',
       },

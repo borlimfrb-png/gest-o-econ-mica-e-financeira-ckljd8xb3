@@ -557,8 +557,8 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
   }
 })
 
-// Endpoint manual POST /api/admin/auditoria-seguranca/verificar (Admin apenas)
-routerAdd('POST', '/api/admin/auditoria-seguranca/verificar', (e) => {
+// Endpoint manual POST /backend/v1/admin/auditoria-seguranca/verificar (Admin apenas)
+routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
   const authRecord = e.auth
   if (!authRecord || authRecord.getString('role') !== 'admin') {
     return e.json(403, { error: 'Acesso restrito para administradores.' })
