@@ -8,6 +8,12 @@ export interface LancamentoVariavelItem {
   contaCodigo?: string
   centroNome?: string
   tipoDespesaNome?: string
+  id?: string
+  data?: string
+  valor?: number
+  historico?: string
+  empresaId?: string
+  mesAno?: string
 }
 
 /**
@@ -74,6 +80,12 @@ export function filtrarLancamentosDespesaVariavel(
 
     itens.push({
       lancamento: lanc,
+      id: lanc.id,
+      data: lanc.data || '',
+      valor: Math.abs(Number(lanc.valor) || 0),
+      historico: lanc.descricao || '',
+      empresaId: lanc.empresa || '',
+      mesAno: mesChave,
       contaId,
       contaNome: conta?.nome || 'Conta',
       contaCodigo: conta?.codigo,
@@ -92,6 +104,55 @@ export function filtrarLancamentosDespesaVariavel(
   })
 
   return itens
+}
+
+/**
+ * Extrai lançamentos de despesas variáveis com filtros convenientes de empresa e chaves de meses.
+ */
+export function extrairLancamentosDespesasVariaveis(
+  lancamentos: LancamentoRecord[],
+  contas: ContaRecord[],
+  planoContas?: PlanoContaRecord[],
+  filtros?: {
+    empresaId?: string
+    ano?: number
+    mesesChaves?: string[]
+  },
+): LancamentoVariavelItem[] {
+  const chavesSet = new Set<string>()
+  if (filtros?.mesesChaves && filtros.mesesChaves.length > 0) {
+    filtros.mesesChaves.forEach((ch) => chavesSet.add(ch))
+  } else if (filtros?.ano) {
+    for (let m = 1; m <= 12; m++) {
+      chavesSet.add(`${filtros.ano}-${String(m).padStart(2, '0')}`)
+    }
+  } else {
+    lancamentos.forEach((l) => {
+      if (l.data) chavesSet.add(l.data.slice(0, 7))
+    })
+  }
+
+  const base = filtrarLancamentosDespesaVariavel(lancamentos, contas, planoContas, chavesSet)
+
+  if (!filtros?.empresaId) return base
+  return base.filter((item) => !item.empresaId || item.empresaId === filtros.empresaId)
+}
+
+/**
+ * Calcula totais consolidados de uma lista de despesas variáveis.
+ */
+export function calcularTotaisVariaveis(itens: LancamentoVariavelItem[]): {
+  totalValor: number
+  quantidade: number
+} {
+  const totalValor = itens.reduce(
+    (acc, curr) => acc + (curr.valor || Math.abs(curr.lancamento.valor) || 0),
+    0,
+  )
+  return {
+    totalValor,
+    quantidade: itens.length,
+  }
 }
 
 /**

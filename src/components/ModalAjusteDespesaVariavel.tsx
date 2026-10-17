@@ -32,7 +32,7 @@ import {
   type LancamentoVariavelItem,
 } from '@/lib/lancamentosVariaveisHelper'
 
-interface ModalAjusteVariavelProps {
+export interface ModalAjusteDespesaVariavelProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   item: LancamentoVariavelItem | null

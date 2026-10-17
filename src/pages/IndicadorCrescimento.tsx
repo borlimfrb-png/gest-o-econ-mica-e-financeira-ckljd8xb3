@@ -7,6 +7,13 @@ import { useRealtime } from '@/hooks/use-realtime'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
+import { ModalAjusteDespesaVariavel } from '@/components/ModalAjusteDespesaVariavel'
+import {
+  filtrarLancamentosDespesaVariavel,
+  extrairLancamentosDespesasVariaveis,
+  calcularTotaisVariaveis,
+  type LancamentoVariavelItem,
+} from '@/lib/lancamentosVariaveisHelper'
 import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
@@ -25,6 +32,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
@@ -103,6 +111,12 @@ export default function IndicadorCrescimento() {
 
   // Modal para classificação em lote
   const [modalClassificacaoOpen, setModalClassificacaoOpen] = useState(false)
+
+  // Estado para Modal e Detalhamento de Ajustes nas Despesas Variáveis Individuais
+  const [modalAjusteVarOpen, setModalAjusteVarOpen] = useState(false)
+  const [itemAjustando, setItemAjustando] = useState<LancamentoVariavelItem | null>(null)
+  const [mostrarGavetaVariaveis, setMostrarGavetaVariaveis] = useState(false)
+  const [filtroTextoVar, setFiltroTextoVar] = useState('')
 
   // Seleção de Período (Mês Único vs Faixa)
   const currentYear = selectedAno || new Date().getFullYear()
@@ -256,6 +270,54 @@ export default function IndicadorCrescimento() {
   const resultado = useMemo<ResultadoSimuladorCrescimento>(() => {
     return calcularSimuladorCrescimento(cenarioBase, parametrosSimulacao)
   }, [cenarioBase, parametrosSimulacao])
+
+  // Lançamentos individuais de Despesas Variáveis extraídos para ajuste
+  const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
+    const empresaIdFiltro =
+      selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : undefined
+    return extrairLancamentosDespesasVariaveis(lancamentos, contas, planoContas, {
+      empresaId: empresaIdFiltro,
+      ano: ano,
+      mesesChaves: mesesSelecionados.map((m) => m.chave),
+    })
+  }, [lancamentos, contas, planoContas, selectedEmpresaId, ano, mesesSelecionados])
+
+  // Lançamentos de despesas variáveis filtrados pela busca textual
+  const lancamentosVariaveisFiltrados = useMemo(() => {
+    if (!filtroTextoVar.trim()) return lancamentosVariaveis
+    const q = filtroTextoVar.toLowerCase()
+    return lancamentosVariaveis.filter(
+      (item) =>
+        (item.historico && item.historico.toLowerCase().includes(q)) ||
+        (item.contaNome && item.contaNome.toLowerCase().includes(q)) ||
+        (item.contaCodigo && item.contaCodigo.toLowerCase().includes(q)) ||
+        (item.centroNome && item.centroNome.toLowerCase().includes(q)),
+    )
+  }, [lancamentosVariaveis, filtroTextoVar])
+
+  const totaisVariaveisApurados = useMemo(() => {
+    return calcularTotaisVariaveis(lancamentosVariaveis)
+  }, [lancamentosVariaveis])
+
+  const empresaIdParaAjuste = useMemo(() => {
+    if (selectedEmpresa?.id) return selectedEmpresa.id
+    if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) return selectedEmpresaId
+    if (lancamentosVariaveis.length > 0) return lancamentosVariaveis[0].empresaId
+    return ''
+  }, [selectedEmpresa, selectedEmpresaId, lancamentosVariaveis])
+
+  const handleAbrirAjuste = (item: LancamentoVariavelItem) => {
+    if (isCliente) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Ajuste de lançamentos é exclusivo da consultoria e administração.',
+      })
+      return
+    }
+    setItemAjustando(item)
+    setModalAjusteVarOpen(true)
+  }
 
   // Resetar Parâmetros para Padrão (+10% faturamento, variáveis proporcionais, fixas mantidas)
   const handleResetarParametros = () => {
@@ -866,6 +928,19 @@ export default function IndicadorCrescimento() {
                       <Label className="text-xs font-bold text-slate-800">
                         Comportamento das Despesas Variáveis
                       </Label>
+                      {!isCliente && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setMostrarGavetaVariaveis(!mostrarGavetaVariaveis)}
+                          className="h-6 px-2 text-[10px] font-bold text-amber-700 hover:text-amber-800 hover:bg-amber-100/60 gap-1 cursor-pointer"
+                          title="Ajustar lançamentos individuais de despesas variáveis"
+                        >
+                          <Sliders className="w-3 h-3 text-amber-600" />
+                          {mostrarGavetaVariaveis ? 'Ocultar Ajustes' : 'Ajustar Lançamentos'}
+                        </Button>
+                      )}
                     </div>
 
                     <RadioGroup
@@ -1006,6 +1081,99 @@ export default function IndicadorCrescimento() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* PAINEL DE AJUSTES INDIVIDUAIS DE DESPESAS VARIÁVEIS */}
+              {mostrarGavetaVariaveis && !isCliente && (
+                <Card className="bg-white border-amber-300 dark:border-amber-800 shadow-sm">
+                  <CardHeader className="py-3 px-4 border-b border-amber-100 dark:border-amber-900/40 bg-amber-50/50 flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Sliders className="w-4 h-4 text-amber-700" />
+                        <CardTitle className="text-xs font-bold text-amber-950">
+                          Ajustes nas Despesas Variáveis Individuais
+                        </CardTitle>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-white border-amber-300 text-amber-800 font-mono"
+                      >
+                        {lancamentosVariaveis.length} itens (
+                        {formatBrl(totaisVariaveisApurados.totalValor)})
+                      </Badge>
+                    </div>
+                    <CardDescription className="text-[11px] text-amber-900/80">
+                      Edite valores, competências ou contas individuais para recalcular o impacto no
+                      cenário base e simulado.
+                    </CardDescription>
+
+                    <div className="pt-1">
+                      <Input
+                        type="text"
+                        placeholder="Buscar por histórico, conta ou centro..."
+                        value={filtroTextoVar}
+                        onChange={(e) => setFiltroTextoVar(e.target.value)}
+                        className="h-7 text-xs bg-white"
+                      />
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 text-xs">
+                      {lancamentosVariaveisFiltrados.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-slate-500">
+                          Nenhum lançamento de despesa variável encontrado no período.
+                        </div>
+                      ) : (
+                        lancamentosVariaveisFiltrados.map((item) => (
+                          <div
+                            key={item.id}
+                            className="p-3 hover:bg-amber-50/40 transition-colors flex items-center justify-between gap-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono text-[10.5px] text-slate-500 font-semibold">
+                                  {item.data}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className="text-[9.5px] px-1 py-0 bg-slate-50 text-slate-700 border-slate-200"
+                                >
+                                  {item.contaNome || 'Conta sem nome'}
+                                </Badge>
+                                {item.centroNome && (
+                                  <span className="text-[10px] text-slate-400">
+                                    • {item.centroNome}
+                                  </span>
+                                )}
+                              </div>
+                              <p
+                                className="text-xs font-medium text-slate-800 truncate mt-0.5"
+                                title={item.historico}
+                              >
+                                {item.historico || '(sem histórico)'}
+                              </p>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="font-mono font-bold text-slate-900 text-xs">
+                                {formatBrl(item.valor)}
+                              </span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleAbrirAjuste(item)}
+                                className="h-6 px-2 text-[10.5px] font-semibold text-amber-800 border-amber-300 hover:bg-amber-100 cursor-pointer"
+                              >
+                                Ajustar
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* CARD DE PONTO DE EQUILÍBRIO DO CENÁRIO */}
               <Card className="bg-white border-slate-200/90 shadow-xs">
@@ -1454,6 +1622,20 @@ export default function IndicadorCrescimento() {
         onOpenChange={setModalClassificacaoOpen}
         contas={contas}
         onSuccess={() => carregarDados()}
+      />
+
+      {/* Modal de Ajuste de Despesa Variável Individual */}
+      <ModalAjusteDespesaVariavel
+        open={modalAjusteVarOpen}
+        onOpenChange={setModalAjusteVarOpen}
+        item={itemAjustando}
+        contas={contas}
+        planoContas={planoContas}
+        empresaId={empresaIdParaAjuste}
+        anoContexto={ano}
+        onAjustado={() => {
+          carregarDados()
+        }}
       />
 
       {/* Rodapé fixo na impressão / PDF A4 */}

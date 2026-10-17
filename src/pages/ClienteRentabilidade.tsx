@@ -946,6 +946,9 @@ export default function ClienteRentabilidade() {
                 <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider print:bg-slate-100 print:text-black">
                   <th className="py-3 px-4 text-left">Mês</th>
                   <th className="py-3 px-4 text-right">Faturamento (R$)</th>
+                  <th className="py-3 px-4 text-right text-amber-800 dark:text-amber-300 print:text-black">
+                    Desp. Fin. (R$)
+                  </th>
                   <th className="py-3 px-4 text-right">Lucro Apurado (R$)</th>
                   <th className="py-3 px-4 text-right">Margem s/ Faturamento (%)</th>
                 </tr>
@@ -961,6 +964,9 @@ export default function ClienteRentabilidade() {
                     </td>
                     <td className="py-2.5 px-4 text-right font-medium text-slate-800 dark:text-slate-200 tabular-nums print:text-black">
                       {formatBrl(item.faturamento)}
+                    </td>
+                    <td className="py-2.5 px-4 text-right text-amber-900 dark:text-amber-200 tabular-nums font-medium print:text-black">
+                      {formatBrl(item.despesasFinanceiras)}
                     </td>
                     <td
                       className={`py-2.5 px-4 text-right font-bold tabular-nums ${
@@ -991,6 +997,9 @@ export default function ClienteRentabilidade() {
                   <td className="py-3 px-4 text-right tabular-nums font-extrabold text-blue-700 dark:text-blue-300 print:text-blue-900">
                     {formatBrl(analise.faturamentoTotal)}
                   </td>
+                  <td className="py-3 px-4 text-right tabular-nums font-extrabold text-amber-900 dark:text-amber-200 print:text-black">
+                    {formatBrl(analise.despesasFinanceirasTotal)}
+                  </td>
                   <td
                     className={`py-3 px-4 text-right tabular-nums font-extrabold ${
                       analise.lucroTotal >= 0
@@ -1010,7 +1019,7 @@ export default function ClienteRentabilidade() {
                     </span>
                   </td>
                 </tr>
-              </tfoot>
+              </tfoot>{' '}
             </table>
           </div>
         </CardContent>

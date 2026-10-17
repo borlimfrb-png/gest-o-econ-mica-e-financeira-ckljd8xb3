@@ -220,6 +220,50 @@ describe('Análise de Rentabilidade - Cálculos e Integração DRE', () => {
     expect(res.piorMesLucro?.valor).toBe(-30000)
   })
 
+  it('deve extrair e calcular despesas financeiras separadamente quando presentes', () => {
+    const contaFin: ContaRecord = {
+      id: 'c-fin-1',
+      collectionId: 'contas',
+      collectionName: 'contas',
+      user: 'u-1',
+      empresa: 'emp-1',
+      codigo: '4.03.01',
+      nome: 'Juros Passivos e Encargos Bancários',
+      tipo: 'Despesa',
+      classificacao_dre: 'Despesa Financeira',
+      natureza: 'devedora',
+      created: '2025-01-01',
+      updated: '2025-01-01',
+    }
+
+    const lancamentoFin: LancamentoRecord = {
+      id: 'l-fin-1',
+      collectionId: 'lancamentos',
+      collectionName: 'lancamentos',
+      user: 'u-1',
+      empresa: 'emp-1',
+      conta: 'c-fin-1',
+      plano_conta: '',
+      data: '2025-01-28',
+      valor: 5000,
+      tipo: 'debito',
+      descricao: 'Juros de Empréstimo Bancário',
+      created: '2025-01-28',
+      updated: '2025-01-28',
+    }
+
+    const res = calcularAnaliseRentabilidade(
+      [...lancamentosMock, lancamentoFin],
+      [...contasMock, contaFin],
+      meses,
+    )
+
+    // Janeiro deve computar 5.000 em despesas financeiras
+    const jan = res.itensPorMes[0]
+    expect(jan.despesasFinanceiras).toBe(5000)
+    expect(res.despesasFinanceirasTotal).toBe(5000)
+  })
+
   it('garante que gerencial_rentabilidade está configurado nas regras de acesso de perfis', () => {
     // Administrador tem acesso
     expect(perfilTemAcesso('admin', 'gerencial_rentabilidade')).toBe(true)
