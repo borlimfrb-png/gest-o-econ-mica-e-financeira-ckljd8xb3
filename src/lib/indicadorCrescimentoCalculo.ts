@@ -19,6 +19,14 @@ export interface CenarioBaseDre {
   temDados: boolean
 }
 
+export interface SimulacaoContaAjuste {
+  contaId: string
+  /** Variação percentual sobre a conta (ex: -10 para 10% de redução, +5 para aumento) */
+  percentual?: number
+  /** Ou valor alvo absoluto simulado */
+  valorAlvo?: number
+}
+
 export interface ParametrosSimulacaoCrescimento {
   percentualCrescimentoFaturamento: number // ex: +10% (-50 a +100)
   modoDespesasVariaveis: 'proporcional' | 'personalizado'
@@ -26,6 +34,18 @@ export interface ParametrosSimulacaoCrescimento {
   modoDespesasFixas: 'manter' | 'personalizado'
   percentualCrescimentoFixas?: number // ex: +5% (usado se modo === 'personalizado')
   percentualCrescimentoFinanceiras?: number // opcional, default 0%
+  /** Ajustes por conta contábil (mapa contaId -> percentual ou valor) */
+  ajustesPorConta?: Record<string, number>
+}
+
+export interface ImpactoContaSimulada {
+  contaId: string
+  contaNome: string
+  contaCodigo?: string
+  valorOriginal: number
+  percentualAplicado: number
+  valorSimulado: number
+  deltaEconomia: number // positivo se economia (redução de despesa), negativo se aumento
 }
 
 export interface CenarioSimuladoResultado {
@@ -303,6 +323,12 @@ export function calcularSimuladorCrescimento(
     despesasVariaveisSimuladas = cenarioBase.despesasVariaveis * (1 + varPct / 100)
   }
 
+  // Se houver ajustes específicos por conta, aplica o impacto granular sobre as despesas variáveis
+  // O mapa ajustesPorConta recebe { [contaId]: percentualVariacao }
+  if (parametros.ajustesPorConta && Object.keys(parametros.ajustesPorConta).length > 0) {
+    // Calculado granularmente quando chamado via calcularSimuladorComContas
+  }
+
   // Despesas Fixas
   let despesasFixasSimuladas = cenarioBase.despesasFixas
   if (parametros.modoDespesasFixas === 'personalizado') {
@@ -462,5 +488,99 @@ export function calcularSimuladorCrescimento(
       },
     },
     resumoExecutivo,
+  }
+}
+
+export interface ResultadoSimuladorComContas {
+  resultadoGeral: ResultadoSimuladorCrescimento
+  contasImpacto: ImpactoContaSimulada[]
+  economiaTotalReais: number // soma das reduções (positivo = economia, negativo = custo maior)
+  despesasVariaveisOriginaisTotal: number
+  despesasVariaveisSimuladasTotal: number
+}
+
+/**
+ * Calcula a simulação granular por conta de despesa variável:
+ * para cada conta contábil, aplica o percentual definido de redução/aumento
+ * e recalcula o impacto em tempo real no resultado do período (faturamento,
+ * despesas variáveis, margem de contribuição, lucro líquido e ponto de equilíbrio).
+ */
+export function calcularSimulacaoContasVariaveis(
+  cenarioBase: CenarioBaseDre,
+  parametrosGerais: ParametrosSimulacaoCrescimento,
+  contasResumo: Array<{
+    contaId: string
+    contaNome: string
+    contaCodigo?: string
+    totalOriginal: number
+  }>,
+  ajustesPorContaPct: Record<string, number>, // contaId -> percentual (ex: -10 para 10% de redução)
+): ResultadoSimuladorComContas {
+  // 1. Calcula o impacto individual de cada conta
+  let somaOriginalContas = 0
+  let somaSimuladaContas = 0
+  const contasImpacto: ImpactoContaSimulada[] = []
+
+  for (const c of contasResumo) {
+    const original = c.totalOriginal || 0
+    const pct = ajustesPorContaPct[c.contaId] !== undefined ? ajustesPorContaPct[c.contaId] : 0
+    // Simulado da conta = original * (1 + pct / 100)
+    const simuladoConta = Math.max(0, original * (1 + pct / 100))
+    const economia = original - simuladoConta // positivo se reduziu despesa
+
+    somaOriginalContas += original
+    somaSimuladaContas += simuladoConta
+
+    contasImpacto.push({
+      contaId: c.contaId,
+      contaNome: c.contaNome,
+      contaCodigo: c.contaCodigo,
+      valorOriginal: original,
+      percentualAplicado: pct,
+      valorSimulado: simuladoConta,
+      deltaEconomia: economia,
+    })
+  }
+
+  const economiaTotalReais = somaOriginalContas - somaSimuladaContas
+
+  // 2. Determina as despesas variáveis simuladas globais
+  // Se houver contas avaliadas, o valor simulado substitui o correspondente nas despesas variáveis
+  // Despesas variáveis base: cenarioBase.despesasVariaveis
+  // Outras variáveis não discriminadas nas contas = base - somaOriginalContas (se houver resíduo)
+  const residuoNaoMapeado = Math.max(0, cenarioBase.despesasVariaveis - somaOriginalContas)
+  // Aplica o fator de faturamento ao resíduo se modo proporcional, ou mantém
+  const fatPct = parametrosGerais.percentualCrescimentoFaturamento || 0
+  const residuoSimulado =
+    parametrosGerais.modoDespesasVariaveis === 'proporcional'
+      ? residuoNaoMapeado * (1 + fatPct / 100)
+      : residuoNaoMapeado
+
+  // Caso haja ajustes nas contas, as variáveis são somaSimuladaContas + residuoSimulado
+  // Caso nenhum percentual tenha sido alterado em nenhuma conta (tudo 0), respeita
+  // o comportamento geral de parametrosGerais
+  const temAlgumAjusteConta = Object.values(ajustesPorContaPct).some((v) => v !== 0)
+
+  let paramsEfetivos = { ...parametrosGerais }
+  if (temAlgumAjusteConta && cenarioBase.despesasVariaveis > 0) {
+    const totalVarSimulada = somaSimuladaContas + residuoSimulado
+    const varPctEfetiva =
+      ((totalVarSimulada - cenarioBase.despesasVariaveis) / cenarioBase.despesasVariaveis) * 100
+    paramsEfetivos = {
+      ...parametrosGerais,
+      modoDespesasVariaveis: 'personalizado',
+      percentualCrescimentoVariaveis: varPctEfetiva,
+      ajustesPorConta: ajustesPorContaPct,
+    }
+  }
+
+  const resultadoGeral = calcularSimuladorCrescimento(cenarioBase, paramsEfetivos)
+
+  return {
+    resultadoGeral,
+    contasImpacto,
+    economiaTotalReais,
+    despesasVariaveisOriginaisTotal: somaOriginalContas,
+    despesasVariaveisSimuladasTotal: somaSimuladaContas,
   }
 }

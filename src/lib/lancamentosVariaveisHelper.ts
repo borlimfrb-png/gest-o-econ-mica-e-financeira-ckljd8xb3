@@ -6,7 +6,10 @@ export interface LancamentoVariavelItem {
   contaId: string
   contaNome: string
   contaCodigo?: string
+  centroId?: string
   centroNome?: string
+  centroCodigo?: string
+  tipoDespesaId?: string
   tipoDespesaNome?: string
   id?: string
   data?: string
@@ -14,6 +17,24 @@ export interface LancamentoVariavelItem {
   historico?: string
   empresaId?: string
   mesAno?: string
+}
+
+export interface GrupoCentroCustoVariavel {
+  centroId: string
+  centroNome: string
+  centroCodigo?: string
+  quantidade: number
+  subtotal: number
+  itens: LancamentoVariavelItem[]
+}
+
+export interface ContaVariavelResumo {
+  contaId: string
+  contaNome: string
+  contaCodigo?: string
+  quantidade: number
+  totalOriginal: number
+  centrosNomes: string[]
 }
 
 /**
@@ -78,6 +99,17 @@ export function filtrarLancamentosDespesaVariavel(
     const classificacao = obterClassificacaoDreConta(conta)
     if (classificacao !== 'Despesa Variável') continue
 
+    const centroObj = lanc.expand?.plano_conta?.expand?.centro || planoDoMapa?.expand?.centro
+    const centroId = centroObj?.id || expandPlanoConta?.centro || planoDoMapa?.centro || undefined
+    const centroNome = centroObj?.nome || (centroId ? `Centro ${centroId}` : undefined)
+    const centroCodigo = (centroObj as any)?.codigo || undefined
+
+    const tipoObj =
+      lanc.expand?.plano_conta?.expand?.tipo_despesa || planoDoMapa?.expand?.tipo_despesa
+    const tipoDespesaId =
+      tipoObj?.id || expandPlanoConta?.tipo_despesa || planoDoMapa?.tipo_despesa || undefined
+    const tipoDespesaNome = tipoObj?.nome || undefined
+
     itens.push({
       lancamento: lanc,
       id: lanc.id,
@@ -89,11 +121,11 @@ export function filtrarLancamentosDespesaVariavel(
       contaId,
       contaNome: conta?.nome || 'Conta',
       contaCodigo: conta?.codigo,
-      centroNome:
-        lanc.expand?.plano_conta?.expand?.centro?.nome || planoDoMapa?.expand?.centro?.nome,
-      tipoDespesaNome:
-        lanc.expand?.plano_conta?.expand?.tipo_despesa?.nome ||
-        planoDoMapa?.expand?.tipo_despesa?.nome,
+      centroId,
+      centroNome,
+      centroCodigo,
+      tipoDespesaId,
+      tipoDespesaNome,
     })
   }
 
@@ -153,6 +185,105 @@ export function calcularTotaisVariaveis(itens: LancamentoVariavelItem[]): {
     totalValor,
     quantidade: itens.length,
   }
+}
+
+/**
+ * Agrupa os lançamentos de despesas variáveis por Centro de Custo.
+ * Cada grupo carrega seu cabeçalho, quantidade de lançamentos, subtotal
+ * e a lista dos itens ordenados pelos mais recentes.
+ * O grupo "Sem Centro de Custo" fica no fim, e os demais são ordenados alfabeticamente.
+ */
+export function agruparLancamentosPorCentroCusto(
+  itens: LancamentoVariavelItem[],
+): GrupoCentroCustoVariavel[] {
+  const map = new Map<string, GrupoCentroCustoVariavel>()
+
+  for (const item of itens) {
+    const nome = item.centroNome?.trim() || 'Sem Centro de Custo'
+    const key = item.centroId || nome
+
+    let grupo = map.get(key)
+    if (!grupo) {
+      grupo = {
+        centroId: item.centroId || key,
+        centroNome: nome,
+        centroCodigo: item.centroCodigo,
+        quantidade: 0,
+        subtotal: 0,
+        itens: [],
+      }
+      map.set(key, grupo)
+    }
+
+    const val = item.valor || Math.abs(Number(item.lancamento.valor) || 0)
+    grupo.quantidade += 1
+    grupo.subtotal += val
+    grupo.itens.push(item)
+  }
+
+  const grupos = Array.from(map.values())
+
+  grupos.sort((a, b) => {
+    const aSem = a.centroNome === 'Sem Centro de Custo'
+    const bSem = b.centroNome === 'Sem Centro de Custo'
+    if (aSem && !bSem) return 1
+    if (!aSem && bSem) return -1
+    return a.centroNome.localeCompare(b.centroNome, 'pt-BR')
+  })
+
+  // Garante ordenação estável dos itens dentro de cada grupo
+  for (const g of grupos) {
+    g.itens.sort((a, b) => {
+      const cmp = (b.data || '').localeCompare(a.data || '')
+      return cmp !== 0 ? cmp : (a.id || '').localeCompare(b.id || '')
+    })
+  }
+
+  return grupos
+}
+
+/**
+ * Agrupa as contas contábeis que possuem despesas variáveis no período,
+ * somando seu total original e acumulando os centros de custo associados.
+ */
+export function agruparContasVariaveisResumo(
+  itens: LancamentoVariavelItem[],
+): ContaVariavelResumo[] {
+  const map = new Map<string, ContaVariavelResumo>()
+
+  for (const item of itens) {
+    let entry = map.get(item.contaId)
+    if (!entry) {
+      entry = {
+        contaId: item.contaId,
+        contaNome: item.contaNome,
+        contaCodigo: item.contaCodigo,
+        quantidade: 0,
+        totalOriginal: 0,
+        centrosNomes: [],
+      }
+      map.set(item.contaId, entry)
+    }
+
+    const val = item.valor || Math.abs(Number(item.lancamento.valor) || 0)
+    entry.quantidade += 1
+    entry.totalOriginal += val
+
+    const cNome = item.centroNome?.trim() || 'Sem Centro de Custo'
+    if (!entry.centrosNomes.includes(cNome)) {
+      entry.centrosNomes.push(cNome)
+    }
+  }
+
+  const lista = Array.from(map.values())
+  lista.sort((a, b) => {
+    if (b.totalOriginal !== a.totalOriginal) {
+      return b.totalOriginal - a.totalOriginal // maiores despesas primeiro
+    }
+    return a.contaNome.localeCompare(b.contaNome, 'pt-BR')
+  })
+
+  return lista
 }
 
 /**

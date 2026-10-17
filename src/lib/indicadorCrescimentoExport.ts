@@ -18,10 +18,17 @@ function formatMoedaCsv(v: number | undefined | null): string {
 /**
  * Exporta a análise e simulação de crescimento para planilha Excel (.xlsx)
  */
+export interface SubtotalCentroExport {
+  centroNome: string
+  quantidade: number
+  subtotal: number
+}
+
 export function exportarIndicadorCrescimentoExcel(
   resultado: ResultadoSimuladorCrescimento,
   empresa?: EmpresaRecord | null,
   periodoDescricao?: string,
+  subtotaisCentros?: SubtotalCentroExport[],
 ) {
   const nomeEmpresa = empresa?.nome || 'Empresa'
   const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
@@ -134,6 +141,38 @@ export function exportarIndicadorCrescimentoExcel(
     'Delta %': '',
   })
 
+  // Bloco 4: Despesas Variáveis por Centro de Custo (se informado)
+  if (subtotaisCentros && subtotaisCentros.length > 0) {
+    rows.push({ Item: '' })
+    rows.push({
+      Item: 'DESPESAS VARIÁVEIS POR CENTRO DE CUSTO (SUBTOTAIS)',
+      'Cenário Base (R$)': 'Lançamentos',
+      'Simulado (R$)': 'Subtotal (R$)',
+      'Delta R$': '% do Total',
+      'Delta %': '',
+    })
+
+    const totalCentros = subtotaisCentros.reduce((acc, c) => acc + c.subtotal, 0)
+    for (const sc of subtotaisCentros) {
+      const pctCentro = totalCentros > 0 ? (sc.subtotal / totalCentros) * 100 : 0
+      rows.push({
+        Item: sc.centroNome,
+        'Cenário Base (R$)': sc.quantidade,
+        'Simulado (R$)': sc.subtotal,
+        'Delta R$': `${pctCentro.toFixed(1)}%`,
+        'Delta %': '',
+      })
+    }
+
+    rows.push({
+      Item: 'TOTAL CONSOLIDADO DAS DESPESAS VARIÁVEIS',
+      'Cenário Base (R$)': subtotaisCentros.reduce((acc, c) => acc + c.quantidade, 0),
+      'Simulado (R$)': totalCentros,
+      'Delta R$': '100.0%',
+      'Delta %': '',
+    })
+  }
+
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(rows)
 
@@ -156,6 +195,7 @@ export function exportarIndicadorCrescimentoCsv(
   resultado: ResultadoSimuladorCrescimento,
   empresa?: EmpresaRecord | null,
   periodoDescricao?: string,
+  subtotaisCentros?: SubtotalCentroExport[],
 ) {
   const nomeEmpresa = empresa?.nome || 'Empresa'
   const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
@@ -273,6 +313,44 @@ export function exportarIndicadorCrescimentoCsv(
 
   linhas.push('')
   linhas.push([`Resumo Executivo: ${resultado.resumoExecutivo}`].map(escapeCsv).join(';'))
+
+  // Bloco: Despesas Variáveis por Centro de Custo (se informado)
+  if (subtotaisCentros && subtotaisCentros.length > 0) {
+    linhas.push('')
+    linhas.push(
+      ['Despesas Variáveis por Centro de Custo', 'Lançamentos', 'Subtotal (R$)', '% do Total', '']
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    const totalCentros = subtotaisCentros.reduce((acc, c) => acc + c.subtotal, 0)
+    for (const sc of subtotaisCentros) {
+      const pctCentro = totalCentros > 0 ? (sc.subtotal / totalCentros) * 100 : 0
+      linhas.push(
+        [
+          sc.centroNome,
+          String(sc.quantidade),
+          formatMoedaCsv(sc.subtotal),
+          `${pctCentro.toFixed(1)}%`,
+          '',
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+
+    linhas.push(
+      [
+        'Total Consolidado',
+        String(subtotaisCentros.reduce((acc, c) => acc + c.quantidade, 0)),
+        formatMoedaCsv(totalCentros),
+        '100.0%',
+        '',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+  }
 
   const csvContent = '\uFEFF' + linhas.join('\n')
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

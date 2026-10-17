@@ -4,6 +4,7 @@ import {
   calcularPontoEquilibrioSimulado,
   extrairCenarioBaseDre,
   gerarResumoExecutivoCrescimento,
+  calcularSimulacaoContasVariaveis,
   type CenarioBaseDre,
   type ParametrosSimulacaoCrescimento,
 } from './indicadorCrescimentoCalculo'
@@ -454,6 +455,88 @@ describe('Indicador de Crescimento - Motor de Simulação', () => {
       // l5 (estornado) e l6 (nao_exibir_dre) não devem ter entrado
       expect(baseReal.totalDespesas).toBe(25000)
       expect(baseReal.lucroPrejuizo).toBe(75000)
+    })
+  })
+
+  describe('calcularSimulacaoContasVariaveis (Simulador Granular por Conta)', () => {
+    const cenarioBase: CenarioBaseDre = {
+      faturamento: 200000,
+      despesasVariaveis: 40000,
+      despesasFixas: 30000,
+      despesasFinanceiras: 5000,
+      receitasFinanceiras: 0,
+      resultadoFinanceiroLiquido: -5000,
+      totalDespesas: 75000,
+      lucroPrejuizo: 125000,
+      margemLiquidaPct: 62.5,
+      margemContribuicaoReais: 160000,
+      margemContribuicaoPct: 80,
+      percentualVariaveisSobreFat: 20,
+      percentualFixasSobreFat: 15,
+      temDados: true,
+    }
+
+    const parametrosGerais: ParametrosSimulacaoCrescimento = {
+      percentualCrescimentoFaturamento: 0,
+      modoDespesasVariaveis: 'personalizado',
+      percentualCrescimentoVariaveis: 0,
+      modoDespesasFixas: 'manter',
+      percentualCrescimentoFixas: 0,
+      percentualCrescimentoFinanceiras: 0,
+    }
+
+    const contasResumo = [
+      {
+        contaId: 'c-comissao',
+        contaNome: 'Comissões de Vendas',
+        contaCodigo: '4.1.01',
+        totalOriginal: 25000,
+      },
+      {
+        contaId: 'c-frete',
+        contaNome: 'Frete de Entrega',
+        contaCodigo: '4.1.02',
+        totalOriginal: 15000,
+      },
+    ]
+
+    it('deve simular redução de 10% em comissões gerando economia de R$ 2.500 e aumento no lucro', () => {
+      const ajustes = {
+        'c-comissao': -10, // -10% de 25000 = 22500 (economia de 2500)
+      }
+
+      const res = calcularSimulacaoContasVariaveis(
+        cenarioBase,
+        parametrosGerais,
+        contasResumo,
+        ajustes,
+      )
+
+      expect(res.economiaTotalReais).toBe(2500)
+      expect(res.despesasVariaveisOriginaisTotal).toBe(40000)
+      expect(res.despesasVariaveisSimuladasTotal).toBe(37500) // 22500 + 15000
+
+      // Lucro projetado sobe exatamente o valor da economia
+      expect(res.resultadoGeral.cenarioSimulado.lucroPrejuizo).toBe(127500) // 125000 + 2500
+      expect(res.resultadoGeral.cenarioSimulado.despesasVariaveis).toBe(37500)
+    })
+
+    it('deve aplicar simulação em todas as contas e calcular margens atualizadas', () => {
+      const ajustes = {
+        'c-comissao': -20, // 25000 -> 20000 (economia 5000)
+        'c-frete': -10, // 15000 -> 13500 (economia 1500)
+      }
+
+      const res = calcularSimulacaoContasVariaveis(
+        cenarioBase,
+        parametrosGerais,
+        contasResumo,
+        ajustes,
+      )
+
+      expect(res.economiaTotalReais).toBe(6500)
+      expect(res.despesasVariaveisSimuladasTotal).toBe(33500)
+      expect(res.resultadoGeral.cenarioSimulado.lucroPrejuizo).toBe(131500) // 125000 + 6500
     })
   })
 })

@@ -8,10 +8,14 @@ import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { ModalAjusteDespesaVariavel } from '@/components/ModalAjusteDespesaVariavel'
+import { PainelDespesasVariaveisCentros } from '@/components/PainelDespesasVariaveisCentros'
+import { PainelSimuladorContas } from '@/components/PainelSimuladorContas'
 import {
   filtrarLancamentosDespesaVariavel,
   extrairLancamentosDespesasVariaveis,
   calcularTotaisVariaveis,
+  agruparLancamentosPorCentroCusto,
+  agruparContasVariaveisResumo,
   type LancamentoVariavelItem,
 } from '@/lib/lancamentosVariaveisHelper'
 import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
@@ -20,13 +24,16 @@ import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import {
   extrairCenarioBaseDre,
   calcularSimuladorCrescimento,
+  calcularSimulacaoContasVariaveis,
   type ParametrosSimulacaoCrescimento,
   type ResultadoSimuladorCrescimento,
+  type ResultadoSimuladorComContas,
 } from '@/lib/indicadorCrescimentoCalculo'
 import {
   exportarIndicadorCrescimentoExcel,
   exportarIndicadorCrescimentoCsv,
   formatarPercentualExport,
+  type SubtotalCentroExport,
 } from '@/lib/indicadorCrescimentoExport'
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -139,7 +146,7 @@ export default function IndicadorCrescimento() {
   // Validação da faixa
   const mesFimEfetivo = Math.max(mesInicioFaixa, mesFimFaixa)
 
-  // Parâmetros de Simulação
+  // Parâmetros de Simulação Globais
   const [crescimentoFatPct, setCrescimentoFatPct] = useState<number>(10) // default +10%
   const [modoVariaveis, setModoVariaveis] = useState<'proporcional' | 'personalizado'>(
     'proporcional',
@@ -148,6 +155,9 @@ export default function IndicadorCrescimento() {
   const [modoFixas, setModoFixas] = useState<'manter' | 'personalizado'>('manter')
   const [crescimentoFixasPct, setCrescimentoFixasPct] = useState<number>(0)
   const [crescimentoFinPct, setCrescimentoFinPct] = useState<number>(0)
+
+  // Simulação Interativa por Conta Contábil (mapa contaId -> % de variação)
+  const [ajustesPorConta, setAjustesPorConta] = useState<Record<string, number>>({})
 
   // Carregar dados
   const carregarDados = async () => {
@@ -266,12 +276,7 @@ export default function IndicadorCrescimento() {
     crescimentoFinPct,
   ])
 
-  // Resultado Simulado Completo
-  const resultado = useMemo<ResultadoSimuladorCrescimento>(() => {
-    return calcularSimuladorCrescimento(cenarioBase, parametrosSimulacao)
-  }, [cenarioBase, parametrosSimulacao])
-
-  // Lançamentos individuais de Despesas Variáveis extraídos para ajuste
+  // Lançamentos individuais de Despesas Variáveis extraídos para agrupamento e ajuste
   const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
     const empresaIdFiltro =
       selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : undefined
@@ -291,13 +296,42 @@ export default function IndicadorCrescimento() {
         (item.historico && item.historico.toLowerCase().includes(q)) ||
         (item.contaNome && item.contaNome.toLowerCase().includes(q)) ||
         (item.contaCodigo && item.contaCodigo.toLowerCase().includes(q)) ||
-        (item.centroNome && item.centroNome.toLowerCase().includes(q)),
+        (item.centroNome && item.centroNome.toLowerCase().includes(q)) ||
+        (item.data && item.data.toLowerCase().includes(q)),
     )
   }, [lancamentosVariaveis, filtroTextoVar])
 
-  const totaisVariaveisApurados = useMemo(() => {
-    return calcularTotaisVariaveis(lancamentosVariaveis)
+  // Agrupamento por Centro de Custo com subtotais e lançamentos detalhados
+  const gruposPorCentroCusto = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
+
+  // Grupos completos sem filtro de texto (para exportação fiel com todos os subtotais)
+  const gruposPorCentroCustoCompletos = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveis)
   }, [lancamentosVariaveis])
+
+  // Resumo das Contas Contábeis que possuem despesas variáveis no período
+  const contasVariaveisResumo = useMemo(() => {
+    return agruparContasVariaveisResumo(lancamentosVariaveis)
+  }, [lancamentosVariaveis])
+
+  // Simulação granular por conta integrada com a DRE oficial
+  const simulacaoContasResultado = useMemo<ResultadoSimuladorComContas>(() => {
+    return calcularSimulacaoContasVariaveis(
+      cenarioBase,
+      parametrosSimulacao,
+      contasVariaveisResumo,
+      ajustesPorConta,
+    )
+  }, [cenarioBase, parametrosSimulacao, contasVariaveisResumo, ajustesPorConta])
+
+  // Resultado Simulado Oficial (reflete os ajustes por conta se houver algum, senão parâmetros globais)
+  const resultado = simulacaoContasResultado.resultadoGeral
+
+  const totaisVariaveisApurados = useMemo(() => {
+    return calcularTotaisVariaveis(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
 
   const empresaIdParaAjuste = useMemo(() => {
     if (selectedEmpresa?.id) return selectedEmpresa.id
@@ -327,19 +361,62 @@ export default function IndicadorCrescimento() {
     setModoFixas('manter')
     setCrescimentoFixasPct(0)
     setCrescimentoFinPct(0)
+    setAjustesPorConta({})
     toast({
       title: 'Parâmetros restaurados',
-      description: 'Crescimento de +10% mantendo despesas fixas.',
+      description: 'Crescimento de +10% mantendo despesas fixas e simulação de contas zerada.',
     })
   }
+
+  // Ações do Simulador por Conta
+  const handleAjusteContaChange = (contaId: string, percentual: number) => {
+    setAjustesPorConta((prev) => ({
+      ...prev,
+      [contaId]: percentual,
+    }))
+  }
+
+  const handleAplicarTodosContas = (percentual: number) => {
+    const next: Record<string, number> = {}
+    for (const c of contasVariaveisResumo) {
+      next[c.contaId] = percentual
+    }
+    setAjustesPorConta(next)
+    toast({
+      title: 'Simulação em lote aplicada',
+      description: `Meta de ${percentual >= 0 ? `+${percentual}%` : `${percentual}%`} aplicada a ${contasVariaveisResumo.length} contas variáveis.`,
+    })
+  }
+
+  const handleLimparSimulacaoContas = () => {
+    setAjustesPorConta({})
+    toast({
+      title: 'Simulação de contas limpa',
+      description: 'Todas as contas retornaram aos valores base reais.',
+    })
+  }
+
+  // Subtotais por Centro de Custo para exportação Excel/CSV
+  const subtotaisCentrosExport = useMemo<SubtotalCentroExport[]>(() => {
+    return gruposPorCentroCustoCompletos.map((g) => ({
+      centroNome: g.centroNome,
+      quantidade: g.quantidade,
+      subtotal: g.subtotal,
+    }))
+  }, [gruposPorCentroCustoCompletos])
 
   // Exportações
   const handleExportarExcel = () => {
     try {
-      exportarIndicadorCrescimentoExcel(resultado, selectedEmpresa, descricaoPeriodo)
+      exportarIndicadorCrescimentoExcel(
+        resultado,
+        selectedEmpresa,
+        descricaoPeriodo,
+        subtotaisCentrosExport,
+      )
       toast({
         title: 'Exportação Concluída',
-        description: 'Planilha Excel com a simulação gerada com sucesso.',
+        description: 'Planilha Excel gerada com subtotais por Centro de Custo.',
       })
     } catch (e: any) {
       toast({
@@ -352,10 +429,15 @@ export default function IndicadorCrescimento() {
 
   const handleExportarCsv = () => {
     try {
-      exportarIndicadorCrescimentoCsv(resultado, selectedEmpresa, descricaoPeriodo)
+      exportarIndicadorCrescimentoCsv(
+        resultado,
+        selectedEmpresa,
+        descricaoPeriodo,
+        subtotaisCentrosExport,
+      )
       toast({
         title: 'Exportação Concluída',
-        description: 'Arquivo CSV com delimitador brasileiro gerado com sucesso.',
+        description: 'Arquivo CSV com delimitador brasileiro e subtotais por Centro gerado.',
       })
     } catch (e: any) {
       toast({
@@ -977,22 +1059,32 @@ export default function IndicadorCrescimento() {
                       <div className="pt-2 pl-6 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] text-slate-600">
-                            Variação das Variáveis:
+                            Variação Global das Variáveis:
                           </span>
                           <span className="text-xs font-mono font-bold text-slate-800">
                             {crescimentoVarPct >= 0
-                              ? `+${crescimentoVarPct}%`
-                              : `${crescimentoVarPct}%`}
+                              ? `+${crescimentoVarPct.toFixed(1)}%`
+                              : `${crescimentoVarPct.toFixed(1)}%`}
                           </span>
                         </div>
                         <Slider
-                          value={[crescimentoVarPct]}
+                          value={[Math.round(crescimentoVarPct)]}
                           min={-50}
                           max={100}
                           step={1}
                           onValueChange={(val) => setCrescimentoVarPct(val[0])}
                           className="py-1 cursor-pointer"
                         />
+                      </div>
+                    )}
+
+                    {Object.values(ajustesPorConta).some((v) => v !== 0) && (
+                      <div className="p-2 rounded-lg bg-blue-100/60 border border-blue-200 text-[11px] text-blue-900 flex items-center justify-between">
+                        <span>Simulação ativa por conta contábil:</span>
+                        <span className="font-bold font-mono">
+                          {simulacaoContasResultado.economiaTotalReais >= 0 ? '+' : ''}
+                          {formatBrl(simulacaoContasResultado.economiaTotalReais)} economizados
+                        </span>
                       </div>
                     )}
                   </div>
@@ -1611,6 +1703,71 @@ export default function IndicadorCrescimento() {
                   no resultado superior ao próprio crescimento das vendas.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* ========================================================
+              NOVO BLOCO: DESPESAS VARIÁVEIS POR CENTRO DE CUSTO (ESQ)
+              E SIMULADOR INTERATIVO POR CONTA CONTÁBIL (DIR)
+          ======================================================== */}
+          <div className="pt-2 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <span className="p-1.5 rounded-lg bg-amber-100/80 text-amber-800 shadow-xs">
+                    <Building className="w-4 h-4 text-amber-700" />
+                  </span>
+                  Detalhamento por Centro de Custo & Simulador por Conta
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Visualização agrupada por centro de custo com subtotais e simulador granular por
+                  conta contábil
+                </p>
+              </div>
+
+              {!isCliente && (
+                <Badge
+                  variant="outline"
+                  className="bg-blue-50 text-blue-800 border-blue-200 text-xs font-semibold hidden sm:inline-flex"
+                >
+                  Simulação em Tempo Real
+                </Badge>
+              )}
+            </div>
+
+            <div
+              className={`grid grid-cols-1 ${
+                !isCliente ? 'lg:grid-cols-12' : 'lg:grid-cols-1'
+              } gap-4 items-start`}
+            >
+              {/* COLUNA ESQUERDA: TODAS AS DESPESAS VARIÁVEIS POR CENTRO DE CUSTO */}
+              <div className={`${!isCliente ? 'lg:col-span-7' : 'lg:col-span-12'}`}>
+                <PainelDespesasVariaveisCentros
+                  grupos={gruposPorCentroCusto}
+                  totalGeral={totaisVariaveisApurados.totalValor}
+                  quantidadeTotal={totaisVariaveisApurados.quantidade}
+                  filtroTexto={filtroTextoVar}
+                  onFiltroTextoChange={setFiltroTextoVar}
+                  onAjustarItem={handleAbrirAjuste}
+                  isCliente={isCliente}
+                />
+              </div>
+
+              {/* COLUNA DIREITA: SIMULADOR INTERATIVO POR CONTA CONTÁBIL (Restrito a perfis internos) */}
+              {!isCliente && (
+                <div className="lg:col-span-5">
+                  <PainelSimuladorContas
+                    contasResumo={contasVariaveisResumo}
+                    ajustesPorConta={ajustesPorConta}
+                    onAjusteContaChange={handleAjusteContaChange}
+                    onAplicarTodos={handleAplicarTodosContas}
+                    onLimparSimulacao={handleLimparSimulacaoContas}
+                    simulacaoResultado={simulacaoContasResultado}
+                    faturamentoBase={cenarioBase.faturamento}
+                    faturamentoSimulado={resultado.cenarioSimulado.faturamento}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </>
