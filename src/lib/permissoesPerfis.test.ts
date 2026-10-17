@@ -12,6 +12,7 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
   const modulosPermitidosCliente: ModuloSistema[] = [
     'analise_economica_financeira',
     'cliente_rentabilidade',
+    'cliente_crescimento',
     'gerencial_dre',
     'gerencial_despesas_fixas',
     'gerencial_despesas_variaveis',
@@ -94,6 +95,14 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('empresa', 'cliente_rentabilidade')).toBe(false)
     expect(perfilTemAcesso('financeiro', 'cliente_rentabilidade')).toBe(false)
     expect(perfilTemAcesso('comercial', 'cliente_rentabilidade')).toBe(false)
+  })
+
+  it('garante que cliente_crescimento é exclusivo do perfil cliente', () => {
+    expect(perfilTemAcesso('cliente', 'cliente_crescimento')).toBe(true)
+    expect(perfilTemAcesso('admin', 'cliente_crescimento')).toBe(false)
+    expect(perfilTemAcesso('empresa', 'cliente_crescimento')).toBe(false)
+    expect(perfilTemAcesso('financeiro', 'cliente_crescimento')).toBe(false)
+    expect(perfilTemAcesso('comercial', 'cliente_crescimento')).toBe(false)
   })
 
   it('deve listar todos os perfis do sistema na LISTA_PERFIS incluindo cliente', () => {

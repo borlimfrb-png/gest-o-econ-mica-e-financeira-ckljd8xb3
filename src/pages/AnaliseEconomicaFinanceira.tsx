@@ -213,6 +213,22 @@ export default function AnaliseEconomicaFinanceira() {
         rota: () => (isCliente ? '/cliente/rentabilidade' : '/gerencial/rentabilidade'),
         metricasTexto: 'Faturamento, Lucro Apurado, Margem Líquida, Bruta e Operacional',
       },
+      {
+        id: 'crescimento',
+        titulo: 'Indicador de Crescimento',
+        subtitulo: 'Evolução de Vendas & Taxas MoM / YoY',
+        descricao:
+          'Acompanhamento do ritmo de crescimento do faturamento, comparações mensais, taxas anuais e selo de qualidade da expansão.',
+        badge: 'Crescimento',
+        badgeVariant: 'cyan',
+        icon: TrendingUp,
+        gradient: 'from-[#0B1F3A] via-[#0D2E54] to-[#12467A]',
+        borderGlow: 'hover:border-cyan-400/70 hover:shadow-cyan-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-cyan-500/25 to-blue-600/20 text-cyan-300 border-cyan-400/40',
+        rota: () => (isCliente ? '/cliente/crescimento' : '/gerencial/indicador-crescimento'),
+        metricasTexto: 'Crescimento no período, comparativo anual e qualidade da expansão',
+      },
     ],
     [isCliente],
   )
@@ -247,8 +263,8 @@ export default function AnaliseEconomicaFinanceira() {
             <p className="text-sm text-slate-300/90 leading-relaxed">
               Central estratégica de demonstrações contábeis e gerenciais pela{' '}
               <strong className="text-sky-300">Borlim Consultoria</strong>. Acesse o Balanço
-              Patrimonial, DRE, Rentabilidade, custos fixos e variáveis e histórico de faturamento
-              da empresa selecionada.{' '}
+              Patrimonial, DRE, Rentabilidade, Indicador de Crescimento, custos fixos e variáveis e
+              histórico de faturamento da empresa selecionada.{' '}
             </p>
           </div>
 
@@ -305,7 +321,7 @@ export default function AnaliseEconomicaFinanceira() {
             </h2>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            6 demonstrativos estruturados
+            7 demonstrativos estruturados
           </span>
         </div>
 

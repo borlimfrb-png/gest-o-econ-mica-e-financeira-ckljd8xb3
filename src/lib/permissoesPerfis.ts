@@ -3,6 +3,7 @@ import type { UserRole } from '@/types/finance'
 export type ModuloSistema =
   | 'analise_economica_financeira'
   | 'cliente_rentabilidade'
+  | 'cliente_crescimento'
   | 'dashboard'
   | 'dashboard_bi'
   | 'empresas'
@@ -180,6 +181,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     modulosPermitidos: [
       'analise_economica_financeira',
       'cliente_rentabilidade',
+      'cliente_crescimento',
       'gerencial_dre',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',

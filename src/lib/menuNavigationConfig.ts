@@ -998,6 +998,17 @@ export function filtrarMenuPorPerfil(
             badgeVariant: 'emerald',
             destaque: true,
           },
+          {
+            id: 'cliente-crescimento',
+            name: 'Indicador de Crescimento',
+            path: '/cliente/crescimento',
+            icon: TrendingUp,
+            descricao: 'Evolução de faturamento, taxas de crescimento mês a mês e comparativos',
+            modulo: 'cliente_crescimento',
+            badge: 'Crescimento',
+            badgeVariant: 'cyan',
+            destaque: true,
+          },
         ],
       },
     ]
