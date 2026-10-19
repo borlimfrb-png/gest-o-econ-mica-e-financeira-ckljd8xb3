@@ -98,6 +98,7 @@ import {
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
+import { gerarPlanilhaModeloImportacaoExcel } from '@/lib/modeloImportacaoExcel'
 
 export default function Importacao() {
   const { toast } = useToast()
@@ -1125,32 +1126,88 @@ export default function Importacao() {
     }
   }
 
-  const handleDownloadExcelTemplate = () => {
-    const templateData = [
-      {
-        'Codigo Plano': 'PC-001',
-        Conta: 'Vendas de Produtos',
-        Centro: 'Comercial',
-        Data: '2025-01-15',
-        Valor: 15000.0,
-        Historico: 'Vendas da primeira quinzena',
-        Recorrente: 'NAO',
-      },
-      {
-        'Codigo Plano': 'PC-002',
-        Conta: 'Salários e Ordenados',
-        Centro: 'Administrativo',
-        Data: '2025-01-05',
-        Valor: 8500.0,
-        Historico: 'Folha de pagamento Janeiro',
-        Recorrente: 'SIM',
-      },
-    ]
+  const [baixandoModeloExcel, setBaixandoModeloExcel] = useState(false)
 
-    const ws = XLSX.utils.json_to_sheet(templateData)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Modelo_Lancamentos')
-    XLSX.writeFile(wb, 'modelo_importacao_lancamentos.xlsx')
+  const handleDownloadExcelTemplate = async () => {
+    setBaixandoModeloExcel(true)
+    try {
+      // 1. Identifica a empresa/grupo alvo para buscar as contas do plano
+      const idAlvo =
+        excelEmpresaId ||
+        (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : '') ||
+        (empresasIdsAtivas.length === 1 ? empresasIdsAtivas[0] : '')
+
+      const empresaAlvoObj = empresas.find((e) => e.id === idAlvo)
+
+      // Monta as opções de filtro conforme empresa individual ou grupo ativo
+      let filtroParaModelo: { empresaId?: string; empresasIds?: string[] } | undefined = undefined
+
+      if (idAlvo) {
+        filtroParaModelo = { empresaId: idAlvo }
+      } else if (isGrupoAtivo && grupoAtivo && (grupoAtivo.empresas || []).length > 0) {
+        filtroParaModelo = { empresasIds: grupoAtivo.empresas }
+      } else if (empresasIdsAtivas.length > 0) {
+        filtroParaModelo =
+          empresasIdsAtivas.length === 1
+            ? { empresaId: empresasIdsAtivas[0] }
+            : { empresasIds: empresasIdsAtivas }
+      }
+
+      // 2. Busca o plano de contas da empresa ativa / grupo ativo no backend
+      let contasDoPlano: PlanoContaRecord[] = []
+      try {
+        contasDoPlano = await financeService.getPlanoContas(filtroParaModelo)
+      } catch (err) {
+        console.warn('Não foi possível obter plano de contas via filtro:', err)
+        contasDoPlano = planoContas || []
+      }
+
+      // Se a busca com filtro vier vazia mas houver contas no estado geral filtrado, reaproveita
+      if (contasDoPlano.length === 0 && planoContas.length > 0 && !idAlvo) {
+        contasDoPlano = planoContas
+      }
+
+      const nomeEntidade =
+        empresaAlvoObj?.nome_fantasia ||
+        empresaAlvoObj?.razao_social ||
+        (isGrupoAtivo && grupoAtivo ? grupoAtivo.nome : undefined)
+
+      // 3. Se não houver contas cadastradas, gera o modelo vazio e emite aviso claro
+      if (contasDoPlano.length === 0) {
+        gerarPlanilhaModeloImportacaoExcel({
+          planoContas: [],
+          nomeEmpresaOuGrupo: nomeEntidade,
+        })
+        toast({
+          title: 'Aviso: Plano de Contas não cadastrado',
+          description:
+            'Não foram encontradas contas cadastradas no Plano de Contas para esta empresa/Grupo. Foi baixada uma planilha modelo padrão genérica.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      // 4. Gera a planilha preenchida com TODAS as contas do plano
+      const { totalContas, nomeArquivo } = gerarPlanilhaModeloImportacaoExcel({
+        planoContas: contasDoPlano,
+        nomeEmpresaOuGrupo: nomeEntidade,
+      })
+
+      toast({
+        title: 'Planilha Modelo gerada com sucesso! 📊',
+        description: `Arquivo "${nomeArquivo}" baixado com ${totalContas} contas do seu Plano de Contas pré-preenchidas.`,
+      })
+    } catch (err: unknown) {
+      const error = err as Error
+      console.error('Erro ao gerar planilha modelo preenchida:', error)
+      toast({
+        title: 'Erro ao gerar modelo',
+        description: error.message || 'Falha ao montar a planilha modelo com o Plano de Contas.',
+        variant: 'destructive',
+      })
+    } finally {
+      setBaixandoModeloExcel(false)
+    }
   }
 
   // Totais e estatísticas do PDF
@@ -2916,10 +2973,20 @@ export default function Importacao() {
               variant="outline"
               size="sm"
               onClick={handleDownloadExcelTemplate}
+              disabled={baixandoModeloExcel}
               className="bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50 gap-2 shrink-0 font-medium"
             >
-              <Download className="w-4 h-4" />
-              Baixar Planilha Modelo
+              {baixandoModeloExcel ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Gerando Modelo...
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  Baixar Planilha Modelo
+                </>
+              )}
             </Button>
           </div>
 
