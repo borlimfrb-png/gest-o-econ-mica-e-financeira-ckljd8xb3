@@ -92,6 +92,8 @@ export interface EmpresaRecord extends RecordModel {
   nome_fantasia?: string
   porte?: PorteEmpresa
   data_fundacao?: string
+  data_inicio_contrato?: string
+  data_fim_contrato?: string
   logradouro?: string
   numero?: string
   complemento?: string

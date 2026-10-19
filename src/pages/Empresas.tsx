@@ -65,6 +65,7 @@ import {
   MapPin,
   Phone,
   FileText,
+  Calendar,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -121,6 +122,8 @@ interface EmpresaFormData {
   setor: SetorEmpresa | ''
   porte: PorteEmpresa | ''
   data_fundacao: string
+  data_inicio_contrato: string
+  data_fim_contrato: string
   logradouro: string
   numero: string
   complemento: string
@@ -144,6 +147,8 @@ const EMPTY_FORM: EmpresaFormData = {
   setor: '',
   porte: '',
   data_fundacao: '',
+  data_inicio_contrato: '',
+  data_fim_contrato: '',
   logradouro: '',
   numero: '',
   complemento: '',
@@ -269,6 +274,10 @@ export default function Empresas() {
       setor: empresa.setor || '',
       porte: empresa.porte || '',
       data_fundacao: empresa.data_fundacao ? empresa.data_fundacao.slice(0, 10) : '',
+      data_inicio_contrato: empresa.data_inicio_contrato
+        ? empresa.data_inicio_contrato.slice(0, 10)
+        : '',
+      data_fim_contrato: empresa.data_fim_contrato ? empresa.data_fim_contrato.slice(0, 10) : '',
       logradouro: empresa.logradouro || '',
       numero: empresa.numero || '',
       complemento: empresa.complemento || '',
@@ -325,6 +334,14 @@ export default function Empresas() {
       errors.estado = 'Selecione o estado (UF)'
     }
 
+    // Validação de datas do contrato: se ambas preenchidas, fim não pode ser anterior a início
+    if (formData.data_inicio_contrato && formData.data_fim_contrato) {
+      if (formData.data_fim_contrato < formData.data_inicio_contrato) {
+        errors.data_fim_contrato =
+          'A data de fim do contrato não pode ser anterior à data de início'
+      }
+    }
+
     // E-mail (se preenchido)
     if (!isEmailValid(formData.email)) {
       errors.email = 'E-mail inválido'
@@ -362,6 +379,8 @@ export default function Empresas() {
       setor: formData.setor || undefined,
       porte: formData.porte || undefined,
       data_fundacao: formData.data_fundacao || undefined,
+      data_inicio_contrato: formData.data_inicio_contrato || undefined,
+      data_fim_contrato: formData.data_fim_contrato || undefined,
       logradouro: formData.logradouro.trim(),
       numero: formData.numero.trim(),
       complemento: formData.complemento.trim(),
@@ -544,6 +563,7 @@ export default function Empresas() {
                     <th className="py-2 px-3">Setor</th>
                     <th className="py-2 px-3">Porte</th>
                     <th className="py-2 px-3">Cidade / UF</th>
+                    <th className="py-2 px-3">Vigência Contrato</th>
                     <th className="py-2 px-3 text-center">NFSe</th>
                     <th className="py-2 px-3 text-center">Último Balanço</th>
                     <th className="py-2 px-3 text-right">Total do Ativo</th>
@@ -627,6 +647,29 @@ export default function Empresas() {
                             </span>
                           ) : (
                             <span className="text-slate-400">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
+                          {emp.data_inicio_contrato || emp.data_fim_contrato ? (
+                            <div className="flex flex-col text-[11px] leading-tight">
+                              <span className="font-medium text-slate-800">
+                                {emp.data_inicio_contrato
+                                  ? new Date(emp.data_inicio_contrato).toLocaleDateString('pt-BR')
+                                  : '—'}{' '}
+                                a{' '}
+                                {emp.data_fim_contrato
+                                  ? new Date(emp.data_fim_contrato).toLocaleDateString('pt-BR')
+                                  : 'vigente'}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                {emp.data_fim_contrato &&
+                                new Date(emp.data_fim_contrato) < new Date()
+                                  ? 'Contrato encerrado'
+                                  : 'Contrato ativo'}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-[11px]">—</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">
@@ -895,6 +938,57 @@ export default function Empresas() {
                 </div>
               </fieldset>
 
+              {/* Seção: Vigência do Contrato */}
+              <fieldset className="space-y-3 bg-slate-50/70 p-3.5 rounded-xl border border-slate-200">
+                <legend className="flex items-center gap-2 text-xs font-bold text-[#0B1F3A] uppercase tracking-wide px-1">
+                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                  Vigência do Contrato
+                </legend>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="empresa-data-inicio-contrato"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Data de Início do Contrato
+                      </Label>
+                      <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
+                    </div>
+                    <Input
+                      id="empresa-data-inicio-contrato"
+                      type="date"
+                      value={formData.data_inicio_contrato}
+                      onChange={(e) => setField('data_inicio_contrato', e.target.value)}
+                      className="h-9 text-xs bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="empresa-data-fim-contrato"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Data de Fim do Contrato
+                      </Label>
+                      <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
+                    </div>
+                    <Input
+                      id="empresa-data-fim-contrato"
+                      type="date"
+                      value={formData.data_fim_contrato}
+                      onChange={(e) => setField('data_fim_contrato', e.target.value)}
+                      className={`h-9 text-xs bg-white ${formErrors.data_fim_contrato ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                    />
+                    {formErrors.data_fim_contrato && (
+                      <p className="text-[11px] text-red-600 font-medium">
+                        {formErrors.data_fim_contrato}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </fieldset>
               {/* Seção: Endereço */}
               <fieldset className="space-y-3">
                 <legend className="flex items-center gap-2 text-xs font-bold text-[#0B1F3A] uppercase tracking-wide mb-1">

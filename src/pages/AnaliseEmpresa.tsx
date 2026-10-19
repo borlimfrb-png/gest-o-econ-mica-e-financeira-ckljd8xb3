@@ -669,9 +669,27 @@ export default function AnaliseEmpresa() {
                 {empresa.segmento}
               </Badge>
             </div>
-            <p className="text-xs text-[#5B6B7F] mt-0.5">
-              CNPJ: <span className="font-mono">{formatCnpj(empresa.cnpj)}</span> · Cadastrada em:{' '}
-              {new Date(empresa.created).toLocaleDateString('pt-BR')}
+            <p className="text-xs text-[#5B6B7F] mt-0.5 flex items-center gap-2 flex-wrap">
+              <span>
+                CNPJ: <span className="font-mono">{formatCnpj(empresa.cnpj)}</span>
+              </span>
+              <span>·</span>
+              <span>Cadastrada em: {new Date(empresa.created).toLocaleDateString('pt-BR')}</span>
+              {(empresa.data_inicio_contrato || empresa.data_fim_contrato) && (
+                <>
+                  <span>·</span>
+                  <span className="font-medium text-slate-700">
+                    Contrato:{' '}
+                    {empresa.data_inicio_contrato
+                      ? new Date(empresa.data_inicio_contrato).toLocaleDateString('pt-BR')
+                      : '—'}{' '}
+                    a{' '}
+                    {empresa.data_fim_contrato
+                      ? new Date(empresa.data_fim_contrato).toLocaleDateString('pt-BR')
+                      : 'vigente'}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>

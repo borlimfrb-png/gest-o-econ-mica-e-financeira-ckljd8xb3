@@ -633,6 +633,21 @@ export default function DashboardEmpresa() {
               <span>CNPJ: {formatCnpj(empresa.cnpj)}</span>
               <span>·</span>
               <span className="text-emerald-700 font-semibold">Dashboard Exclusivo</span>
+              {(empresa.data_inicio_contrato || empresa.data_fim_contrato) && (
+                <>
+                  <span>·</span>
+                  <span className="text-slate-600 font-medium">
+                    Contrato:{' '}
+                    {empresa.data_inicio_contrato
+                      ? new Date(empresa.data_inicio_contrato).toLocaleDateString('pt-BR')
+                      : '—'}{' '}
+                    a{' '}
+                    {empresa.data_fim_contrato
+                      ? new Date(empresa.data_fim_contrato).toLocaleDateString('pt-BR')
+                      : 'vigente'}
+                  </span>
+                </>
+              )}
             </p>
           </div>
         </div>
