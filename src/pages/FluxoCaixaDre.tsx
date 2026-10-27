@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -680,9 +681,14 @@ export default function FluxoCaixaDre() {
                               </span>
                             )}
                             {conta.codigo && (
-                              <span className="font-mono text-[10px] text-emerald-600 font-semibold shrink-0">
+                              <Link
+                                to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                className="font-mono text-[10px] text-emerald-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {conta.codigo}
-                              </span>
+                              </Link>
                             )}
                             <span className="truncate font-medium">{conta.nome}</span>
                           </div>
@@ -851,9 +857,14 @@ export default function FluxoCaixaDre() {
                               <div className="flex items-center gap-2 truncate">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
                                 {conta.codigo && (
-                                  <span className="font-mono text-[10px] text-rose-600 font-semibold shrink-0">
+                                  <Link
+                                    to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                    className="font-mono text-[10px] text-rose-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                    title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     {conta.codigo}
-                                  </span>
+                                  </Link>
                                 )}
                                 <span
                                   className="truncate font-medium text-slate-900"
@@ -982,9 +993,14 @@ export default function FluxoCaixaDre() {
                               </span>
                             )}
                             {conta.codigo && (
-                              <span className="font-mono text-[10px] text-sky-600 font-semibold shrink-0">
+                              <Link
+                                to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                className="font-mono text-[10px] text-sky-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {conta.codigo}
-                              </span>
+                              </Link>
                             )}
                             <span className="truncate font-medium">{conta.nome}</span>
                           </div>
@@ -1153,9 +1169,14 @@ export default function FluxoCaixaDre() {
                               <div className="flex items-center gap-2 truncate">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
                                 {conta.codigo && (
-                                  <span className="font-mono text-[10px] text-purple-600 font-semibold shrink-0">
+                                  <Link
+                                    to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                    className="font-mono text-[10px] text-purple-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                    title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
                                     {conta.codigo}
-                                  </span>
+                                  </Link>
                                 )}
                                 <span
                                   className="truncate font-medium text-slate-900"

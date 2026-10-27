@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
@@ -1294,9 +1295,14 @@ export default function DreGerencial() {
                                     <div className="flex items-center gap-2 truncate">
                                       <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
                                       {conta.codigo && (
-                                        <span className="font-mono text-[10px] text-blue-600 font-semibold shrink-0">
+                                        <Link
+                                          to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                          className="font-mono text-[10px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                          title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
                                           {conta.codigo}
-                                        </span>
+                                        </Link>
                                       )}
                                       <span
                                         className="truncate font-medium text-slate-900"
@@ -1612,9 +1618,14 @@ export default function DreGerencial() {
                                     <div className="flex items-center gap-2 truncate">
                                       <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
                                       {conta.codigo && (
-                                        <span className="font-mono text-[10px] text-amber-700 font-semibold shrink-0">
+                                        <Link
+                                          to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                          className="font-mono text-[10px] text-amber-800 hover:underline font-semibold shrink-0 cursor-pointer"
+                                          title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
                                           {conta.codigo}
-                                        </span>
+                                        </Link>
                                       )}
                                       <span
                                         className="truncate font-medium text-slate-900"
@@ -1795,9 +1806,14 @@ export default function DreGerencial() {
                                     </span>
                                   )}
                                   {conta.codigo && (
-                                    <span className="font-mono text-[10px] text-blue-600 font-semibold shrink-0">
+                                    <Link
+                                      to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                      className="font-mono text-[10px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                      title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
                                       {conta.codigo}
-                                    </span>
+                                    </Link>
                                   )}
                                   <span className="truncate font-medium">{conta.nome}</span>
                                 </div>
@@ -2062,9 +2078,14 @@ export default function DreGerencial() {
                                     </span>
                                   )}
                                   {conta.codigo && (
-                                    <span className="font-mono text-[10px] text-amber-700 font-semibold shrink-0">
+                                    <Link
+                                      to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                      className="font-mono text-[10px] text-amber-800 hover:underline font-semibold shrink-0 cursor-pointer"
+                                      title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
                                       {conta.codigo}
-                                    </span>
+                                    </Link>
                                   )}
                                   <span className="truncate font-medium">{conta.nome}</span>
                                 </div>

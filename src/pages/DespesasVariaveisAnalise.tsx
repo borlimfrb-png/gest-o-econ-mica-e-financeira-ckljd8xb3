@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
@@ -812,9 +812,14 @@ export default function DespesasVariaveisAnalise() {
                             <div className="flex items-center gap-2 truncate">
                               <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
                               {conta.codigo && (
-                                <span className="font-mono text-[10.5px] text-indigo-700 font-semibold shrink-0">
+                                <Link
+                                  to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                  className="font-mono text-[10.5px] text-indigo-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                  title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
                                   {conta.codigo}
-                                </span>
+                                </Link>
                               )}
                               <span
                                 className="truncate font-medium text-slate-900"

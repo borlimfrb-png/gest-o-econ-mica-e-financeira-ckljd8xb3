@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -1069,9 +1069,14 @@ export default function ComparativoDespesasAnalise() {
                               </span>
                             )}
                             {conta.codigo && (
-                              <span className="font-mono text-[10px] text-rose-700 font-semibold shrink-0">
+                              <Link
+                                to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                className="font-mono text-[10px] text-rose-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {conta.codigo}
-                              </span>
+                              </Link>
                             )}
                             <span
                               className="truncate font-medium text-slate-900"
@@ -1217,9 +1222,14 @@ export default function ComparativoDespesasAnalise() {
                               </span>
                             )}
                             {conta.codigo && (
-                              <span className="font-mono text-[10px] text-blue-700 font-semibold shrink-0">
+                              <Link
+                                to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                className="font-mono text-[10px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 {conta.codigo}
-                              </span>
+                              </Link>
                             )}
                             <span
                               className="truncate font-medium text-slate-900"
