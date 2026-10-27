@@ -23,6 +23,7 @@ export type ModuloSistema =
   | 'gerencial_analise_faturamento'
   | 'gerencial_indicador_crescimento'
   | 'gerencial_rentabilidade'
+  | 'gerencial_conta_detalhe'
   | 'financeiro'
   | 'baixa_recebiveis'
   | 'contratos'
@@ -78,6 +79,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
       'gerencial_rentabilidade',
+      'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -119,6 +121,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
       'gerencial_rentabilidade',
+      'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
@@ -152,6 +155,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
       'gerencial_rentabilidade',
+      'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
       'contratos',
