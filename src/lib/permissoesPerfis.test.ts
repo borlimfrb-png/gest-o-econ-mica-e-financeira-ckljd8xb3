@@ -13,6 +13,8 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'analise_economica_financeira',
     'cliente_rentabilidade',
     'cliente_crescimento',
+    'cliente_dashboard_bi',
+    'cliente_indicadores',
     'gerencial_dre',
     'gerencial_despesas_fixas',
     'gerencial_despesas_variaveis',
@@ -35,6 +37,8 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'gerencial_fluxo_caixa',
     'gerencial_indicador_crescimento',
     'gerencial_rentabilidade',
+    'gerencial_dashboard_bi',
+    'gerencial_indicadores',
     'gerencial_conta_detalhe',
     'financeiro',
     'baixa_recebiveis',
@@ -104,6 +108,20 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('empresa', 'cliente_crescimento')).toBe(false)
     expect(perfilTemAcesso('financeiro', 'cliente_crescimento')).toBe(false)
     expect(perfilTemAcesso('comercial', 'cliente_crescimento')).toBe(false)
+  })
+
+  it('garante que as rotas cliente_dashboard_bi e cliente_indicadores são exclusivas do perfil cliente', () => {
+    expect(perfilTemAcesso('cliente', 'cliente_dashboard_bi')).toBe(true)
+    expect(perfilTemAcesso('admin', 'cliente_dashboard_bi')).toBe(false)
+    expect(perfilTemAcesso('cliente', 'cliente_indicadores')).toBe(true)
+    expect(perfilTemAcesso('admin', 'cliente_indicadores')).toBe(false)
+  })
+
+  it('garante que o cliente NUNCA acessa gerencial_dashboard_bi nem gerencial_indicadores', () => {
+    expect(perfilTemAcesso('cliente', 'gerencial_dashboard_bi')).toBe(false)
+    expect(perfilTemAcesso('cliente', 'gerencial_indicadores')).toBe(false)
+    expect(perfilTemAcesso('admin', 'gerencial_dashboard_bi')).toBe(true)
+    expect(perfilTemAcesso('admin', 'gerencial_indicadores')).toBe(true)
   })
 
   it('deve listar todos os perfis do sistema na LISTA_PERFIS incluindo cliente', () => {

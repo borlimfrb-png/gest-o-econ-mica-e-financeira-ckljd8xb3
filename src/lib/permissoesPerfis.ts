@@ -4,6 +4,8 @@ export type ModuloSistema =
   | 'analise_economica_financeira'
   | 'cliente_rentabilidade'
   | 'cliente_crescimento'
+  | 'cliente_dashboard_bi'
+  | 'cliente_indicadores'
   | 'dashboard'
   | 'dashboard_bi'
   | 'empresas'
@@ -23,6 +25,8 @@ export type ModuloSistema =
   | 'gerencial_analise_faturamento'
   | 'gerencial_indicador_crescimento'
   | 'gerencial_rentabilidade'
+  | 'gerencial_dashboard_bi'
+  | 'gerencial_indicadores'
   | 'gerencial_conta_detalhe'
   | 'financeiro'
   | 'baixa_recebiveis'
@@ -79,6 +83,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
       'gerencial_rentabilidade',
+      'gerencial_dashboard_bi',
+      'gerencial_indicadores',
       'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
@@ -121,6 +127,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
       'gerencial_rentabilidade',
+      'gerencial_dashboard_bi',
+      'gerencial_indicadores',
       'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
@@ -155,6 +163,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
       'gerencial_rentabilidade',
+      'gerencial_dashboard_bi',
+      'gerencial_indicadores',
       'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
@@ -186,6 +196,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'analise_economica_financeira',
       'cliente_rentabilidade',
       'cliente_crescimento',
+      'cliente_dashboard_bi',
+      'cliente_indicadores',
       'gerencial_dre',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',

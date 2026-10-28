@@ -29,16 +29,18 @@ export function extractUserEmpresasIds(user: AppUser | null | undefined): string
   const ids: string[] = []
   if (Array.isArray(user.empresas)) {
     for (const item of user.empresas) {
-      if (typeof item === 'string' && item) {
+      if (!item) continue
+      if (typeof item === 'string') {
         ids.push(item)
-      } else if (item && typeof item === 'object' && 'id' in item && (item as any).id) {
+      } else if (typeof item === 'object' && 'id' in item && (item as any).id) {
         ids.push((item as any).id)
       }
     }
   }
   if (user.expand?.empresas && Array.isArray(user.expand.empresas)) {
     for (const item of user.expand.empresas) {
-      if (item?.id && !ids.includes(item.id)) {
+      if (!item) continue
+      if (item.id && !ids.includes(item.id)) {
         ids.push(item.id)
       }
     }

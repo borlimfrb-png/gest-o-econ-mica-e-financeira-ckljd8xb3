@@ -40,6 +40,10 @@ const AnaliseRentabilidade = lazy(() => import('./pages/AnaliseRentabilidade'))
 const ContaDetalheGerencial = lazy(() => import('./pages/ContaDetalheGerencial'))
 const ClienteRentabilidade = lazy(() => import('./pages/ClienteRentabilidade'))
 const ClienteCrescimento = lazy(() => import('./pages/ClienteCrescimento'))
+const GerencialDashboardBi = lazy(() => import('./pages/GerencialDashboardBi'))
+const ClienteDashboardBi = lazy(() => import('./pages/ClienteDashboardBi'))
+const GerencialIndicadores = lazy(() => import('./pages/GerencialIndicadores'))
+const ClienteIndicadores = lazy(() => import('./pages/ClienteIndicadores'))
 const Financeiro = lazy(() => import('./pages/Financeiro'))
 const BaixaRecebiveis = lazy(() => import('./pages/BaixaRecebiveis'))
 const Contratos = lazy(() => import('./pages/Contratos'))
@@ -410,6 +414,38 @@ const App = () => (
                       element={
                         <ModuloRoute modulo="cliente_crescimento">
                           <ClienteCrescimento />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/dashboard-bi"
+                      element={
+                        <ModuloRoute modulo="gerencial_dashboard_bi">
+                          <GerencialDashboardBi />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/cliente/dashboard-bi"
+                      element={
+                        <ModuloRoute modulo="cliente_dashboard_bi">
+                          <ClienteDashboardBi />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/indicadores"
+                      element={
+                        <ModuloRoute modulo="gerencial_indicadores">
+                          <GerencialIndicadores />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/cliente/indicadores"
+                      element={
+                        <ModuloRoute modulo="cliente_indicadores">
+                          <ClienteIndicadores />
                         </ModuloRoute>
                       }
                     />

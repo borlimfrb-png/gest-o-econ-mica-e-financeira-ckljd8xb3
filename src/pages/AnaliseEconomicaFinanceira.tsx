@@ -13,6 +13,7 @@ import {
   Sparkles,
   ShieldCheck,
   ChevronRight,
+  Gauge,
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -244,6 +245,37 @@ export default function AnaliseEconomicaFinanceira() {
         rota: () => (isCliente ? '/cliente/crescimento' : '/gerencial/indicador-crescimento'),
         metricasTexto: 'Crescimento no período, comparativo anual e qualidade da expansão',
       },
+      {
+        id: 'dashboard-bi',
+        titulo: 'Dashboard BI Interativo',
+        subtitulo: 'Painel Executivo & BI Interativo',
+        descricao:
+          'Painel executivo com KPIs consolidados, evolução mensal faturamento vs. despesas, donut de centros de custo e curvas de margens.',
+        badge: 'BI Interativo',
+        badgeVariant: 'cyan',
+        icon: Sparkles,
+        gradient: 'from-[#0B1F3A] via-[#0E284E] to-[#143A6E]',
+        borderGlow: 'hover:border-cyan-400/70 hover:shadow-cyan-500/15',
+        iconBg: 'bg-gradient-to-tr from-cyan-500/25 to-sky-600/20 text-cyan-300 border-cyan-400/40',
+        rota: () => (isCliente ? '/cliente/dashboard-bi' : '/gerencial/dashboard-bi'),
+        metricasTexto: 'Faturamento, Lucro, Margens, Custos Fixos/Variáveis e Centros de Custo',
+      },
+      {
+        id: 'indicadores',
+        titulo: 'Indicadores',
+        subtitulo: 'Métricas Econômico-Financeiras Clássicas',
+        descricao:
+          'Painel de indicadores financeiros: Liquidez Corrente/Seca/Geral, Alavancagem (Dívida/PL), ROE, ROI, Margens e Prazos Médios com badges de status.',
+        badge: 'Indicadores',
+        badgeVariant: 'emerald',
+        icon: Gauge,
+        gradient: 'from-[#0B1F3A] via-[#103438] to-[#164842]',
+        borderGlow: 'hover:border-emerald-400/70 hover:shadow-emerald-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-emerald-500/25 to-teal-600/20 text-emerald-300 border-emerald-400/40',
+        rota: () => (isCliente ? '/cliente/indicadores' : '/gerencial/indicadores'),
+        metricasTexto: 'Liquidez, Endividamento, ROE/ROA, Margens e Prazos Médios PMR/PMP',
+      },
     ],
     [isCliente],
   )
@@ -361,7 +393,7 @@ export default function AnaliseEconomicaFinanceira() {
             </h2>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            7 demonstrativos estruturados
+            9 demonstrativos estruturados
           </span>
         </div>
 
