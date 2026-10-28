@@ -323,21 +323,32 @@ export function calcularComparativoRentabilidadeAnos(
   anosComparados: number[],
   planoContas?: PlanoContaRecord[],
 ): AnoRentabilidadeComparado[] {
-  const anosUnicos = Array.from(new Set(anosComparados.filter((a) => a && a !== anoBase))).sort(
-    (a, b) => b - a, // mais recente primeiro: 2024 antes de 2023
-  )
+  // Ordena anos comparados de forma que o mais antigo venha antes para cálculo cronológico de variação
+  const anosValidos = Array.from(
+    new Set([anoBase, ...anosComparados.filter((a) => a && Number.isFinite(a))]),
+  ).sort((a, b) => a - b) // ex.: [2023, 2024, 2025]
 
-  const anosOrdem = [anoBase, ...anosUnicos]
-  const saida: AnoRentabilidadeComparado[] = []
-
-  for (const ano of anosOrdem) {
+  // Mapeia cada ano ao seu resultado da DRE
+  const resultadosPorAno = new Map<number, AnaliseRentabilidadeResultado>()
+  for (const ano of anosValidos) {
     const mesesAno = gerarListaMeses(ano, mesInicial, qtdMeses)
     const resultado = calcularAnaliseRentabilidade(lancamentos, contas, mesesAno, planoContas)
+    resultadosPorAno.set(ano, resultado)
+  }
 
-    const anterior = saida[saida.length - 1]
-    const variacoes = anterior
-      ? calcularVariacoesEntreAnos(anterior.resultado, resultado, anterior.ano)
-      : undefined
+  // Gera o comparativo mantendo o anoBase em destaque ou ordem cronológica coerente
+  // Saída cronológica (mais antigo -> mais recente) para evolução gráfica e de tabelas
+  const saida: AnoRentabilidadeComparado[] = []
+  for (let i = 0; i < anosValidos.length; i++) {
+    const ano = anosValidos[i]
+    const resultado = resultadosPorAno.get(ano)!
+    const anoAnterior = i > 0 ? anosValidos[i - 1] : undefined
+    const resultadoAnterior = anoAnterior ? resultadosPorAno.get(anoAnterior) : undefined
+
+    const variacoes =
+      resultadoAnterior && anoAnterior !== undefined
+        ? calcularVariacoesEntreAnos(resultadoAnterior, resultado, anoAnterior)
+        : undefined
 
     saida.push({ ano, resultado, variacoes })
   }

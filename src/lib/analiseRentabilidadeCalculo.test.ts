@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { calcularAnaliseRentabilidade } from './analiseRentabilidadeCalculo'
+import {
+  calcularAnaliseRentabilidade,
+  calcularComparativoRentabilidadeAnos,
+} from './analiseRentabilidadeCalculo'
 import { gerarListaMeses } from './dreGerencialTypes'
 import { perfilTemAcesso } from './permissoesPerfis'
 import type { ContaRecord, LancamentoRecord } from '@/types/finance'
@@ -262,6 +265,94 @@ describe('Análise de Rentabilidade - Cálculos e Integração DRE', () => {
     const jan = res.itensPorMes[0]
     expect(jan.despesasFinanceiras).toBe(5000)
     expect(res.despesasFinanceirasTotal).toBe(5000)
+  })
+
+  it('deve calcular comparativo multi-ano cronológico com variações YoY corretas', () => {
+    // Adiciona lançamentos para 2024
+    const lancamentos2024: LancamentoRecord[] = [
+      {
+        id: 'l-2024-1',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        user: 'u-1',
+        empresa: 'emp-1',
+        conta: 'c-rec-1',
+        plano_conta: '',
+        data: '2024-01-15',
+        valor: 80000,
+        tipo: 'credito',
+        descricao: 'Vendas Janeiro 2024',
+        created: '2024-01-15',
+        updated: '2024-01-15',
+      },
+      {
+        id: 'l-2024-2',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        user: 'u-1',
+        empresa: 'emp-1',
+        conta: 'c-var-1',
+        plano_conta: '',
+        data: '2024-01-20',
+        valor: 16000,
+        tipo: 'debito',
+        descricao: 'Comissões Janeiro 2024',
+        created: '2024-01-20',
+        updated: '2024-01-20',
+      },
+      {
+        id: 'l-2024-3',
+        collectionId: 'lancamentos',
+        collectionName: 'lancamentos',
+        user: 'u-1',
+        empresa: 'emp-1',
+        conta: 'c-fix-1',
+        plano_conta: '',
+        data: '2024-01-25',
+        valor: 24000,
+        tipo: 'debito',
+        descricao: 'Aluguel Janeiro 2024',
+        created: '2024-01-25',
+        updated: '2024-01-25',
+      },
+    ]
+
+    const todosLancamentos = [...lancamentosMock, ...lancamentos2024]
+    const comp = calcularComparativoRentabilidadeAnos(
+      todosLancamentos,
+      contasMock,
+      2025,
+      1,
+      3,
+      [2024],
+    )
+
+    expect(comp).toHaveLength(2)
+    expect(comp[0].ano).toBe(2024)
+    expect(comp[1].ano).toBe(2025)
+
+    // 2024 não tem variação anterior
+    expect(comp[0].variacoes).toBeUndefined()
+    expect(comp[0].resultado.faturamentoTotal).toBe(80000)
+    expect(comp[0].resultado.lucroTotal).toBe(40000)
+
+    // 2025 tem variação em relação a 2024
+    const v2025 = comp[1].variacoes
+    expect(v2025).toBeDefined()
+    expect(v2025?.faturamento.anoAnterior).toBe(2024)
+    // Fat 2024: 80k -> Fat 2025: 250k = +170k (+212.5%)
+    expect(v2025?.faturamento.deltaAbsoluto).toBe(170000)
+    expect(v2025?.faturamento.deltaPercentual).toBeCloseTo(212.5)
+    expect(v2025?.faturamento.favoravel).toBe(true)
+
+    // Lucro 2024: 40k -> Lucro 2025: 110k = +70k (+175%)
+    expect(v2025?.lucroApurado.deltaAbsoluto).toBe(70000)
+    expect(v2025?.lucroApurado.deltaPercentual).toBeCloseTo(175)
+    expect(v2025?.lucroApurado.favoravel).toBe(true)
+
+    // Margem 2024: 50% -> Margem 2025: 44% = -6 p.p.
+    expect(v2025?.margemSobreFaturamento.deltaPontos).toBeCloseTo(-6)
+    expect(v2025?.margemSobreFaturamento.favoravel).toBe(false)
   })
 
   it('garante que gerencial_rentabilidade está configurado nas regras de acesso de perfis', () => {

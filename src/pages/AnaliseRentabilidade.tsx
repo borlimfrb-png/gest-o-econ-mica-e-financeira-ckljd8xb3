@@ -205,7 +205,7 @@ export default function AnaliseRentabilidade() {
       setLancamentos(lancamentosList)
       setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
 
-      // Identifica anos disponíveis nos lançamentos carregados
+      // Identifica anos disponíveis nos lançamentos carregados para o escopo
       const anosSet = new Set<number>()
       lancamentosList.forEach((l) => {
         if (l.data) {
@@ -216,7 +216,10 @@ export default function AnaliseRentabilidade() {
       if (anosSet.size > 0) {
         const listaAnos = Array.from(anosSet).sort((a, b) => b - a)
         setAnosComparados((prev) => {
-          if (prev.length > 0) return prev
+          if (prev.length > 0) {
+            const filtrados = prev.filter((a) => listaAnos.includes(a) && a !== anoInicial)
+            if (filtrados.length > 0) return filtrados
+          }
           const anoAnt = anoInicial - 1
           return listaAnos.includes(anoAnt) ? [anoAnt] : []
         })
@@ -281,6 +284,22 @@ export default function AnaliseRentabilidade() {
   const analise = useMemo<AnaliseRentabilidadeResultado>(() => {
     return calcularAnaliseRentabilidade(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
+
+  // Lista de anos com dados reais nos lançamentos carregados
+  const anosComDados = useMemo<number[]>(() => {
+    const s = new Set<number>()
+    lancamentos.forEach((l) => {
+      if (l.data) {
+        const a = parseInt(l.data.slice(0, 4), 10)
+        if (!isNaN(a) && a > 2000 && a < 2100) s.add(a)
+      }
+    })
+    if (anosDisponiveis && anosDisponiveis.length > 0) {
+      anosDisponiveis.forEach((a) => s.add(a))
+    }
+    s.add(anoInicial)
+    return Array.from(s).sort((a, b) => b - a)
+  }, [lancamentos, anosDisponiveis, anoInicial])
 
   // Cálculo comparativo multi-ano usando o motor oficial multi-ano
   const comparativoAnos = useMemo<AnoRentabilidadeComparado[]>(() => {
@@ -662,30 +681,34 @@ export default function AnaliseRentabilidade() {
             {modoComparativo && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mr-1">
-                  Incluir anos:
+                  Incluir anos anteriores:
                 </span>
-                {(anosDisponiveis && anosDisponiveis.length > 0
-                  ? anosDisponiveis.filter((a) => a !== anoInicial)
-                  : [anoInicial - 1, anoInicial - 2]
-                ).map((ano) => {
-                  const ativo = anosComparados.includes(ano)
-                  return (
-                    <Button
-                      key={ano}
-                      type="button"
-                      size="sm"
-                      variant={ativo ? 'default' : 'outline'}
-                      onClick={() => toggleAnoComparado(ano)}
-                      className={`h-7 px-2.5 text-xs font-semibold cursor-pointer ${
-                        ativo
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200'
-                      }`}
-                    >
-                      {ano}
-                    </Button>
-                  )
-                })}
+                {(() => {
+                  const opcoesAnos = anosComDados.filter((a) => a !== anoInicial)
+                  const listaFinal =
+                    opcoesAnos.length > 0
+                      ? opcoesAnos
+                      : [anoInicial - 1, anoInicial - 2].filter((a) => a > 2000)
+                  return listaFinal.map((ano) => {
+                    const ativo = anosComparados.includes(ano)
+                    return (
+                      <Button
+                        key={ano}
+                        type="button"
+                        size="sm"
+                        variant={ativo ? 'default' : 'outline'}
+                        onClick={() => toggleAnoComparado(ano)}
+                        className={`h-7 px-2.5 text-xs font-semibold cursor-pointer ${
+                          ativo
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        {ano}
+                      </Button>
+                    )
+                  })
+                })()}
                 {anosComparados.length === 0 && (
                   <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
                     Selecione ao menos um ano para comparar

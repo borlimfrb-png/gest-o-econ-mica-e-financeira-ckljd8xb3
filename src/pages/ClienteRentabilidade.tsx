@@ -9,8 +9,11 @@ import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/fi
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import {
   calcularAnaliseRentabilidade,
+  calcularComparativoRentabilidadeAnos,
   type AnaliseRentabilidadeResultado,
+  type AnoRentabilidadeComparado,
 } from '@/lib/analiseRentabilidadeCalculo'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { BorlimLogo } from '@/components/BorlimLogo'
@@ -46,6 +49,7 @@ import {
   Sparkles,
   Layers,
   ArrowLeft,
+  BarChart3,
   CheckCircle2,
   AlertTriangle,
   RefreshCw,
@@ -121,6 +125,10 @@ export default function ClienteRentabilidade() {
   const [qtdMeses, setQtdMeses] = useState<number>(12)
   const [avisoLimiteMeses, setAvisoLimiteMeses] = useState(false)
 
+  // Modo comparativo multi-ano (somente leitura para o cliente)
+  const [modoComparativo, setModoComparativo] = useState(false)
+  const [anosComparados, setAnosComparados] = useState<number[]>([])
+
   // Tipo de visualização gráfica
   const [tipoVisualizacaoGrafico, setTipoVisualizacaoGrafico] = useState<
     'barras_linha' | 'linhas_margem'
@@ -170,6 +178,26 @@ export default function ClienteRentabilidade() {
       setContas(Array.from(new Map(contasList.map((i) => [i.id, i])).values()))
       setLancamentos(lancamentosList)
       setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
+
+      // Identifica anos disponíveis nos lançamentos carregados para a empresa
+      const anosSet = new Set<number>()
+      lancamentosList.forEach((l) => {
+        if (l.data) {
+          const a = parseInt(l.data.slice(0, 4), 10)
+          if (!isNaN(a) && a > 2000 && a < 2100) anosSet.add(a)
+        }
+      })
+      if (anosSet.size > 0) {
+        const listaAnos = Array.from(anosSet).sort((a, b) => b - a)
+        setAnosComparados((prev) => {
+          if (prev.length > 0) {
+            const filtrados = prev.filter((a) => listaAnos.includes(a) && a !== anoInicial)
+            if (filtrados.length > 0) return filtrados
+          }
+          const anoAnt = anoInicial - 1
+          return listaAnos.includes(anoAnt) ? [anoAnt] : []
+        })
+      }
     } catch (err: any) {
       console.error('Erro ao carregar dados de rentabilidade do cliente:', err)
       toast({
@@ -214,10 +242,58 @@ export default function ClienteRentabilidade() {
     return gerarListaMeses(anoInicial, mesInicial, qtdMeses)
   }, [anoInicial, mesInicial, qtdMeses])
 
+  // Lista de anos com dados reais nos lançamentos
+  const anosComDados = useMemo<number[]>(() => {
+    const s = new Set<number>()
+    lancamentos.forEach((l) => {
+      if (l.data) {
+        const a = parseInt(l.data.slice(0, 4), 10)
+        if (!isNaN(a) && a > 2000 && a < 2100) s.add(a)
+      }
+    })
+    if (anosDisponiveis && anosDisponiveis.length > 0) {
+      anosDisponiveis.forEach((a) => s.add(a))
+    }
+    s.add(anoInicial)
+    return Array.from(s).sort((a, b) => b - a)
+  }, [lancamentos, anosDisponiveis, anoInicial])
+
   // Cálculo da Análise de Rentabilidade via motor oficial
   const analise = useMemo<AnaliseRentabilidadeResultado>(() => {
     return calcularAnaliseRentabilidade(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
+
+  // Cálculo comparativo multi-ano via motor oficial (somente leitura)
+  const comparativoAnos = useMemo<AnoRentabilidadeComparado[]>(() => {
+    if (!modoComparativo || anosComparados.length === 0) {
+      return [{ ano: anoInicial, resultado: analise }]
+    }
+    return calcularComparativoRentabilidadeAnos(
+      lancamentos,
+      contas,
+      anoInicial,
+      mesInicial,
+      qtdMeses,
+      anosComparados,
+      planoContas,
+    )
+  }, [
+    modoComparativo,
+    anosComparados,
+    anoInicial,
+    mesInicial,
+    qtdMeses,
+    lancamentos,
+    contas,
+    planoContas,
+    analise,
+  ])
+
+  const toggleAnoComparado = (ano: number) => {
+    setAnosComparados((prev) =>
+      prev.includes(ano) ? prev.filter((a) => a !== ano) : [...prev, ano].sort((a, b) => b - a),
+    )
+  }
 
   const periodoDescricao = useMemo(() => {
     if (meses.length === 0) return ''
@@ -246,6 +322,27 @@ export default function ClienteRentabilidade() {
       margemOperacional: item.margemOperacional ?? 0,
     }))
   }, [analise.itensPorMes])
+
+  // Dados do gráfico comparativo multi-ano
+  const dadosGraficoComparativo = useMemo(() => {
+    if (!modoComparativo || comparativoAnos.length <= 1) return []
+    const mesesBase = comparativoAnos[0]?.resultado?.itensPorMes || []
+    return mesesBase.map((itemBase, idx) => {
+      const ponto: Record<string, any> = {
+        mes: itemBase.rotuloCurto,
+        mesCompleto: itemBase.rotuloCompleto,
+      }
+      for (const comp of comparativoAnos) {
+        const itemAno = comp.resultado.itensPorMes[idx]
+        if (itemAno) {
+          ponto[`fat_${comp.ano}`] = itemAno.faturamento
+          ponto[`lucro_${comp.ano}`] = itemAno.lucroApurado
+          ponto[`margem_${comp.ano}`] = itemAno.margemSobreFaturamento ?? 0
+        }
+      }
+      return ponto
+    })
+  }, [modoComparativo, comparativoAnos])
 
   const margemConsolidada = analise.margemSobreFaturamentoTotal
   const margemBrutaConsolidada = analise.margemBrutaTotal
@@ -483,6 +580,66 @@ export default function ClienteRentabilidade() {
               )}
             </div>
           </div>
+
+          {/* Seletor do Modo Comparativo Multi-Ano (Visão Cliente - Somente Leitura) */}
+          <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={modoComparativo}
+                  onChange={(e) => setModoComparativo(e.target.checked)}
+                  className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
+                />
+                <span className="text-xs font-bold text-[#0B1F3A] dark:text-slate-100 flex items-center gap-1.5">
+                  <BarChart3 className="w-3.5 h-3.5 text-emerald-600" />
+                  Comparar com outros anos
+                </span>
+              </label>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 hidden sm:inline">
+                (Compara o mesmo intervalo de meses entre os exercícios disponíveis)
+              </span>
+            </div>
+
+            {modoComparativo && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300 mr-1">
+                  Incluir anos anteriores:
+                </span>
+                {(() => {
+                  const opcoesAnos = anosComDados.filter((a) => a !== anoInicial)
+                  const listaFinal =
+                    opcoesAnos.length > 0
+                      ? opcoesAnos
+                      : [anoInicial - 1, anoInicial - 2].filter((a) => a > 2000)
+                  return listaFinal.map((ano) => {
+                    const ativo = anosComparados.includes(ano)
+                    return (
+                      <Button
+                        key={ano}
+                        type="button"
+                        size="sm"
+                        variant={ativo ? 'default' : 'outline'}
+                        onClick={() => toggleAnoComparado(ano)}
+                        className={`h-7 px-2.5 text-xs font-semibold cursor-pointer ${
+                          ativo
+                            ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200'
+                        }`}
+                      >
+                        {ano}
+                      </Button>
+                    )
+                  })
+                })()}
+                {anosComparados.length === 0 && (
+                  <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                    Selecione ao menos um ano para comparar
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -670,6 +827,406 @@ export default function ClienteRentabilidade() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Bloco Exclusivo de Comparativo Multi-Ano (Quando ativado) */}
+      {modoComparativo && comparativoAnos.length > 1 && (
+        <div className="space-y-4">
+          {/* Gráfico Comparativo Multi-Ano */}
+          <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs">
+            <CardHeader className="py-3 px-4 sm:px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-1 rounded-md bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                    <BarChart3 className="w-4 h-4" />
+                  </span>
+                  <CardTitle className="text-sm font-bold text-[#0B1F3A] dark:text-slate-100">
+                    Comparativo Multi-Ano: Faturamento e Lucro Apurado
+                  </CardTitle>
+                </div>
+                <CardDescription className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Barras agrupadas de faturamento e lucro com linha de margem % (
+                  {comparativoAnos.map((c) => c.ano).join(' vs ')})
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 sm:p-6">
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart
+                    data={dadosGraficoComparativo}
+                    margin={{ top: 15, right: 25, left: 10, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#94A3B8" opacity={0.25} />
+                    <XAxis
+                      dataKey="mes"
+                      stroke="#64748B"
+                      fontSize={11}
+                      tickLine={false}
+                      axisLine={{ stroke: '#CBD5E1' }}
+                    />
+                    <YAxis
+                      yAxisId="left"
+                      stroke="#64748B"
+                      fontSize={11}
+                      tickFormatter={formatBrlCompacto}
+                      tickLine={false}
+                      axisLine={{ stroke: '#CBD5E1' }}
+                    />
+                    <YAxis
+                      yAxisId="right"
+                      orientation="right"
+                      stroke="#F59E0B"
+                      fontSize={11}
+                      tickFormatter={(v) => `${v}%`}
+                      tickLine={false}
+                      axisLine={{ stroke: '#F59E0B' }}
+                    />
+                    <ReferenceLine yAxisId="left" y={0} stroke="#94A3B8" strokeWidth={1} />
+                    <RechartsTooltip
+                      content={({ active, payload }) => {
+                        if (!active || !payload || !payload.length) return null
+                        const d = payload[0].payload
+                        return (
+                          <div className="bg-[#0B1F3A] text-white p-3 rounded-xl shadow-xl border border-slate-700 text-xs min-w-[240px]">
+                            <p className="font-bold border-b border-white/10 pb-1.5 text-blue-200">
+                              {d.mesCompleto} — Comparativo
+                            </p>
+                            <div className="space-y-2 mt-2">
+                              {comparativoAnos.map((c) => (
+                                <div
+                                  key={c.ano}
+                                  className="border-b border-white/10 pb-1.5 last:border-0 last:pb-0"
+                                >
+                                  <div className="text-[11px] font-bold text-slate-300">
+                                    Ano {c.ano}
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-[11px]">
+                                    <span className="text-blue-300">Faturamento:</span>
+                                    <strong className="text-white">
+                                      {formatBrl(d[`fat_${c.ano}`] || 0)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-[11px]">
+                                    <span className="text-emerald-300">Lucro:</span>
+                                    <strong
+                                      className={
+                                        d[`lucro_${c.ano}`] >= 0
+                                          ? 'text-emerald-300'
+                                          : 'text-red-300'
+                                      }
+                                    >
+                                      {formatBrl(d[`lucro_${c.ano}`] || 0)}
+                                    </strong>
+                                  </div>
+                                  <div className="flex justify-between gap-3 text-[11px]">
+                                    <span className="text-amber-300">Margem:</span>
+                                    <strong className="text-amber-300">
+                                      {formatPercent(d[`margem_${c.ano}`] ?? null)}
+                                    </strong>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      }}
+                    />
+                    <Legend
+                      verticalAlign="top"
+                      align="right"
+                      wrapperStyle={{ paddingBottom: '12px', fontSize: '11px' }}
+                    />
+                    {comparativoAnos.map((comp, idx) => {
+                      const coresFat = ['#2563EB', '#60A5FA', '#93C5FD', '#1D4ED8']
+                      const coresLucro = ['#10B981', '#34D399', '#6EE7B7', '#047857']
+                      const coresMargem = ['#F59E0B', '#FBBF24', '#D97706', '#B45309']
+                      return [
+                        <Bar
+                          key={`fat_${comp.ano}`}
+                          yAxisId="left"
+                          dataKey={`fat_${comp.ano}`}
+                          name={`Fat. ${comp.ano}`}
+                          fill={coresFat[idx % coresFat.length]}
+                          radius={[3, 3, 0, 0]}
+                          maxBarSize={28}
+                        />,
+                        <Bar
+                          key={`lucro_${comp.ano}`}
+                          yAxisId="left"
+                          dataKey={`lucro_${comp.ano}`}
+                          name={`Lucro ${comp.ano}`}
+                          fill={coresLucro[idx % coresLucro.length]}
+                          radius={[3, 3, 0, 0]}
+                          maxBarSize={28}
+                        />,
+                        <Line
+                          key={`margem_${comp.ano}`}
+                          yAxisId="right"
+                          type="monotone"
+                          dataKey={`margem_${comp.ano}`}
+                          name={`Margem ${comp.ano} (%)`}
+                          stroke={coresMargem[idx % coresMargem.length]}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                        />,
+                      ]
+                    })}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Cards de Resumo Comparativo Lado a Lado com Variações YoY */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {comparativoAnos.map((comp) => {
+              const res = comp.resultado
+              const varAnt = comp.variacoes
+              return (
+                <Card
+                  key={comp.ano}
+                  className={`bg-white dark:bg-slate-900 border shadow-xs relative overflow-hidden ${
+                    comp.ano === anoInicial
+                      ? 'border-blue-300 dark:border-blue-700 ring-1 ring-blue-400/30'
+                      : 'border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <div
+                    className={`absolute top-0 left-0 right-0 h-1 ${
+                      comp.ano === anoInicial ? 'bg-blue-600' : 'bg-slate-400 dark:bg-slate-600'
+                    }`}
+                  />
+                  <CardHeader className="py-3 px-4 pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sm text-[#0B1F3A] dark:text-slate-100">
+                          Exercício {comp.ano}
+                        </span>
+                        {comp.ano === anoInicial && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-blue-50 text-blue-700 border-blue-300"
+                          >
+                            Ano Base
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-slate-500">{meses.length} mês(es)</span>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-4 space-y-2.5 text-xs">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Faturamento:</span>
+                      <div className="text-right">
+                        <span className="font-bold text-[#0B1F3A] dark:text-slate-100 tabular-nums">
+                          {formatBrl(res.faturamentoTotal)}
+                        </span>
+                        {varAnt && (
+                          <div
+                            className={`text-[10px] font-semibold tabular-nums ${
+                              varAnt.faturamento.favoravel ? 'text-emerald-600' : 'text-red-500'
+                            }`}
+                          >
+                            {varAnt.faturamento.deltaPercentual !== null
+                              ? `${varAnt.faturamento.deltaPercentual >= 0 ? '+' : ''}${varAnt.faturamento.deltaPercentual.toFixed(1)}% vs ${varAnt.faturamento.anoAnterior}`
+                              : '—'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Lucro Apurado:</span>
+                      <div className="text-right">
+                        <span
+                          className={`font-bold tabular-nums ${
+                            res.lucroTotal >= 0 ? 'text-emerald-600' : 'text-red-600'
+                          }`}
+                        >
+                          {formatBrl(res.lucroTotal)}
+                        </span>
+                        {varAnt && (
+                          <div
+                            className={`text-[10px] font-semibold tabular-nums ${
+                              varAnt.lucroApurado.favoravel ? 'text-emerald-600' : 'text-red-500'
+                            }`}
+                          >
+                            {varAnt.lucroApurado.deltaPercentual !== null
+                              ? `${varAnt.lucroApurado.deltaPercentual >= 0 ? '+' : ''}${varAnt.lucroApurado.deltaPercentual.toFixed(1)}% vs ${varAnt.lucroApurado.anoAnterior}`
+                              : '—'}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-500">Despesas Financeiras:</span>
+                      <span className="font-semibold text-amber-800 dark:text-amber-300 tabular-nums">
+                        {formatBrl(res.despesasFinanceirasTotal)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <span className="text-slate-500 font-medium">Margem Líquida:</span>
+                      <div className="text-right">
+                        <span
+                          className={`font-extrabold px-2 py-0.5 rounded text-[11px] ${getMargemBadgeColor(
+                            res.margemSobreFaturamentoTotal,
+                          )}`}
+                        >
+                          {formatPercent(res.margemSobreFaturamentoTotal)}
+                        </span>
+                        {varAnt && varAnt.margemSobreFaturamento.deltaPontos !== null && (
+                          <div
+                            className={`text-[10px] font-semibold mt-0.5 tabular-nums ${
+                              varAnt.margemSobreFaturamento.favoravel
+                                ? 'text-emerald-600'
+                                : 'text-red-500'
+                            }`}
+                          >
+                            {varAnt.margemSobreFaturamento.deltaPontos >= 0 ? '+' : ''}
+                            {varAnt.margemSobreFaturamento.deltaPontos.toFixed(1)} p.p. vs{' '}
+                            {varAnt.margemSobreFaturamento.anoAnterior}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+
+          {/* Tabela Comparativa Lado a Lado (Mês a Mês) */}
+          <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs">
+            <CardHeader className="py-3 px-4 sm:px-6 flex flex-row items-center justify-between border-b border-slate-100 dark:border-slate-800">
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A] dark:text-slate-100">
+                  Tabela Comparativa Multi-Ano: Mês a Mês Lado a Lado
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
+                  Meses idênticos comparados entre os exercícios selecionados
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <DoubleHorizontalScroll>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wider">
+                        <th className="py-3 px-4 text-left">Mês</th>
+                        {comparativoAnos.map((c) => (
+                          <th key={`cli_h_fat_${c.ano}`} className="py-3 px-3 text-right">
+                            Fat. {c.ano}
+                          </th>
+                        ))}
+                        {comparativoAnos.map((c) => (
+                          <th key={`cli_h_luc_${c.ano}`} className="py-3 px-3 text-right">
+                            Lucro {c.ano}
+                          </th>
+                        ))}
+                        {comparativoAnos.map((c) => (
+                          <th key={`cli_h_mg_${c.ano}`} className="py-3 px-3 text-right">
+                            Margem {c.ano}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {meses.map((mes, idx) => (
+                        <tr
+                          key={mes.chave}
+                          className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                        >
+                          <td className="py-2.5 px-4 font-semibold text-[#0B1F3A] dark:text-slate-100">
+                            {mes.rotuloCompleto}
+                          </td>
+                          {comparativoAnos.map((c) => (
+                            <td
+                              key={`cli_v_fat_${c.ano}_${idx}`}
+                              className="py-2.5 px-3 text-right tabular-nums text-slate-800 dark:text-slate-200 font-medium"
+                            >
+                              {formatBrl(c.resultado.itensPorMes[idx]?.faturamento || 0)}
+                            </td>
+                          ))}
+                          {comparativoAnos.map((c) => {
+                            const valLucro = c.resultado.itensPorMes[idx]?.lucroApurado || 0
+                            return (
+                              <td
+                                key={`cli_v_luc_${c.ano}_${idx}`}
+                                className={`py-2.5 px-3 text-right tabular-nums font-bold ${
+                                  valLucro >= 0
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-red-600 dark:text-red-400'
+                                }`}
+                              >
+                                {formatBrl(valLucro)}
+                              </td>
+                            )
+                          })}
+                          {comparativoAnos.map((c) => {
+                            const mg = c.resultado.itensPorMes[idx]?.margemSobreFaturamento
+                            return (
+                              <td
+                                key={`cli_v_mg_${c.ano}_${idx}`}
+                                className="py-2.5 px-3 text-right tabular-nums"
+                              >
+                                <span
+                                  className={`inline-block font-bold px-2 py-0.5 rounded-full text-[10.5px] ${getMargemBadgeColor(mg ?? null)}`}
+                                >
+                                  {formatPercent(mg ?? null)}
+                                </span>
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-100/90 dark:bg-slate-800/90 border-t-2 border-slate-300 dark:border-slate-700 font-bold text-[11.5px] text-[#0B1F3A] dark:text-slate-100">
+                        <td className="py-3 px-4 uppercase tracking-wider">TOTAL DO PERÍODO</td>
+                        {comparativoAnos.map((c) => (
+                          <td
+                            key={`cli_tot_fat_${c.ano}`}
+                            className="py-3 px-3 text-right tabular-nums font-extrabold text-blue-700 dark:text-blue-300"
+                          >
+                            {formatBrl(c.resultado.faturamentoTotal)}
+                          </td>
+                        ))}
+                        {comparativoAnos.map((c) => (
+                          <td
+                            key={`cli_tot_luc_${c.ano}`}
+                            className={`py-3 px-3 text-right tabular-nums font-extrabold ${
+                              c.resultado.lucroTotal >= 0
+                                ? 'text-emerald-700 dark:text-emerald-400'
+                                : 'text-red-600 dark:text-red-400'
+                            }`}
+                          >
+                            {formatBrl(c.resultado.lucroTotal)}
+                          </td>
+                        ))}
+                        {comparativoAnos.map((c) => (
+                          <td
+                            key={`cli_tot_mg_${c.ano}`}
+                            className="py-3 px-3 text-right tabular-nums font-extrabold"
+                          >
+                            <span
+                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${getMargemBadgeColor(c.resultado.margemSobreFaturamentoTotal)}`}
+                            >
+                              {formatPercent(c.resultado.margemSobreFaturamentoTotal)}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </DoubleHorizontalScroll>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Gráfico Principal de Evolução no Período */}
       <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs print:border-slate-300">
