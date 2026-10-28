@@ -168,6 +168,70 @@ export default function AdminUsuarios() {
     )
   }
 
+  // Handlers de seleção múltipla de empresas (criar)
+  const toggleCreateEmpresa = (empresaId: string) => {
+    setCreateForm((prev) => {
+      const current = prev.empresas || []
+      const next = current.includes(empresaId)
+        ? current.filter((id) => id !== empresaId)
+        : [...current, empresaId]
+      return {
+        ...prev,
+        empresas: next,
+        empresa: next[0] || '',
+      }
+    })
+  }
+
+  const selectAllCreateEmpresas = () => {
+    const allIds = empresas.map((e) => e.id)
+    setCreateForm((prev) => ({
+      ...prev,
+      empresas: allIds,
+      empresa: allIds[0] || '',
+    }))
+  }
+
+  const clearAllCreateEmpresas = () => {
+    setCreateForm((prev) => ({
+      ...prev,
+      empresas: [],
+      empresa: '',
+    }))
+  }
+
+  // Handlers de seleção múltipla de empresas (editar)
+  const toggleEditEmpresa = (empresaId: string) => {
+    setEditForm((prev) => {
+      const current = prev.empresas || []
+      const next = current.includes(empresaId)
+        ? current.filter((id) => id !== empresaId)
+        : [...current, empresaId]
+      return {
+        ...prev,
+        empresas: next,
+        empresa: next[0] || '',
+      }
+    })
+  }
+
+  const selectAllEditEmpresas = () => {
+    const allIds = empresas.map((e) => e.id)
+    setEditForm((prev) => ({
+      ...prev,
+      empresas: allIds,
+      empresa: allIds[0] || '',
+    }))
+  }
+
+  const clearAllEditEmpresas = () => {
+    setEditForm((prev) => ({
+      ...prev,
+      empresas: [],
+      empresa: '',
+    }))
+  }
+
   // Handlers CRUD
   const handleOpenCreate = () => {
     const defaultEmpresa = empresas.length > 0 ? empresas[0].id : ''
@@ -930,30 +994,79 @@ export default function AdminUsuarios() {
             </div>
 
             {createForm.role !== 'admin' && (
-              <div className="space-y-1.5 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-                <Label className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  Empresa Vinculada *
-                </Label>
-                <p className="text-[11px] text-blue-700/80 mb-1">
-                  O usuário verá única e exclusivamente as informações financeiras e cadastrais
-                  desta empresa.
+              <div className="space-y-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    Empresas Vinculadas *
+                  </Label>
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px] font-bold px-1.5 py-0">
+                    {(createForm.empresas || []).length} selecionada(s)
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-blue-700/80">
+                  Selecione uma ou mais empresas às quais este usuário terá acesso. O usuário poderá
+                  alternar entre elas no seletor do sistema.
                 </p>
-                <Select
-                  value={createForm.empresa}
-                  onValueChange={(val) => setCreateForm({ ...createForm, empresa: val })}
-                >
-                  <SelectTrigger className="text-xs bg-white">
-                    <SelectValue placeholder="Selecione a empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {empresas.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                        {emp.nome_fantasia || emp.nome} ({emp.cnpj})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllCreateEmpresas}
+                    className="h-6 text-[10px] px-2 bg-white hover:bg-blue-50 text-blue-700 border-blue-200"
+                  >
+                    Marcar todas ({empresas.length})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllCreateEmpresas}
+                    disabled={(createForm.empresas || []).length === 0}
+                    className="h-6 text-[10px] px-2 bg-white hover:bg-slate-100 text-slate-600 border-slate-200"
+                  >
+                    Desmarcar todas
+                  </Button>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto space-y-1 bg-white p-2 rounded border border-blue-100">
+                  {empresas.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic p-2 text-center">
+                      Nenhuma empresa cadastrada
+                    </p>
+                  ) : (
+                    empresas.map((emp) => {
+                      const isSelected = (createForm.empresas || []).includes(emp.id)
+                      return (
+                        <label
+                          key={emp.id}
+                          className={`flex items-start gap-2.5 p-1.5 rounded cursor-pointer transition-colors text-xs ${
+                            isSelected
+                              ? 'bg-blue-50/80 text-blue-950 font-medium'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleCreateEmpresa(emp.id)}
+                            className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium">
+                              {emp.nome_fantasia || emp.nome}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              {emp.cnpj}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
               </div>
             )}
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -1045,26 +1158,79 @@ export default function AdminUsuarios() {
             </div>
 
             {editForm.role !== 'admin' && (
-              <div className="space-y-1.5 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
-                <Label className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
-                  <Building2 className="w-4 h-4 text-blue-600" />
-                  Empresa Vinculada *
-                </Label>
-                <Select
-                  value={editForm.empresa}
-                  onValueChange={(val) => setEditForm({ ...editForm, empresa: val })}
-                >
-                  <SelectTrigger className="text-xs bg-white">
-                    <SelectValue placeholder="Selecione a empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {empresas.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                        {emp.nome_fantasia || emp.nome} ({emp.cnpj})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-blue-900 flex items-center gap-1.5">
+                    <Building2 className="w-4 h-4 text-blue-600" />
+                    Empresas Vinculadas *
+                  </Label>
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-[10px] font-bold px-1.5 py-0">
+                    {(editForm.empresas || []).length} selecionada(s)
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-blue-700/80">
+                  Marque ou desmarque as empresas às quais o usuário tem acesso. Usuários vinculados
+                  a múltiplas empresas podem alternar entre elas no topo do sistema.
+                </p>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllEditEmpresas}
+                    className="h-6 text-[10px] px-2 bg-white hover:bg-blue-50 text-blue-700 border-blue-200"
+                  >
+                    Marcar todas ({empresas.length})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={clearAllEditEmpresas}
+                    disabled={(editForm.empresas || []).length === 0}
+                    className="h-6 text-[10px] px-2 bg-white hover:bg-slate-100 text-slate-600 border-slate-200"
+                  >
+                    Desmarcar todas
+                  </Button>
+                </div>
+
+                <div className="max-h-48 overflow-y-auto space-y-1 bg-white p-2 rounded border border-blue-100">
+                  {empresas.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic p-2 text-center">
+                      Nenhuma empresa cadastrada
+                    </p>
+                  ) : (
+                    empresas.map((emp) => {
+                      const isSelected = (editForm.empresas || []).includes(emp.id)
+                      return (
+                        <label
+                          key={emp.id}
+                          className={`flex items-start gap-2.5 p-1.5 rounded cursor-pointer transition-colors text-xs ${
+                            isSelected
+                              ? 'bg-blue-50/80 text-blue-950 font-medium'
+                              : 'hover:bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleEditEmpresa(emp.id)}
+                            className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-medium">
+                              {emp.nome_fantasia || emp.nome}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              {emp.cnpj}
+                            </div>
+                          </div>
+                        </label>
+                      )
+                    })
+                  )}
+                </div>
               </div>
             )}
             <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">

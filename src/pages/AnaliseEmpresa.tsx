@@ -29,6 +29,7 @@ import {
   formatPercent,
   formatCnpj,
 } from '@/lib/financeCalculations'
+import { useAuth } from '@/contexts/AuthContext'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'

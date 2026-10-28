@@ -209,10 +209,6 @@ export default function Empresas() {
   const { toast } = useToast()
   const navigate = useNavigate()
 
-  if (user?.role === 'cliente') {
-    return <Navigate to="/analise-economica-financeira" replace />
-  }
-
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [listaSetores, setListaSetores] = useState<SetorRecord[]>([])
@@ -502,6 +498,10 @@ export default function Empresas() {
       (emp.estado || '').toLowerCase().includes(q)
     )
   })
+
+  if (user?.role === 'cliente') {
+    return <Navigate to="/analise-economica-financeira" replace />
+  }
 
   return (
     <div className="space-y-4 animate-fadeIn pb-6">
