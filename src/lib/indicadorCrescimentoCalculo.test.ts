@@ -5,6 +5,7 @@ import {
   extrairCenarioBaseDre,
   gerarResumoExecutivoCrescimento,
   calcularSimulacaoContasVariaveis,
+  calcularSimulacaoContaUnica,
   type CenarioBaseDre,
   type ParametrosSimulacaoCrescimento,
 } from './indicadorCrescimentoCalculo'
@@ -537,6 +538,83 @@ describe('Indicador de Crescimento - Motor de Simulação', () => {
       expect(res.economiaTotalReais).toBe(6500)
       expect(res.despesasVariaveisSimuladasTotal).toBe(33500)
       expect(res.resultadoGeral.cenarioSimulado.lucroPrejuizo).toBe(131500) // 125000 + 6500
+    })
+  })
+
+  describe('calcularSimulacaoContaUnica (Simulação Isolada para Detalhe da Conta)', () => {
+    const cenarioBase: CenarioBaseDre = {
+      faturamento: 100000,
+      despesasVariaveis: 20000,
+      despesasFixas: 30000,
+      despesasFinanceiras: 5000,
+      receitasFinanceiras: 0,
+      resultadoFinanceiroLiquido: -5000,
+      totalDespesas: 55000,
+      lucroPrejuizo: 45000,
+      margemLiquidaPct: 45,
+      margemContribuicaoReais: 80000,
+      margemContribuicaoPct: 80,
+      percentualVariaveisSobreFat: 20,
+      percentualFixasSobreFat: 30,
+      temDados: true,
+    }
+
+    it('deve simular redução de -10% em uma despesa fixa aumentando lucro em R$ 1.000', () => {
+      const conta = {
+        id: 'c-aluguel',
+        nome: 'Aluguel do Escritório',
+        codigo: '4.2.01',
+        classificacao: 'Despesa Fixa',
+        totalOriginal: 10000,
+      }
+
+      const res = calcularSimulacaoContaUnica(cenarioBase, conta, -10)
+
+      expect(res.percentual).toBe(-10)
+      expect(res.valorOriginal).toBe(10000)
+      expect(res.valorSimulado).toBe(9000)
+      expect(res.deltaEconomia).toBe(1000)
+      expect(res.novoLucroLiquido).toBe(46000)
+      expect(res.deltaLucroReais).toBe(1000)
+      expect(res.novaMargemLiquidaPct).toBe(46) // 46.000 / 100.000 * 100
+      expect(res.novaMargemContribuicaoPct).toBe(80) // fixas não afetam MC
+    })
+
+    it('deve simular redução de -15% em uma despesa variável aumentando lucro e MC', () => {
+      const conta = {
+        id: 'c-frete',
+        nome: 'Frete Terceirizado',
+        codigo: '4.1.05',
+        classificacao: 'Despesa Variável',
+        totalOriginal: 8000,
+      }
+
+      const res = calcularSimulacaoContaUnica(cenarioBase, conta, -15)
+
+      expect(res.percentual).toBe(-15)
+      expect(res.valorSimulado).toBe(6800)
+      expect(res.deltaEconomia).toBe(1200)
+      expect(res.novoLucroLiquido).toBe(46200)
+      expect(res.deltaLucroReais).toBe(1200)
+      expect(res.cenarioSimulado.despesasVariaveis).toBe(18800)
+      expect(res.novaMargemContribuicaoPct).toBe(81.2) // (100k - 18.8k) / 100k = 81.2%
+    })
+
+    it('deve simular aumento de +20% em despesa gerando impacto negativo no lucro', () => {
+      const conta = {
+        id: 'c-energia',
+        nome: 'Energia Elétrica',
+        codigo: '4.2.05',
+        classificacao: 'Despesa Fixa',
+        totalOriginal: 5000,
+      }
+
+      const res = calcularSimulacaoContaUnica(cenarioBase, conta, 20)
+
+      expect(res.valorSimulado).toBe(6000)
+      expect(res.deltaEconomia).toBe(-1000)
+      expect(res.novoLucroLiquido).toBe(44000)
+      expect(res.deltaLucroReais).toBe(-1000)
     })
   })
 })

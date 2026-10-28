@@ -19,6 +19,12 @@ import {
   DollarSign,
   AlertCircle,
   HelpCircle,
+  Calculator,
+  RotateCcw,
+  Sparkles,
+  ShieldCheck,
+  Check,
+  Percent,
 } from 'lucide-react'
 import {
   ResponsiveContainer,
@@ -36,6 +42,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
 import {
   Select,
   SelectContent,
@@ -49,6 +56,14 @@ import { useFilter } from '@/contexts/FilterContext'
 import { lancamentosService, contasService, planoContasService } from '@/services/financeService'
 import { LancamentoRecord, ContaRecord, PlanoContaRecord } from '@/types/finance'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import {
+  extrairCenarioBaseDre,
+  calcularSimulacaoContaUnica,
+  type CenarioBaseDre,
+  type ResultadoSimulacaoContaUnica,
+} from '@/lib/indicadorCrescimentoCalculo'
+import { gerarListaMeses } from '@/lib/dreGerencialTypes'
+import { obterClassificacaoDreConta } from '@/lib/dreClassificacaoHeuristica'
 
 function formatBrl(val: number | undefined | null): string {
   if (val === undefined || val === null || isNaN(val)) return 'R$ 0,00'
@@ -119,6 +134,7 @@ interface PontoMensal {
   valor: number
   indice: number
   tendencia?: number
+  valorSimulado?: number
   qtdLancamentos: number
 }
 
@@ -155,6 +171,12 @@ export default function ContaDetalheGerencial() {
   const [contaObj, setContaObj] = useState<ContaRecord | null>(null)
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
+  const [todosLancamentosBase, setTodosLancamentosBase] = useState<LancamentoRecord[]>([])
+  const [todasContasBase, setTodasContasBase] = useState<ContaRecord[]>([])
+
+  // Estado do Simulador por Conta Contábil (-50% a +50%)
+  const [percentualSimulado, setPercentualSimulado] = useState<number>(0)
+  const [percentualInput, setPercentualInput] = useState<string>('0')
 
   // Filtros internos da tela
   const [filtroTexto, setFiltroTexto] = useState('')
@@ -218,6 +240,8 @@ export default function ContaDetalheGerencial() {
 
         setContaObj(contaEncontrada)
         setPlanoContas(listaPlanos)
+        setTodasContasBase(listaContas)
+        setTodosLancamentosBase(listaLancamentos)
 
         // Filtra lançamentos que pertençam a esta conta (ou código) e às empresas do escopo
         const contaIdAlvo = contaEncontrada?.id || paramContaId
@@ -409,6 +433,113 @@ export default function ContaDetalheGerencial() {
     })
   }, [lancamentosFormatados, filtroAno, filtroCentro, filtroTipoDespesa, filtroTexto])
 
+  // Determina a classificação contábil efetiva da conta para cálculo do DRE
+  const classificacaoConta = useMemo(() => {
+    if (contaObj) {
+      return obterClassificacaoDreConta(contaObj)
+    }
+    // Caso ainda não tenha o objeto conta carregado, usa objeto mínimo compatível
+    const contaMinima = {
+      id: paramContaId || 'temp',
+      user: '',
+      collectionId: 'contas',
+      collectionName: 'contas',
+      codigo: paramCodigo || '',
+      nome: paramCodigo || 'Conta',
+      tipo: 'Despesa' as const,
+      grupo: '',
+      created: '',
+      updated: '',
+    }
+    return obterClassificacaoDreConta(contaMinima as ContaRecord)
+  }, [contaObj, paramContaId, paramCodigo])
+
+  // Identifica o ano base para a simulação DRE (usa o ano do parâmetro se fornecido, senão o ano mais recente dos lançamentos ou o atual)
+  const anoSimulacaoDre = useMemo(() => {
+    if (paramAno && !isNaN(Number(paramAno))) {
+      return Number(paramAno)
+    }
+    if (anosDisponiveis.length > 0) {
+      return anosDisponiveis[0]
+    }
+    return new Date().getFullYear()
+  }, [paramAno, anosDisponiveis])
+
+  // Cenario Base DRE extraído dos lançamentos e contas da empresa ativa (12 meses do ano)
+  const cenarioBaseDre: CenarioBaseDre = useMemo(() => {
+    const mesesAno = gerarListaMeses(anoSimulacaoDre, 1, 12)
+    return extrairCenarioBaseDre(todosLancamentosBase, todasContasBase, mesesAno, planoContas)
+  }, [todosLancamentosBase, todasContasBase, planoContas, anoSimulacaoDre])
+
+  // Total da conta no ano da simulação (ou total acumulado se nenhum ano específico selecionado)
+  const totalContaAnoSimulacao = useMemo(() => {
+    const mesesAnoItens = gerarListaMeses(anoSimulacaoDre, 1, 12)
+    const mesesAnoSet = new Set(mesesAnoItens.map((m) => m.chave))
+    let somaAno = 0
+    let somaTotal = 0
+    lancamentosFormatados.forEach((l) => {
+      somaTotal += l.valor
+      if (mesesAnoSet.has(l.mesAnoChave)) {
+        somaAno += l.valor
+      }
+    })
+    // Se no ano não houver lançamentos mas houver total acumulado na conta, usa o total acumulado como base
+    if (somaAno === 0 && somaTotal > 0) {
+      return somaTotal
+    }
+    return somaAno
+  }, [lancamentosFormatados, anoSimulacaoDre])
+
+  // Cálculo da simulação isolada para a conta atual
+  const resultadoSimulacao: ResultadoSimulacaoContaUnica = useMemo(() => {
+    return calcularSimulacaoContaUnica(
+      cenarioBaseDre,
+      {
+        id: contaObj?.id || paramContaId || paramCodigo,
+        nome: contaObj?.nome || paramCodigo || 'Conta Contábil',
+        codigo: contaObj?.codigo || paramCodigo,
+        classificacao: classificacaoConta,
+        totalOriginal: totalContaAnoSimulacao,
+      },
+      percentualSimulado,
+    )
+  }, [
+    cenarioBaseDre,
+    contaObj,
+    paramContaId,
+    paramCodigo,
+    classificacaoConta,
+    totalContaAnoSimulacao,
+    percentualSimulado,
+  ])
+
+  // Handlers para o Simulador
+  const handlePercentualSliderChange = (valores: number[]) => {
+    const v = valores[0] ?? 0
+    setPercentualSimulado(v)
+    setPercentualInput(String(v))
+  }
+
+  const handlePercentualInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const valStr = e.target.value
+    setPercentualInput(valStr)
+    const num = parseFloat(valStr)
+    if (!isNaN(num)) {
+      const clamped = Math.max(-50, Math.min(50, num))
+      setPercentualSimulado(clamped)
+    }
+  }
+
+  const handleAplicarAtalho = (pct: number) => {
+    setPercentualSimulado(pct)
+    setPercentualInput(String(pct))
+  }
+
+  const handleLimparSimulacao = () => {
+    setPercentualSimulado(0)
+    setPercentualInput('0')
+  }
+
   // Agrupamento mensal para a série temporal (gráfico) — ordenado cronologicamente crescente
   const serieMensal = useMemo<PontoMensal[]>(() => {
     const mapaMeses = new Map<string, { valor: number; qtd: number; ano: number; mes: number }>()
@@ -468,13 +599,25 @@ export default function ContaDetalheGerencial() {
 
       pontos.forEach((p, idx) => {
         p.tendencia = Number((inclinacao * idx + intercepto).toFixed(2))
+        if (percentualSimulado !== 0) {
+          p.valorSimulado = Math.max(
+            0,
+            Number((p.valor * (1 + percentualSimulado / 100)).toFixed(2)),
+          )
+        }
       })
     } else if (n === 1) {
       pontos[0].tendencia = pontos[0].valor
+      if (percentualSimulado !== 0) {
+        pontos[0].valorSimulado = Math.max(
+          0,
+          Number((pontos[0].valor * (1 + percentualSimulado / 100)).toFixed(2)),
+        )
+      }
     }
 
     return pontos
-  }, [lancamentosFiltrados])
+  }, [lancamentosFiltrados, percentualSimulado])
 
   // Coeficiente angular e direção da tendência
   const dadosRegressao = useMemo(() => {
@@ -786,6 +929,291 @@ export default function ContaDetalheGerencial() {
         </div>
       </div>
 
+      {/* Painel do Simulador por Conta Contábil */}
+      <Card className="border-blue-200 bg-linear-to-r from-blue-50/70 via-indigo-50/40 to-slate-50/60 shadow-xs print:hidden">
+        <CardHeader className="p-4 pb-3 border-b border-blue-100/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 rounded-lg bg-blue-600 text-white shadow-xs">
+                <Calculator className="w-4 h-4" />
+              </span>
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                  Simulador de Cenário por Conta Contábil
+                  {percentualSimulado !== 0 ? (
+                    <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-bold text-[10px] gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-600" />
+                      Cenário Simulado (
+                      {percentualSimulado > 0
+                        ? `+${percentualSimulado}%`
+                        : `${percentualSimulado}%`}
+                      )
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="outline"
+                      className="text-slate-500 border-slate-300 font-normal text-[10px]"
+                    >
+                      Real (Sem Simulação)
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription className="text-xs text-slate-500">
+                  Simule variações de -50% a +50% nesta conta ({codigoContaExibicao} •{' '}
+                  {classificacaoConta}) e visualize em tempo real o novo valor, a economia em R$, o
+                  novo lucro líquido e as margens resultantes. É cenário puro: nenhum dado é gravado
+                  no banco.
+                </CardDescription>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {percentualSimulado !== 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleLimparSimulacao}
+                  className="h-7 text-xs gap-1 border-slate-300 text-slate-600 hover:text-slate-900 bg-white/80"
+                  title="Restaurar valores reais da conta"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  Limpar Simulação
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-4 space-y-4">
+          {/* Controles: Slider + Input numérico + Atalhos rápidos */}
+          <div className="bg-white p-3.5 rounded-xl border border-blue-100 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-1">
+                <span className="text-xs font-semibold text-slate-700 min-w-32">
+                  Variação Simulada:
+                </span>
+                <div className="flex-1 max-w-md px-2">
+                  <Slider
+                    value={[percentualSimulado]}
+                    min={-50}
+                    max={50}
+                    step={1}
+                    onValueChange={handlePercentualSliderChange}
+                    className="cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-400 mt-1 font-mono">
+                    <span>-50%</span>
+                    <span>-25%</span>
+                    <span className="text-slate-600 font-bold">0% (Real)</span>
+                    <span>+25%</span>
+                    <span>+50%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Campo Numérico de % */}
+              <div className="flex items-center gap-2 self-start sm:self-auto">
+                <div className="relative w-24">
+                  <Input
+                    type="number"
+                    min={-50}
+                    max={50}
+                    step={0.5}
+                    value={percentualInput}
+                    onChange={handlePercentualInputChange}
+                    className="h-8 text-xs font-mono font-bold text-center pr-6 border-slate-300"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
+                    %
+                  </span>
+                </div>
+              </div>
+
+              {/* Botões rápidos de atalhos */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[11px] text-slate-500 font-medium mr-1">Atalhos:</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={percentualSimulado === -5 ? 'default' : 'outline'}
+                  onClick={() => handleAplicarAtalho(-5)}
+                  className={`h-7 px-2.5 text-xs font-mono font-bold ${
+                    percentualSimulado === -5
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'border-emerald-300 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100/60'
+                  }`}
+                >
+                  -5%
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={percentualSimulado === -10 ? 'default' : 'outline'}
+                  onClick={() => handleAplicarAtalho(-10)}
+                  className={`h-7 px-2.5 text-xs font-mono font-bold ${
+                    percentualSimulado === -10
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'border-emerald-300 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100/60'
+                  }`}
+                >
+                  -10%
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={percentualSimulado === -15 ? 'default' : 'outline'}
+                  onClick={() => handleAplicarAtalho(-15)}
+                  className={`h-7 px-2.5 text-xs font-mono font-bold ${
+                    percentualSimulado === -15
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                      : 'border-emerald-300 text-emerald-800 bg-emerald-50/50 hover:bg-emerald-100/60'
+                  }`}
+                >
+                  -15%
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Cards de Impacto em Tempo Real */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {/* 1. Valor da Conta: Real vs Simulado */}
+            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+              <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                Valor da Conta ({anoSimulacaoDre})
+              </span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span className="text-base font-black font-mono text-[#0B1F3A]">
+                  {formatBrl(resultadoSimulacao.valorSimulado)}
+                </span>
+                <span className="text-[11px] font-mono text-slate-500 line-through">
+                  {formatBrl(resultadoSimulacao.valorOriginal)}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {percentualSimulado === 0
+                  ? 'Valor original sem alteração'
+                  : `Variação simulada de ${percentualSimulado > 0 ? `+${percentualSimulado}%` : `${percentualSimulado}%`}`}
+              </p>
+            </div>
+
+            {/* 2. Impacto / Economia em R$ com Badge */}
+            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+              <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                Economia / Impacto em R$
+              </span>
+              <div className="mt-1 flex items-center justify-between">
+                <span
+                  className={`text-base font-black font-mono ${
+                    resultadoSimulacao.deltaEconomia > 0
+                      ? 'text-emerald-700'
+                      : resultadoSimulacao.deltaEconomia < 0
+                        ? 'text-rose-700'
+                        : 'text-slate-700'
+                  }`}
+                >
+                  {resultadoSimulacao.deltaEconomia > 0
+                    ? `+${formatBrl(resultadoSimulacao.deltaEconomia)}`
+                    : resultadoSimulacao.deltaEconomia < 0
+                      ? `-${formatBrl(Math.abs(resultadoSimulacao.deltaEconomia))}`
+                      : 'R$ 0,00'}
+                </span>
+                {resultadoSimulacao.deltaEconomia > 0 ? (
+                  <Badge className="bg-emerald-100 text-emerald-800 border-emerald-300 font-bold text-[10px] gap-1">
+                    <TrendingUp className="w-3 h-3 text-emerald-600" />
+                    Economia
+                  </Badge>
+                ) : resultadoSimulacao.deltaEconomia < 0 ? (
+                  <Badge className="bg-rose-100 text-rose-800 border-rose-300 font-bold text-[10px] gap-1">
+                    <TrendingDown className="w-3 h-3 text-rose-600" />
+                    Aumento Custo
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-slate-500 border-slate-300 text-[10px]">
+                    Neutro
+                  </Badge>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {resultadoSimulacao.deltaEconomia >= 0
+                  ? 'Ganho direto projetado no resultado'
+                  : 'Custo adicional sobre a base'}
+              </p>
+            </div>
+
+            {/* 3. Novo Lucro Líquido Projetado */}
+            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+              <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                Novo Lucro Líquido Projetado
+              </span>
+              <div className="flex items-baseline justify-between mt-1">
+                <span
+                  className={`text-base font-black font-mono ${
+                    resultadoSimulacao.novoLucroLiquido >= 0 ? 'text-[#0B1F3A]' : 'text-rose-700'
+                  }`}
+                >
+                  {formatBrl(resultadoSimulacao.novoLucroLiquido)}
+                </span>
+                {resultadoSimulacao.deltaLucroReais !== 0 && (
+                  <span
+                    className={`text-[11px] font-mono font-bold ${
+                      resultadoSimulacao.deltaLucroReais > 0 ? 'text-emerald-700' : 'text-rose-700'
+                    }`}
+                  >
+                    {resultadoSimulacao.deltaLucroReais > 0 ? '+' : ''}
+                    {formatBrl(resultadoSimulacao.deltaLucroReais)}
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                Lucro base {anoSimulacaoDre}: {formatBrl(cenarioBaseDre.lucroPrejuizo)}
+              </p>
+            </div>
+
+            {/* 4. Margens Resultantes: Líquida e de Contribuição */}
+            <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-2xs">
+              <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                Margens Resultantes
+              </span>
+              <div className="mt-1 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[10.5px] text-slate-500 block">Margem Líquida</span>
+                  <span className="font-mono font-black text-slate-900 text-sm">
+                    {resultadoSimulacao.novaMargemLiquidaPct !== null
+                      ? `${resultadoSimulacao.novaMargemLiquidaPct.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                  {cenarioBaseDre.margemLiquidaPct !== null &&
+                    resultadoSimulacao.novaMargemLiquidaPct !== null &&
+                    resultadoSimulacao.novaMargemLiquidaPct !== cenarioBaseDre.margemLiquidaPct && (
+                      <span className="text-[9.5px] text-slate-400 block">
+                        de {cenarioBaseDre.margemLiquidaPct.toFixed(1)}%
+                      </span>
+                    )}
+                </div>
+                <div className="text-right">
+                  <span className="text-[10.5px] text-slate-500 block">Margem Contribuição</span>
+                  <span className="font-mono font-black text-slate-900 text-sm">
+                    {resultadoSimulacao.novaMargemContribuicaoPct !== null
+                      ? `${resultadoSimulacao.novaMargemContribuicaoPct.toFixed(1)}%`
+                      : '—'}
+                  </span>
+                  {cenarioBaseDre.margemContribuicaoPct !== null &&
+                    resultadoSimulacao.novaMargemContribuicaoPct !== null &&
+                    resultadoSimulacao.novaMargemContribuicaoPct !==
+                      cenarioBaseDre.margemContribuicaoPct && (
+                      <span className="text-[9.5px] text-slate-400 block">
+                        de {cenarioBaseDre.margemContribuicaoPct.toFixed(1)}%
+                      </span>
+                    )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Cards de Resumo Executivo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {/* Card 1: Total Acumulado */}
@@ -932,11 +1360,18 @@ export default function ContaDetalheGerencial() {
               </CardDescription>
             </div>
 
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-3 text-xs flex-wrap">
               <span className="flex items-center gap-1 text-slate-600 font-medium">
-                <span className="w-3 h-3 rounded-xs bg-[#0B1F3A]" />
-                Lançamentos Mensais
+                <span className="w-3 h-3 rounded-xs bg-[#1E40AF]" />
+                Lançamentos Reais
               </span>
+              {percentualSimulado !== 0 && (
+                <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                  <span className="w-3 h-0.5 bg-emerald-600 border border-emerald-600" />
+                  Cenário Simulado (
+                  {percentualSimulado > 0 ? `+${percentualSimulado}%` : `${percentualSimulado}%`})
+                </span>
+              )}
               <span className="flex items-center gap-1 text-amber-700 font-medium">
                 <span className="w-3 h-0.5 bg-amber-500 border border-amber-500" />
                 Linha de Tendência
@@ -989,6 +1424,20 @@ export default function ContaDetalheGerencial() {
                               {formatBrl(item.valor)}
                             </span>
                           </div>
+                          {item.valorSimulado !== undefined && (
+                            <div className="flex justify-between gap-4">
+                              <span className="text-emerald-300">
+                                Simulado (
+                                {percentualSimulado > 0
+                                  ? `+${percentualSimulado}%`
+                                  : `${percentualSimulado}%`}
+                                ):
+                              </span>
+                              <span className="font-bold font-mono text-emerald-400">
+                                {formatBrl(item.valorSimulado)}
+                              </span>
+                            </div>
+                          )}
                           {item.tendencia !== undefined && (
                             <div className="flex justify-between gap-4">
                               <span className="text-slate-300">Tendência:</span>
@@ -1012,6 +1461,16 @@ export default function ContaDetalheGerencial() {
                     radius={[4, 4, 0, 0]}
                     maxBarSize={48}
                   />
+                  {percentualSimulado !== 0 && (
+                    <Line
+                      type="monotone"
+                      dataKey="valorSimulado"
+                      name="Valor Simulado"
+                      stroke="#059669"
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: '#059669' }}
+                    />
+                  )}
                   <Line
                     type="linear"
                     dataKey="tendencia"

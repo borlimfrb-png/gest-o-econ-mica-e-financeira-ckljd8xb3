@@ -499,6 +499,139 @@ export interface ResultadoSimuladorComContas {
   despesasVariaveisSimuladasTotal: number
 }
 
+export interface ResultadoSimulacaoContaUnica {
+  contaId: string
+  contaNome: string
+  contaCodigo?: string
+  classificacao:
+    | 'Despesa Variável'
+    | 'Despesa Fixa'
+    | 'Despesa Financeira'
+    | 'Receita'
+    | 'Receita Financeira'
+    | 'Outros'
+  valorOriginal: number
+  percentual: number
+  valorSimulado: number
+  deltaEconomia: number // positivo se redução de despesa, negativo se aumento (para receitas, positivo se aumento)
+  cenarioBase: CenarioBaseDre
+  cenarioSimulado: CenarioSimuladoResultado
+  novoLucroLiquido: number
+  deltaLucroReais: number
+  novaMargemLiquidaPct: number | null
+  novaMargemContribuicaoPct: number | null
+}
+
+/**
+ * Calcula a simulação de impacto para uma conta contábil única sobre o cenário base da DRE.
+ * Funciona para qualquer classificação da conta (Despesa Variável, Fixa, Financeira ou Receita),
+ * recalculando em tempo real o novo lucro projetado, nova despesa da conta, economia em R$ e margens.
+ */
+export function calcularSimulacaoContaUnica(
+  cenarioBase: CenarioBaseDre,
+  conta: {
+    id: string
+    nome: string
+    codigo?: string
+    classificacao?: string | null
+    totalOriginal: number
+  },
+  percentual: number,
+): ResultadoSimulacaoContaUnica {
+  const original = conta.totalOriginal || 0
+  const pct = Number.isFinite(percentual) ? percentual : 0
+  // Simulado da conta = original * (1 + pct / 100), mínimo 0
+  const valorSimulado = Math.max(0, original * (1 + pct / 100))
+  const deltaDiferenca = valorSimulado - original
+
+  const clf = conta.classificacao || 'Despesa Fixa'
+  const isReceita = clf === 'Receita' || clf === 'Receita Financeira'
+  // Para despesa, economia = original - simulado (positivo se reduziu despesa)
+  // Para receita, ganho = simulado - original (positivo se faturou mais)
+  const deltaEconomia = isReceita ? valorSimulado - original : original - valorSimulado
+
+  // Projeta o cenário DRE partindo do cenarioBase
+  let fatSimulado = cenarioBase.faturamento
+  let despVarSimulada = cenarioBase.despesasVariaveis
+  let despFixSimulada = cenarioBase.despesasFixas
+  let despFinSimulada = cenarioBase.despesasFinanceiras
+  let recFinSimulada = cenarioBase.receitasFinanceiras
+
+  if (clf === 'Receita') {
+    fatSimulado = Math.max(0, cenarioBase.faturamento + deltaDiferenca)
+  } else if (clf === 'Receita Financeira') {
+    recFinSimulada = Math.max(0, cenarioBase.receitasFinanceiras + deltaDiferenca)
+  } else if (clf === 'Despesa Variável') {
+    despVarSimulada = Math.max(0, cenarioBase.despesasVariaveis + deltaDiferenca)
+  } else if (clf === 'Despesa Financeira') {
+    despFinSimulada = Math.max(0, cenarioBase.despesasFinanceiras + deltaDiferenca)
+  } else {
+    // Default Despesa Fixa ou Outros
+    despFixSimulada = Math.max(0, cenarioBase.despesasFixas + deltaDiferenca)
+  }
+
+  const totalDespesas = despVarSimulada + despFixSimulada + despFinSimulada
+  const lucroSimulado =
+    fatSimulado - despVarSimulada - despFixSimulada - despFinSimulada + recFinSimulada
+
+  const margemContribuicaoReais = fatSimulado - despVarSimulada
+  const margemContribuicaoPct =
+    fatSimulado > 0 ? (margemContribuicaoReais / fatSimulado) * 100 : null
+  const margemLiquidaPct = fatSimulado > 0 ? (lucroSimulado / fatSimulado) * 100 : null
+
+  const finLiquidasSimuladas = despFinSimulada - recFinSimulada
+  const peInfo = calcularPontoEquilibrioSimulado(
+    fatSimulado,
+    despFixSimulada,
+    finLiquidasSimuladas,
+    margemContribuicaoPct,
+  )
+
+  const cenarioSimulado: CenarioSimuladoResultado = {
+    faturamento: fatSimulado,
+    despesasVariaveis: despVarSimulada,
+    despesasFixas: despFixSimulada,
+    despesasFinanceiras: despFinSimulada,
+    receitasFinanceiras: recFinSimulada,
+    totalDespesas,
+    lucroPrejuizo: lucroSimulado,
+    margemContribuicaoReais,
+    margemContribuicaoPct,
+    margemLiquidaPct,
+    pontoEquilibrioReais: peInfo.pontoEquilibrioReais,
+    margemSegurancaReais: peInfo.margemSegurancaReais,
+    margemSegurancaPct: peInfo.margemSegurancaPct,
+    quedaFaturamentoAteLucroZeroPct: peInfo.margemSegurancaPct,
+  }
+
+  const deltaLucroReais = lucroSimulado - cenarioBase.lucroPrejuizo
+
+  let clfNormalizada: ResultadoSimulacaoContaUnica['classificacao'] = 'Despesa Fixa'
+  if (clf === 'Receita') clfNormalizada = 'Receita'
+  else if (clf === 'Receita Financeira') clfNormalizada = 'Receita Financeira'
+  else if (clf === 'Despesa Variável') clfNormalizada = 'Despesa Variável'
+  else if (clf === 'Despesa Financeira') clfNormalizada = 'Despesa Financeira'
+  else if (clf === 'Despesa Fixa') clfNormalizada = 'Despesa Fixa'
+  else clfNormalizada = 'Outros'
+
+  return {
+    contaId: conta.id,
+    contaNome: conta.nome,
+    contaCodigo: conta.codigo,
+    classificacao: clfNormalizada,
+    valorOriginal: original,
+    percentual: pct,
+    valorSimulado,
+    deltaEconomia,
+    cenarioBase,
+    cenarioSimulado,
+    novoLucroLiquido: lucroSimulado,
+    deltaLucroReais,
+    novaMargemLiquidaPct: margemLiquidaPct,
+    novaMargemContribuicaoPct: margemContribuicaoPct,
+  }
+}
+
 /**
  * Calcula a simulação granular por conta de despesa variável:
  * para cada conta contábil, aplica o percentual definido de redução/aumento
