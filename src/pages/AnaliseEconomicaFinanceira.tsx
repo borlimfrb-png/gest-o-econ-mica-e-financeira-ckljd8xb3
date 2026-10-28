@@ -293,32 +293,7 @@ export default function AnaliseEconomicaFinanceira() {
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">
                   Empresa Ativa
                 </span>
-                {isCliente ? (
-                  empresas.length > 1 ? (
-                    <Select
-                      value={selectedEmpresaId}
-                      onValueChange={(id) => setSelectedEmpresaId(id)}
-                    >
-                      <SelectTrigger className="h-7 border border-white/20 bg-white/10 hover:bg-white/15 text-xs font-bold text-white p-2 mt-0.5 w-full focus:ring-1 focus:ring-sky-400 cursor-pointer">
-                        <SelectValue placeholder="Selecione a empresa" />
-                      </SelectTrigger>
-                      <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                        {empresas.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                            {emp.nome_fantasia || emp.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <span
-                      className="text-xs font-bold text-white truncate block max-w-[190px]"
-                      title={empresaNome}
-                    >
-                      {empresaNome}
-                    </span>
-                  )
-                ) : (
+                {empresas.length > 1 ? (
                   <Select
                     value={selectedEmpresaId}
                     onValueChange={(id) => setSelectedEmpresaId(id)}
@@ -327,12 +302,27 @@ export default function AnaliseEconomicaFinanceira() {
                       <SelectValue placeholder="Selecione a empresa" />
                     </SelectTrigger>
                     <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                      <SelectEmpresaOuGrupoItems
-                        todasEntidades={todasEntidades}
-                        empresas={empresas}
-                      />
+                      {isCliente ? (
+                        empresas.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                            {emp.nome_fantasia || emp.nome}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectEmpresaOuGrupoItems
+                          todasEntidades={todasEntidades}
+                          empresas={empresas}
+                        />
+                      )}
                     </SelectContent>
                   </Select>
+                ) : (
+                  <span
+                    className="text-xs font-bold text-white truncate block max-w-[190px]"
+                    title={empresaNome}
+                  >
+                    {empresaNome}
+                  </span>
                 )}
               </div>
             </div>

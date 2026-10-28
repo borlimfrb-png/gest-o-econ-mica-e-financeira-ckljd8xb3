@@ -300,7 +300,7 @@ export function VerticalSidebar({
               {/* Seletor Empresa */}
               <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-800 rounded-lg px-2.5 py-0.5 text-xs transition-colors">
                 <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                {isUserAdmin || (user?.role === 'cliente' && empresas.length > 1) ? (
+                {isUserAdmin || empresas.length > 1 ? (
                   <Select
                     value={selectedEmpresaId}
                     onValueChange={(id) => {

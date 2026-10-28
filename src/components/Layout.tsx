@@ -446,7 +446,7 @@ export default function Layout() {
                   {/* Seletor Empresa */}
                   <div className="flex items-center gap-1.5 bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-2.5 py-1 text-xs transition-colors">
                     <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                    {isUserAdmin || (user?.role === 'cliente' && empresas.length > 1) ? (
+                    {isUserAdmin || empresas.length > 1 ? (
                       <Select
                         value={selectedEmpresaId}
                         onValueChange={(id) => {
@@ -909,7 +909,7 @@ export default function Layout() {
               <div className="mt-3 space-y-1.5 shrink-0">
                 <div className="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-xl px-2.5 py-1 text-xs">
                   <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                  {isUserAdmin || (user?.role === 'cliente' && empresas.length > 1) ? (
+                  {isUserAdmin || empresas.length > 1 ? (
                     <Select
                       value={selectedEmpresaId}
                       onValueChange={(id) => {
@@ -1305,7 +1305,7 @@ export default function Layout() {
               {/* Seletor Empresa */}
               <div className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/90 rounded-lg px-2.5 py-0.5 text-xs transition-colors">
                 <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                {isUserAdmin || (user?.role === 'cliente' && empresas.length > 1) ? (
+                {isUserAdmin || empresas.length > 1 ? (
                   <Select
                     value={selectedEmpresaId}
                     onValueChange={(id) => {

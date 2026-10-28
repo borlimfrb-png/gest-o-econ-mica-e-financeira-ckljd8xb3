@@ -24,6 +24,35 @@ export interface AppUser extends AuthModel {
   }
 }
 
+export function extractUserEmpresasIds(user: AppUser | null | undefined): string[] {
+  if (!user) return []
+  const ids: string[] = []
+  if (Array.isArray(user.empresas)) {
+    for (const item of user.empresas) {
+      if (typeof item === 'string' && item) {
+        ids.push(item)
+      } else if (item && typeof item === 'object' && 'id' in item && (item as any).id) {
+        ids.push((item as any).id)
+      }
+    }
+  }
+  if (user.expand?.empresas && Array.isArray(user.expand.empresas)) {
+    for (const item of user.expand.empresas) {
+      if (item?.id && !ids.includes(item.id)) {
+        ids.push(item.id)
+      }
+    }
+  }
+  const legadoId = typeof user.empresa === 'string' ? user.empresa : (user.empresa as any)?.id
+  if (legadoId && !ids.includes(legadoId)) {
+    ids.push(legadoId)
+  }
+  if (user.expand?.empresa?.id && !ids.includes(user.expand.empresa.id)) {
+    ids.push(user.expand.empresa.id)
+  }
+  return Array.from(new Set(ids.filter(Boolean)))
+}
+
 interface AuthContextType {
   user: AppUser | null
   token: string | null
@@ -31,6 +60,7 @@ interface AuthContextType {
   isAuthenticated: boolean
   isAdmin: boolean
   empresaVinculadaId: string | null
+  userEmpresasIds: string[]
   login: (email: string, pass: string) => Promise<void>
   signup: (email: string, pass: string, name: string) => Promise<void>
   updateUser: (data: Partial<Record<string, any>>) => Promise<AuthModel>
@@ -157,13 +187,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const isAdmin = user?.role === 'admin'
-  const userEmpresas =
-    Array.isArray(user?.empresas) && user.empresas.length > 0
-      ? user.empresas.filter(Boolean)
-      : user?.empresa
-        ? [user.empresa]
-        : []
-  const empresaVinculadaId = !isAdmin && userEmpresas.length > 0 ? userEmpresas[0] : null
+  const userEmpresasIds = extractUserEmpresasIds(user)
+  // empresaVinculadaId é estritamente definida quando o usuário possui EXATAMENTE 1 empresa vinculada
+  const empresaVinculadaId = !isAdmin && userEmpresasIds.length === 1 ? userEmpresasIds[0] : null
 
   return (
     <AuthContext.Provider
@@ -174,6 +200,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAuthenticated: !!token && pb.authStore.isValid,
         isAdmin,
         empresaVinculadaId,
+        userEmpresasIds,
         login,
         signup,
         updateUser,

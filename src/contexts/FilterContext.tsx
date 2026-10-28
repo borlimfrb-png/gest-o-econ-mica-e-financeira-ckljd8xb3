@@ -33,23 +33,38 @@ interface FilterContextType {
 const FilterContext = createContext<FilterContextType | undefined>(undefined)
 
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAuthenticated, isAdmin, empresaVinculadaId, user } = useAuth()
+  const {
+    isAuthenticated,
+    isAdmin,
+    empresaVinculadaId,
+    user,
+    userEmpresasIds: authEmpresasIds,
+  } = useAuth()
 
   // Lista de IDs de empresas vinculadas ao usuário autenticado (suporte a multi-empresas e campo legado)
   const userEmpresasIds: string[] = React.useMemo(() => {
     if (isAdmin) return []
     const list: string[] = []
+    if (Array.isArray(authEmpresasIds) && authEmpresasIds.length > 0) {
+      list.push(...authEmpresasIds)
+    }
     if (Array.isArray(user?.empresas) && user.empresas.length > 0) {
       list.push(...user.empresas.filter(Boolean))
     }
+    if (user?.expand?.empresas && Array.isArray(user.expand.empresas)) {
+      list.push(...user.expand.empresas.map((e) => e?.id).filter(Boolean))
+    }
     if (user?.empresa && !list.includes(user.empresa)) {
       list.push(user.empresa)
+    }
+    if (user?.expand?.empresa?.id && !list.includes(user.expand.empresa.id)) {
+      list.push(user.expand.empresa.id)
     }
     if (empresaVinculadaId && !list.includes(empresaVinculadaId)) {
       list.push(empresaVinculadaId)
     }
     return Array.from(new Set(list))
-  }, [isAdmin, user?.empresas, user?.empresa, empresaVinculadaId])
+  }, [isAdmin, authEmpresasIds, user?.empresas, user?.expand, user?.empresa, empresaVinculadaId])
 
   const isCliente = user?.role === 'cliente'
 
