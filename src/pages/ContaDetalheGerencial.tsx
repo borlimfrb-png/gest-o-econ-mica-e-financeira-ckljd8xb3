@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -514,11 +514,14 @@ export default function ContaDetalheGerencial() {
   ])
 
   // Handlers para o Simulador
-  const handlePercentualSliderChange = (valores: number[]) => {
+  const handlePercentualSliderChange = useCallback((valores: number[]) => {
     const v = valores[0] ?? 0
-    setPercentualSimulado(v)
-    setPercentualInput(String(v))
-  }
+    setPercentualSimulado((prev) => {
+      if (prev === v) return prev
+      setPercentualInput(String(v))
+      return v
+    })
+  }, [])
 
   const handlePercentualInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const valStr = e.target.value
@@ -526,19 +529,22 @@ export default function ContaDetalheGerencial() {
     const num = parseFloat(valStr)
     if (!isNaN(num)) {
       const clamped = Math.max(-50, Math.min(50, num))
-      setPercentualSimulado(clamped)
+      setPercentualSimulado((prev) => (prev === clamped ? prev : clamped))
     }
   }
 
-  const handleAplicarAtalho = (pct: number) => {
+  const handleAplicarAtalho = useCallback((pct: number) => {
     setPercentualSimulado(pct)
     setPercentualInput(String(pct))
-  }
+  }, [])
 
-  const handleLimparSimulacao = () => {
+  const handleLimparSimulacao = useCallback(() => {
     setPercentualSimulado(0)
     setPercentualInput('0')
-  }
+  }, [])
+
+  // Array estável para o Slider value, evitando novas referências quando percentualSimulado não muda
+  const sliderValue = useMemo(() => [percentualSimulado], [percentualSimulado])
 
   // Agrupamento mensal para a série temporal (gráfico) — ordenado cronologicamente crescente
   const serieMensal = useMemo<PontoMensal[]>(() => {
@@ -995,7 +1001,7 @@ export default function ContaDetalheGerencial() {
                 </span>
                 <div className="flex-1 max-w-md px-2">
                   <Slider
-                    value={[percentualSimulado]}
+                    value={sliderValue}
                     min={-50}
                     max={50}
                     step={1}
