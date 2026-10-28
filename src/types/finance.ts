@@ -76,11 +76,13 @@ export interface UserRecord extends RecordModel {
   avatar?: string
   role?: UserRole
   empresa?: string
+  empresas?: string[]
   ativo?: boolean
   receber_alertas_email?: boolean
   notificacoes_vencimento?: boolean
   expand?: {
     empresa?: EmpresaRecord
+    empresas?: EmpresaRecord[]
   }
 }
 

@@ -79,6 +79,7 @@ export default function AdminUsuarios() {
     passwordConfirm: '',
     role: 'empresa' as UserRole,
     empresa: '',
+    empresas: [] as string[],
     ativo: true,
   })
   const [creating, setCreating] = useState(false)
@@ -89,6 +90,7 @@ export default function AdminUsuarios() {
     email: '',
     role: 'empresa' as UserRole,
     empresa: '',
+    empresas: [] as string[],
     ativo: true,
   })
   const [editing, setEditing] = useState(false)
@@ -126,6 +128,17 @@ export default function AdminUsuarios() {
     }
   }, [isAdmin])
 
+  // Retorna a lista normalizada de IDs de empresas de um usuário
+  const getUserEmpresasIds = (u: UserRecord): string[] => {
+    const list: string[] = []
+    if (Array.isArray(u.empresas) && u.empresas.length > 0) {
+      list.push(...u.empresas.filter(Boolean))
+    } else if (u.empresa) {
+      list.push(u.empresa)
+    }
+    return Array.from(new Set(list))
+  }
+
   // Filtragem de usuários
   const filteredUsers = useMemo(() => {
     return usuarios.filter((u) => {
@@ -135,7 +148,11 @@ export default function AdminUsuarios() {
 
       const matchRole = filterRole === 'todos' || (u.role || 'empresa') === filterRole
 
-      const matchEmpresa = filterEmpresa === 'todas' || u.empresa === filterEmpresa
+      const userEmpresas = getUserEmpresasIds(u)
+      const matchEmpresa =
+        filterEmpresa === 'todas' ||
+        u.empresa === filterEmpresa ||
+        userEmpresas.includes(filterEmpresa)
 
       return matchSearch && matchRole && matchEmpresa
     })
@@ -153,13 +170,15 @@ export default function AdminUsuarios() {
 
   // Handlers CRUD
   const handleOpenCreate = () => {
+    const defaultEmpresa = empresas.length > 0 ? empresas[0].id : ''
     setCreateForm({
       name: '',
       email: '',
       password: '',
       passwordConfirm: '',
       role: 'empresa',
-      empresa: empresas.length > 0 ? empresas[0].id : '',
+      empresa: defaultEmpresa,
+      empresas: defaultEmpresa ? [defaultEmpresa] : [],
       ativo: true,
     })
     setModalCreateOpen(true)
@@ -194,11 +213,18 @@ export default function AdminUsuarios() {
       return
     }
 
-    if (createForm.role !== 'admin' && !createForm.empresa) {
+    const empresasSelecionadas =
+      createForm.empresas && createForm.empresas.length > 0
+        ? createForm.empresas
+        : createForm.empresa
+          ? [createForm.empresa]
+          : []
+
+    if (createForm.role !== 'admin' && empresasSelecionadas.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Empresa obrigatória',
-        description: 'Selecione uma empresa para vincular o usuário.',
+        description: 'Selecione pelo menos uma empresa para vincular ao usuário.',
       })
       return
     }
@@ -207,7 +233,8 @@ export default function AdminUsuarios() {
     try {
       await usuariosService.create({
         ...createForm,
-        empresa: createForm.role !== 'admin' ? createForm.empresa : undefined,
+        empresa: createForm.role !== 'admin' ? empresasSelecionadas[0] : undefined,
+        empresas: createForm.role !== 'admin' ? empresasSelecionadas : [],
       })
       toast({
         title: 'Usuário cadastrado com sucesso!',
@@ -232,11 +259,13 @@ export default function AdminUsuarios() {
 
   const handleOpenEdit = (user: UserRecord) => {
     setSelectedUser(user)
+    const empresasIds = getUserEmpresasIds(user)
     setEditForm({
       name: user.name || '',
       email: user.email || '',
       role: (user.role as UserRole) || 'empresa',
-      empresa: user.empresa || (empresas.length > 0 ? empresas[0].id : ''),
+      empresa: empresasIds[0] || user.empresa || '',
+      empresas: empresasIds,
       ativo: user.ativo !== false,
     })
     setModalEditOpen(true)
@@ -255,11 +284,18 @@ export default function AdminUsuarios() {
       return
     }
 
-    if (editForm.role !== 'admin' && !editForm.empresa) {
+    const empresasSelecionadas =
+      editForm.empresas && editForm.empresas.length > 0
+        ? editForm.empresas
+        : editForm.empresa
+          ? [editForm.empresa]
+          : []
+
+    if (editForm.role !== 'admin' && empresasSelecionadas.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Empresa obrigatória',
-        description: 'Selecione uma empresa para este usuário.',
+        description: 'Selecione pelo menos uma empresa para este usuário.',
       })
       return
     }
@@ -270,7 +306,8 @@ export default function AdminUsuarios() {
         name: editForm.name,
         email: editForm.email,
         role: editForm.role,
-        empresa: editForm.role !== 'admin' ? editForm.empresa : null,
+        empresa: editForm.role !== 'admin' ? empresasSelecionadas[0] : null,
+        empresas: editForm.role !== 'admin' ? empresasSelecionadas : [],
         ativo: editForm.ativo,
       })
       toast({
@@ -407,6 +444,60 @@ export default function AdminUsuarios() {
     if (!empresaId) return 'Nenhuma (Acesso Global)'
     const emp = empresas.find((e) => e.id === empresaId)
     return emp ? emp.nome_fantasia || emp.nome : 'Empresa não encontrada'
+  }
+
+  const renderEmpresasBadges = (u: UserRecord) => {
+    if (u.role === 'admin') {
+      return <span className="text-slate-500 font-medium italic">Todas as Empresas (Global)</span>
+    }
+
+    const ids = getUserEmpresasIds(u)
+    if (ids.length === 0) {
+      return <span className="text-amber-600 font-medium italic">Nenhuma empresa vinculada</span>
+    }
+
+    const empresasVinculadas = ids
+      .map((id) => empresas.find((e) => e.id === id))
+      .filter(Boolean) as EmpresaRecord[]
+
+    if (empresasVinculadas.length === 1) {
+      const emp = empresasVinculadas[0]
+      return (
+        <div className="flex items-center gap-1.5 text-slate-800 font-medium">
+          <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+          <span className="truncate max-w-[240px]">{emp.nome_fantasia || emp.nome}</span>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-col gap-1 max-w-[280px]">
+        <div className="flex items-center gap-1.5">
+          <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200 text-[10px] font-bold px-1.5 py-0">
+            {empresasVinculadas.length} empresas
+          </Badge>
+          <span className="text-[11px] font-semibold text-slate-700 truncate">
+            {empresasVinculadas[0]?.nome_fantasia || empresasVinculadas[0]?.nome}
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {empresasVinculadas.slice(1, 4).map((emp) => (
+            <span
+              key={emp.id}
+              className="text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 truncate max-w-[130px]"
+              title={emp.nome_fantasia || emp.nome}
+            >
+              {emp.nome_fantasia || emp.nome}
+            </span>
+          ))}
+          {empresasVinculadas.length > 4 && (
+            <span className="text-[10px] text-slate-500 font-medium self-center">
+              +{empresasVinculadas.length - 4} mais
+            </span>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -694,20 +785,7 @@ export default function AdminUsuarios() {
                         })()}
                       </td>
 
-                      <td className="py-3 px-4">
-                        {isUserAdmin ? (
-                          <span className="text-slate-500 font-medium italic">
-                            Todas as Empresas (Global)
-                          </span>
-                        ) : (
-                          <div className="flex items-center gap-1.5 text-slate-800 font-medium">
-                            <Building2 className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                            <span className="truncate max-w-[240px]">
-                              {getEmpresaNome(u.empresa)}
-                            </span>
-                          </div>
-                        )}
-                      </td>
+                      <td className="py-3 px-4">{renderEmpresasBadges(u)}</td>
 
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">

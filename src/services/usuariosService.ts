@@ -9,6 +9,7 @@ export interface CreateUserInput {
   passwordConfirm: string
   role: UserRole
   empresa?: string
+  empresas?: string[]
   ativo?: boolean
 }
 
@@ -17,6 +18,7 @@ export interface UpdateUserInput {
   email?: string
   role?: UserRole
   empresa?: string | null
+  empresas?: string[]
   ativo?: boolean
   password?: string
   passwordConfirm?: string
@@ -26,17 +28,20 @@ export const usuariosService = {
   async getAll(): Promise<UserRecord[]> {
     return await pb.collection('users').getFullList<UserRecord>({
       sort: '-created',
-      expand: 'empresa',
+      expand: 'empresa,empresas',
     })
   },
 
   async getById(id: string): Promise<UserRecord> {
     return await pb.collection('users').getOne<UserRecord>(id, {
-      expand: 'empresa',
+      expand: 'empresa,empresas',
     })
   },
 
   async create(data: CreateUserInput): Promise<UserRecord> {
+    const empresasIds =
+      data.empresas && data.empresas.length > 0 ? data.empresas : data.empresa ? [data.empresa] : []
+
     const payload: Record<string, any> = {
       name: data.name.trim(),
       email: data.email.trim(),
@@ -44,15 +49,16 @@ export const usuariosService = {
       passwordConfirm: data.passwordConfirm,
       role: data.role || 'empresa',
       empresa:
-        data.role === 'empresa' || data.role === 'financeiro' || data.role === 'comercial'
-          ? data.empresa || undefined
-          : undefined,
+        data.role === 'admin'
+          ? undefined
+          : data.empresa || (empresasIds.length > 0 ? empresasIds[0] : undefined),
+      empresas: data.role === 'admin' ? [] : empresasIds,
       ativo: data.ativo ?? true,
       emailVisibility: true,
     }
 
     const record = await pb.collection('users').create<UserRecord>(payload, {
-      expand: 'empresa',
+      expand: 'empresa,empresas',
     })
 
     auditoriaCadastrosService
@@ -92,10 +98,21 @@ export const usuariosService = {
       payload.role = data.role
       if (data.role === 'admin') {
         payload.empresa = null
+        payload.empresas = []
       }
     }
-    if (data.empresa !== undefined) {
+    if (data.empresas !== undefined) {
+      payload.empresas = data.empresas
+      if (data.empresa !== undefined) {
+        payload.empresa = data.empresa || null
+      } else if (data.empresas.length > 0) {
+        payload.empresa = data.empresas[0]
+      } else {
+        payload.empresa = null
+      }
+    } else if (data.empresa !== undefined) {
       payload.empresa = data.empresa || null
+      payload.empresas = data.empresa ? [data.empresa] : []
     }
     if (data.ativo !== undefined) payload.ativo = data.ativo
     if (data.password && data.password.trim().length > 0) {
@@ -104,7 +121,7 @@ export const usuariosService = {
     }
 
     const record = await pb.collection('users').update<UserRecord>(id, payload, {
-      expand: 'empresa',
+      expand: 'empresa,empresas',
     })
 
     const camposAlterados: Record<string, { antes: any; depois: any }> = {}
