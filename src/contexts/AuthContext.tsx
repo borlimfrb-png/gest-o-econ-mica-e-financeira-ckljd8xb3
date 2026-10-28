@@ -143,7 +143,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Este usuário está desativado. Entre em contato com o administrador.')
     }
 
-    setUser(authData.record as AppUser)
+    let record = authData.record as AppUser
+    try {
+      record = await pb.collection('users').getOne<AppUser>(authData.record.id, {
+        expand: 'empresa,empresas',
+      })
+    } catch {
+      // mantém o record do auth como fallback
+    }
+
+    setUser(record)
     setToken(authData.token)
   }
 
