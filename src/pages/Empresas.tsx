@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, Navigate } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 import { empresasService, balancosService } from '@/services/financeService'
 import type {
   EmpresaRecord,
@@ -203,9 +204,14 @@ const PORTE_LABELS: Record<PorteEmpresa, { label: string; cls: string }> = {
 }
 
 export default function Empresas() {
+  const { user } = useAuth()
   const { reloadEmpresas, setSelectedEmpresaId } = useFilter()
   const { toast } = useToast()
   const navigate = useNavigate()
+
+  if (user?.role === 'cliente') {
+    return <Navigate to="/analise-economica-financeira" replace />
+  }
 
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])

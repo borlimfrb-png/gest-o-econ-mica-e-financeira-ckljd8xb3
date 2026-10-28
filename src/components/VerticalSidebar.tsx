@@ -298,9 +298,9 @@ export function VerticalSidebar({
           {!isCollapsed && (
             <div className="mt-2 space-y-1.5 pt-2 border-t border-white/10">
               {/* Seletor Empresa */}
-              <div className="flex items-center gap-1.5 bg-white/10 border border-white/15 rounded-xl px-2 py-1 text-xs">
-                <Building className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                {isUserAdmin ? (
+              <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-800 rounded-lg px-2.5 py-0.5 text-xs transition-colors">
+                <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                {isUserAdmin || (user?.role === 'cliente' && empresas.length > 1) ? (
                   <Select
                     value={selectedEmpresaId}
                     onValueChange={(id) => {
@@ -313,19 +313,27 @@ export function VerticalSidebar({
                       }
                     }}
                   >
-                    <SelectTrigger className="h-6 border-none shadow-none bg-transparent text-xs font-semibold text-white p-0 focus:ring-0 w-full cursor-pointer">
+                    <SelectTrigger className="h-6.5 border-none shadow-none bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 p-0 focus:ring-0 w-[170px] sm:w-[210px] cursor-pointer">
                       <SelectValue placeholder="Selecione a empresa" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                      <SelectEmpresaOuGrupoItems
-                        todasEntidades={todasEntidades}
-                        empresas={empresas}
-                      />
+                    <SelectContent>
+                      {user?.role === 'cliente' ? (
+                        empresas.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                            {emp.nome_fantasia || emp.nome}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectEmpresaOuGrupoItems
+                          todasEntidades={todasEntidades}
+                          empresas={empresas}
+                        />
+                      )}
                     </SelectContent>
                   </Select>
                 ) : (
                   <div
-                    className="flex items-center justify-between w-full py-0.5 text-xs font-semibold text-white truncate"
+                    className="flex items-center gap-1.5 py-0.5 text-xs font-semibold text-slate-800 dark:text-slate-200 max-w-[190px] truncate"
                     title={
                       empresas.find((e) => e.id === selectedEmpresaId)?.nome_fantasia ||
                       'Sua Empresa'
@@ -336,13 +344,12 @@ export function VerticalSidebar({
                         empresas.find((e) => e.id === selectedEmpresaId)?.nome ||
                         'Empresa Vinculada'}
                     </span>
-                    <span className="text-[9px] bg-white/20 text-blue-100 px-1 py-0.2 rounded font-normal shrink-0">
-                      Fixa
+                    <span className="text-[10px] bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 px-1 py-0.2 rounded font-normal">
+                      {user?.role === 'cliente' ? 'Cliente' : 'Fixa'}
                     </span>
                   </div>
                 )}
               </div>
-
               {/* Seletor Ano */}
               <div className="flex items-center justify-between bg-white/10 border border-white/15 rounded-xl px-2 py-1 text-xs">
                 <div className="flex items-center gap-1.5 text-slate-200">

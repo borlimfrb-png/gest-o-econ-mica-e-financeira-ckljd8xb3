@@ -99,6 +99,8 @@ import {
 export default function AnaliseEmpresa() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isCliente = user?.role === 'cliente'
   const [searchParams] = useSearchParams()
   const { toast } = useToast()
   const { setSelectedEmpresaId } = useFilter()
@@ -746,22 +748,26 @@ export default function AnaliseEmpresa() {
             </Select>
           </div>
 
-          <Button
-            onClick={() => setModalImportarBalanceteOpen(true)}
-            variant="outline"
-            className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 font-semibold text-xs h-9 shadow-xs gap-1.5"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
-            Importar Balancete
-          </Button>
+          {!isCliente && (
+            <>
+              <Button
+                onClick={() => setModalImportarBalanceteOpen(true)}
+                variant="outline"
+                className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 font-semibold text-xs h-9 shadow-xs gap-1.5"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-indigo-600" />
+                Importar Balancete
+              </Button>
 
-          <Button
-            onClick={openNovoLancamentoModal}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
-          >
-            <Plus className="w-4 h-4 mr-1.5" />
-            Novo Lançamento Mensal
-          </Button>
+              <Button
+                onClick={openNovoLancamentoModal}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Novo Lançamento Mensal
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -1215,20 +1221,22 @@ export default function AnaliseEmpresa() {
                 {anoAnterior}
               </p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                onClick={() =>
-                  openEditBalancoModal(selectedMes !== 'todos' ? Number(selectedMes) : 12)
-                }
-                size="sm"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
-              >
-                <Pencil className="w-3.5 h-3.5 mr-1.5" />
-                {selectedMes !== 'todos'
-                  ? `Editar Balanço (${NOMES_MESES_ABREV[Number(selectedMes) - 1]}/${selectedAno})`
-                  : `Editar Balanço (Dezembro/${selectedAno})`}
-              </Button>
-            </div>
+            {!isCliente && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  onClick={() =>
+                    openEditBalancoModal(selectedMes !== 'todos' ? Number(selectedMes) : 12)
+                  }
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
+                >
+                  <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                  {selectedMes !== 'todos'
+                    ? `Editar Balanço (${NOMES_MESES_ABREV[Number(selectedMes) - 1]}/${selectedAno})`
+                    : `Editar Balanço (Dezembro/${selectedAno})`}
+                </Button>
+              </div>
+            )}
           </div>
 
           <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
@@ -1817,16 +1825,18 @@ export default function AnaliseEmpresa() {
                 (AH%) vs {anoAnterior}
               </p>
             </div>
-            <Button
-              onClick={() => openEditDreModal(selectedMes !== 'todos' ? Number(selectedMes) : 12)}
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
-            >
-              <Pencil className="w-3.5 h-3.5 mr-1.5" />
-              {selectedMes !== 'todos'
-                ? `Editar DRE (${NOMES_MESES_ABREV[Number(selectedMes) - 1]}/${selectedAno})`
-                : `Editar DRE (Dezembro/${selectedAno})`}
-            </Button>
+            {!isCliente && (
+              <Button
+                onClick={() => openEditDreModal(selectedMes !== 'todos' ? Number(selectedMes) : 12)}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-8"
+              >
+                <Pencil className="w-3.5 h-3.5 mr-1.5" />
+                {selectedMes !== 'todos'
+                  ? `Editar DRE (${NOMES_MESES_ABREV[Number(selectedMes) - 1]}/${selectedAno})`
+                  : `Editar DRE (Dezembro/${selectedAno})`}
+              </Button>
+            )}
           </div>
 
           <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">

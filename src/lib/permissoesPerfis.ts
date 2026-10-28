@@ -180,7 +180,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     id: 'cliente',
     nome: 'Cliente',
     descricao:
-      'Acesso exclusivo à tela-hub Análise Econômica e Financeira, Balanço Patrimonial, DRE, Rentabilidade e análises gerenciais (Faturamento, Despesas Fixas e Variáveis).',
+      'Acesso exclusivo à tela-hub Análise Econômica e Financeira, Balanço Patrimonial, DRE, Rentabilidade e análises do hub.',
     badgeCor: 'bg-cyan-100 text-cyan-800 border-cyan-200',
     modulosPermitidos: [
       'analise_economica_financeira',

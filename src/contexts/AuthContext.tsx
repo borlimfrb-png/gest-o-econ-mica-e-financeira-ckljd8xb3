@@ -6,6 +6,7 @@ import type { UserRole } from '@/types/finance'
 export interface AppUser extends AuthModel {
   role?: UserRole
   empresa?: string
+  empresas?: string[]
   ativo?: boolean
   expand?: {
     empresa?: {
@@ -14,6 +15,12 @@ export interface AppUser extends AuthModel {
       nome_fantasia?: string
       cnpj: string
     }
+    empresas?: Array<{
+      id: string
+      nome: string
+      nome_fantasia?: string
+      cnpj: string
+    }>
   }
 }
 
@@ -42,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (pb.authStore.isValid && pb.authStore.record?.id) {
       try {
         const fullUser = await pb.collection('users').getOne<AppUser>(pb.authStore.record.id, {
-          expand: 'empresa',
+          expand: 'empresa,empresas',
         })
         setUser(fullUser)
         setToken(pb.authStore.token)
@@ -63,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Valida token atual
     if (pb.authStore.isValid) {
       pb.collection('users')
-        .authRefresh({ expand: 'empresa' })
+        .authRefresh({ expand: 'empresa,empresas' })
         .then((res) => {
           setUser(res.record as AppUser)
           setToken(pb.authStore.token)
@@ -93,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, pass: string) => {
     const authData = await pb.collection('users').authWithPassword(email.trim(), pass, {
-      expand: 'empresa',
+      expand: 'empresa,empresas',
     })
 
     // Checagem se o usuário está ativo
@@ -122,7 +129,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUser = async (data: Partial<Record<string, any>>) => {
     if (!pb.authStore.record?.id) throw new Error('Usuário não autenticado')
     const updated = await pb.collection('users').update(pb.authStore.record.id, data, {
-      expand: 'empresa',
+      expand: 'empresa,empresas',
     })
     setUser(updated as AppUser)
     return updated
@@ -150,7 +157,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const isAdmin = user?.role === 'admin'
-  const empresaVinculadaId = !isAdmin && user?.empresa ? user.empresa : null
+  const userEmpresas =
+    Array.isArray(user?.empresas) && user.empresas.length > 0
+      ? user.empresas.filter(Boolean)
+      : user?.empresa
+        ? [user.empresa]
+        : []
+  const empresaVinculadaId = !isAdmin && userEmpresas.length > 0 ? userEmpresas[0] : null
 
   return (
     <AuthContext.Provider

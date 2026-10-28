@@ -21,6 +21,14 @@ import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BorlimLogo } from '@/components/BorlimLogo'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
 
 interface HubShortcut {
   id: string
@@ -40,7 +48,14 @@ interface HubShortcut {
 export default function AnaliseEconomicaFinanceira() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { selectedEmpresa, selectedEmpresaId, selectedAno } = useFilter()
+  const {
+    empresas,
+    todasEntidades,
+    selectedEmpresa,
+    selectedEmpresaId,
+    setSelectedEmpresaId,
+    selectedAno,
+  } = useFilter()
   const isCliente = user?.role === 'cliente'
 
   const [verificandoDados, setVerificandoDados] = useState<boolean>(false)
@@ -274,16 +289,51 @@ export default function AnaliseEconomicaFinanceira() {
               <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-200 shrink-0">
                 <Building2 className="w-4 h-4" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">
                   Empresa Ativa
                 </span>
-                <span
-                  className="text-xs font-bold text-white truncate block max-w-[190px]"
-                  title={empresaNome}
-                >
-                  {empresaNome}
-                </span>
+                {isCliente ? (
+                  empresas.length > 1 ? (
+                    <Select
+                      value={selectedEmpresaId}
+                      onValueChange={(id) => setSelectedEmpresaId(id)}
+                    >
+                      <SelectTrigger className="h-7 border border-white/20 bg-white/10 hover:bg-white/15 text-xs font-bold text-white p-2 mt-0.5 w-full focus:ring-1 focus:ring-sky-400 cursor-pointer">
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
+                        {empresas.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                            {emp.nome_fantasia || emp.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span
+                      className="text-xs font-bold text-white truncate block max-w-[190px]"
+                      title={empresaNome}
+                    >
+                      {empresaNome}
+                    </span>
+                  )
+                ) : (
+                  <Select
+                    value={selectedEmpresaId}
+                    onValueChange={(id) => setSelectedEmpresaId(id)}
+                  >
+                    <SelectTrigger className="h-7 border border-white/20 bg-white/10 hover:bg-white/15 text-xs font-bold text-white p-2 mt-0.5 w-full focus:ring-1 focus:ring-sky-400 cursor-pointer">
+                      <SelectValue placeholder="Selecione a empresa" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
+                      <SelectEmpresaOuGrupoItems
+                        todasEntidades={todasEntidades}
+                        empresas={empresas}
+                      />
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
 

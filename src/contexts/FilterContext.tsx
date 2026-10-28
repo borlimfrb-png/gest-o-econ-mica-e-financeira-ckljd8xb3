@@ -35,11 +35,27 @@ const FilterContext = createContext<FilterContextType | undefined>(undefined)
 export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isAdmin, empresaVinculadaId, user } = useAuth()
 
-  // Se for usuário de empresa (não admin), garante filtragem estrita pela empresa vinculada
+  // Lista de IDs de empresas vinculadas ao usuário autenticado (suporte a multi-empresas e campo legado)
+  const userEmpresasIds: string[] = React.useMemo(() => {
+    if (isAdmin) return []
+    const list: string[] = []
+    if (Array.isArray(user?.empresas) && user.empresas.length > 0) {
+      list.push(...user.empresas.filter(Boolean))
+    }
+    if (user?.empresa && !list.includes(user.empresa)) {
+      list.push(user.empresa)
+    }
+    if (empresaVinculadaId && !list.includes(empresaVinculadaId)) {
+      list.push(empresaVinculadaId)
+    }
+    return Array.from(new Set(list))
+  }, [isAdmin, user?.empresas, user?.empresa, empresaVinculadaId])
+
+  const isCliente = user?.role === 'cliente'
+
+  // Para usuário não-admin com empresa única fixada
   const empresaFixada =
-    (!isAdmin && empresaVinculadaId) || (user?.role === 'cliente' && user?.empresa)
-      ? empresaVinculadaId || user?.empresa || null
-      : null
+    !isAdmin && !isCliente && userEmpresasIds.length === 1 ? userEmpresasIds[0] : null
 
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
@@ -67,33 +83,38 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         gruposEmpresariaisService.getAll().catch(() => [] as GrupoEmpresarialRecord[]),
       ])
 
-      // Se for usuário de empresa (não admin), garante filtragem estrita pela empresa vinculada
       let empresasFiltradas = listEmpresas
       let gruposFiltrados = listGrupos
 
-      if (empresaFixada) {
-        empresasFiltradas = listEmpresas.filter((e) => e.id === empresaFixada)
-        // Grupos que contenham a empresa do usuário
-        gruposFiltrados = listGrupos.filter((g) => (g.empresas || []).includes(empresaFixada))
+      // Se for perfil cliente: restringe ESTRITAMENTE às empresas vinculadas ao usuário autenticado, sem grupos
+      if (isCliente) {
+        empresasFiltradas = listEmpresas.filter((e) => userEmpresasIds.includes(e.id))
+        gruposFiltrados = []
+      } else if (!isAdmin && userEmpresasIds.length > 0) {
+        empresasFiltradas = listEmpresas.filter((e) => userEmpresasIds.includes(e.id))
+        gruposFiltrados = listGrupos.filter((g) =>
+          (g.empresas || []).some((empId) => userEmpresasIds.includes(empId)),
+        )
       }
 
       setEmpresas(empresasFiltradas)
       setGrupos(gruposFiltrados)
 
-      // Se usuário for comum/cliente e tiver empresa vinculada, pré-seleciona e fixa nela
-      if (empresaFixada) {
-        setSelectedEmpresaId(empresaFixada)
-      } else {
-        const todasEntidadesIds = [
-          ...empresasFiltradas.map((e) => e.id),
-          ...gruposFiltrados.map((g) => `grupo-${g.id}`),
-        ]
+      const todasEntidadesIds = [
+        ...empresasFiltradas.map((e) => e.id),
+        ...gruposFiltrados.map((g) => `grupo-${g.id}`),
+      ]
 
-        if (todasEntidadesIds.length > 0) {
-          if (!selectedEmpresaId || !todasEntidadesIds.includes(selectedEmpresaId)) {
-            setSelectedEmpresaId(todasEntidadesIds[0])
+      if (todasEntidadesIds.length > 0) {
+        // Se a empresa atualmente selecionada não pertencer à lista permitida, redefine
+        setSelectedEmpresaId((prevId) => {
+          if (prevId && todasEntidadesIds.includes(prevId)) {
+            return prevId
           }
-        }
+          return todasEntidadesIds[0]
+        })
+      } else {
+        setSelectedEmpresaId('')
       }
     } catch (err) {
       console.error('Erro ao carregar empresas e grupos:', err)
@@ -110,7 +131,15 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setGrupos([])
       setSelectedEmpresaId('')
     }
-  }, [isAuthenticated, isAdmin, empresaVinculadaId, user?.role, user?.empresa])
+  }, [
+    isAuthenticated,
+    isAdmin,
+    isCliente,
+    empresaVinculadaId,
+    user?.role,
+    user?.empresa,
+    JSON.stringify(user?.empresas || []),
+  ])
 
   // Realtime empresas
   useRealtime<EmpresaRecord>(
@@ -250,7 +279,9 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ? [selectedEmpresaId]
         : empresaFixada
           ? [empresaFixada]
-          : []
+          : isCliente && userEmpresasIds.length > 0
+            ? [userEmpresasIds[0]]
+            : []
 
   return (
     <FilterContext.Provider
@@ -260,11 +291,35 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         todasEntidades,
         selectedEmpresaId,
         setSelectedEmpresaId: (id: string) => {
-          // Se for usuário comum ou cliente, não permite trocar empresa para outra diferente da vinculada
+          // Se for perfil cliente: restringe a seleção estritamente às empresas do seu vínculo
+          if (isCliente) {
+            if (userEmpresasIds.includes(id)) {
+              setSelectedEmpresaId(id)
+            } else if (
+              userEmpresasIds.length > 0 &&
+              (!selectedEmpresaId || !userEmpresasIds.includes(selectedEmpresaId))
+            ) {
+              setSelectedEmpresaId(userEmpresasIds[0])
+            }
+            return
+          }
+
+          // Se for usuário com apenas uma empresa fixada, mantém ela
           if (empresaFixada) {
             setSelectedEmpresaId(empresaFixada)
             return
           }
+
+          // Se for usuário não-admin com empresas vinculadas, só permite as suas
+          if (!isAdmin && userEmpresasIds.length > 0) {
+            const isGrupoPermitido =
+              id.startsWith('grupo-') && grupos.some((g) => `grupo-${g.id}` === id)
+            if (userEmpresasIds.includes(id) || isGrupoPermitido) {
+              setSelectedEmpresaId(id)
+            }
+            return
+          }
+
           setSelectedEmpresaId(id)
         },
         selectedAno,
