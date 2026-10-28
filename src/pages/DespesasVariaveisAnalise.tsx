@@ -19,6 +19,15 @@ import {
   exportarDespesasVariaveisCsv,
   formatarPercentualExport,
 } from '@/lib/despesasVariaveisExport'
+import {
+  extrairLancamentosDespesasVariaveis,
+  agruparLancamentosPorCentroCusto,
+  calcularTotaisVariaveis,
+  type LancamentoVariavelItem,
+  type SubtotalCentroExport,
+} from '@/lib/lancamentosVariaveisHelper'
+import { PainelDespesasVariaveisCentros } from '@/components/PainelDespesasVariaveisCentros'
+import { ModalAjusteDespesaVariavel } from '@/components/ModalAjusteDespesaVariavel'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
@@ -98,6 +107,13 @@ export default function DespesasVariaveisAnalise() {
 
   // Modal para classificação em lote do plano de contas
   const [modalClassificacaoOpen, setModalClassificacaoOpen] = useState(false)
+
+  // Modal para ajuste de despesa variável individual
+  const [modalAjusteVarOpen, setModalAjusteVarOpen] = useState(false)
+  const [itemAjustando, setItemAjustando] = useState<LancamentoVariavelItem | null>(null)
+
+  // Filtro textual para busca nos lançamentos por centro
+  const [filtroTextoVar, setFiltroTextoVar] = useState('')
 
   // Filtros de período (sincronizado com seletor global, até 12 meses)
   const currentYear = selectedAno || new Date().getFullYear()
@@ -216,13 +232,81 @@ export default function DespesasVariaveisAnalise() {
     return calcularAnaliseDespesasVariaveis(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
 
+  // Lançamentos individuais de Despesas Variáveis extraídos para agrupamento e detalhamento
+  const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
+    const empresaIdFiltro =
+      selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : undefined
+    return extrairLancamentosDespesasVariaveis(lancamentos, contas, planoContas, {
+      empresaId: empresaIdFiltro,
+      ano: anoInicial,
+      mesesChaves: meses.map((m) => m.chave),
+    })
+  }, [lancamentos, contas, planoContas, selectedEmpresaId, anoInicial, meses])
+
+  // Lançamentos filtrados pela busca textual
+  const lancamentosVariaveisFiltrados = useMemo(() => {
+    if (!filtroTextoVar.trim()) return lancamentosVariaveis
+    const q = filtroTextoVar.toLowerCase()
+    return lancamentosVariaveis.filter(
+      (item) =>
+        (item.historico && item.historico.toLowerCase().includes(q)) ||
+        (item.contaNome && item.contaNome.toLowerCase().includes(q)) ||
+        (item.contaCodigo && item.contaCodigo.toLowerCase().includes(q)) ||
+        (item.centroNome && item.centroNome.toLowerCase().includes(q)) ||
+        (item.data && item.data.toLowerCase().includes(q)),
+    )
+  }, [lancamentosVariaveis, filtroTextoVar])
+
+  // Agrupamento por Centro de Custo com subtotais e lançamentos detalhados
+  const gruposPorCentroCusto = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
+
+  // Grupos completos sem filtro de busca (para exportação completa com todos os centros)
+  const gruposPorCentroCustoCompletos = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveis)
+  }, [lancamentosVariaveis])
+
+  const totaisVariaveisApurados = useMemo(() => {
+    return calcularTotaisVariaveis(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
+
+  // Subtotais por Centro de Custo para exportação Excel e CSV
+  const subtotaisCentrosExport = useMemo<SubtotalCentroExport[]>(() => {
+    return gruposPorCentroCustoCompletos.map((g) => ({
+      centroNome: g.centroNome,
+      quantidade: g.quantidade,
+      subtotal: g.subtotal,
+    }))
+  }, [gruposPorCentroCustoCompletos])
+
+  const empresaIdParaAjuste = useMemo(() => {
+    if (selectedEmpresa?.id) return selectedEmpresa.id
+    if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) return selectedEmpresaId
+    if (lancamentosVariaveis.length > 0) return lancamentosVariaveis[0].empresaId
+    return ''
+  }, [selectedEmpresa, selectedEmpresaId, lancamentosVariaveis])
+
+  const handleAbrirAjuste = (item: LancamentoVariavelItem) => {
+    if (isCliente) {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Ajuste de lançamentos é exclusivo da consultoria e administração.',
+      })
+      return
+    }
+    setItemAjustando(item)
+    setModalAjusteVarOpen(true)
+  }
+
   const handleImprimir = () => {
     window.print()
   }
 
   const handleExportarExcel = () => {
     try {
-      exportarDespesasVariaveisExcel(analise, selectedEmpresa, anoInicial)
+      exportarDespesasVariaveisExcel(analise, selectedEmpresa, anoInicial, subtotaisCentrosExport)
       toast({
         title: 'Despesas Variáveis Exportadas',
         description: 'Planilha Excel gerada com valores e percentuais de faturamento.',
@@ -238,7 +322,7 @@ export default function DespesasVariaveisAnalise() {
 
   const handleExportarCsv = () => {
     try {
-      exportarDespesasVariaveisCsv(analise, selectedEmpresa, anoInicial)
+      exportarDespesasVariaveisCsv(analise, selectedEmpresa, anoInicial, subtotaisCentrosExport)
       toast({
         title: 'Despesas Variáveis Exportadas',
         description: 'Arquivo CSV com delimitador brasileiro gerado com sucesso.',
@@ -1040,6 +1124,19 @@ export default function DespesasVariaveisAnalise() {
         </CardContent>
       </Card>
 
+      {/* ================= BLOCO DE DESPESAS VARIÁVEIS POR CENTRO DE CUSTO ================= */}
+      <div className="pt-2">
+        <PainelDespesasVariaveisCentros
+          grupos={gruposPorCentroCusto}
+          totalGeral={totaisVariaveisApurados.totalValor}
+          quantidadeTotal={totaisVariaveisApurados.quantidade}
+          filtroTexto={filtroTextoVar}
+          onFiltroTextoChange={setFiltroTextoVar}
+          onAjustarItem={handleAbrirAjuste}
+          isCliente={isCliente}
+        />
+      </div>
+
       {/* Bloco de Soma Geral Consolidada (Destaque ao Consultor) */}
       {analise.temDespesasVariaveis && (
         <Card className="bg-gradient-to-r from-[#0B1F3A] to-[#152e50] text-white border-none shadow-md overflow-hidden">
@@ -1141,6 +1238,20 @@ export default function DespesasVariaveisAnalise() {
         onOpenChange={setModalClassificacaoOpen}
         contas={contas}
         onSuccess={() => carregarDados()}
+      />
+
+      {/* Modal de Ajuste de Despesa Variável Individual */}
+      <ModalAjusteDespesaVariavel
+        open={modalAjusteVarOpen}
+        onOpenChange={setModalAjusteVarOpen}
+        item={itemAjustando}
+        contas={contas}
+        planoContas={planoContas}
+        empresaId={empresaIdParaAjuste}
+        anoContexto={anoInicial}
+        onAjustado={() => {
+          carregarDados()
+        }}
       />
 
       {/* Rodapé fixo na impressão / PDF A4 */}

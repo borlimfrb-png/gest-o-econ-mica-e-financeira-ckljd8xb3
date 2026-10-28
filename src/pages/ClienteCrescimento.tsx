@@ -12,6 +12,13 @@ import {
   calcularDeltaPercentual,
   type CenarioBaseDre,
 } from '@/lib/indicadorCrescimentoCalculo'
+import {
+  extrairLancamentosDespesasVariaveis,
+  agruparLancamentosPorCentroCusto,
+  calcularTotaisVariaveis,
+  type LancamentoVariavelItem,
+} from '@/lib/lancamentosVariaveisHelper'
+import { PainelDespesasVariaveisCentros } from '@/components/PainelDespesasVariaveisCentros'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { BorlimLogo } from '@/components/BorlimLogo'
@@ -145,6 +152,9 @@ export default function ClienteCrescimento() {
     'barras_linha' | 'comparativo_ano_anterior'
   >('barras_linha')
 
+  // Filtro de texto para despesas variáveis
+  const [filtroTextoVar, setFiltroTextoVar] = useState('')
+
   // Identificação da empresa vinculada ao cliente (sem seletor livre)
   const empresaIdAlvo =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
@@ -253,6 +263,37 @@ export default function ClienteCrescimento() {
   const cenarioBaseAnoAnterior: CenarioBaseDre = useMemo(() => {
     return extrairCenarioBaseDre(lancamentos, contas, mesesAnoAnterior, planoContas)
   }, [lancamentos, contas, mesesAnoAnterior, planoContas])
+
+  // Lançamentos individuais de Despesas Variáveis extraídos para a empresa vinculada
+  const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
+    return extrairLancamentosDespesasVariaveis(lancamentos, contas, planoContas, {
+      empresaId: empresaIdAlvo || undefined,
+      ano: anoInicial,
+      mesesChaves: meses.map((m) => m.chave),
+    })
+  }, [lancamentos, contas, planoContas, empresaIdAlvo, anoInicial, meses])
+
+  const lancamentosVariaveisFiltrados = useMemo(() => {
+    if (!filtroTextoVar.trim()) return lancamentosVariaveis
+    const q = filtroTextoVar.toLowerCase()
+    return lancamentosVariaveis.filter(
+      (item) =>
+        (item.historico && item.historico.toLowerCase().includes(q)) ||
+        (item.contaNome && item.contaNome.toLowerCase().includes(q)) ||
+        (item.contaCodigo && item.contaCodigo.toLowerCase().includes(q)) ||
+        (item.centroNome && item.centroNome.toLowerCase().includes(q)) ||
+        (item.data && item.data.toLowerCase().includes(q)),
+    )
+  }, [lancamentosVariaveis, filtroTextoVar])
+
+  // Agrupamento por Centro de Custo para visão do cliente
+  const gruposPorCentroCusto = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
+
+  const totaisVariaveisApurados = useMemo(() => {
+    return calcularTotaisVariaveis(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
 
   // 3) Cálculo mês a mês utilizando extração oficial para cada mês individual
   const itensPorMes = useMemo<ItemMesCrescimento[]>(() => {
@@ -1152,6 +1193,20 @@ export default function ClienteCrescimento() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ================= BLOCO DE DESPESAS VARIÁVEIS POR CENTRO DE CUSTO ================= */}
+      {temMovimentacao && (
+        <div className="pt-2">
+          <PainelDespesasVariaveisCentros
+            grupos={gruposPorCentroCusto}
+            totalGeral={totaisVariaveisApurados.totalValor}
+            quantidadeTotal={totaisVariaveisApurados.quantidade}
+            filtroTexto={filtroTextoVar}
+            onFiltroTextoChange={setFiltroTextoVar}
+            isCliente={true}
+          />
+        </div>
+      )}
 
       {/* Assinatura Borlim no final da página */}
       <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400 print:hidden">

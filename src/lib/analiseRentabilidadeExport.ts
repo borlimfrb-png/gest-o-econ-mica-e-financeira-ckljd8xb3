@@ -5,6 +5,7 @@ import type {
 } from './analiseRentabilidadeCalculo'
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
+import type { SubtotalCentroExport } from './lancamentosVariaveisHelper'
 
 export function formatarPercentualExport(val: number | null | undefined): string {
   if (val === null || val === undefined || !Number.isFinite(val)) {
@@ -114,6 +115,7 @@ export function exportarAnaliseRentabilidadeExcel(
   empresa?: EmpresaRecord | null,
   exercicioAno?: number,
   comparativo?: AnoRentabilidadeComparado[],
+  subtotaisCentros?: SubtotalCentroExport[],
 ) {
   const nomeEmpresa = empresa?.nome || 'Empresa'
   const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
@@ -155,6 +157,53 @@ export function exportarAnaliseRentabilidadeExcel(
     }
   } else {
     rows.push(...montarLinhasResultado(resultado))
+  }
+
+  // Bloco adicional: Despesas Variáveis por Centro de Custo (se informado)
+  if (subtotaisCentros && subtotaisCentros.length > 0) {
+    rows.push({ ...CABECALHO_PADRAO } as LinhaRentabilidade)
+    rows.push({
+      Mês: 'DESPESAS VARIÁVEIS POR CENTRO DE CUSTO (SUBTOTAIS)',
+      'Faturamento (Receita DRE)': 'Lançamentos',
+      'Despesas Variáveis': 'Subtotal (R$)',
+      'Despesas Fixas': '% do Total',
+      'Despesas Financeiras': '',
+      'Resultado Financeiro': '',
+      'Lucro Apurado (Resultado)': '',
+      'Margem Bruta (%)': '',
+      'Margem Operacional (%)': '',
+      'Margem Líquida s/ Faturamento (%)': '',
+    })
+
+    const totalCentros = subtotaisCentros.reduce((acc, c) => acc + c.subtotal, 0)
+    for (const sc of subtotaisCentros) {
+      const pctCentro = totalCentros > 0 ? (sc.subtotal / totalCentros) * 100 : 0
+      rows.push({
+        Mês: sc.centroNome,
+        'Faturamento (Receita DRE)': sc.quantidade,
+        'Despesas Variáveis': sc.subtotal,
+        'Despesas Fixas': `${pctCentro.toFixed(1)}%`,
+        'Despesas Financeiras': '',
+        'Resultado Financeiro': '',
+        'Lucro Apurado (Resultado)': '',
+        'Margem Bruta (%)': '',
+        'Margem Operacional (%)': '',
+        'Margem Líquida s/ Faturamento (%)': '',
+      })
+    }
+
+    rows.push({
+      Mês: 'TOTAL CONSOLIDADO DAS DESPESAS VARIÁVEIS',
+      'Faturamento (Receita DRE)': subtotaisCentros.reduce((acc, c) => acc + c.quantidade, 0),
+      'Despesas Variáveis': totalCentros,
+      'Despesas Fixas': '100.0%',
+      'Despesas Financeiras': '',
+      'Resultado Financeiro': '',
+      'Lucro Apurado (Resultado)': '',
+      'Margem Bruta (%)': '',
+      'Margem Operacional (%)': '',
+      'Margem Líquida s/ Faturamento (%)': '',
+    })
   }
 
   const ws = XLSX.utils.json_to_sheet(rows)
@@ -258,6 +307,7 @@ export function exportarAnaliseRentabilidadeCsv(
   empresa?: EmpresaRecord | null,
   exercicioAno?: number,
   comparativo?: AnoRentabilidadeComparado[],
+  subtotaisCentros?: SubtotalCentroExport[],
 ) {
   const nomeEmpresa = empresa?.nome || 'Empresa'
   const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
@@ -393,6 +443,42 @@ export function exportarAnaliseRentabilidadeCsv(
         formatarPercentualExport(resultado.margemBrutaTotal),
         formatarPercentualExport(resultado.margemOperacionalTotal),
         formatarPercentualExport(resultado.margemSobreFaturamentoTotal),
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+  }
+
+  // Bloco adicional: Despesas Variáveis por Centro de Custo (se informado)
+  if (subtotaisCentros && subtotaisCentros.length > 0) {
+    linhas.push('')
+    linhas.push(
+      ['Despesas Variáveis por Centro de Custo', 'Lançamentos', 'Subtotal (R$)', '% do Total']
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    const totalCentros = subtotaisCentros.reduce((acc, c) => acc + c.subtotal, 0)
+    for (const sc of subtotaisCentros) {
+      const pctCentro = totalCentros > 0 ? (sc.subtotal / totalCentros) * 100 : 0
+      linhas.push(
+        [
+          sc.centroNome,
+          String(sc.quantidade),
+          formatMoedaCsv(sc.subtotal),
+          `${pctCentro.toFixed(1)}%`,
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+
+    linhas.push(
+      [
+        'Total Consolidado das Despesas Variáveis',
+        String(subtotaisCentros.reduce((acc, c) => acc + c.quantidade, 0)),
+        formatMoedaCsv(totalCentros),
+        '100.0%',
       ]
         .map(escapeCsv)
         .join(';'),

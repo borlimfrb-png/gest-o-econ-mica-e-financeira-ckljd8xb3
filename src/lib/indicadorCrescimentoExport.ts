@@ -2,6 +2,8 @@ import * as XLSX from 'xlsx'
 import type { ResultadoSimuladorCrescimento } from './indicadorCrescimentoCalculo'
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
+import type { SubtotalCentroExport } from './lancamentosVariaveisHelper'
+export type { SubtotalCentroExport }
 
 export function formatarPercentualExport(val: number | null | undefined): string {
   if (val === null || val === undefined || !Number.isFinite(val)) {
@@ -13,15 +15,6 @@ export function formatarPercentualExport(val: number | null | undefined): string
 function formatMoedaCsv(v: number | undefined | null): string {
   if (v === undefined || v === null || !Number.isFinite(v)) return '0,00'
   return v.toFixed(2).replace('.', ',')
-}
-
-/**
- * Exporta a análise e simulação de crescimento para planilha Excel (.xlsx)
- */
-export interface SubtotalCentroExport {
-  centroNome: string
-  quantidade: number
-  subtotal: number
 }
 
 export function exportarIndicadorCrescimentoExcel(

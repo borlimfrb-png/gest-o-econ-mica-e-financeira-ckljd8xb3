@@ -17,6 +17,15 @@ import {
   exportarAnaliseRentabilidadeExcel,
   exportarAnaliseRentabilidadeCsv,
 } from '@/lib/analiseRentabilidadeExport'
+import {
+  extrairLancamentosDespesasVariaveis,
+  agruparLancamentosPorCentroCusto,
+  calcularTotaisVariaveis,
+  type LancamentoVariavelItem,
+  type SubtotalCentroExport,
+} from '@/lib/lancamentosVariaveisHelper'
+import { PainelDespesasVariaveisCentros } from '@/components/PainelDespesasVariaveisCentros'
+import { ModalAjusteDespesaVariavel } from '@/components/ModalAjusteDespesaVariavel'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
@@ -138,6 +147,13 @@ export default function AnaliseRentabilidade() {
 
   // Modal para classificação em lote do plano de contas
   const [modalClassificacaoOpen, setModalClassificacaoOpen] = useState(false)
+
+  // Modal para ajuste de despesa variável individual
+  const [modalAjusteVarOpen, setModalAjusteVarOpen] = useState(false)
+  const [itemAjustando, setItemAjustando] = useState<LancamentoVariavelItem | null>(null)
+
+  // Filtro de texto para despesas variáveis
+  const [filtroTextoVar, setFiltroTextoVar] = useState('')
 
   // Filtros de período (sincronizado com seletor global do exercício, até 12 meses)
   const currentYear = selectedAno || new Date().getFullYear()
@@ -285,6 +301,71 @@ export default function AnaliseRentabilidade() {
     return calcularAnaliseRentabilidade(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
 
+  // Lançamentos individuais de Despesas Variáveis para detalhamento por Centro de Custo
+  const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
+    const empresaIdFiltro =
+      selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : undefined
+    return extrairLancamentosDespesasVariaveis(lancamentos, contas, planoContas, {
+      empresaId: empresaIdFiltro,
+      ano: anoInicial,
+      mesesChaves: meses.map((m) => m.chave),
+    })
+  }, [lancamentos, contas, planoContas, selectedEmpresaId, anoInicial, meses])
+
+  const lancamentosVariaveisFiltrados = useMemo(() => {
+    if (!filtroTextoVar.trim()) return lancamentosVariaveis
+    const q = filtroTextoVar.toLowerCase()
+    return lancamentosVariaveis.filter(
+      (item) =>
+        (item.historico && item.historico.toLowerCase().includes(q)) ||
+        (item.contaNome && item.contaNome.toLowerCase().includes(q)) ||
+        (item.contaCodigo && item.contaCodigo.toLowerCase().includes(q)) ||
+        (item.centroNome && item.centroNome.toLowerCase().includes(q)) ||
+        (item.data && item.data.toLowerCase().includes(q)),
+    )
+  }, [lancamentosVariaveis, filtroTextoVar])
+
+  // Agrupamento por Centro de Custo com subtotais e lançamentos detalhados
+  const gruposPorCentroCusto = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
+
+  const gruposPorCentroCustoCompletos = useMemo(() => {
+    return agruparLancamentosPorCentroCusto(lancamentosVariaveis)
+  }, [lancamentosVariaveis])
+
+  const totaisVariaveisApurados = useMemo(() => {
+    return calcularTotaisVariaveis(lancamentosVariaveisFiltrados)
+  }, [lancamentosVariaveisFiltrados])
+
+  const subtotaisCentrosExport = useMemo<SubtotalCentroExport[]>(() => {
+    return gruposPorCentroCustoCompletos.map((g) => ({
+      centroNome: g.centroNome,
+      quantidade: g.quantidade,
+      subtotal: g.subtotal,
+    }))
+  }, [gruposPorCentroCustoCompletos])
+
+  const empresaIdParaAjuste = useMemo(() => {
+    if (selectedEmpresa?.id) return selectedEmpresa.id
+    if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) return selectedEmpresaId
+    if (lancamentosVariaveis.length > 0) return lancamentosVariaveis[0].empresaId
+    return ''
+  }, [selectedEmpresa, selectedEmpresaId, lancamentosVariaveis])
+
+  const handleAbrirAjuste = (item: LancamentoVariavelItem) => {
+    if (user?.role === 'cliente') {
+      toast({
+        variant: 'destructive',
+        title: 'Acesso restrito',
+        description: 'Ajuste de lançamentos é exclusivo da consultoria e administração.',
+      })
+      return
+    }
+    setItemAjustando(item)
+    setModalAjusteVarOpen(true)
+  }
+
   // Lista de anos com dados reais nos lançamentos carregados
   const anosComDados = useMemo<number[]>(() => {
     const s = new Set<number>()
@@ -356,6 +437,7 @@ export default function AnaliseRentabilidade() {
         selectedEmpresa,
         anoInicial,
         modoComparativo ? comparativoAnos : undefined,
+        subtotaisCentrosExport,
       )
       toast({
         title: 'Planilha Exportada com Sucesso',
@@ -379,6 +461,7 @@ export default function AnaliseRentabilidade() {
         selectedEmpresa,
         anoInicial,
         modoComparativo ? comparativoAnos : undefined,
+        subtotaisCentrosExport,
       )
       toast({
         title: 'Arquivo CSV Exportado',
@@ -1766,12 +1849,39 @@ export default function AnaliseRentabilidade() {
         </CardContent>
       </Card>
 
+      {/* ================= BLOCO DE DESPESAS VARIÁVEIS POR CENTRO DE CUSTO ================= */}
+      <div className="pt-2">
+        <PainelDespesasVariaveisCentros
+          grupos={gruposPorCentroCusto}
+          totalGeral={totaisVariaveisApurados.totalValor}
+          quantidadeTotal={totaisVariaveisApurados.quantidade}
+          filtroTexto={filtroTextoVar}
+          onFiltroTextoChange={setFiltroTextoVar}
+          onAjustarItem={handleAbrirAjuste}
+          isCliente={user?.role === 'cliente'}
+        />
+      </div>
+
       {/* Modal para Classificação em Lote do Plano de Contas */}
       <ModalClassificacaoDreLote
         open={modalClassificacaoOpen}
         onOpenChange={setModalClassificacaoOpen}
         contas={contas}
         onSuccess={() => carregarDados()}
+      />
+
+      {/* Modal para Ajuste de Despesa Variável Individual */}
+      <ModalAjusteDespesaVariavel
+        open={modalAjusteVarOpen}
+        onOpenChange={setModalAjusteVarOpen}
+        item={itemAjustando}
+        contas={contas}
+        planoContas={planoContas}
+        empresaId={empresaIdParaAjuste}
+        anoContexto={anoInicial}
+        onAjustado={() => {
+          carregarDados()
+        }}
       />
 
       {/* Rodapé exclusivo de impressão A4 */}

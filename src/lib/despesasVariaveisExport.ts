@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx'
 import type { DespesasVariaveisAnaliseResultado } from './despesasVariaveisCalculo'
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
+import type { SubtotalCentroExport } from './lancamentosVariaveisHelper'
 
 /**
  * Formata percentual para exibição textual em planilhas e relatórios
@@ -29,6 +30,7 @@ export function exportarDespesasVariaveisExcel(
   resultado: DespesasVariaveisAnaliseResultado,
   empresa?: EmpresaRecord | null,
   exercicioAno?: number,
+  subtotaisCentros?: SubtotalCentroExport[],
 ) {
   const nomeEmpresa = empresa?.nome || 'Empresa'
   const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
@@ -155,6 +157,47 @@ export function exportarDespesasVariaveisExcel(
   rowIndice['Total Período (%)'] = formatarPercentualExport(resultado.percentualTotalPeriodo)
   rows.push(rowIndice)
 
+  // 5. Bloco: Despesas Variáveis por Centro de Custo (Subtotais e % Representatividade)
+  if (subtotaisCentros && subtotaisCentros.length > 0) {
+    rows.push({ Conta: '' })
+    rows.push({
+      Conta: 'DESPESAS VARIÁVEIS POR CENTRO DE CUSTO (SUBTOTAIS)',
+      'Centro de Custo': 'Lançamentos',
+      'Tipo de Despesa': '% do Total',
+      'Total Período (R$)': 'Subtotal (R$)',
+    })
+
+    const totalCentros = subtotaisCentros.reduce((acc, c) => acc + c.subtotal, 0)
+    for (const sc of subtotaisCentros) {
+      const pctCentro = totalCentros > 0 ? (sc.subtotal / totalCentros) * 100 : 0
+      const rowCentro: Record<string, any> = {
+        Conta: sc.centroNome,
+        'Centro de Custo': sc.quantidade,
+        'Tipo de Despesa': `${pctCentro.toFixed(1)}%`,
+        'Total Período (R$)': sc.subtotal,
+      }
+      for (const m of resultado.meses) {
+        rowCentro[`${m.rotuloCurto} (R$)`] = ''
+        rowCentro[`${m.rotuloCurto} (%)`] = ''
+      }
+      rowCentro['Total Período (%)'] = `${pctCentro.toFixed(1)}%`
+      rows.push(rowCentro)
+    }
+
+    const rowTotalCentros: Record<string, any> = {
+      Conta: 'TOTAL CONSOLIDADO DOS CENTROS DE CUSTO',
+      'Centro de Custo': subtotaisCentros.reduce((acc, c) => acc + c.quantidade, 0),
+      'Tipo de Despesa': '100.0%',
+      'Total Período (R$)': totalCentros,
+    }
+    for (const m of resultado.meses) {
+      rowTotalCentros[`${m.rotuloCurto} (R$)`] = ''
+      rowTotalCentros[`${m.rotuloCurto} (%)`] = ''
+    }
+    rowTotalCentros['Total Período (%)'] = '100.0%'
+    rows.push(rowTotalCentros)
+  }
+
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(rows)
 
@@ -183,6 +226,7 @@ export function exportarDespesasVariaveisCsv(
   resultado: DespesasVariaveisAnaliseResultado,
   empresa?: EmpresaRecord | null,
   exercicioAno?: number,
+  subtotaisCentros?: SubtotalCentroExport[],
 ) {
   const nomeEmpresa = empresa?.nome || 'Empresa'
   const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
@@ -307,6 +351,42 @@ export function exportarDespesasVariaveisCsv(
   linhaPct.push('—')
   linhaPct.push(formatarPercentualExport(resultado.percentualTotalPeriodo))
   linhas.push(linhaPct.map(escapeCsv).join(';'))
+
+  // 5. Bloco: Despesas Variáveis por Centro de Custo (Subtotais e % Representatividade)
+  if (subtotaisCentros && subtotaisCentros.length > 0) {
+    linhas.push('')
+    linhas.push(
+      ['Despesas Variáveis por Centro de Custo', 'Lançamentos', 'Subtotal (R$)', '% do Total']
+        .map(escapeCsv)
+        .join(';'),
+    )
+
+    const totalCentros = subtotaisCentros.reduce((acc, c) => acc + c.subtotal, 0)
+    for (const sc of subtotaisCentros) {
+      const pctCentro = totalCentros > 0 ? (sc.subtotal / totalCentros) * 100 : 0
+      linhas.push(
+        [
+          sc.centroNome,
+          String(sc.quantidade),
+          formatMoedaCsv(sc.subtotal),
+          `${pctCentro.toFixed(1)}%`,
+        ]
+          .map(escapeCsv)
+          .join(';'),
+      )
+    }
+
+    linhas.push(
+      [
+        'Total Consolidado dos Centros',
+        String(subtotaisCentros.reduce((acc, c) => acc + c.quantidade, 0)),
+        formatMoedaCsv(totalCentros),
+        '100.0%',
+      ]
+        .map(escapeCsv)
+        .join(';'),
+    )
+  }
 
   const csvContent = '\uFEFF' + linhas.join('\n')
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })

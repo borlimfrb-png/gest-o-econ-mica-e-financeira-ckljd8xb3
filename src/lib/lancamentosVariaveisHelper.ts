@@ -19,6 +19,12 @@ export interface LancamentoVariavelItem {
   mesAno?: string
 }
 
+export interface SubtotalCentroExport {
+  centroNome: string
+  quantidade: number
+  subtotal: number
+}
+
 export interface GrupoCentroCustoVariavel {
   centroId: string
   centroNome: string
