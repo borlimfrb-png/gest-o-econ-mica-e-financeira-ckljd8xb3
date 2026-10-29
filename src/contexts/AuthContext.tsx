@@ -7,6 +7,7 @@ export interface AppUser extends AuthModel {
   role?: UserRole
   empresa?: string
   empresas?: string[]
+  grupos_empresariais?: string[]
   ativo?: boolean
   expand?: {
     empresa?: {
@@ -20,6 +21,20 @@ export interface AppUser extends AuthModel {
       nome: string
       nome_fantasia?: string
       cnpj: string
+    }>
+    grupos_empresariais?: Array<{
+      id: string
+      nome: string
+      descricao?: string
+      empresas?: string[]
+      expand?: {
+        empresas?: Array<{
+          id: string
+          nome: string
+          nome_fantasia?: string
+          cnpj: string
+        }>
+      }
     }>
   }
 }
@@ -98,6 +113,7 @@ interface AuthContextType {
   isAdmin: boolean
   empresaVinculadaId: string | null
   userEmpresasIds: string[]
+  userGruposIds: string[]
   login: (email: string, pass: string) => Promise<void>
   signup: (email: string, pass: string, name: string) => Promise<void>
   updateUser: (data: Partial<Record<string, any>>) => Promise<AuthModel>
@@ -116,7 +132,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (pb.authStore.isValid && pb.authStore.record?.id) {
       try {
         const fullUser = await pb.collection('users').getOne<AppUser>(pb.authStore.record.id, {
-          expand: 'empresa,empresas',
+          expand: 'empresa,empresas,grupos_empresariais,grupos_empresariais.empresas',
         })
         setUser(fullUser)
         setToken(pb.authStore.token)
@@ -137,13 +153,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Valida token atual
     if (pb.authStore.isValid) {
       pb.collection('users')
-        .authRefresh({ expand: 'empresa,empresas' })
+        .authRefresh({
+          expand: 'empresa,empresas,grupos_empresariais,grupos_empresariais.empresas',
+        })
         .then(async (res) => {
           // Busca record completo atualizado do banco para garantir que campos relation/array mais recentes venham populados
           if (res.record?.id) {
             try {
               const fullUser = await pb.collection('users').getOne<AppUser>(res.record.id, {
-                expand: 'empresa,empresas',
+                expand: 'empresa,empresas,grupos_empresariais,grupos_empresariais.empresas',
               })
               setUser(fullUser)
               setToken(pb.authStore.token)
@@ -180,7 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, pass: string) => {
     const authData = await pb.collection('users').authWithPassword(email.trim(), pass, {
-      expand: 'empresa,empresas',
+      expand: 'empresa,empresas,grupos_empresariais,grupos_empresariais.empresas',
     })
 
     // Checagem se o usuário está ativo
@@ -194,7 +212,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let record = authData.record as AppUser
     try {
       record = await pb.collection('users').getOne<AppUser>(authData.record.id, {
-        expand: 'empresa,empresas',
+        expand: 'empresa,empresas,grupos_empresariais,grupos_empresariais.empresas',
       })
     } catch {
       // mantém o record do auth como fallback
@@ -218,7 +236,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateUser = async (data: Partial<Record<string, any>>) => {
     if (!pb.authStore.record?.id) throw new Error('Usuário não autenticado')
     const updated = await pb.collection('users').update(pb.authStore.record.id, data, {
-      expand: 'empresa,empresas',
+      expand: 'empresa,empresas,grupos_empresariais,grupos_empresariais.empresas',
     })
     setUser(updated as AppUser)
     return updated
@@ -247,8 +265,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const isAdmin = user?.role === 'admin'
   const userEmpresasIds = extractUserEmpresasIds(user)
-  // empresaVinculadaId é estritamente definida quando o usuário possui EXATAMENTE 1 empresa vinculada
-  const empresaVinculadaId = !isAdmin && userEmpresasIds.length === 1 ? userEmpresasIds[0] : null
+  // Grupos vinculados ao usuário
+  const userGruposIds = React.useMemo(() => {
+    if (!user) return []
+    const ids: string[] = []
+    const raw = (user as any).grupos_empresariais
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (!item) continue
+        if (typeof item === 'string') ids.push(item.trim())
+        else if (typeof item === 'object' && item.id) ids.push(String(item.id).trim())
+      }
+    }
+    if (user.expand?.grupos_empresariais && Array.isArray(user.expand.grupos_empresariais)) {
+      for (const g of user.expand.grupos_empresariais) {
+        if (g?.id) ids.push(String(g.id).trim())
+      }
+    }
+    return Array.from(new Set(ids.filter(Boolean)))
+  }, [user])
+
+  // empresaVinculadaId é estritamente definida quando o usuário possui EXATAMENTE 1 empresa vinculada e nenhum grupo
+  const empresaVinculadaId =
+    !isAdmin && userEmpresasIds.length === 1 && userGruposIds.length === 0
+      ? userEmpresasIds[0]
+      : null
 
   return (
     <AuthContext.Provider
@@ -260,6 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isAdmin,
         empresaVinculadaId,
         userEmpresasIds,
+        userGruposIds,
         login,
         signup,
         updateUser,

@@ -10,6 +10,7 @@ import pb from '@/lib/pocketbase/client'
 import type { EmpresaRecord, GrupoEmpresarialRecord, BalancoRecord } from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from './AuthContext'
+import { resolverEmpresasPermitidas, extractUserGruposIds } from '@/lib/vinculosEmpresas'
 
 interface FilterContextType {
   empresas: EmpresaRecord[]
@@ -30,6 +31,7 @@ interface FilterContextType {
   selectedCentroCustoId: string
   setSelectedCentroCustoId: (id: string) => void
   userEmpresasIds: string[]
+  userGruposIds: string[]
 }
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined)
@@ -41,66 +43,35 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     empresaVinculadaId,
     user,
     userEmpresasIds: authEmpresasIds,
+    userGruposIds: authGruposIds,
   } = useAuth()
 
-  // Lista de IDs de empresas vinculadas ao usuário autenticado (suporte a multi-empresas e campo legado)
+  const [gruposState, setGruposState] = useState<GrupoEmpresarialRecord[]>([])
+
+  // Grupos vinculados ao usuário
+  const userGruposIds: string[] = React.useMemo(() => {
+    if (isAdmin) return []
+    const fromAuth = Array.isArray(authGruposIds) ? authGruposIds : []
+    const fromUser = extractUserGruposIds(user)
+    return Array.from(new Set([...fromAuth, ...fromUser].filter(Boolean)))
+  }, [isAdmin, authGruposIds, user])
+
+  // Lista de IDs de todas as empresas acessíveis pelo usuário autenticado (individuais + dos grupos vinculados)
   const userEmpresasIds: string[] = React.useMemo(() => {
     if (isAdmin) return []
-    const list: string[] = []
+    const resolucao = resolverEmpresasPermitidas({
+      user,
+      gruposDisponiveis: gruposState,
+    })
+    const list = [...resolucao.todasEmpresasIds]
     if (Array.isArray(authEmpresasIds) && authEmpresasIds.length > 0) {
       list.push(...authEmpresasIds)
-    }
-    if (Array.isArray(user?.empresas) && user.empresas.length > 0) {
-      for (const item of user.empresas) {
-        if (!item) continue
-        if (typeof item === 'string') list.push(item.trim())
-        else if (typeof item === 'object' && 'id' in item && (item as any).id) {
-          list.push(String((item as any).id).trim())
-        }
-      }
-    } else if (typeof (user as any)?.empresas === 'string' && (user as any).empresas.trim()) {
-      const val = (user as any).empresas.trim()
-      try {
-        const parsed = JSON.parse(val)
-        if (Array.isArray(parsed)) {
-          for (const item of parsed) {
-            if (typeof item === 'string') list.push(item.trim())
-            else if (item && typeof item === 'object' && item.id) list.push(String(item.id).trim())
-          }
-        } else if (typeof parsed === 'string') {
-          list.push(parsed.trim())
-        }
-      } catch {
-        list.push(val)
-      }
-    }
-    if (user?.expand?.empresas && Array.isArray(user.expand.empresas)) {
-      list.push(
-        ...user.expand.empresas.map((e) => (e?.id ? String(e.id).trim() : '')).filter(Boolean),
-      )
-    }
-    if (user?.empresa) {
-      const legado =
-        typeof user.empresa === 'string'
-          ? user.empresa.trim()
-          : (user.empresa as any)?.id
-            ? String((user.empresa as any).id).trim()
-            : ''
-      if (legado && !list.includes(legado)) {
-        list.push(legado)
-      }
-    }
-    if (user?.expand?.empresa?.id) {
-      const expandLegado = String(user.expand.empresa.id).trim()
-      if (expandLegado && !list.includes(expandLegado)) {
-        list.push(expandLegado)
-      }
     }
     if (empresaVinculadaId && !list.includes(empresaVinculadaId)) {
       list.push(empresaVinculadaId)
     }
     return Array.from(new Set(list.filter(Boolean)))
-  }, [isAdmin, authEmpresasIds, user?.empresas, user?.expand, user?.empresa, empresaVinculadaId])
+  }, [isAdmin, user, gruposState, authEmpresasIds, empresaVinculadaId])
 
   const isCliente = user?.role === 'cliente'
 
@@ -148,6 +119,8 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         gruposEmpresariaisService.getAll().catch(() => [] as GrupoEmpresarialRecord[]),
       ])
 
+      setGruposState(listGrupos)
+
       // Mapa para deduplicação e acesso rápido
       const empresasMap = new Map<string, EmpresaRecord>()
       for (const emp of listEmpresasRaw) {
@@ -156,12 +129,20 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
+      // Resolver todos os IDs de empresas autorizadas para o usuário (individuais + dos grupos vinculados)
+      const vinculosCalculados = resolverEmpresasPermitidas({
+        user,
+        gruposDisponiveis: listGrupos,
+      })
+      const idsPermitidos = Array.from(
+        new Set([...userEmpresasIds, ...vinculosCalculados.todasEmpresasIds].filter(Boolean)),
+      )
+
       // DETERMINISMO TOTAL PARA VÍNCULOS (BUSCA PREVENTIVA INDIVIDUAL E INCONDICIONAL):
-      // Para cada ID de vínculo do usuário (userEmpresasIds) que não estiver presente na lista carregada,
-      // fazer pb.collection('empresas').getOne(id) SEM nenhuma condição sobre nome/razão social,
-      // e mesclar o resultado no empresasMap.
-      if (userEmpresasIds.length > 0) {
-        const idsAusentes = userEmpresasIds.filter((id) => !empresasMap.has(id))
+      // Para cada ID de vínculo do usuário (individuais + membros dos grupos) que não estiver presente na lista carregada,
+      // fazer pb.collection('empresas').getOne(id) e mesclar no empresasMap.
+      if (idsPermitidos.length > 0) {
+        const idsAusentes = idsPermitidos.filter((id) => !empresasMap.has(id))
         if (idsAusentes.length > 0) {
           const fetchedIndividuais = await Promise.all(
             idsAusentes.map(async (id) => {
@@ -187,14 +168,14 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let empresasFiltradas: EmpresaRecord[] = todasEmpresasCarregadas
       let gruposFiltrados: GrupoEmpresarialRecord[] = listGrupos
 
-      // Para perfil cliente: montar a lista estritamente a partir dos vínculos do usuário;
-      // manter o bloqueio de segurança (cliente só vê vínculos dele).
+      // Para perfil cliente: montar a lista estritamente a partir dos vínculos do usuário (individuais + empresas dos grupos);
+      // manter o bloqueio de segurança (cliente só vê empresas dos vínculos dele).
       if (isCliente) {
-        if (userEmpresasIds.length > 0) {
+        if (idsPermitidos.length > 0) {
           const listaCliente: EmpresaRecord[] = []
-          for (const vId of userEmpresasIds) {
+          for (const vId of idsPermitidos) {
             const empRecord = empresasMap.get(vId)
-            if (empRecord) {
+            if (empRecord && !listaCliente.some((e) => e.id === empRecord.id)) {
               listaCliente.push(empRecord)
             }
           }
@@ -202,11 +183,15 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } else {
           empresasFiltradas = []
         }
+        // Cliente navega nas empresas resultantes (individuais + membros de grupos)
         gruposFiltrados = []
-      } else if (!isAdmin && userEmpresasIds.length > 0) {
-        empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
-        gruposFiltrados = listGrupos.filter((g) =>
-          (g.empresas || []).some((empId) => userEmpresasIds.includes(empId)),
+      } else if (!isAdmin && idsPermitidos.length > 0) {
+        empresasFiltradas = todasEmpresasCarregadas.filter((e) => idsPermitidos.includes(e.id))
+        const gruposPermitidosIds = userGruposIds
+        gruposFiltrados = listGrupos.filter(
+          (g) =>
+            gruposPermitidosIds.includes(g.id) ||
+            (g.empresas || []).some((empId) => idsPermitidos.includes(empId)),
         )
       }
 
@@ -484,6 +469,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         selectedCentroCustoId,
         setSelectedCentroCustoId,
         userEmpresasIds,
+        userGruposIds,
       }}
     >
       {children}
