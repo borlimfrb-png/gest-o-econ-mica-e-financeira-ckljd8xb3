@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { extractUserGruposIds, resolverEmpresasPermitidas } from './vinculosEmpresas'
+import { extractUserEmpresasAndGruposIds, extractUserEmpresasIds } from '@/contexts/AuthContext'
 import type { AppUser } from '@/contexts/AuthContext'
 import type { GrupoEmpresarialRecord } from '@/types/finance'
 
@@ -144,6 +145,86 @@ describe('vinculosEmpresas - Merge e Expansão de Vínculos (Individuais + Grupo
       expect(res.gruposVinculadosIds).toEqual(['grp-gamma'])
       expect(res.empresasDosGruposIds).toEqual(['emp-99', 'emp-100'])
       expect(res.todasEmpresasIds).toEqual(['emp-99', 'emp-100'])
+    })
+
+    it('reproduz com precisão o caso real do usuário maic@imcal.com.br (vínculo individual multi-empresa)', () => {
+      // Usuário real cadastrado no banco:
+      // role: 'cliente', empresas: ['nhvab3tif4lil5i', 'z1pgfks1abh4s7c']
+      // nhvab3tif4lil5i = MATIC MÓVEIS DE BEBE LTDA
+      // z1pgfks1abh4s7c = CARGOMOVE TRANSPORTES E LOGISTICA LTDA
+      const userMaic = {
+        id: '0q9f21j2a3t3b6d',
+        email: 'maic@imcal.com.br',
+        name: 'Maic Ronny Imcal',
+        role: 'cliente',
+        ativo: true,
+        empresa: 'nhvab3tif4lil5i',
+        empresas: ['nhvab3tif4lil5i', 'z1pgfks1abh4s7c'],
+        grupos_empresariais: [],
+      } as unknown as AppUser
+
+      const res = resolverEmpresasPermitidas({ user: userMaic, gruposDisponiveis: todosGrupos })
+      expect(res.empresasIndividuaisIds).toEqual(['nhvab3tif4lil5i', 'z1pgfks1abh4s7c'])
+      expect(res.todasEmpresasIds).toHaveLength(2)
+      expect(res.todasEmpresasIds).toContain('nhvab3tif4lil5i')
+      expect(res.todasEmpresasIds).toContain('z1pgfks1abh4s7c')
+
+      // Na AuthContext e FilterContext
+      const empresasIdsSessao = extractUserEmpresasAndGruposIds(userMaic)
+      expect(empresasIdsSessao).toEqual(['nhvab3tif4lil5i', 'z1pgfks1abh4s7c'])
+    })
+
+    it('usuário cliente vinculado somente por grupo empresarial vê todas as empresas do grupo no login e sessão', () => {
+      // Cliente vinculado ao Grupo Alpha (membros: emp-1, emp-2)
+      const userGrupoApenas = {
+        id: 'u-cliente-grupo',
+        email: 'cliente.grupo@exemplo.com',
+        role: 'cliente',
+        ativo: true,
+        empresas: [],
+        grupos_empresariais: ['grp-alpha'],
+        expand: {
+          grupos_empresariais: [grupoAlpha as any],
+        },
+      } as unknown as AppUser
+
+      const res = resolverEmpresasPermitidas({
+        user: userGrupoApenas,
+        gruposDisponiveis: [grupoAlpha],
+      })
+      expect(res.empresasIndividuaisIds).toEqual([])
+      expect(res.gruposVinculadosIds).toEqual(['grp-alpha'])
+      expect(res.empresasDosGruposIds).toEqual(['emp-1', 'emp-2'])
+      expect(res.todasEmpresasIds).toEqual(['emp-1', 'emp-2'])
+
+      // extractUserEmpresasAndGruposIds síncrono a partir do expand
+      const idsSessao = extractUserEmpresasAndGruposIds(userGrupoApenas)
+      expect(idsSessao).toEqual(['emp-1', 'emp-2'])
+    })
+
+    it('usuário com sobreposição entre vínculo individual e empresas de grupo econômico', () => {
+      // Exemplo: individual tem emp-1, e grupo tem emp-1 e emp-2
+      const userSobreposto = {
+        id: 'u-sobreposto',
+        email: 'sobreposto@exemplo.com',
+        role: 'cliente',
+        empresas: ['emp-1'],
+        grupos_empresariais: ['grp-alpha'],
+        expand: {
+          grupos_empresariais: [grupoAlpha as any],
+        },
+      } as unknown as AppUser
+
+      const res = resolverEmpresasPermitidas({
+        user: userSobreposto,
+        gruposDisponiveis: [grupoAlpha],
+      })
+      expect(res.empresasIndividuaisIds).toEqual(['emp-1'])
+      expect(res.gruposVinculadosIds).toEqual(['grp-alpha'])
+      expect(res.todasEmpresasIds).toEqual(['emp-1', 'emp-2'])
+
+      const idsSessao = extractUserEmpresasAndGruposIds(userSobreposto)
+      expect(idsSessao).toEqual(['emp-1', 'emp-2'])
     })
   })
 })

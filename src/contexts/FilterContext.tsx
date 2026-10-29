@@ -75,9 +75,11 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const isCliente = user?.role === 'cliente'
 
-  // Para usuário não-admin com empresa única fixada
+  // Para usuário não-admin com empresa única fixada (apenas 1 empresa e nenhum grupo vinculado)
   const empresaFixada =
-    !isAdmin && !isCliente && userEmpresasIds.length === 1 ? userEmpresasIds[0] : null
+    !isAdmin && !isCliente && userEmpresasIds.length === 1 && userGruposIds.length === 0
+      ? userEmpresasIds[0]
+      : null
 
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
@@ -109,7 +111,10 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!isAuthenticated) return
     try {
       setIsLoadingEmpresas(true)
-      const [listEmpresasRaw, listGrupos] = await Promise.all([
+      // 1. Grupos pré-hidratados que possam vir no expand do usuário autenticado
+      const gruposDoExpand = (user?.expand?.grupos_empresariais || []) as GrupoEmpresarialRecord[]
+
+      const [listEmpresasRaw, listGruposRaw] = await Promise.all([
         empresasService.getAll().catch((err) => {
           if (import.meta.env.DEV) {
             console.warn('[FilterContext] Falha ao listar todas as empresas:', err)
@@ -119,6 +124,42 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         gruposEmpresariaisService.getAll().catch(() => [] as GrupoEmpresarialRecord[]),
       ])
 
+      // Consolida grupos (listagem pública + expand do usuário)
+      const gruposMap = new Map<string, GrupoEmpresarialRecord>()
+      for (const g of listGruposRaw) {
+        if (g?.id) gruposMap.set(g.id, g)
+      }
+      for (const g of gruposDoExpand) {
+        if (g?.id && !gruposMap.has(g.id)) gruposMap.set(g.id, g)
+      }
+
+      // Se o usuário possui grupos vinculados não retornados ou incompletos, buscar getOne
+      if (userGruposIds.length > 0) {
+        const faltantes = userGruposIds.filter(
+          (gid) => !gruposMap.has(gid) || !Array.isArray(gruposMap.get(gid)?.empresas),
+        )
+        if (faltantes.length > 0) {
+          const buscados = await Promise.all(
+            faltantes.map(async (gid) => {
+              try {
+                return await pb
+                  .collection('grupos_empresariais')
+                  .getOne<GrupoEmpresarialRecord>(gid, {
+                    expand: 'empresas',
+                  })
+              } catch (e) {
+                console.warn(`[FilterContext] Grupo ${gid} não pôde ser recuperado via getOne:`, e)
+                return null
+              }
+            }),
+          )
+          for (const b of buscados) {
+            if (b?.id) gruposMap.set(b.id, b)
+          }
+        }
+      }
+
+      const listGrupos = Array.from(gruposMap.values())
       setGruposState(listGrupos)
 
       // Mapa para deduplicação e acesso rápido
@@ -264,8 +305,10 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     user?.role,
     user?.empresa,
     JSON.stringify(user?.empresas || []),
+    JSON.stringify((user as any)?.grupos_empresariais || []),
     JSON.stringify(authEmpresasIds || []),
     JSON.stringify(userEmpresasIds || []),
+    JSON.stringify(userGruposIds || []),
   ])
 
   // Realtime empresas

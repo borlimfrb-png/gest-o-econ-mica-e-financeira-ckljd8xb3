@@ -60,7 +60,9 @@ export default function AnaliseEconomicaFinanceira() {
   } = useFilter()
   const isCliente = user?.role === 'cliente'
   const temMultiplosVinculos =
-    (userEmpresasIds && userEmpresasIds.length > 1) || empresas.length > 1
+    (userEmpresasIds && userEmpresasIds.length > 1) ||
+    empresas.length > 1 ||
+    todasEntidades.length > 1
 
   const [verificandoDados, setVerificandoDados] = useState<boolean>(false)
   const [temDadosCliente, setTemDadosCliente] = useState<boolean>(true)

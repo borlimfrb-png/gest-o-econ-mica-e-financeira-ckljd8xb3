@@ -108,7 +108,10 @@ export function VerticalSidebar({
   userEmpresasIds,
 }: VerticalSidebarProps) {
   const temMultiplasEmpresas =
-    isUserAdmin || empresas.length > 1 || (userEmpresasIds?.length || 0) > 1
+    isUserAdmin ||
+    todasEntidades.length > 1 ||
+    empresas.length > 1 ||
+    (userEmpresasIds?.length || 0) > 1
   const navigate = useNavigate()
   const location = useLocation()
 

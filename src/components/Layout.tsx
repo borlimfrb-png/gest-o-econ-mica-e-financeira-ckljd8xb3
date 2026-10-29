@@ -69,6 +69,7 @@ export default function Layout() {
     setSelectedAno,
     anosDisponiveis,
     userEmpresasIds,
+    userGruposIds,
   } = useFilter()
   const { minhaEmpresa, logoUrl, corPrimaria, corSecundaria } = useMinhaEmpresa()
 
@@ -156,7 +157,11 @@ export default function Layout() {
   const isUserFinanceiro = user?.role === 'financeiro'
   const isUserComercial = user?.role === 'comercial'
   const temMultiplasEmpresas =
-    isUserAdmin || empresas.length > 1 || (userEmpresasIds && userEmpresasIds.length > 1)
+    isUserAdmin ||
+    todasEntidades.length > 1 ||
+    empresas.length > 1 ||
+    (userEmpresasIds && userEmpresasIds.length > 1) ||
+    (userGruposIds && userGruposIds.length > 0)
 
   // Atalho Balanço e DRE destino
   const balancoDreUrl = selectedEmpresaId
