@@ -395,16 +395,35 @@ export default function DreGerencial() {
     window.print()
   }
 
+  const opcoesExportacao = useMemo(() => {
+    return {
+      empresa: selectedEmpresa,
+      exercicioAno: anoInicial,
+      periodoDescricao:
+        modoVisualizacao === 'comparativo' ? `${p1Descricao} vs ${p2Descricao}` : p1Descricao,
+      isGrupo: Boolean(isGrupoAtivo),
+      nomeGrupo: grupoAtivo?.nome || undefined,
+    }
+  }, [
+    selectedEmpresa,
+    anoInicial,
+    modoVisualizacao,
+    p1Descricao,
+    p2Descricao,
+    isGrupoAtivo,
+    grupoAtivo,
+  ])
+
   const handleExportarExcel = () => {
     try {
       if (modoVisualizacao === 'comparativo') {
-        exportarDreComparativoExcel(comparativo, selectedEmpresa)
+        exportarDreComparativoExcel(comparativo, opcoesExportacao)
         toast({
           title: 'DRE Comparativa Exportada',
           description: 'Planilha Excel gerada com a comparação dos 2 períodos e variações.',
         })
       } else {
-        exportarDreGerencialExcel(matriz, selectedEmpresa)
+        exportarDreGerencialExcel(matriz, opcoesExportacao)
         toast({
           title: 'DRE Exportada com sucesso',
           description: 'Planilha Excel gerada com a matriz da DRE Gerencial.',
@@ -422,13 +441,13 @@ export default function DreGerencial() {
   const handleExportarCsv = () => {
     try {
       if (modoVisualizacao === 'comparativo') {
-        exportarDreComparativoCsv(comparativo, selectedEmpresa)
+        exportarDreComparativoCsv(comparativo, opcoesExportacao)
         toast({
           title: 'DRE Comparativa Exportada',
           description: 'Arquivo CSV com dados comparativos e variações gerado.',
         })
       } else {
-        exportarDreGerencialCsv(matriz, selectedEmpresa)
+        exportarDreGerencialCsv(matriz, opcoesExportacao)
         toast({
           title: 'DRE Exportada com sucesso',
           description: 'Arquivo CSV gerado com separador padrão brasileiro (;).',
@@ -580,43 +599,45 @@ export default function DreGerencial() {
             Imprimir / PDF
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Exportar
-                <ChevronDown className="w-3 h-3 text-white/80" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52 bg-white">
-              <DropdownMenuItem
-                onClick={handleExportarExcel}
-                className="text-xs cursor-pointer gap-2 py-2"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                <div className="flex flex-col">
-                  <span className="font-semibold text-slate-800">Planilha Excel (.xlsx)</span>
-                  <span className="text-[10px] text-slate-500">Matriz com grupos e contas</span>
-                </div>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={handleExportarCsv}
-                className="text-xs cursor-pointer gap-2 py-2"
-              >
-                <Download className="w-4 h-4 text-blue-600" />
-                <div className="flex flex-col">
-                  <span className="font-semibold text-slate-800">Arquivo CSV (.csv)</span>
-                  <span className="text-[10px] text-slate-500">
-                    Padrão delimitado por ponto e vírgula
-                  </span>
-                </div>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {!isCliente && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Exportar
+                  <ChevronDown className="w-3 h-3 text-white/80" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52 bg-white">
+                <DropdownMenuItem
+                  onClick={handleExportarExcel}
+                  className="text-xs cursor-pointer gap-2 py-2"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-slate-800">Planilha Excel (.xlsx)</span>
+                    <span className="text-[10px] text-slate-500">Matriz com grupos e contas</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleExportarCsv}
+                  className="text-xs cursor-pointer gap-2 py-2"
+                >
+                  <Download className="w-4 h-4 text-blue-600" />
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-slate-800">Arquivo CSV (.csv)</span>
+                    <span className="text-[10px] text-slate-500">
+                      Padrão delimitado por ponto e vírgula
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
 

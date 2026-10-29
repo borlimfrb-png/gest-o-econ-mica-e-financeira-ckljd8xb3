@@ -8,12 +8,26 @@ import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
  */
 export function exportarDreComparativoExcel(
   comparativo: DreComparativoResultado,
-  empresa?: EmpresaRecord | null,
+  empresaOuOpcoes?: EmpresaRecord | null | OpcoesExportacaoDre,
 ) {
-  const nomeEmpresa = empresa?.nome || 'Empresa'
-  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
-  const dataHoje = new Date().toISOString().slice(0, 10)
-  const fileName = `dre-comparativo-${safeEmpresa}-${dataHoje}.xlsx`
+  let opcoes: OpcoesExportacaoDre = {}
+  if (empresaOuOpcoes && 'id' in empresaOuOpcoes) {
+    opcoes = { empresa: empresaOuOpcoes }
+  } else if (empresaOuOpcoes) {
+    opcoes = empresaOuOpcoes as OpcoesExportacaoDre
+  }
+
+  const identificadorEntidade =
+    opcoes.isGrupo && opcoes.nomeGrupo
+      ? `Grupo_${opcoes.nomeGrupo}`
+      : opcoes.empresa?.nome || (opcoes.isGrupo ? 'Grupo_Economico' : 'Consolidado')
+  const safeEntidade = sanitizeNomeArquivo(identificadorEntidade)
+  const exercicio =
+    opcoes.exercicioAno ||
+    (comparativo.matriz1.meses.length > 0
+      ? comparativo.matriz1.meses[0].ano
+      : new Date().getFullYear())
+  const fileName = `DRE_Comparativo_${safeEntidade}_${exercicio}.xlsx`
 
   const colP1 = `Período 1 (${comparativo.periodo1Descricao})`
   const colP2 = `Período 2 (${comparativo.periodo2Descricao})`
@@ -126,12 +140,26 @@ export function exportarDreComparativoExcel(
  */
 export function exportarDreComparativoCsv(
   comparativo: DreComparativoResultado,
-  empresa?: EmpresaRecord | null,
+  empresaOuOpcoes?: EmpresaRecord | null | OpcoesExportacaoDre,
 ) {
-  const nomeEmpresa = empresa?.nome || 'Empresa'
-  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
-  const dataHoje = new Date().toISOString().slice(0, 10)
-  const fileName = `dre-comparativo-${safeEmpresa}-${dataHoje}.csv`
+  let opcoes: OpcoesExportacaoDre = {}
+  if (empresaOuOpcoes && 'id' in empresaOuOpcoes) {
+    opcoes = { empresa: empresaOuOpcoes }
+  } else if (empresaOuOpcoes) {
+    opcoes = empresaOuOpcoes as OpcoesExportacaoDre
+  }
+
+  const identificadorEntidade =
+    opcoes.isGrupo && opcoes.nomeGrupo
+      ? `Grupo_${opcoes.nomeGrupo}`
+      : opcoes.empresa?.nome || (opcoes.isGrupo ? 'Grupo_Economico' : 'Consolidado')
+  const safeEntidade = sanitizeNomeArquivo(identificadorEntidade)
+  const exercicio =
+    opcoes.exercicioAno ||
+    (comparativo.matriz1.meses.length > 0
+      ? comparativo.matriz1.meses[0].ano
+      : new Date().getFullYear())
+  const fileName = `DRE_Comparativo_${safeEntidade}_${exercicio}.csv`
 
   const escapeCsv = (val: any): string => {
     if (val === null || val === undefined) return ''
@@ -220,23 +248,90 @@ export function exportarDreComparativoCsv(
 /**
  * Exporta a matriz da DRE Gerencial para arquivo Excel (.xlsx) com layout de linhas e colunas mensais
  */
+export interface OpcoesExportacaoDre {
+  empresa?: EmpresaRecord | null
+  exercicioAno?: number | string
+  periodoDescricao?: string
+  isGrupo?: boolean
+  nomeGrupo?: string
+}
+
+/**
+ * Exporta a matriz da DRE Gerencial para arquivo Excel (.xlsx) com layout de linhas,
+ * seções hierárquicas, colunas mensais e totalizadores consolidados.
+ */
 export function exportarDreGerencialExcel(
   matriz: DreMatrizResultado,
-  empresa?: EmpresaRecord | null,
-  periodoDescricao?: string,
+  empresaOuOpcoes?: EmpresaRecord | null | OpcoesExportacaoDre,
+  periodoDescricaoLegado?: string,
 ) {
-  const nomeEmpresa = empresa?.nome || 'Empresa'
-  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
-  const dataHoje = new Date().toISOString().slice(0, 10)
-  const fileName = `dre-gerencial-${safeEmpresa}-${dataHoje}.xlsx`
+  // Suporte flexível para compatibilidade com assinaturas anteriores
+  let opcoes: OpcoesExportacaoDre = {}
+  if (empresaOuOpcoes && 'id' in empresaOuOpcoes) {
+    opcoes = {
+      empresa: empresaOuOpcoes,
+      periodoDescricao: periodoDescricaoLegado,
+    }
+  } else if (empresaOuOpcoes) {
+    opcoes = empresaOuOpcoes as OpcoesExportacaoDre
+  }
+
+  const identificadorEntidade =
+    opcoes.isGrupo && opcoes.nomeGrupo
+      ? `Grupo_${opcoes.nomeGrupo}`
+      : opcoes.empresa?.nome || (opcoes.isGrupo ? 'Grupo_Economico' : 'Consolidado')
+  const safeEntidade = sanitizeNomeArquivo(identificadorEntidade)
+
+  // Identificação do exercício/período
+  const exercicio =
+    opcoes.exercicioAno ||
+    (matriz.meses.length > 0 ? matriz.meses[0].ano : new Date().getFullYear())
+  const fileName = `DRE_Gerencial_${safeEntidade}_${exercicio}.xlsx`
 
   const rows: Array<Record<string, any>> = []
 
-  // Linhas dos grupos
+  // 1. Linhas de cabeçalho informativo de contexto
+  const descPeriodo =
+    opcoes.periodoDescricao ||
+    (matriz.meses.length > 0
+      ? `${matriz.meses[0].rotuloCurto} a ${matriz.meses[matriz.meses.length - 1].rotuloCurto}`
+      : String(exercicio))
+
+  // Cabeçalho de metadados
+  const rowMeta1: Record<string, any> = {
+    Código: 'DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO (DRE GERENCIAL)',
+    Descrição: '',
+    'Centro de Custo': '',
+    'Tipo de Despesa': '',
+    Nível: 'CABEÇALHO',
+  }
+  for (const m of matriz.meses) rowMeta1[m.rotuloCurto] = ''
+  rowMeta1['Total do Período'] = ''
+  rows.push(rowMeta1)
+
+  const rowMeta2: Record<string, any> = {
+    Código: `Entidade: ${opcoes.isGrupo && opcoes.nomeGrupo ? `Grupo Econômico ${opcoes.nomeGrupo}` : opcoes.empresa?.nome || 'Todas as Empresas (Consolidado)'}`,
+    Descrição: `Exercício/Período: ${descPeriodo}`,
+    'Centro de Custo': '',
+    'Tipo de Despesa': '',
+    Nível: '',
+  }
+  for (const m of matriz.meses) rowMeta2[m.rotuloCurto] = ''
+  rowMeta2['Total do Período'] = ''
+  rows.push(rowMeta2)
+
+  // Linha em branco separadora
+  rows.push({ Código: '', Descrição: '', 'Centro de Custo': '', 'Tipo de Despesa': '', Nível: '' })
+
+  // 2. Seções e contas da DRE
   for (const grupo of matriz.grupos) {
+    // Linha de Cabeçalho/Subtotal da Seção
     const linhaGrupo: Record<string, any> = {
-      Estrutura: grupo.titulo,
-      Tipo: 'Grupo',
+      Código: '',
+      Descrição: grupo.titulo.toUpperCase(),
+      'Centro de Custo': '',
+      'Tipo de Despesa': '',
+      Nível: 'Seção',
     }
     for (const m of matriz.meses) {
       linhaGrupo[m.rotuloCurto] = grupo.valoresPorMes[m.chave] || 0
@@ -244,14 +339,56 @@ export function exportarDreGerencialExcel(
     linhaGrupo['Total do Período'] = grupo.totalPeriodo
     rows.push(linhaGrupo)
 
-    // Contas individuais (detalhamento)
+    // Agrupamento e detalhamento de contas por Centro de Custo e Tipo de Despesa
+    let ultimoCentroKey: string | null = null
+    let ultimoTipoKey: string | null = null
+
     for (const conta of grupo.contas) {
-      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
-      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
-      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
+      const centroAtual =
+        conta.centroNome?.trim() || (conta.centroId ? `Centro ${conta.centroId}` : '')
+      const centroKey = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
+
+      const tipoAtual =
+        conta.tipoDespesaNome?.trim() || (conta.tipoDespesaId ? `Tipo ${conta.tipoDespesaId}` : '')
+      const tipoKey = `${centroKey}__${conta.tipoDespesaId || conta.tipoDespesaNome || '__SEM_TIPO__'}`
+
+      // Cabeçalho de Centro se houver Centro especificado
+      if (centroAtual && centroKey !== ultimoCentroKey) {
+        ultimoCentroKey = centroKey
+        ultimoTipoKey = null
+        const rowCentro: Record<string, any> = {
+          Código: '',
+          Descrição: `  ▶ CENTRO DE CUSTO: ${centroAtual.toUpperCase()}`,
+          'Centro de Custo': centroAtual,
+          'Tipo de Despesa': '',
+          Nível: 'Centro de Custo',
+        }
+        for (const m of matriz.meses) rowCentro[m.rotuloCurto] = ''
+        rowCentro['Total do Período'] = ''
+        rows.push(rowCentro)
+      }
+
+      // Cabeçalho de Tipo se houver Tipo especificado
+      if (tipoAtual && tipoKey !== ultimoTipoKey) {
+        ultimoTipoKey = tipoKey
+        const rowTipo: Record<string, any> = {
+          Código: '',
+          Descrição: `    ▶ TIPO DE DESPESA: ${tipoAtual.toUpperCase()}`,
+          'Centro de Custo': centroAtual,
+          'Tipo de Despesa': tipoAtual,
+          Nível: 'Tipo de Despesa',
+        }
+        for (const m of matriz.meses) rowTipo[m.rotuloCurto] = ''
+        rowTipo['Total do Período'] = ''
+        rows.push(rowTipo)
+      }
+
       const linhaConta: Record<string, any> = {
-        Estrutura: `    ${centroStr}${tipoStr}${codStr}${conta.nome}`,
-        Tipo: 'Conta',
+        Código: conta.codigo || '—',
+        Descrição: `      ${conta.nome}`,
+        'Centro de Custo': conta.centroNome || '',
+        'Tipo de Despesa': conta.tipoDespesaNome || '',
+        Nível: 'Conta',
       }
       for (const m of matriz.meses) {
         linhaConta[m.rotuloCurto] = conta.valoresPorMes[m.chave] || 0
@@ -259,15 +396,40 @@ export function exportarDreGerencialExcel(
       linhaConta['Total do Período'] = conta.totalPeriodo
       rows.push(linhaConta)
     }
+
+    // Linha de Subtotal da Seção após o detalhamento (caso o grupo contenha contas)
+    if (grupo.contas.length > 0) {
+      const linhaSubtotal: Record<string, any> = {
+        Código: '',
+        Descrição: `  SUBTOTAL ${grupo.titulo.toUpperCase()}`,
+        'Centro de Custo': '',
+        'Tipo de Despesa': '',
+        Nível: 'Subtotal Seção',
+      }
+      for (const m of matriz.meses) {
+        linhaSubtotal[m.rotuloCurto] = grupo.valoresPorMes[m.chave] || 0
+      }
+      linhaSubtotal['Total do Período'] = grupo.totalPeriodo
+      rows.push(linhaSubtotal)
+    }
+
+    // Linha separadora
+    rows.push({
+      Código: '',
+      Descrição: '',
+      'Centro de Custo': '',
+      'Tipo de Despesa': '',
+      Nível: '',
+    })
   }
 
-  // Linha em branco
-  rows.push({ Estrutura: '', Tipo: '' })
-
-  // Lucro ou Prejuízo
+  // 3. Linha Totalizadora: LUCRO OU PREJUÍZO (RESULTADO LÍQUIDO)
   const linhaResultado: Record<string, any> = {
-    Estrutura: matriz.lucroPrejuizo.titulo,
-    Tipo: 'Resultado',
+    Código: '',
+    Descrição: matriz.lucroPrejuizo.titulo.toUpperCase(),
+    'Centro de Custo': '',
+    'Tipo de Despesa': '',
+    Nível: 'Resultado Consolidado',
   }
   for (const m of matriz.meses) {
     linhaResultado[m.rotuloCurto] = matriz.lucroPrejuizo.valoresPorMes[m.chave] || 0
@@ -275,10 +437,13 @@ export function exportarDreGerencialExcel(
   linhaResultado['Total do Período'] = matriz.lucroPrejuizo.totalPeriodo
   rows.push(linhaResultado)
 
-  // Margem Líquida %
+  // 4. Margem Líquida %
   const linhaMargem: Record<string, any> = {
-    Estrutura: 'Margem Líquida (%)',
-    Tipo: 'Indicador',
+    Código: '',
+    Descrição: 'MARGEM LÍQUIDA (% S/ RECEITAS)',
+    'Centro de Custo': '',
+    'Tipo de Despesa': '',
+    Nível: 'Indicador',
   }
   for (const m of matriz.meses) {
     const mg = matriz.margemLiquidaPorMes[m.chave]
@@ -290,12 +455,21 @@ export function exportarDreGerencialExcel(
       : '—'
   rows.push(linhaMargem)
 
-  // Não classificados se existirem
+  // 5. Contas Não Classificadas (se houver pendências)
   if (matriz.naoClassificados.contas.length > 0) {
-    rows.push({ Estrutura: '', Tipo: '' })
+    rows.push({
+      Código: '',
+      Descrição: '',
+      'Centro de Custo': '',
+      'Tipo de Despesa': '',
+      Nível: '',
+    })
     const linhaNc: Record<string, any> = {
-      Estrutura: matriz.naoClassificados.titulo,
-      Tipo: 'Não Classificado',
+      Código: '',
+      Descrição: matriz.naoClassificados.titulo.toUpperCase(),
+      'Centro de Custo': '',
+      'Tipo de Despesa': '',
+      Nível: 'Não Classificado',
     }
     for (const m of matriz.meses) {
       linhaNc[m.rotuloCurto] = matriz.naoClassificados.valoresPorMes[m.chave] || 0
@@ -304,12 +478,12 @@ export function exportarDreGerencialExcel(
     rows.push(linhaNc)
 
     for (const conta of matriz.naoClassificados.contas) {
-      const centroStr = conta.centroNome ? `[${conta.centroNome}] ` : ''
-      const tipoStr = conta.tipoDespesaNome ? `[${conta.tipoDespesaNome}] ` : ''
-      const codStr = conta.codigo ? `${conta.codigo} — ` : ''
       const linhaConta: Record<string, any> = {
-        Estrutura: `    ${centroStr}${tipoStr}${codStr}${conta.nome}`,
-        Tipo: 'Conta Não Classificada',
+        Código: conta.codigo || '—',
+        Descrição: `      ${conta.nome}`,
+        'Centro de Custo': conta.centroNome || '',
+        'Tipo de Despesa': conta.tipoDespesaNome || '',
+        Nível: 'Conta Pendente',
       }
       for (const m of matriz.meses) {
         linhaConta[m.rotuloCurto] = conta.valoresPorMes[m.chave] || 0
@@ -322,15 +496,18 @@ export function exportarDreGerencialExcel(
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(rows)
 
-  // Larguras das colunas
+  // Formatação das larguras de colunas
   const cols = [
-    { wch: 44 }, // Estrutura
-    { wch: 14 }, // Tipo
+    { wch: 14 }, // Código
+    { wch: 48 }, // Descrição
+    { wch: 22 }, // Centro de Custo
+    { wch: 20 }, // Tipo de Despesa
+    { wch: 18 }, // Nível
   ]
   for (let i = 0; i < matriz.meses.length; i++) {
     cols.push({ wch: 16 })
   }
-  cols.push({ wch: 20 }) // Total do Período
+  cols.push({ wch: 22 }) // Total do Período
   ws['!cols'] = cols
 
   XLSX.utils.book_append_sheet(wb, ws, 'DRE Gerencial')
@@ -342,12 +519,28 @@ export function exportarDreGerencialExcel(
  */
 export function exportarDreGerencialCsv(
   matriz: DreMatrizResultado,
-  empresa?: EmpresaRecord | null,
+  empresaOuOpcoes?: EmpresaRecord | null | OpcoesExportacaoDre,
+  periodoDescricaoLegado?: string,
 ) {
-  const nomeEmpresa = empresa?.nome || 'Empresa'
-  const safeEmpresa = sanitizeNomeArquivo(nomeEmpresa)
-  const dataHoje = new Date().toISOString().slice(0, 10)
-  const fileName = `dre-gerencial-${safeEmpresa}-${dataHoje}.csv`
+  let opcoes: OpcoesExportacaoDre = {}
+  if (empresaOuOpcoes && 'id' in empresaOuOpcoes) {
+    opcoes = {
+      empresa: empresaOuOpcoes,
+      periodoDescricao: periodoDescricaoLegado,
+    }
+  } else if (empresaOuOpcoes) {
+    opcoes = empresaOuOpcoes as OpcoesExportacaoDre
+  }
+
+  const identificadorEntidade =
+    opcoes.isGrupo && opcoes.nomeGrupo
+      ? `Grupo_${opcoes.nomeGrupo}`
+      : opcoes.empresa?.nome || (opcoes.isGrupo ? 'Grupo_Economico' : 'Consolidado')
+  const safeEntidade = sanitizeNomeArquivo(identificadorEntidade)
+  const exercicio =
+    opcoes.exercicioAno ||
+    (matriz.meses.length > 0 ? matriz.meses[0].ano : new Date().getFullYear())
+  const fileName = `DRE_Gerencial_${safeEntidade}_${exercicio}.csv`
 
   const escapeCsv = (val: any): string => {
     if (val === null || val === undefined) return ''
