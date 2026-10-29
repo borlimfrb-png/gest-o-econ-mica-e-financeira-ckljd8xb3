@@ -29,6 +29,7 @@ interface FilterContextType {
   reloadEmpresas: () => Promise<void>
   selectedCentroCustoId: string
   setSelectedCentroCustoId: (id: string) => void
+  userEmpresasIds: string[]
 }
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined)
@@ -155,21 +156,15 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
-      // DETERMINISMO TOTAL PARA VÍNCULOS:
-      // Se o usuário possuir vínculos (userEmpresasIds), TODOS os IDs vinculados que não estiverem
-      // no empresasMap são buscados via getOne. E mais: para perfil cliente (ou sempre que a contagem
-      // de empresas encontradas for menor que userEmpresasIds.length), busca cada vínculo diretamente
-      // para garantir que nenhuma empresa vinculada fique de fora por falha de cache ou listagem geral.
+      // DETERMINISMO TOTAL PARA VÍNCULOS (BUSCA PREVENTIVA INDIVIDUAL E INCONDICIONAL):
+      // Para cada ID de vínculo do usuário (userEmpresasIds) que não estiver presente na lista carregada,
+      // fazer pb.collection('empresas').getOne(id) SEM nenhuma condição sobre nome/razão social,
+      // e mesclar o resultado no empresasMap.
       if (userEmpresasIds.length > 0) {
         const idsAusentes = userEmpresasIds.filter((id) => !empresasMap.has(id))
-        // Para perfil cliente, buscamos individualmente para garantir todos os vínculos 100% resolvidos
-        const idsParaBuscar = isCliente
-          ? userEmpresasIds.filter((id) => !empresasMap.has(id) || !empresasMap.get(id)?.nome)
-          : idsAusentes
-
-        if (idsParaBuscar.length > 0) {
+        if (idsAusentes.length > 0) {
           const fetchedIndividuais = await Promise.all(
-            idsParaBuscar.map(async (id) => {
+            idsAusentes.map(async (id) => {
               try {
                 return await pb.collection('empresas').getOne<EmpresaRecord>(id)
               } catch (err) {
@@ -192,9 +187,9 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let empresasFiltradas: EmpresaRecord[] = todasEmpresasCarregadas
       let gruposFiltrados: GrupoEmpresarialRecord[] = listGrupos
 
-      // Se for perfil cliente: constrói a lista SEMPRE a partir de userEmpresasIds (garantindo todos os vínculos)
+      // Para perfil cliente: montar a lista estritamente a partir dos vínculos do usuário;
+      // manter o bloqueio de segurança (cliente só vê vínculos dele).
       if (isCliente) {
-        // Se temos userEmpresasIds, selecionamos exatamente os records presentes no empresasMap
         if (userEmpresasIds.length > 0) {
           const listaCliente: EmpresaRecord[] = []
           for (const vId of userEmpresasIds) {
@@ -205,7 +200,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           }
           empresasFiltradas = listaCliente
         } else {
-          empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
+          empresasFiltradas = []
         }
         gruposFiltrados = []
       } else if (!isAdmin && userEmpresasIds.length > 0) {
@@ -488,6 +483,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         reloadEmpresas: loadEmpresasEGrupos,
         selectedCentroCustoId,
         setSelectedCentroCustoId,
+        userEmpresasIds,
       }}
     >
       {children}

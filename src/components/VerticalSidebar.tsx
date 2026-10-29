@@ -73,6 +73,7 @@ interface VerticalSidebarProps {
   todasEntidades: any[]
   empresas: any[]
   anosDisponiveis: number[]
+  userEmpresasIds?: string[]
 }
 
 export function VerticalSidebar({
@@ -104,7 +105,10 @@ export function VerticalSidebar({
   todasEntidades,
   empresas,
   anosDisponiveis,
+  userEmpresasIds,
 }: VerticalSidebarProps) {
+  const temMultiplasEmpresas =
+    isUserAdmin || empresas.length > 1 || (userEmpresasIds?.length || 0) > 1
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -300,7 +304,7 @@ export function VerticalSidebar({
               {/* Seletor Empresa */}
               <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200/90 dark:border-slate-800 rounded-lg px-2.5 py-0.5 text-xs transition-colors">
                 <Building className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                {isUserAdmin || empresas.length > 1 ? (
+                {temMultiplasEmpresas ? (
                   <Select
                     value={selectedEmpresaId}
                     onValueChange={(id) => {

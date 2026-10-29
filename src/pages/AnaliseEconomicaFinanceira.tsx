@@ -56,8 +56,11 @@ export default function AnaliseEconomicaFinanceira() {
     selectedEmpresaId,
     setSelectedEmpresaId,
     selectedAno,
+    userEmpresasIds,
   } = useFilter()
   const isCliente = user?.role === 'cliente'
+  const temMultiplosVinculos =
+    (userEmpresasIds && userEmpresasIds.length > 1) || empresas.length > 1
 
   const [verificandoDados, setVerificandoDados] = useState<boolean>(false)
   const [temDadosCliente, setTemDadosCliente] = useState<boolean>(true)
@@ -325,7 +328,7 @@ export default function AnaliseEconomicaFinanceira() {
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">
                   Empresa Ativa
                 </span>
-                {empresas.length > 1 ? (
+                {temMultiplosVinculos ? (
                   <Select
                     value={selectedEmpresaId}
                     onValueChange={(id) => setSelectedEmpresaId(id)}
