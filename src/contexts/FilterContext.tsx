@@ -50,21 +50,55 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       list.push(...authEmpresasIds)
     }
     if (Array.isArray(user?.empresas) && user.empresas.length > 0) {
-      list.push(...user.empresas.filter(Boolean))
+      for (const item of user.empresas) {
+        if (!item) continue
+        if (typeof item === 'string') list.push(item.trim())
+        else if (typeof item === 'object' && 'id' in item && (item as any).id) {
+          list.push(String((item as any).id).trim())
+        }
+      }
+    } else if (typeof (user as any)?.empresas === 'string' && (user as any).empresas.trim()) {
+      const val = (user as any).empresas.trim()
+      try {
+        const parsed = JSON.parse(val)
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            if (typeof item === 'string') list.push(item.trim())
+            else if (item && typeof item === 'object' && item.id) list.push(String(item.id).trim())
+          }
+        } else if (typeof parsed === 'string') {
+          list.push(parsed.trim())
+        }
+      } catch {
+        list.push(val)
+      }
     }
     if (user?.expand?.empresas && Array.isArray(user.expand.empresas)) {
-      list.push(...user.expand.empresas.map((e) => e?.id).filter(Boolean))
+      list.push(
+        ...user.expand.empresas.map((e) => (e?.id ? String(e.id).trim() : '')).filter(Boolean),
+      )
     }
-    if (user?.empresa && !list.includes(user.empresa)) {
-      list.push(user.empresa)
+    if (user?.empresa) {
+      const legado =
+        typeof user.empresa === 'string'
+          ? user.empresa.trim()
+          : (user.empresa as any)?.id
+            ? String((user.empresa as any).id).trim()
+            : ''
+      if (legado && !list.includes(legado)) {
+        list.push(legado)
+      }
     }
-    if (user?.expand?.empresa?.id && !list.includes(user.expand.empresa.id)) {
-      list.push(user.expand.empresa.id)
+    if (user?.expand?.empresa?.id) {
+      const expandLegado = String(user.expand.empresa.id).trim()
+      if (expandLegado && !list.includes(expandLegado)) {
+        list.push(expandLegado)
+      }
     }
     if (empresaVinculadaId && !list.includes(empresaVinculadaId)) {
       list.push(empresaVinculadaId)
     }
-    return Array.from(new Set(list))
+    return Array.from(new Set(list.filter(Boolean)))
   }, [isAdmin, authEmpresasIds, user?.empresas, user?.expand, user?.empresa, empresaVinculadaId])
 
   const isCliente = user?.role === 'cliente'
@@ -75,7 +109,16 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [grupos, setGrupos] = useState<GrupoEmpresarialRecord[]>([])
-  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>('')
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>(() => {
+    return localStorage.getItem('filter_selected_empresa_id') || ''
+  })
+
+  // Sincronizar persistência no localStorage
+  useEffect(() => {
+    if (selectedEmpresaId) {
+      localStorage.setItem('filter_selected_empresa_id', selectedEmpresaId)
+    }
+  }, [selectedEmpresaId])
   const [selectedAno, setSelectedAno] = useState<number>(2024)
   const [balancosEmpresa, setBalancosEmpresa] = useState<BalancoRecord[]>([])
   const [anosDisponiveis, setAnosDisponiveis] = useState<number[]>([2024, 2023])
@@ -112,24 +155,25 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }
       }
 
-      // CAMADA DE PROTEÇÃO OBRIGATÓRIA:
-      // Se houver IDs vinculados ao usuário (userEmpresasIds), verificar se algum está ausente na listagem geral.
-      // Se estiver ausente, busca individualmente via pb.collection('empresas').getOne para garantir que
-      // falhas parciais de listagem, paginação ou filtros não excluam empresas do usuário.
+      // DETERMINISMO TOTAL PARA VÍNCULOS:
+      // Se o usuário possuir vínculos (userEmpresasIds), TODOS os IDs vinculados que não estiverem
+      // no empresasMap são buscados via getOne. E mais: para perfil cliente (ou sempre que a contagem
+      // de empresas encontradas for menor que userEmpresasIds.length), busca cada vínculo diretamente
+      // para garantir que nenhuma empresa vinculada fique de fora por falha de cache ou listagem geral.
       if (userEmpresasIds.length > 0) {
         const idsAusentes = userEmpresasIds.filter((id) => !empresasMap.has(id))
-        if (idsAusentes.length > 0) {
+        // Para perfil cliente, buscamos individualmente para garantir todos os vínculos 100% resolvidos
+        const idsParaBuscar = isCliente
+          ? userEmpresasIds.filter((id) => !empresasMap.has(id) || !empresasMap.get(id)?.nome)
+          : idsAusentes
+
+        if (idsParaBuscar.length > 0) {
           const fetchedIndividuais = await Promise.all(
-            idsAusentes.map(async (id) => {
+            idsParaBuscar.map(async (id) => {
               try {
                 return await pb.collection('empresas').getOne<EmpresaRecord>(id)
               } catch (err) {
-                if (import.meta.env.DEV) {
-                  console.warn(
-                    `[FilterContext] Falha ao recuperar empresa individual id=${id}:`,
-                    err,
-                  )
-                }
+                console.warn(`[FilterContext] Falha ao recuperar empresa individual id=${id}:`, err)
                 return null
               }
             }),
@@ -148,9 +192,21 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let empresasFiltradas: EmpresaRecord[] = todasEmpresasCarregadas
       let gruposFiltrados: GrupoEmpresarialRecord[] = listGrupos
 
-      // Se for perfil cliente: restringe ESTRITAMENTE às empresas vinculadas ao usuário autenticado, sem grupos
+      // Se for perfil cliente: constrói a lista SEMPRE a partir de userEmpresasIds (garantindo todos os vínculos)
       if (isCliente) {
-        empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
+        // Se temos userEmpresasIds, selecionamos exatamente os records presentes no empresasMap
+        if (userEmpresasIds.length > 0) {
+          const listaCliente: EmpresaRecord[] = []
+          for (const vId of userEmpresasIds) {
+            const empRecord = empresasMap.get(vId)
+            if (empRecord) {
+              listaCliente.push(empRecord)
+            }
+          }
+          empresasFiltradas = listaCliente
+        } else {
+          empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
+        }
         gruposFiltrados = []
       } else if (!isAdmin && userEmpresasIds.length > 0) {
         empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
@@ -190,10 +246,15 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ]
 
       if (todasEntidadesIds.length > 0) {
-        // Se a empresa atualmente selecionada não pertencer à lista permitida, redefine
+        // Se a empresa atualmente selecionada não pertencer à lista permitida, redefine.
+        // Dá preferência ao valor salvo no localStorage se ele pertencer à lista permitida.
         setSelectedEmpresaId((prevId) => {
           if (prevId && todasEntidadesIds.includes(prevId)) {
             return prevId
+          }
+          const savedId = localStorage.getItem('filter_selected_empresa_id')
+          if (savedId && todasEntidadesIds.includes(savedId)) {
+            return savedId
           }
           return todasEntidadesIds[0]
         })
@@ -223,6 +284,8 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     user?.role,
     user?.empresa,
     JSON.stringify(user?.empresas || []),
+    JSON.stringify(authEmpresasIds || []),
+    JSON.stringify(userEmpresasIds || []),
   ])
 
   // Realtime empresas
@@ -356,6 +419,9 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     null
 
   // Lista desagregada de IDs de empresas ativas (para empresa única ou membros do grupo)
+  // IMPORTANTE: Se o cliente tem selectedEmpresaId selecionada, ela é a empresa ativa.
+  // Se ainda não houver selectedEmpresaId ou for grupo inválido, e o cliente tiver empresas vinculadas,
+  // mantemos a primeira da lista como padrão até seleção, mas NUNCA forçamos apenas userEmpresasIds[0] se houver selectedEmpresaId válida.
   const empresasIdsAtivas: string[] =
     isGrupoAtivo && grupoAtivo && (grupoAtivo.empresas || []).length > 0
       ? grupoAtivo.empresas || []
@@ -364,7 +430,9 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         : empresaFixada
           ? [empresaFixada]
           : isCliente && userEmpresasIds.length > 0
-            ? [userEmpresasIds[0]]
+            ? selectedEmpresaId && userEmpresasIds.includes(selectedEmpresaId)
+              ? [selectedEmpresaId]
+              : [userEmpresasIds[0]]
             : []
 
   return (
@@ -379,11 +447,13 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (isCliente) {
             if (userEmpresasIds.includes(id)) {
               setSelectedEmpresaId(id)
+              localStorage.setItem('filter_selected_empresa_id', id)
             } else if (
               userEmpresasIds.length > 0 &&
               (!selectedEmpresaId || !userEmpresasIds.includes(selectedEmpresaId))
             ) {
               setSelectedEmpresaId(userEmpresasIds[0])
+              localStorage.setItem('filter_selected_empresa_id', userEmpresasIds[0])
             }
             return
           }

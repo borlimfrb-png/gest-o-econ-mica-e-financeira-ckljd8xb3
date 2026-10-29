@@ -155,11 +155,11 @@ export default function ClienteCrescimento() {
   // Filtro de texto para despesas variáveis
   const [filtroTextoVar, setFiltroTextoVar] = useState('')
 
-  // Identificação da empresa vinculada ao cliente (sem seletor livre)
+  // Identificação da empresa vinculada ao cliente selecionada no contexto
   const empresaIdAlvo =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
       ? selectedEmpresaId
-      : selectedEmpresa?.id || user?.empresa || null
+      : selectedEmpresa?.id || (empresasIdsAtivas.length > 0 ? empresasIdsAtivas[0] : null)
 
   const empresaNome = selectedEmpresa?.nome || selectedEmpresa?.nome_fantasia || 'Minha Empresa'
 

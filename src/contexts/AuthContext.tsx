@@ -138,7 +138,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (pb.authStore.isValid) {
       pb.collection('users')
         .authRefresh({ expand: 'empresa,empresas' })
-        .then((res) => {
+        .then(async (res) => {
+          // Busca record completo atualizado do banco para garantir que campos relation/array mais recentes venham populados
+          if (res.record?.id) {
+            try {
+              const fullUser = await pb.collection('users').getOne<AppUser>(res.record.id, {
+                expand: 'empresa,empresas',
+              })
+              setUser(fullUser)
+              setToken(pb.authStore.token)
+              return
+            } catch {
+              // fallback para res.record
+            }
+          }
           setUser(res.record as AppUser)
           setToken(pb.authStore.token)
         })

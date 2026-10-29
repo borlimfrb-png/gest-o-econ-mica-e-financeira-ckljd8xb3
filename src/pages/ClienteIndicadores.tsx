@@ -93,7 +93,7 @@ export default function ClienteIndicadores() {
   const empresaIdAlvo =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
       ? selectedEmpresaId
-      : selectedEmpresa?.id || user?.empresa || null
+      : selectedEmpresa?.id || (empresasIdsAtivas.length > 0 ? empresasIdsAtivas[0] : null)
 
   const nomeEntidade = selectedEmpresa?.nome || selectedEmpresa?.nome_fantasia || 'Minha Empresa'
 
