@@ -46,7 +46,7 @@ export const SelectEmpresaOuGrupoItems: React.FC<SelectEmpresaOuGrupoItemsProps>
         )}
         {empresasIndividuais.map((emp) => (
           <SelectItem key={emp.id} value={emp.id} className="text-xs">
-            {emp.nome} ({emp.segmento})
+            {emp.nome_fantasia ? `${emp.nome_fantasia} (${emp.nome})` : emp.nome} ({emp.segmento})
           </SelectItem>
         ))}
       </>
@@ -57,7 +57,7 @@ export const SelectEmpresaOuGrupoItems: React.FC<SelectEmpresaOuGrupoItemsProps>
     <>
       {empresas.map((emp) => (
         <SelectItem key={emp.id} value={emp.id} className="text-xs">
-          {emp.nome} ({emp.segmento})
+          {emp.nome_fantasia ? `${emp.nome_fantasia} (${emp.nome})` : emp.nome} ({emp.segmento})
         </SelectItem>
       ))}
     </>

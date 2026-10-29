@@ -27,32 +27,67 @@ export interface AppUser extends AuthModel {
 export function extractUserEmpresasIds(user: AppUser | null | undefined): string[] {
   if (!user) return []
   const ids: string[] = []
+
+  // 1. Array 'empresas' direto no record (IDs brutos do PocketBase relation múltiplo)
   if (Array.isArray(user.empresas)) {
     for (const item of user.empresas) {
       if (!item) continue
       if (typeof item === 'string') {
-        ids.push(item)
+        ids.push(item.trim())
       } else if (typeof item === 'object' && 'id' in item && (item as any).id) {
-        ids.push((item as any).id)
+        ids.push(String((item as any).id).trim())
       }
     }
+  } else if (typeof (user as any).empresas === 'string' && (user as any).empresas.trim()) {
+    // Caso venha serializado como string JSON ou ID único
+    const val = (user as any).empresas.trim()
+    try {
+      const parsed = JSON.parse(val)
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (typeof item === 'string') ids.push(item.trim())
+          else if (item && typeof item === 'object' && item.id) ids.push(String(item.id).trim())
+        }
+      } else if (typeof parsed === 'string') {
+        ids.push(parsed.trim())
+      }
+    } catch {
+      ids.push(val)
+    }
   }
+
+  // 2. Expand de 'empresas' (objetos expandidos pelo PocketBase)
   if (user.expand?.empresas && Array.isArray(user.expand.empresas)) {
     for (const item of user.expand.empresas) {
       if (!item) continue
-      if (item.id && !ids.includes(item.id)) {
-        ids.push(item.id)
+      const id = typeof item === 'object' && 'id' in item ? String(item.id).trim() : ''
+      if (id && !ids.includes(id)) {
+        ids.push(id)
       }
     }
   }
-  const legadoId = typeof user.empresa === 'string' ? user.empresa : (user.empresa as any)?.id
+
+  // 3. Campo legado 'empresa' (único)
+  const legadoId =
+    typeof user.empresa === 'string'
+      ? user.empresa.trim()
+      : (user.empresa as any)?.id
+        ? String((user.empresa as any).id).trim()
+        : ''
   if (legadoId && !ids.includes(legadoId)) {
     ids.push(legadoId)
   }
-  if (user.expand?.empresa?.id && !ids.includes(user.expand.empresa.id)) {
-    ids.push(user.expand.empresa.id)
+
+  // 4. Expand do campo legado 'empresa'
+  if (user.expand?.empresa?.id) {
+    const expandEmpresaId = String(user.expand.empresa.id).trim()
+    if (expandEmpresaId && !ids.includes(expandEmpresaId)) {
+      ids.push(expandEmpresaId)
+    }
   }
-  return Array.from(new Set(ids.filter(Boolean)))
+
+  const clean = Array.from(new Set(ids.filter(Boolean)))
+  return clean
 }
 
 interface AuthContextType {

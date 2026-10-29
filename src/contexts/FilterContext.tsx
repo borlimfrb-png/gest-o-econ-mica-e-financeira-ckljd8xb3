@@ -6,6 +6,7 @@ import {
   dreService,
   lancamentosService,
 } from '@/services/financeService'
+import pb from '@/lib/pocketbase/client'
 import type { EmpresaRecord, GrupoEmpresarialRecord, BalancoRecord } from '@/types/finance'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from './AuthContext'
@@ -93,22 +94,90 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!isAuthenticated) return
     try {
       setIsLoadingEmpresas(true)
-      const [listEmpresas, listGrupos] = await Promise.all([
-        empresasService.getAll(),
+      const [listEmpresasRaw, listGrupos] = await Promise.all([
+        empresasService.getAll().catch((err) => {
+          if (import.meta.env.DEV) {
+            console.warn('[FilterContext] Falha ao listar todas as empresas:', err)
+          }
+          return [] as EmpresaRecord[]
+        }),
         gruposEmpresariaisService.getAll().catch(() => [] as GrupoEmpresarialRecord[]),
       ])
 
-      let empresasFiltradas = listEmpresas
-      let gruposFiltrados = listGrupos
+      // Mapa para deduplicação e acesso rápido
+      const empresasMap = new Map<string, EmpresaRecord>()
+      for (const emp of listEmpresasRaw) {
+        if (emp?.id) {
+          empresasMap.set(emp.id, emp)
+        }
+      }
+
+      // CAMADA DE PROTEÇÃO OBRIGATÓRIA:
+      // Se houver IDs vinculados ao usuário (userEmpresasIds), verificar se algum está ausente na listagem geral.
+      // Se estiver ausente, busca individualmente via pb.collection('empresas').getOne para garantir que
+      // falhas parciais de listagem, paginação ou filtros não excluam empresas do usuário.
+      if (userEmpresasIds.length > 0) {
+        const idsAusentes = userEmpresasIds.filter((id) => !empresasMap.has(id))
+        if (idsAusentes.length > 0) {
+          const fetchedIndividuais = await Promise.all(
+            idsAusentes.map(async (id) => {
+              try {
+                return await pb.collection('empresas').getOne<EmpresaRecord>(id)
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.warn(
+                    `[FilterContext] Falha ao recuperar empresa individual id=${id}:`,
+                    err,
+                  )
+                }
+                return null
+              }
+            }),
+          )
+
+          for (const emp of fetchedIndividuais) {
+            if (emp && emp.id) {
+              empresasMap.set(emp.id, emp)
+            }
+          }
+        }
+      }
+
+      const todasEmpresasCarregadas = Array.from(empresasMap.values())
+
+      let empresasFiltradas: EmpresaRecord[] = todasEmpresasCarregadas
+      let gruposFiltrados: GrupoEmpresarialRecord[] = listGrupos
 
       // Se for perfil cliente: restringe ESTRITAMENTE às empresas vinculadas ao usuário autenticado, sem grupos
       if (isCliente) {
-        empresasFiltradas = listEmpresas.filter((e) => userEmpresasIds.includes(e.id))
+        empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
         gruposFiltrados = []
       } else if (!isAdmin && userEmpresasIds.length > 0) {
-        empresasFiltradas = listEmpresas.filter((e) => userEmpresasIds.includes(e.id))
+        empresasFiltradas = todasEmpresasCarregadas.filter((e) => userEmpresasIds.includes(e.id))
         gruposFiltrados = listGrupos.filter((g) =>
           (g.empresas || []).some((empId) => userEmpresasIds.includes(empId)),
+        )
+      }
+
+      // Ordenar alfabeticamente pelo nome/nome_fantasia para consistência no seletor
+      empresasFiltradas.sort((a, b) => {
+        const nomeA = a.nome_fantasia || a.nome || ''
+        const nomeB = b.nome_fantasia || b.nome || ''
+        return nomeA.localeCompare(nomeB)
+      })
+
+      if (import.meta.env.DEV) {
+        console.log(
+          `[FilterContext dev] empresas disponíveis (${empresasFiltradas.length}) vs. vinculadas (${userEmpresasIds.length}):`,
+          {
+            perfil: user?.role,
+            userEmpresasIds,
+            empresasDisponiveis: empresasFiltradas.map((e) => ({
+              id: e.id,
+              nome: e.nome,
+              nome_fantasia: e.nome_fantasia,
+            })),
+          },
         )
       }
 
