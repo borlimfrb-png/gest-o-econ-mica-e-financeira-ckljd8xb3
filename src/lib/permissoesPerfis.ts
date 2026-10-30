@@ -202,7 +202,6 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',
       'gerencial_analise_faturamento',
-      'empresas',
     ],
   },
 }

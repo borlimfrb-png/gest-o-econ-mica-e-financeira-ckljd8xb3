@@ -727,6 +727,14 @@ const App = () => (
                       }
                     />
                     <Route
+                      path="/admin/grupos-empresariais"
+                      element={
+                        <ModuloRoute modulo="grupos_empresariais">
+                          <GruposEmpresariais />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
                       path="/admin/usuarios"
                       element={
                         <AdminRoute>

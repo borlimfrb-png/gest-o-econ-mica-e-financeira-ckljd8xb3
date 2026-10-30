@@ -239,6 +239,7 @@ export default function Layout() {
         location.pathname.startsWith('/contas') ||
         location.pathname.startsWith('/plano-contas') ||
         location.pathname === '/minha-empresa' ||
+        location.pathname.startsWith('/admin/grupos-empresariais') ||
         location.pathname.startsWith('/admin/usuarios') ||
         location.pathname.startsWith('/admin/auditoria')
       )

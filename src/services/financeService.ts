@@ -241,6 +241,29 @@ export const gruposEmpresariaisService = {
   },
 
   async delete(id: string): Promise<boolean> {
+    // 1. Desvincular usuários associados a este grupo para evitar referências órfãs
+    try {
+      const usersComGrupo = await pb.collection('users').getFullList<any>({
+        filter: `grupos_empresariais ~ '${id}'`,
+        fields: 'id,name,email,grupos_empresariais',
+      })
+
+      for (const u of usersComGrupo) {
+        const currentGrupos: string[] = Array.isArray(u.grupos_empresariais)
+          ? u.grupos_empresariais
+          : []
+        if (currentGrupos.includes(id)) {
+          const nextGrupos = currentGrupos.filter((gId) => gId !== id)
+          await pb.collection('users').update(u.id, {
+            grupos_empresariais: nextGrupos,
+          })
+        }
+      }
+    } catch (cleanErr) {
+      console.warn('Aviso ao limpar vinculos de usuarios com o grupo excluido:', cleanErr)
+    }
+
+    // 2. Excluir o grupo
     return await pb.collection('grupos_empresariais').delete(id)
   },
 }
