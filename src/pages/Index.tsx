@@ -24,6 +24,8 @@ import {
   Building2,
   TrendingUp,
   ShieldCheck,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { minhaEmpresaService } from '@/services/minhaEmpresaService'
@@ -48,11 +50,13 @@ export default function Index() {
   // Form states
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
+  const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [loginErrors, setLoginErrors] = useState<{ email?: string; password?: string }>({})
 
   const [signupName, setSignupName] = useState('')
   const [signupEmail, setSignupEmail] = useState('')
   const [signupPassword, setSignupPassword] = useState('')
+  const [showSignupPassword, setShowSignupPassword] = useState(false)
   const [signupErrors, setSignupErrors] = useState<{
     name?: string
     email?: string
@@ -358,10 +362,10 @@ export default function Index() {
                       </button>
                     </div>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <Input
                         id="login-password"
-                        type="password"
+                        type={showLoginPassword ? 'text' : 'password'}
                         placeholder="••••••••"
                         value={loginPassword}
                         onChange={(e) => {
@@ -369,12 +373,27 @@ export default function Index() {
                           if (loginErrors.password)
                             setLoginErrors((prev) => ({ ...prev, password: undefined }))
                         }}
-                        className={`pl-9 h-11 text-sm bg-slate-50/50 border-slate-200 focus:bg-white focus:border-blue-600 ${
+                        className={`pl-9 pr-10 h-11 text-sm bg-slate-50/50 border-slate-200 focus:bg-white focus:border-blue-600 ${
                           loginErrors.password
                             ? 'border-red-500 focus:border-red-500 ring-red-200'
                             : ''
                         }`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowLoginPassword((prev) => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none transition-colors p-1"
+                        aria-label={
+                          showLoginPassword ? 'Ocultar senha digitada' : 'Visualizar senha digitada'
+                        }
+                        title={showLoginPassword ? 'Ocultar senha' : 'Ver senha'}
+                      >
+                        {showLoginPassword ? (
+                          <EyeOff className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                     {loginErrors.password && (
                       <p className="text-xs text-red-600 font-medium">{loginErrors.password}</p>
@@ -459,10 +478,10 @@ export default function Index() {
                       Senha (mínimo 8 caracteres)
                     </Label>
                     <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                       <Input
                         id="signup-password"
-                        type="password"
+                        type={showSignupPassword ? 'text' : 'password'}
                         placeholder="Mínimo 8 caracteres"
                         value={signupPassword}
                         onChange={(e) => {
@@ -470,12 +489,29 @@ export default function Index() {
                           if (signupErrors.password)
                             setSignupErrors((prev) => ({ ...prev, password: undefined }))
                         }}
-                        className={`pl-9 h-11 text-sm bg-slate-50/50 border-slate-200 focus:bg-white focus:border-blue-600 ${
+                        className={`pl-9 pr-10 h-11 text-sm bg-slate-50/50 border-slate-200 focus:bg-white focus:border-blue-600 ${
                           signupErrors.password
                             ? 'border-red-500 focus:border-red-500 ring-red-200'
                             : ''
                         }`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => setShowSignupPassword((prev) => !prev)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none transition-colors p-1"
+                        aria-label={
+                          showSignupPassword
+                            ? 'Ocultar senha digitada'
+                            : 'Visualizar senha digitada'
+                        }
+                        title={showSignupPassword ? 'Ocultar senha' : 'Ver senha'}
+                      >
+                        {showSignupPassword ? (
+                          <EyeOff className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                     {signupErrors.password && (
                       <p className="text-xs text-red-600 font-medium">{signupErrors.password}</p>

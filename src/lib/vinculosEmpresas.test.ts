@@ -147,31 +147,60 @@ describe('vinculosEmpresas - Merge e Expansão de Vínculos (Individuais + Grupo
       expect(res.todasEmpresasIds).toEqual(['emp-99', 'emp-100'])
     })
 
-    it('reproduz com precisão o caso real do usuário maic@imcal.com.br (vínculo individual multi-empresa)', () => {
-      // Usuário real cadastrado no banco:
-      // role: 'cliente', empresas: ['nhvab3tif4lil5i', 'z1pgfks1abh4s7c']
-      // nhvab3tif4lil5i = MATIC MÓVEIS DE BEBE LTDA
-      // z1pgfks1abh4s7c = CARGOMOVE TRANSPORTES E LOGISTICA LTDA
+    it('reproduz com precisão o caso real do usuário maic@imcal.com.br (vínculo individual multi-empresa + Grupo Caneira)', () => {
+      // Usuário real cadastrado no banco com Grupo Caneira:
+      // nhvab3tif4lil5i = MATIC MÓVEIS
+      // z1pgfks1abh4s7c = CARGOMOVE
+      // Grupo Caneira (sjdem494dzulyk3): ejntpbzj1asshkp (IMCAL MATRIZ), rwi4w9nwfmea09v (IMCAL ROBEL)
+      const grupoCaneira: GrupoEmpresarialRecord = {
+        id: 'sjdem494dzulyk3',
+        collectionId: 'grupos_empresariais',
+        collectionName: 'grupos_empresariais',
+        nome: 'GRUPO CANEIRA',
+        descricao: '',
+        empresas: ['ejntpbzj1asshkp', 'rwi4w9nwfmea09v'],
+        created: '2026-10-29',
+        updated: '2026-10-29',
+      }
+
       const userMaic = {
-        id: '0q9f21j2a3t3b6d',
+        id: 'w2eqr8w5zodbtna',
         email: 'maic@imcal.com.br',
-        name: 'Maic Ronny Imcal',
+        name: 'MAIC ROGER GONÇALVES CANEIRA',
         role: 'cliente',
         ativo: true,
         empresa: 'nhvab3tif4lil5i',
         empresas: ['nhvab3tif4lil5i', 'z1pgfks1abh4s7c'],
-        grupos_empresariais: [],
+        grupos_empresariais: ['sjdem494dzulyk3'],
+        expand: {
+          grupos_empresariais: [grupoCaneira as any],
+        },
       } as unknown as AppUser
 
-      const res = resolverEmpresasPermitidas({ user: userMaic, gruposDisponiveis: todosGrupos })
+      const res = resolverEmpresasPermitidas({
+        user: userMaic,
+        gruposDisponiveis: [grupoCaneira],
+      })
       expect(res.empresasIndividuaisIds).toEqual(['nhvab3tif4lil5i', 'z1pgfks1abh4s7c'])
-      expect(res.todasEmpresasIds).toHaveLength(2)
-      expect(res.todasEmpresasIds).toContain('nhvab3tif4lil5i')
-      expect(res.todasEmpresasIds).toContain('z1pgfks1abh4s7c')
+      expect(res.gruposVinculadosIds).toEqual(['sjdem494dzulyk3'])
+      expect(res.empresasDosGruposIds).toEqual(['ejntpbzj1asshkp', 'rwi4w9nwfmea09v'])
+
+      // Soma de vínculos deduplicada
+      expect(res.todasEmpresasIds).toEqual([
+        'nhvab3tif4lil5i',
+        'z1pgfks1abh4s7c',
+        'ejntpbzj1asshkp',
+        'rwi4w9nwfmea09v',
+      ])
 
       // Na AuthContext e FilterContext
       const empresasIdsSessao = extractUserEmpresasAndGruposIds(userMaic)
-      expect(empresasIdsSessao).toEqual(['nhvab3tif4lil5i', 'z1pgfks1abh4s7c'])
+      expect(empresasIdsSessao).toEqual([
+        'nhvab3tif4lil5i',
+        'z1pgfks1abh4s7c',
+        'ejntpbzj1asshkp',
+        'rwi4w9nwfmea09v',
+      ])
     })
 
     it('usuário cliente vinculado somente por grupo empresarial vê todas as empresas do grupo no login e sessão', () => {

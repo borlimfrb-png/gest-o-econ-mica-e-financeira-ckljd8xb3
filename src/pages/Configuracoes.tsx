@@ -22,6 +22,8 @@ import {
   Trash2,
   RefreshCw,
   CalendarCheck,
+  Eye,
+  EyeOff,
   Server,
   Send,
 } from 'lucide-react'
@@ -45,6 +47,9 @@ export default function Configuracoes() {
   const [oldPassword, setOldPassword] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [showOldPassword, setShowOldPassword] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
 
   // Estado Notificações
@@ -589,14 +594,27 @@ export default function Configuracoes() {
                 <div className="relative">
                   <Input
                     id="oldPassword"
-                    type="password"
+                    type={showOldPassword ? 'text' : 'password'}
                     value={oldPassword}
                     onChange={(e) => setOldPassword(e.target.value)}
                     placeholder="Digite sua senha atual"
-                    className="h-9 text-xs pl-8"
+                    className="h-9 text-xs pl-8 pr-8"
                     required
                   />
-                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                  <button
+                    type="button"
+                    onClick={() => setShowOldPassword((prev) => !prev)}
+                    className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    aria-label={showOldPassword ? 'Ocultar senha atual' : 'Visualizar senha atual'}
+                    title={showOldPassword ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showOldPassword ? (
+                      <EyeOff className="w-3.5 h-3.5 text-blue-600" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -608,15 +626,28 @@ export default function Configuracoes() {
                   <div className="relative">
                     <Input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Mínimo 8 caracteres"
-                      className="h-9 text-xs pl-8"
+                      className="h-9 text-xs pl-8 pr-8"
                       required
                       minLength={8}
                     />
-                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      aria-label={showPassword ? 'Ocultar nova senha' : 'Visualizar nova senha'}
+                      title={showPassword ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="w-3.5 h-3.5 text-blue-600" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -627,15 +658,32 @@ export default function Configuracoes() {
                   <div className="relative">
                     <Input
                       id="passwordConfirm"
-                      type="password"
+                      type={showPasswordConfirm ? 'text' : 'password'}
                       value={passwordConfirm}
                       onChange={(e) => setPasswordConfirm(e.target.value)}
                       placeholder="Repita a nova senha"
-                      className="h-9 text-xs pl-8"
+                      className="h-9 text-xs pl-8 pr-8"
                       required
                       minLength={8}
                     />
-                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => setShowPasswordConfirm((prev) => !prev)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 focus:outline-none"
+                      aria-label={
+                        showPasswordConfirm
+                          ? 'Ocultar confirmação de nova senha'
+                          : 'Visualizar confirmação de nova senha'
+                      }
+                      title={showPasswordConfirm ? 'Ocultar senha' : 'Ver senha'}
+                    >
+                      {showPasswordConfirm ? (
+                        <EyeOff className="w-3.5 h-3.5 text-blue-600" />
+                      ) : (
+                        <Eye className="w-3.5 h-3.5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>

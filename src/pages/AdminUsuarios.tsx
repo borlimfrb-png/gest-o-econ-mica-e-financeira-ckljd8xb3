@@ -25,6 +25,7 @@ import {
   FileCheck2,
   ShieldAlert,
   Eye,
+  EyeOff,
   Layers,
 } from 'lucide-react'
 import { ModalAuditoriaCadastros } from '@/components/ModalAuditoriaCadastros'
@@ -87,6 +88,8 @@ export default function AdminUsuarios() {
     ativo: true,
   })
   const [creating, setCreating] = useState(false)
+  const [showCreatePassword, setShowCreatePassword] = useState(false)
+  const [showCreatePasswordConfirm, setShowCreatePasswordConfirm] = useState(false)
 
   // Formulário de Edição
   const [editForm, setEditForm] = useState({
@@ -103,6 +106,8 @@ export default function AdminUsuarios() {
   // Formulário de Redefinição de Senha
   const [newPassword, setNewPassword] = useState('')
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
 
   // Exclusão
@@ -1050,28 +1055,64 @@ export default function AdminUsuarios() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Senha Inicial *</Label>
-                <Input
-                  type="password"
-                  placeholder="Mínimo 8 caracteres"
-                  value={createForm.password}
-                  onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                  required
-                  className="text-xs"
-                />
+                <div className="relative">
+                  <Input
+                    type={showCreatePassword ? 'text' : 'password'}
+                    placeholder="Mínimo 8 caracteres"
+                    value={createForm.password}
+                    onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                    required
+                    className="text-xs pr-8"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePassword((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-0.5"
+                    aria-label={
+                      showCreatePassword ? 'Ocultar senha inicial' : 'Visualizar senha inicial'
+                    }
+                    title={showCreatePassword ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showCreatePassword ? (
+                      <EyeOff className="w-3.5 h-3.5 text-blue-600" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold">Confirmar Senha *</Label>
-                <Input
-                  type="password"
-                  placeholder="Repita a senha"
-                  value={createForm.passwordConfirm}
-                  onChange={(e) =>
-                    setCreateForm({ ...createForm, passwordConfirm: e.target.value })
-                  }
-                  required
-                  className="text-xs"
-                />
+                <div className="relative">
+                  <Input
+                    type={showCreatePasswordConfirm ? 'text' : 'password'}
+                    placeholder="Repita a senha"
+                    value={createForm.passwordConfirm}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, passwordConfirm: e.target.value })
+                    }
+                    required
+                    className="text-xs pr-8"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePasswordConfirm((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-0.5"
+                    aria-label={
+                      showCreatePasswordConfirm
+                        ? 'Ocultar confirmação de senha'
+                        : 'Visualizar confirmação de senha'
+                    }
+                    title={showCreatePasswordConfirm ? 'Ocultar senha' : 'Ver senha'}
+                  >
+                    {showCreatePasswordConfirm ? (
+                      <EyeOff className="w-3.5 h-3.5 text-blue-600" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1555,26 +1596,60 @@ export default function AdminUsuarios() {
           <form onSubmit={handleResetPassword} className="space-y-4 pt-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Nova Senha *</Label>
-              <Input
-                type="password"
-                placeholder="Mínimo 8 caracteres"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                className="text-xs"
-              />
+              <div className="relative">
+                <Input
+                  type={showNewPassword ? 'text' : 'password'}
+                  placeholder="Mínimo 8 caracteres"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  className="text-xs pr-8"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-0.5"
+                  aria-label={showNewPassword ? 'Ocultar nova senha' : 'Visualizar nova senha'}
+                  title={showNewPassword ? 'Ocultar senha' : 'Ver senha'}
+                >
+                  {showNewPassword ? (
+                    <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Confirmar Nova Senha *</Label>
-              <Input
-                type="password"
-                placeholder="Repita a nova senha"
-                value={confirmNewPassword}
-                onChange={(e) => setConfirmNewPassword(e.target.value)}
-                required
-                className="text-xs"
-              />
+              <div className="relative">
+                <Input
+                  type={showConfirmNewPassword ? 'text' : 'password'}
+                  placeholder="Repita a nova senha"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  required
+                  className="text-xs pr-8"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmNewPassword((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none p-0.5"
+                  aria-label={
+                    showConfirmNewPassword
+                      ? 'Ocultar confirmação de nova senha'
+                      : 'Visualizar confirmação de nova senha'
+                  }
+                  title={showConfirmNewPassword ? 'Ocultar senha' : 'Ver senha'}
+                >
+                  {showConfirmNewPassword ? (
+                    <EyeOff className="w-3.5 h-3.5 text-amber-600" />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5" />
+                  )}
+                </button>
+              </div>
             </div>
 
             <DialogFooter className="pt-2">
