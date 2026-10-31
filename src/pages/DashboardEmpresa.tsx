@@ -628,9 +628,26 @@ export default function DashboardEmpresa() {
               >
                 {empresa.segmento}
               </Badge>
+              {empresa.forma_tributacao && (
+                <Badge
+                  variant="outline"
+                  className="text-xs font-semibold bg-emerald-50 text-emerald-800 border-emerald-300"
+                >
+                  {empresa.forma_tributacao}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-[#5B6B7F] mt-0.5 flex items-center gap-2 flex-wrap">
               <span>CNPJ: {formatCnpj(empresa.cnpj)}</span>
+              {empresa.forma_tributacao && (
+                <>
+                  <span>·</span>
+                  <span className="text-slate-700 font-medium">
+                    Regime:{' '}
+                    <span className="font-semibold text-slate-900">{empresa.forma_tributacao}</span>
+                  </span>
+                </>
+              )}
               <span>·</span>
               <span className="text-emerald-700 font-semibold">Dashboard Exclusivo</span>
               {(empresa.data_inicio_contrato || empresa.data_fim_contrato) && (

@@ -9,8 +9,9 @@ import type {
   SetorEmpresa,
   PorteEmpresa,
   UfEmpresa,
+  FormaTributacaoEmpresa,
 } from '@/types/finance'
-import { SETORES_PADRAO, type SetorRecord } from '@/types/finance'
+import { SETORES_PADRAO, FORMAS_TRIBUTACAO_EMPRESA, type SetorRecord } from '@/types/finance'
 import { setoresService } from '@/services/setoresService'
 import {
   formatCnpj,
@@ -121,6 +122,7 @@ interface EmpresaFormData {
   cnpj: string
   segmento: SegmentoEmpresa
   setor: SetorEmpresa | ''
+  forma_tributacao: FormaTributacaoEmpresa | ''
   porte: PorteEmpresa | ''
   data_fundacao: string
   data_inicio_contrato: string
@@ -146,6 +148,7 @@ const EMPTY_FORM: EmpresaFormData = {
   cnpj: '',
   segmento: 'Serviços',
   setor: '',
+  forma_tributacao: '',
   porte: '',
   data_fundacao: '',
   data_inicio_contrato: '',
@@ -201,6 +204,25 @@ const PORTE_LABELS: Record<PorteEmpresa, { label: string; cls: string }> = {
   Pequena: { label: 'PP', cls: 'bg-emerald-50 text-emerald-700' },
   Média: { label: 'PM', cls: 'bg-violet-50 text-violet-700' },
   Grande: { label: 'GE', cls: 'bg-rose-50 text-rose-700' },
+}
+
+const TRIBUTACAO_BADGES: Record<FormaTributacaoEmpresa, { label: string; cls: string }> = {
+  'MEI (Microempreendedor Individual)': {
+    label: 'MEI',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  'Simples Nacional': {
+    label: 'Simples Nacional',
+    cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  },
+  'Lucro Presumido': {
+    label: 'Lucro Presumido',
+    cls: 'bg-blue-50 text-blue-800 border-blue-200',
+  },
+  'Lucro Real': {
+    label: 'Lucro Real',
+    cls: 'bg-purple-50 text-purple-800 border-purple-200',
+  },
 }
 
 export default function Empresas() {
@@ -274,6 +296,7 @@ export default function Empresas() {
       cnpj: formatCnpj(empresa.cnpj),
       segmento: empresa.segmento,
       setor: empresa.setor || '',
+      forma_tributacao: empresa.forma_tributacao || '',
       porte: empresa.porte || '',
       data_fundacao: empresa.data_fundacao ? empresa.data_fundacao.slice(0, 10) : '',
       data_inicio_contrato: empresa.data_inicio_contrato
@@ -379,6 +402,7 @@ export default function Empresas() {
       cnpj: cleanCnpj(formData.cnpj),
       segmento: formData.segmento,
       setor: formData.setor || undefined,
+      forma_tributacao: formData.forma_tributacao || undefined,
       porte: formData.porte || undefined,
       data_fundacao: formData.data_fundacao || undefined,
       data_inicio_contrato: formData.data_inicio_contrato || undefined,
@@ -494,6 +518,7 @@ export default function Empresas() {
       (emp.nome_fantasia || '').toLowerCase().includes(q) ||
       emp.cnpj.includes(q) ||
       emp.segmento.toLowerCase().includes(q) ||
+      (emp.forma_tributacao || '').toLowerCase().includes(q) ||
       (emp.cidade || '').toLowerCase().includes(q) ||
       (emp.estado || '').toLowerCase().includes(q)
     )
@@ -567,6 +592,7 @@ export default function Empresas() {
                     <th className="py-2 px-3">CNPJ</th>
                     <th className="py-2 px-3">Segmento</th>
                     <th className="py-2 px-3">Setor</th>
+                    <th className="py-2 px-3">Regime Tributário</th>
                     <th className="py-2 px-3">Porte</th>
                     <th className="py-2 px-3">Cidade / UF</th>
                     <th className="py-2 px-3">Vigência Contrato</th>
@@ -627,6 +653,25 @@ export default function Empresas() {
                               className="text-[10px] font-semibold bg-blue-50 text-blue-700 border-blue-200 px-1.5 py-0"
                             >
                               {emp.setor}
+                            </Badge>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 italic">Não informado</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          {emp.forma_tributacao && TRIBUTACAO_BADGES[emp.forma_tributacao] ? (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-semibold px-2 py-0.5 border ${TRIBUTACAO_BADGES[emp.forma_tributacao].cls}`}
+                            >
+                              {TRIBUTACAO_BADGES[emp.forma_tributacao].label}
+                            </Badge>
+                          ) : emp.forma_tributacao ? (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] font-semibold bg-slate-50 text-slate-700 border-slate-200 px-2 py-0.5"
+                            >
+                              {emp.forma_tributacao}
                             </Badge>
                           ) : (
                             <span className="text-[11px] text-slate-400 italic">Não informado</span>
@@ -902,6 +947,45 @@ export default function Empresas() {
                     <p className="text-[10px] text-slate-500">
                       Usado para calibrar múltiplos e benchmarks no módulo Planejamento &gt;
                       Setores.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label
+                        htmlFor="empresa-forma-tributacao"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Forma de Tributação
+                      </Label>
+                      <span className="text-[10px] text-slate-400 font-medium">Opcional</span>
+                    </div>
+                    <Select
+                      value={formData.forma_tributacao || 'NONE'}
+                      onValueChange={(val) =>
+                        setField(
+                          'forma_tributacao',
+                          val === 'NONE' ? '' : (val as FormaTributacaoEmpresa),
+                        )
+                      }
+                    >
+                      <SelectTrigger id="empresa-forma-tributacao" className="h-9 text-xs bg-white">
+                        <SelectValue placeholder="Selecione o regime de tributação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="NONE" className="text-xs text-slate-400">
+                          (Não informado / Selecionar depois)
+                        </SelectItem>
+                        {FORMAS_TRIBUTACAO_EMPRESA.map((regime) => (
+                          <SelectItem key={regime} value={regime} className="text-xs">
+                            {regime}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-slate-500">
+                      Regimes em vigor no Brasil: MEI, Simples Nacional, Lucro Presumido e Lucro
+                      Real.
                     </p>
                   </div>
 

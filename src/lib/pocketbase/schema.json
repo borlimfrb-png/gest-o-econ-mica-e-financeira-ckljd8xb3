@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-31T13:16:08.486Z",
+  "generatedAt": "2026-10-31T14:01:08.772Z",
   "collections": [
     {
       "name": "users",
@@ -294,12 +294,25 @@
           "type": "date",
           "required": false,
           "system": false
+        },
+        {
+          "name": "forma_tributacao",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "MEI (Microempreendedor Individual)",
+            "Simples Nacional",
+            "Lucro Presumido",
+            "Lucro Real"
+          ]
         }
       ],
       "indexes": [
         "CREATE UNIQUE INDEX idx_empresas_cnpj ON empresas (cnpj)",
         "CREATE INDEX idx_empresas_segmento ON empresas (segmento)",
-        "CREATE INDEX `idx_empresas_setor` ON `empresas` (setor)"
+        "CREATE INDEX `idx_empresas_setor` ON `empresas` (setor)",
+        "CREATE INDEX `idx_empresas_forma_tributacao` ON `empresas` (forma_tributacao)"
       ]
     },
     {

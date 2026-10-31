@@ -671,11 +671,42 @@ export default function AnaliseEmpresa() {
               <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-semibold text-xs">
                 {empresa.segmento}
               </Badge>
+              {empresa.forma_tributacao && (
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-50 text-emerald-800 border-emerald-300 font-semibold text-xs"
+                >
+                  {empresa.forma_tributacao}
+                </Badge>
+              )}
+              {empresa.setor && (
+                <Badge
+                  variant="outline"
+                  className="bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold text-xs"
+                >
+                  {empresa.setor}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-[#5B6B7F] mt-0.5 flex items-center gap-2 flex-wrap">
               <span>
                 CNPJ: <span className="font-mono">{formatCnpj(empresa.cnpj)}</span>
               </span>
+              {empresa.forma_tributacao && (
+                <>
+                  <span>·</span>
+                  <span className="font-medium text-slate-700">
+                    Regime:{' '}
+                    <span className="text-slate-900 font-semibold">{empresa.forma_tributacao}</span>
+                  </span>
+                </>
+              )}
+              {empresa.porte && (
+                <>
+                  <span>·</span>
+                  <span>Porte: {empresa.porte}</span>
+                </>
+              )}
               <span>·</span>
               <span>Cadastrada em: {new Date(empresa.created).toLocaleDateString('pt-BR')}</span>
               {(empresa.data_inicio_contrato || empresa.data_fim_contrato) && (

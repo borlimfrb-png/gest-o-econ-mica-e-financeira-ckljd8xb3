@@ -88,11 +88,25 @@ export interface UserRecord extends RecordModel {
   }
 }
 
+export type FormaTributacaoEmpresa =
+  | 'MEI (Microempreendedor Individual)'
+  | 'Simples Nacional'
+  | 'Lucro Presumido'
+  | 'Lucro Real'
+
+export const FORMAS_TRIBUTACAO_EMPRESA: FormaTributacaoEmpresa[] = [
+  'MEI (Microempreendedor Individual)',
+  'Simples Nacional',
+  'Lucro Presumido',
+  'Lucro Real',
+]
+
 export interface EmpresaRecord extends RecordModel {
   nome: string
   cnpj: string
   segmento: SegmentoEmpresa
   setor?: SetorEmpresa
+  forma_tributacao?: FormaTributacaoEmpresa
   nome_fantasia?: string
   porte?: PorteEmpresa
   data_fundacao?: string
