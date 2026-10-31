@@ -450,6 +450,22 @@ const App = () => (
                       }
                     />
                     <Route
+                      path="/cliente/agente-ia"
+                      element={
+                        <ModuloRoute modulo="cliente_agente_ia">
+                          <AgenteIA />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/agente-ia"
+                      element={
+                        <ModuloRoute modulo="gerencial_agente_ia">
+                          <AgenteIA />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
                       path="/financeiro"
                       element={
                         <ModuloRoute modulo="financeiro">

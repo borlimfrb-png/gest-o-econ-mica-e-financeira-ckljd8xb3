@@ -11,10 +11,14 @@ import type { EmpresaRecord } from '@/types/finance'
 
 export interface ConversationItem {
   id: string
+  empresa_id?: string
+  empresa_nome?: string
   title?: string
   created: string
   updated: string
   last_message_at?: string
+  ultimo_ano?: number
+  skip_conversation_id?: string
 }
 
 export interface SendMessageOptions {
@@ -22,6 +26,7 @@ export interface SendMessageOptions {
   conversationId?: string | null
   title?: string
   empresa?: EmpresaRecord | null
+  empresaId?: string | null
   ano?: number
   anoComparacao?: number | null
   mes?: number | null
@@ -41,6 +46,7 @@ export interface PromptSugestao {
     | 'rentabilidade'
     | 'kanitz'
     | 'plano_acao'
+    | 'despesas'
   prompt: string
   icone: string
 }
@@ -53,6 +59,14 @@ export const PROMPTS_SUGERIDOS: PromptSugestao[] = [
     prompt:
       'Faça uma análise diagnóstica completa 360° da empresa no período selecionado: avalie Balanço Patrimonial, DRE, todos os índices de Liquidez, Endividamento, Rentabilidade, Modelo Fleuriet e Kanitz. Dê a classificação geral da situação (Saudável, Atenção ou Crítica), aponte os pontos fortes, pontos fracos e qual é o melhor caminho prático para melhorar os resultados operacionais e de caixa.',
     icone: 'Gauge',
+  },
+  {
+    id: 'analise-despesas-fixas-variaveis',
+    titulo: 'Despesas Fixas & Variáveis',
+    categoria: 'despesas',
+    prompt:
+      'Analise a estrutura de despesas da empresa ativa: qual é o peso das despesas fixas recorrentes e das despesas variáveis de vendas sobre o faturamento? Quais centros de custo e tipos de despesa mais impactam o resultado líquido e onde há oportunidade imediata de racionalização?',
+    icone: 'PieChart',
   },
   {
     id: 'benchmark-setorial',
@@ -114,10 +128,21 @@ export const PROMPTS_SUGERIDOS: PromptSugestao[] = [
 
 export const aiAgentService = {
   /**
-   * Envia uma mensagem via streaming para o assistente nativo do Skip Cloud
+   * Envia uma mensagem via streaming para o assistente nativo do Skip Cloud,
+   * persistindo estritamente na conversa DA EMPRESA ATIVA.
    */
   async sendMessageStream(options: SendMessageOptions) {
-    const { message, conversationId, title, empresa, ano, mes, handlers, signal } = options
+    const {
+      message,
+      conversationId,
+      title,
+      empresa,
+      empresaId: explicitEmpresaId,
+      ano,
+      mes,
+      handlers,
+      signal,
+    } = options
 
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''
     const token = pb.authStore.token
@@ -126,33 +151,40 @@ export const aiAgentService = {
       throw new Error('Sessão expirada. Faça login novamente para falar com o Agente de IA.')
     }
 
+    const targetEmpresaId = explicitEmpresaId || empresa?.id
+    if (!targetEmpresaId) {
+      throw new Error(
+        'Nenhuma empresa ativa selecionada. Selecione uma empresa no seletor para consultar o Agente de IA.',
+      )
+    }
+
+    const empresaNome = empresa?.nome || 'Empresa Ativa'
+
     // Adiciona metadados de contexto financeiro da tela caso disponíveis
     let contextualizedMessage = message.trim()
     const { anoComparacao, dadosContextoExtra } = options
-    if (empresa) {
-      const contextoExtraLinhas = [
-        `\n\n[CONTEXTO ATUAL DA SESSÃO:`,
-        `- Empresa: "${empresa.nome}" (ID: ${empresa.id}, CNPJ: ${empresa.cnpj || 'N/D'}, Setor/Segmento: ${empresa.segmento || 'Não informado / Geral'})`,
-        ano ? `- Ano Principal de Referência: ${ano}` : '',
-        anoComparacao ? `- Ano de Comparação Selecionado: ${anoComparacao}` : '',
-        mes ? `- Mês de Referência: ${mes}` : '',
-        `- Precedência de Benchmarks: Consulte "benchmarks_empresas" (meta específica da empresa), depois "benchmarks_setoriais" (personalizado do setor "${empresa.segmento || 'Geral'}") e por fim a mediana padrão de mercado na sua memória.`,
-        dadosContextoExtra
-          ? `\n[DEMONSTRAÇÕES E INDICADORES CONSOLIDADOS]:\n${dadosContextoExtra}`
-          : '',
-        `Consulte diretamente os registros de balancos, dre, benchmarks_empresas, benchmarks_setoriais e demais coleções da empresa "${empresa.nome}" para fundamentar as respostas com números reais comparativos.]`,
-      ]
-        .filter(Boolean)
-        .join('\n')
 
-      // Se o usuário não mencionou o nome da empresa expressamente ou se há contexto comparativo, contextualizamos no prompt
-      if (
-        !contextualizedMessage.toLowerCase().includes(empresa.nome.toLowerCase()) ||
-        anoComparacao ||
-        dadosContextoExtra
-      ) {
-        contextualizedMessage = `${contextualizedMessage}${contextoExtraLinhas}`
-      }
+    const contextoExtraLinhas = [
+      `\n\n[CONTEXTO ATUAL DA SESSÃO — BORLIM CONSULTORIA:`,
+      `- Empresa Ativa: "${empresaNome}" (ID: ${targetEmpresaId}, CNPJ: ${empresa?.cnpj || 'N/D'}, Setor/Segmento: ${empresa?.segmento || 'Não informado / Geral'})`,
+      ano ? `- Ano Principal de Referência: ${ano}` : '',
+      anoComparacao ? `- Ano de Comparação Selecionado: ${anoComparacao}` : '',
+      mes ? `- Mês de Referência: ${mes}` : '',
+      `- Precedência de Benchmarks: Consulte "benchmarks_empresas" (meta específica da empresa), depois "benchmarks_setoriais" (personalizado do setor "${empresa?.segmento || 'Geral'}") e por fim a mediana padrão de mercado na sua memória.`,
+      dadosContextoExtra
+        ? `\n[DEMONSTRAÇÕES E INDICADORES CONSOLIDADOS DA EMPRESA ATIVA]:\n${dadosContextoExtra}`
+        : '',
+      `AVISO RIGOROSO: Consulte diretamente os registros de balancos, dre, lancamentos, centros, tipos_despesa, contas e plano_contas vinculados estritamente à empresa "${empresaNome}" (ID: ${targetEmpresaId}). Não traga dados de qualquer outra empresa.]`,
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    if (
+      !contextualizedMessage.toLowerCase().includes(empresaNome.toLowerCase()) ||
+      anoComparacao ||
+      dadosContextoExtra
+    ) {
+      contextualizedMessage = `${contextualizedMessage}${contextoExtraLinhas}`
     }
 
     const res = await fetch(`${backendUrl}/backend/v1/agent-diagnostico/stream`, {
@@ -163,8 +195,11 @@ export const aiAgentService = {
       },
       body: JSON.stringify({
         message: contextualizedMessage,
-        conversation_id: conversationId || null,
-        title: title || (empresa ? `Diagnóstico ${empresa.nome}` : 'Diagnóstico Financeiro'),
+        empresa_id: targetEmpresaId,
+        empresa_nome: empresaNome,
+        app_conversation_id: conversationId || null,
+        ano: ano || null,
+        title: title || `Consulta ${empresaNome}`,
       }),
       signal,
     })
@@ -173,6 +208,26 @@ export const aiAgentService = {
 
     const resolvedConversationId =
       res.headers.get('X-Conversation-Id') ?? streamResult.conversation_id
+
+    // Registrar fechamento assíncrono da mensagem no backend para persistência completa por empresa
+    if (resolvedConversationId && streamResult.content) {
+      try {
+        await fetch(`${backendUrl}/backend/v1/agent-diagnostico/save-assistant-message`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          body: JSON.stringify({
+            app_conversation_id: resolvedConversationId,
+            content: streamResult.content,
+            citations: streamResult.citations,
+          }),
+        })
+      } catch (err) {
+        console.warn('Aviso: persistência secundária da resposta:', err)
+      }
+    }
 
     return {
       conversationId: resolvedConversationId,
@@ -190,10 +245,18 @@ export const aiAgentService = {
     message: string
     conversationId?: string | null
     empresa?: EmpresaRecord | null
+    empresaId?: string | null
     ano?: number
     anoComparacao?: number | null
   }) {
-    const { message, conversationId, empresa, ano, anoComparacao } = options
+    const {
+      message,
+      conversationId,
+      empresa,
+      empresaId: explicitEmpresaId,
+      ano,
+      anoComparacao,
+    } = options
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''
     const token = pb.authStore.token
 
@@ -201,10 +264,15 @@ export const aiAgentService = {
       throw new Error('Usuário não autenticado.')
     }
 
-    let contextualizedMessage = message.trim()
-    if (empresa) {
-      contextualizedMessage += `\n\n[Contexto: Empresa "${empresa.nome}" (ID: ${empresa.id}, Setor/Segmento: ${empresa.segmento || 'Geral'}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}. Precedência de benchmarks: benchmarks_empresas > benchmarks_setoriais > padrão mercado.]`
+    const targetEmpresaId = explicitEmpresaId || empresa?.id
+    if (!targetEmpresaId) {
+      throw new Error('Nenhuma empresa ativa selecionada.')
     }
+
+    const empresaNome = empresa?.nome || 'Empresa Ativa'
+
+    let contextualizedMessage = message.trim()
+    contextualizedMessage += `\n\n[Contexto: Empresa "${empresaNome}" (ID: ${targetEmpresaId}, Setor/Segmento: ${empresa?.segmento || 'Geral'}), Exercício: ${ano || 'Atual'}${anoComparacao ? ` vs ${anoComparacao}` : ''}. Precedência de benchmarks: benchmarks_empresas > benchmarks_setoriais > padrão mercado. Isolamento estrito à empresa "${empresaNome}".]`
 
     const res = await fetch(`${backendUrl}/backend/v1/agent-diagnostico/ask`, {
       method: 'POST',
@@ -214,7 +282,10 @@ export const aiAgentService = {
       },
       body: JSON.stringify({
         message: contextualizedMessage,
-        conversation_id: conversationId || null,
+        empresa_id: targetEmpresaId,
+        empresa_nome: empresaNome,
+        app_conversation_id: conversationId || null,
+        ano: ano || null,
       }),
     })
 
@@ -223,25 +294,27 @@ export const aiAgentService = {
       throw new Error(data.error || 'Falha na comunicação com o agente.')
     }
 
-    return data as {
-      conversation_id: string
-      content: string
-      citations?: AgentCitation[]
-      message_id: string
+    return {
+      conversation_id: data.app_conversation_id || data.conversation_id,
+      content: data.content,
+      citations: data.citations as AgentCitation[] | undefined,
+      message_id: data.message_id,
     }
   },
 
   /**
-   * Lista todas as conversas existentes do usuário com o agente nativo
+   * Lista conversas do usuário FILTRADAS POR EMPRESA ATIVA
    */
-  async listConversations(limit = 30): Promise<ConversationItem[]> {
+  async listConversationsByEmpresa(empresaId: string, limit = 50): Promise<ConversationItem[]> {
+    if (!empresaId) return []
+
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''
     const token = pb.authStore.token
     if (!token) return []
 
     try {
       const res = await fetch(
-        `${backendUrl}/backend/v1/agent-diagnostico/conversations?limit=${limit}`,
+        `${backendUrl}/backend/v1/agent-diagnostico/conversations?empresa_id=${encodeURIComponent(empresaId)}&limit=${limit}`,
         {
           headers: {
             Authorization: token,
@@ -254,13 +327,20 @@ export const aiAgentService = {
       const data = await res.json()
       return Array.isArray(data) ? data : data?.conversations || []
     } catch (err) {
-      console.warn('Não foi possível carregar conversas anteriores:', err)
+      console.warn('Não foi possível carregar conversas da empresa:', err)
       return []
     }
   },
 
   /**
-   * Carrega histórico completo de mensagens de uma conversa e formata para exibição
+   * Compatibilidade legado (caso alguma tela ainda chame listConversations sem empresa)
+   */
+  async listConversations(limit = 30): Promise<ConversationItem[]> {
+    return []
+  },
+
+  /**
+   * Carrega histórico completo de mensagens de uma conversa persistida por empresa
    */
   async loadConversationMessages(conversationId: string): Promise<DisplayMessage[]> {
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL || ''

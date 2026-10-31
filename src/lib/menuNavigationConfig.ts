@@ -1074,6 +1074,17 @@ export function filtrarMenuPorPerfil(
             badgeVariant: 'cyan',
             destaque: true,
           },
+          {
+            id: 'cliente-agente-ia',
+            name: 'Agente de IA Borlim',
+            path: '/cliente/agente-ia',
+            icon: Bot,
+            descricao: 'Consultoria econômica e financeira com histórico por empresa ativa',
+            modulo: 'cliente_agente_ia',
+            badge: 'IA Borlim',
+            badgeVariant: 'purple',
+            destaque: true,
+          },
         ],
       },
     ]

@@ -185,15 +185,28 @@ export default function AgenteIA() {
     return analisarAlertasProativos(balancosRaw, dresRaw, selectedAno, selectedEmpresa)
   }, [balancosRaw, dresRaw, selectedAno, selectedEmpresa])
 
-  // Carregar lista de conversas do backend
+  // Carregar lista de conversas do backend FILTRADAS POR EMPRESA ATIVA
   const refreshConversations = async () => {
-    const list = await aiAgentService.listConversations(30)
+    if (!selectedEmpresaId) {
+      setConversations([])
+      return
+    }
+    const list = await aiAgentService.listConversationsByEmpresa(selectedEmpresaId, 50)
     setConversations(list)
   }
 
+  // Quando a Empresa Ativa muda, limpa o chat e recarrega estritamente o histórico daquela empresa
   useEffect(() => {
+    if (isStreaming) {
+      abortControllerRef.current?.abort()
+    }
+    setActiveConversationId(null)
+    setMessages([])
+    setStreamDelta('')
+    setActiveCitations([])
+    setInputMessage('')
     refreshConversations()
-  }, [])
+  }, [selectedEmpresaId])
 
   // Carregar mensagens ao trocar de conversa ativa
   const selectConversation = async (convId: string) => {
@@ -738,17 +751,23 @@ export default function AgenteIA() {
         <div className="hidden md:flex flex-col w-72 bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden shrink-0">
           {/* Topo da Sidebar */}
           <div className="p-3 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-blue-700" />
-              <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                Conversas Anteriores
-              </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <MessageSquare className="w-4 h-4 text-blue-700 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                  Consultas da Empresa
+                </span>
+                <span className="text-[10px] text-slate-400 truncate block font-medium">
+                  {selectedEmpresa?.nome || 'Empresa ativa'}
+                </span>
+              </div>
             </div>
             <Button
               size="sm"
               variant="outline"
               onClick={handleStartNewConversation}
-              className="h-7 text-xs px-2 gap-1 border-blue-300 text-blue-700 hover:bg-blue-50"
+              className="h-7 text-xs px-2 gap-1 border-blue-300 text-blue-700 hover:bg-blue-50 shrink-0"
+              title="Iniciar nova conversa para a empresa ativa"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               Nova
@@ -759,9 +778,13 @@ export default function AgenteIA() {
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {conversations.length === 0 ? (
               <div className="p-4 text-center text-slate-400 text-xs">
-                <p>Nenhuma conversa salva ainda.</p>
+                <p className="font-medium text-slate-600">Nenhuma consulta desta empresa.</p>
                 <p className="text-[11px] mt-1 text-slate-400">
-                  Inicie um novo diagnóstico para criar histórico.
+                  As consultas e diagnósticos são gravados exclusivamente para{' '}
+                  <strong className="text-slate-600">
+                    {selectedEmpresa?.nome || 'esta empresa'}
+                  </strong>
+                  .
                 </p>
               </div>
             ) : (
@@ -797,7 +820,9 @@ export default function AgenteIA() {
           {/* Dicas de uso no rodapé da Sidebar */}
           <div className="p-3 bg-slate-50 border-t border-slate-100 text-[11px] text-slate-500 flex items-start gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            <span>Memória contínua com isolamento seguro por usuário e empresa.</span>
+            <span>
+              Histórico isolado por <strong>{selectedEmpresa?.nome || 'empresa ativa'}</strong>.
+            </span>
           </div>
         </div>
 

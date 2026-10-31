@@ -341,6 +341,8 @@ export default function Layout() {
     location.pathname === '/relatorios' ||
     location.pathname === '/relatorio-anual' ||
     location.pathname === '/agente-ia' ||
+    location.pathname === '/cliente/agente-ia' ||
+    location.pathname === '/gerencial/agente-ia' ||
     location.pathname === '/analise-tributaria' ||
     location.pathname === '/planejamento/bsc' ||
     location.pathname === '/notas-fiscais' ||
@@ -1239,7 +1241,10 @@ export default function Layout() {
                 {location.pathname === '/dashboard' && 'Dashboard Financeiro'}
                 {(location.pathname === '/dashboard-bi' || location.pathname === '/bi') &&
                   'Dashboard de BI Interativo · Apresentação Executiva'}
-                {location.pathname === '/agente-ia' && 'Agente de Diagnóstico & Estratégia de IA'}
+                {(location.pathname === '/agente-ia' ||
+                  location.pathname === '/cliente/agente-ia' ||
+                  location.pathname === '/gerencial/agente-ia') &&
+                  'Agente de IA Borlim — Análise Econômica & Financeira'}
                 {location.pathname === '/relatorios' && 'Relatórios e Pareceres'}
                 {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
                 {location.pathname === '/planejamento/bsc' && 'Balanced Scorecard (BSC)'}

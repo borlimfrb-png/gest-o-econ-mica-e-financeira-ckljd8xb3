@@ -6,6 +6,8 @@ export type ModuloSistema =
   | 'cliente_crescimento'
   | 'cliente_dashboard_bi'
   | 'cliente_indicadores'
+  | 'cliente_agente_ia'
+  | 'gerencial_agente_ia'
   | 'dashboard'
   | 'dashboard_bi'
   | 'empresas'
@@ -99,6 +101,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'relatorios',
       'relatorio_anual',
       'agente_ia',
+      'gerencial_agente_ia',
       'configuracoes',
     ],
   },
@@ -143,6 +146,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'relatorios',
       'relatorio_anual',
       'agente_ia',
+      'gerencial_agente_ia',
       'configuracoes',
     ],
   },
@@ -198,6 +202,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'cliente_crescimento',
       'cliente_dashboard_bi',
       'cliente_indicadores',
+      'cliente_agente_ia',
       'gerencial_dre',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',

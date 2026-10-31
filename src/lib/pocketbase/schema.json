@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-31T11:00:20.879Z",
+  "generatedAt": "2026-10-31T13:16:08.486Z",
   "collections": [
     {
       "name": "users",
@@ -5418,6 +5418,165 @@
         "CREATE INDEX idx_import_rascunho_empresa ON importacao_rascunhos (empresa)",
         "CREATE INDEX idx_import_rascunho_status ON importacao_rascunhos (status)",
         "CREATE INDEX idx_import_rascunho_created ON importacao_rascunhos (created DESC)"
+      ]
+    },
+    {
+      "name": "agente_conversas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")",
+        "view": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")",
+        "create": "@request.auth.id != \"\" && @request.body.user = @request.auth.id",
+        "update": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")",
+        "delete": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "empresa_nome",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "titulo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "agent_slug",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "skip_conversation_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultimo_ano",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ultima_mensagem_em",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_agente_conv_user ON agente_conversas (user)",
+        "CREATE INDEX idx_agente_conv_empresa ON agente_conversas (empresa_id)",
+        "CREATE INDEX idx_agente_conv_user_empresa ON agente_conversas (user, empresa_id)"
+      ]
+    },
+    {
+      "name": "agente_mensagens",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")",
+        "view": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")",
+        "create": "@request.auth.id != \"\" && @request.body.user = @request.auth.id",
+        "update": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")",
+        "delete": "@request.auth.id != \"\" && (user = @request.auth.id || @request.auth.role = \"admin\")"
+      },
+      "fields": [
+        {
+          "name": "conversa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "agente_conversas"
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa_id",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "role",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["user", "assistant", "system"]
+        },
+        {
+          "name": "content",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "citations",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "metadata",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_agente_msg_conversa ON agente_mensagens (conversa)",
+        "CREATE INDEX idx_agente_msg_empresa ON agente_mensagens (empresa_id)",
+        "CREATE INDEX idx_agente_msg_user_empresa ON agente_mensagens (user, empresa_id)",
+        "CREATE INDEX idx_agente_msg_created ON agente_mensagens (created)"
       ]
     }
   ]

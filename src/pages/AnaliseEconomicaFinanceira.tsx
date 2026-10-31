@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   ChevronRight,
   Gauge,
+  Bot,
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -37,7 +38,7 @@ interface HubShortcut {
   subtitulo: string
   descricao: string
   badge: string
-  badgeVariant?: 'blue' | 'emerald' | 'amber' | 'cyan'
+  badgeVariant?: 'blue' | 'emerald' | 'amber' | 'cyan' | 'purple'
   icon: typeof Scale
   gradient: string
   borderGlow: string
@@ -281,6 +282,22 @@ export default function AnaliseEconomicaFinanceira() {
         rota: () => (isCliente ? '/cliente/indicadores' : '/gerencial/indicadores'),
         metricasTexto: 'Liquidez, Endividamento, ROE/ROA, Margens e Prazos Médios PMR/PMP',
       },
+      {
+        id: 'agente-ia',
+        titulo: 'Agente de IA Borlim',
+        subtitulo: 'Consultoria Econômico-Financeira Inteligente',
+        descricao:
+          'Assistente de IA nativo com histórico exclusivo por empresa ativa. Responde sobre faturamento, despesas fixas/variáveis, margens, centros de custo e planos de ação.',
+        badge: 'IA Nativa',
+        badgeVariant: 'purple',
+        icon: Bot,
+        gradient: 'from-[#0B1F3A] via-[#1E1945] to-[#2D1B54]',
+        borderGlow: 'hover:border-purple-400/80 hover:shadow-purple-500/20',
+        iconBg:
+          'bg-gradient-to-tr from-purple-500/30 to-violet-600/25 text-purple-300 border-purple-400/50 shadow-purple-950/40',
+        rota: () => (isCliente ? '/cliente/agente-ia' : '/gerencial/agente-ia'),
+        metricasTexto: 'Consultas, diagnósticos e histórico isolados por empresa ativa',
+      },
     ],
     [isCliente],
   )
@@ -398,7 +415,7 @@ export default function AnaliseEconomicaFinanceira() {
             </h2>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            9 demonstrativos estruturados
+            10 módulos executivos estruturados
           </span>
         </div>
 
