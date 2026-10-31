@@ -344,6 +344,7 @@ export default function Layout() {
     location.pathname === '/cliente/agente-ia' ||
     location.pathname === '/gerencial/agente-ia' ||
     location.pathname === '/analise-tributaria' ||
+    location.pathname === '/reforma-tributaria' ||
     location.pathname === '/planejamento/bsc' ||
     location.pathname === '/notas-fiscais' ||
     location.pathname === '/notas-fiscais/validacao' ||
@@ -1249,6 +1250,7 @@ export default function Layout() {
                 {location.pathname === '/relatorio-anual' && 'Relatório Consolidado Anual'}
                 {location.pathname === '/planejamento/bsc' && 'Balanced Scorecard (BSC)'}
                 {location.pathname === '/analise-tributaria' && 'Análise Tributária e Planejamento'}
+                {location.pathname === '/reforma-tributaria' && 'Reforma Tributária — CBS & IBS'}
                 {location.pathname === '/notas-fiscais' && 'Emissão de Nota Fiscal (NFS-e)'}
                 {location.pathname === '/notas-fiscais/validacao' &&
                   'Validação de NFS-e (Padrão Nacional)'}
@@ -1286,6 +1288,8 @@ export default function Layout() {
                   'Gestão estratégica em 4 perspectivas com metas, peso e apuração automática'}
                 {location.pathname === '/analise-tributaria' &&
                   'Comparativo entre Simples Nacional, Lucro Presumido e Lucro Real'}
+                {location.pathname === '/reforma-tributaria' &&
+                  'Simulação da Reforma Tributária (LC 214/2025) com apuração de CBS, IBS, saídas DRE e créditos CC-018'}
                 {location.pathname === '/notas-fiscais' &&
                   'Emita NFS-e, gere DANFSE em PDF/XML e envie para clientes por e-mail'}
                 {location.pathname === '/notas-fiscais/validacao' &&

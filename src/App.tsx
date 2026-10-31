@@ -74,6 +74,7 @@ const IndicadoresKanitz = lazy(() => import('./pages/IndicadoresKanitz'))
 const AgenteIA = lazy(() => import('./pages/AgenteIA'))
 const Importacao = lazy(() => import('./pages/Importacao'))
 const AnaliseTributaria = lazy(() => import('./pages/AnaliseTributaria'))
+const ReformaTributaria = lazy(() => import('./pages/ReformaTributaria'))
 const BalancedScorecard = lazy(() => import('./pages/BalancedScorecard'))
 const SetoresMercado = lazy(() => import('./pages/SetoresMercado'))
 const CadastroSetores = lazy(() => import('./pages/CadastroSetores'))
@@ -699,6 +700,14 @@ const App = () => (
                       element={
                         <ModuloRoute modulo="analise_tributaria">
                           <AnaliseTributaria />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/reforma-tributaria"
+                      element={
+                        <ModuloRoute modulo="analise_tributaria">
+                          <ReformaTributaria />
                         </ModuloRoute>
                       }
                     />
