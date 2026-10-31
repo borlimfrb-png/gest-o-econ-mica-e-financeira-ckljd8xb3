@@ -210,7 +210,7 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       let gruposFiltrados: GrupoEmpresarialRecord[] = listGrupos
 
       // Para perfil cliente: montar a lista estritamente a partir dos vínculos do usuário (individuais + empresas dos grupos);
-      // manter o bloqueio de segurança (cliente só vê empresas dos vínculos dele).
+      // manter o bloqueio de segurança (cliente só vê empresas e grupos dos vínculos dele).
       if (isCliente) {
         if (idsPermitidos.length > 0) {
           const listaCliente: EmpresaRecord[] = []
@@ -224,8 +224,8 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         } else {
           empresasFiltradas = []
         }
-        // Cliente navega nas empresas resultantes (individuais + membros de grupos)
-        gruposFiltrados = []
+        // Mantém apenas os grupos vinculados ao usuário cliente
+        gruposFiltrados = listGrupos.filter((g) => userGruposIds.includes(g.id))
       } else if (!isAdmin && idsPermitidos.length > 0) {
         empresasFiltradas = todasEmpresasCarregadas.filter((e) => idsPermitidos.includes(e.id))
         const gruposPermitidosIds = userGruposIds
@@ -466,17 +466,25 @@ export const FilterProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         todasEntidades,
         selectedEmpresaId,
         setSelectedEmpresaId: (id: string) => {
-          // Se for perfil cliente: restringe a seleção estritamente às empresas do seu vínculo
+          // Se for perfil cliente: restringe a seleção estritamente às empresas e grupos do seu vínculo
           if (isCliente) {
-            if (userEmpresasIds.includes(id)) {
+            const isGrupoValidoCliente =
+              id.startsWith('grupo-') && userGruposIds.includes(id.replace(/^grupo-/, ''))
+            if (userEmpresasIds.includes(id) || isGrupoValidoCliente) {
               setSelectedEmpresaId(id)
               localStorage.setItem('filter_selected_empresa_id', id)
             } else if (
               userEmpresasIds.length > 0 &&
-              (!selectedEmpresaId || !userEmpresasIds.includes(selectedEmpresaId))
+              (!selectedEmpresaId ||
+                (!userEmpresasIds.includes(selectedEmpresaId) &&
+                  !(
+                    selectedEmpresaId.startsWith('grupo-') &&
+                    userGruposIds.includes(selectedEmpresaId.replace(/^grupo-/, ''))
+                  )))
             ) {
-              setSelectedEmpresaId(userEmpresasIds[0])
-              localStorage.setItem('filter_selected_empresa_id', userEmpresasIds[0])
+              const fallbackId = userEmpresasIds[0]
+              setSelectedEmpresaId(fallbackId)
+              localStorage.setItem('filter_selected_empresa_id', fallbackId)
             }
             return
           }

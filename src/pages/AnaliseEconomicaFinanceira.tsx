@@ -340,9 +340,9 @@ export default function AnaliseEconomicaFinanceira() {
                     </SelectTrigger>
                     <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
                       {isCliente ? (
-                        empresas.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                            {emp.nome_fantasia || emp.nome}
+                        todasEntidades.map((ent) => (
+                          <SelectItem key={ent.id} value={ent.id} className="text-xs">
+                            {ent.is_grupo ? ent.nome : ent.nome_fantasia || ent.nome}
                           </SelectItem>
                         ))
                       ) : (
