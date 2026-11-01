@@ -23,10 +23,125 @@ export interface LinhaReferenciaPlanoContas {
   Descricao: string
 }
 
+export interface LinhaExcelValidada {
+  codigo_pc?: string
+  conta_nome?: string
+  centro_nome?: string
+  tipo_despesa_nome?: string
+  data: string
+  valor: number
+  historico?: string
+  recorrente?: boolean
+  plano_conta_id?: string
+  status: 'valido' | 'erro'
+  erro_msg?: string
+}
+
+/**
+ * Faz o parsing e validação das linhas de uma planilha Excel de lançamentos
+ * compatível com o modelo padrão Borlim.
+ */
+export function parsePlanilhaLancamentosExcel(
+  rawData: Array<Record<string, unknown>>,
+  planoContas: PlanoContaRecord[],
+  opcoes?: {
+    mesObrigatorio?: number // 1 a 12
+    anoObrigatorio?: number
+  },
+): LinhaExcelValidada[] {
+  return rawData.map((row) => {
+    const codPC = String(
+      row['Codigo Plano'] || row['codigo_plano'] || row['Codigo'] || row['codigo'] || '',
+    ).trim()
+    const rawDataLanc = row['Data'] || row['data'] || row['Data Lancamento'] || ''
+    const rawValor = row['Valor'] || row['valor'] || 0
+    const historico = String(row['Historico'] || row['historico'] || row['Descricao'] || '')
+    const recorrente = Boolean(row['Recorrente'] || row['recorrente'])
+
+    let dataFormatada = ''
+    if (rawDataLanc instanceof Date) {
+      dataFormatada = rawDataLanc.toISOString().split('T')[0]
+    } else if (typeof rawDataLanc === 'string') {
+      if (rawDataLanc.includes('/')) {
+        const parts = rawDataLanc.split('/')
+        if (parts.length === 3) {
+          dataFormatada = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`
+        }
+      } else {
+        dataFormatada = rawDataLanc
+      }
+    }
+
+    let numValor = 0
+    if (typeof rawValor === 'number') {
+      numValor = rawValor
+    } else if (typeof rawValor === 'string') {
+      numValor = parseFloat(rawValor.replace(/[R$\s.]/g, '').replace(',', '.')) || 0
+    }
+
+    const rawContaNome = String(row['Conta'] || '')
+      .trim()
+      .toLowerCase()
+    const pcEncontrado = planoContas.find(
+      (p) =>
+        (p.codigo_empresa &&
+          (p.codigo_empresa.toLowerCase() === codPC.toLowerCase() ||
+            p.codigo_empresa.toLowerCase() === rawContaNome)) ||
+        (p.codigo && p.codigo.toLowerCase() === codPC.toLowerCase()) ||
+        (p.expand?.conta?.nome && p.expand.conta.nome.trim().toLowerCase() === rawContaNome),
+    )
+
+    let status: 'valido' | 'erro' = 'valido'
+    let erro_msg = ''
+
+    if (!pcEncontrado && !codPC) {
+      status = 'erro'
+      erro_msg = 'Código do Plano de Contas não informado'
+    } else if (!pcEncontrado) {
+      status = 'erro'
+      erro_msg = `Plano de contas "${codPC}" não encontrado`
+    } else if (!dataFormatada || isNaN(Date.parse(dataFormatada))) {
+      status = 'erro'
+      erro_msg = 'Data inválida'
+    } else if (numValor <= 0) {
+      status = 'erro'
+      erro_msg = 'Valor deve ser maior que zero'
+    } else if (opcoes?.mesObrigatorio !== undefined || opcoes?.anoObrigatorio !== undefined) {
+      const parts = dataFormatada.split('-')
+      if (parts.length === 3) {
+        const anoData = parseInt(parts[0], 10)
+        const mesData = parseInt(parts[1], 10)
+        if (opcoes.anoObrigatorio !== undefined && anoData !== opcoes.anoObrigatorio) {
+          status = 'erro'
+          erro_msg = `Data (${dataFormatada}) pertence ao ano ${anoData}, mas o exercício selecionado é ${opcoes.anoObrigatorio}`
+        } else if (opcoes.mesObrigatorio !== undefined && mesData !== opcoes.mesObrigatorio) {
+          status = 'erro'
+          erro_msg = `Data (${dataFormatada}) é do mês ${mesData}, mas a etapa atual exige lançamentos do mês ${opcoes.mesObrigatorio}`
+        }
+      }
+    }
+
+    return {
+      codigo_pc: codPC,
+      conta_nome: pcEncontrado?.expand?.conta?.nome || String(row['Conta'] || ''),
+      centro_nome: pcEncontrado?.expand?.centro?.nome || String(row['Centro'] || ''),
+      tipo_despesa_nome: pcEncontrado?.expand?.tipo_despesa?.nome,
+      data: dataFormatada,
+      valor: numValor,
+      historico,
+      recorrente,
+      plano_conta_id: pcEncontrado?.id,
+      status,
+      erro_msg,
+    }
+  })
+}
+
 export interface OpcoesDownloadModeloExcel {
   planoContas?: PlanoContaRecord[]
   nomeEmpresaOuGrupo?: string
   anoReferencia?: number
+  mesReferencia?: number // 1 a 12
 }
 
 /**
@@ -73,6 +188,24 @@ export function gerarPlanilhaModeloImportacaoExcel(opcoes?: OpcoesDownloadModelo
   if (plano.length > 0) {
     const planoOrdenado = ordenarPlanoContasHierarquico(plano)
 
+    const mesNum = opcoes?.mesReferencia ? Math.max(1, Math.min(12, opcoes.mesReferencia)) : 1
+    const mesFormatado = String(mesNum).padStart(2, '0')
+    const nomesMesesPt = [
+      'janeiro',
+      'fevereiro',
+      'marco',
+      'abril',
+      'maio',
+      'junho',
+      'julho',
+      'agosto',
+      'setembro',
+      'outubro',
+      'novembro',
+      'dezembro',
+    ]
+    const nomeMesSufixo = opcoes?.mesReferencia ? `_${nomesMesesPt[mesNum - 1]}` : ''
+
     // 1. Aba principal: Modelo_Lancamentos com TODAS as contas do plano
     const rowsLancamentos: LinhaModeloExcelLancamentos[] = planoOrdenado.map((pc) => {
       const codPlano = (pc.codigo_empresa || pc.codigo || '').trim()
@@ -85,7 +218,7 @@ export function gerarPlanilhaModeloImportacaoExcel(opcoes?: OpcoesDownloadModelo
         'Codigo Plano': codPlano,
         Conta: contaNome,
         Centro: centroNome,
-        Data: `${ano}-01-15`,
+        Data: `${ano}-${mesFormatado}-15`,
         Valor: 0.0,
         Historico: isReceita
           ? `Recebimento ref. ${contaNome || 'serviços/vendas'}`
@@ -197,11 +330,14 @@ export function gerarPlanilhaModeloImportacaoExcel(opcoes?: OpcoesDownloadModelo
           .toLowerCase()
       : 'plano_contas'
 
-    const nomeArquivo = `modelo_importacao_lancamentos_${safeEntidade}_${dataHoje}.xlsx`
+    const nomeArquivo = `modelo_importacao_lancamentos_${safeEntidade}${nomeMesSufixo}_${ano}.xlsx`
     XLSX.writeFile(wb, nomeArquivo)
 
     return { totalContas: planoOrdenado.length, nomeArquivo }
   }
+
+  const mesNum = opcoes?.mesReferencia ? Math.max(1, Math.min(12, opcoes.mesReferencia)) : 1
+  const mesFormatado = String(mesNum).padStart(2, '0')
 
   // Fallback: modelo genérico/vazio quando a empresa/grupo não possui plano de contas
   const templateGenerico: LinhaModeloExcelLancamentos[] = [
@@ -209,18 +345,18 @@ export function gerarPlanilhaModeloImportacaoExcel(opcoes?: OpcoesDownloadModelo
       'Codigo Plano': 'PC-001',
       Conta: 'Vendas de Produtos',
       Centro: 'Comercial',
-      Data: `${ano}-01-15`,
+      Data: `${ano}-${mesFormatado}-15`,
       Valor: 15000.0,
-      Historico: 'Vendas da primeira quinzena',
+      Historico: 'Vendas do mês',
       Recorrente: 'NAO',
     },
     {
       'Codigo Plano': 'PC-002',
       Conta: 'Salários e Ordenados',
       Centro: 'Administrativo',
-      Data: `${ano}-01-05`,
+      Data: `${ano}-${mesFormatado}-05`,
       Valor: 8500.0,
-      Historico: 'Folha de pagamento Janeiro',
+      Historico: 'Folha de pagamento do mês',
       Recorrente: 'SIM',
     },
   ]
@@ -237,7 +373,9 @@ export function gerarPlanilhaModeloImportacaoExcel(opcoes?: OpcoesDownloadModelo
   ]
   XLSX.utils.book_append_sheet(wb, wsGenerico, 'Modelo_Lancamentos')
 
-  const nomeArquivo = 'modelo_importacao_lancamentos.xlsx'
+  const nomeArquivo = opcoes?.mesReferencia
+    ? `modelo_importacao_lancamentos_mes_${mesFormatado}_${ano}.xlsx`
+    : `modelo_importacao_lancamentos_${ano}.xlsx`
   XLSX.writeFile(wb, nomeArquivo)
 
   return { totalContas: 0, nomeArquivo }

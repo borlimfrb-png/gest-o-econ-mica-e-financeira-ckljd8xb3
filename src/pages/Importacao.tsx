@@ -26,6 +26,7 @@ import {
   Pencil,
   Bot,
   BookOpen,
+  Calendar,
 } from 'lucide-react'
 import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import { ImportarDespesasIA } from '@/components/ImportarDespesasIA'
@@ -96,6 +97,7 @@ import {
   type OcrProvider,
 } from '@/lib/pdfToExcel'
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
+import { ImportarExcel12Meses } from '@/components/ImportarExcel12Meses'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { gerarPlanilhaModeloImportacaoExcel } from '@/lib/modeloImportacaoExcel'
@@ -142,6 +144,7 @@ export default function Importacao() {
   // ----------------------------------------------------
   // Aba Excel (Estados)
   // ----------------------------------------------------
+  const [excelModo, setExcelModo] = useState<'lote' | '12meses'>('12meses')
   const [excelEmpresaId, setExcelEmpresaId] = useState('')
   const [excelFile, setExcelFile] = useState<File | null>(null)
   const [excelParsedRows, setExcelParsedRows] = useState<
@@ -2950,209 +2953,272 @@ export default function Importacao() {
         </TabsContent>
 
         {/* ========================================================================= */}
-        {/* ABA 2: IMPORTAR EXCEL (Existente)                                         */}
+        {/* ABA 2: IMPORTAR EXCEL (Existente + Novo Fluxo 12 Meses)                   */}
         {/* ========================================================================= */}
         <TabsContent value="excel" className="space-y-6 focus:outline-none">
-          {/* Download Modelo */}
-          <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
-                <FileSpreadsheet className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-emerald-950">
-                  Planilha Modelo de Lançamentos (.xlsx)
-                </h3>
-                <p className="text-xs text-emerald-800 mt-0.5">
-                  Baixe o modelo pré-formatado com as colunas necessárias para importar seus dados
-                  sem erros.
-                </p>
-              </div>
+          {/* Seletor de Modo na Tela Importar Excel */}
+          <div className="bg-white border border-slate-200 rounded-xl p-2 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-lg w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setExcelModo('12meses')}
+                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  excelModo === '12meses'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>Importar 12 Meses (Passo a Passo)</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
+                    excelModo === '12meses'
+                      ? 'bg-blue-500/40 text-blue-100'
+                      : 'bg-blue-100 text-blue-700'
+                  }`}
+                >
+                  Novo
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setExcelModo('lote')}
+                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  excelModo === 'lote'
+                    ? 'bg-emerald-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Planilha Única / Lote Aberto</span>
+              </button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleDownloadExcelTemplate}
-              disabled={baixandoModeloExcel}
-              className="bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50 gap-2 shrink-0 font-medium"
-            >
-              {baixandoModeloExcel ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  Gerando Modelo...
-                </>
-              ) : (
-                <>
-                  <Download className="w-4 h-4" />
-                  Baixar Planilha Modelo
-                </>
-              )}
-            </Button>
+
+            <span className="text-xs text-slate-500 hidden md:inline px-3">
+              {excelModo === '12meses'
+                ? 'Fluxo sequencial: valida e confirma cada mês antes de liberar o próximo.'
+                : 'Importe lançamentos avulsos ou de múltiplos períodos em um único arquivo.'}
+            </span>
           </div>
 
-          {/* Configuração da Importação Excel */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="excelEmpresa" className="font-medium text-slate-700">
-                  Empresa de Destino *
-                </Label>
-                <Select value={excelEmpresaId} onValueChange={setExcelEmpresaId}>
-                  <SelectTrigger id="excelEmpresa" className="bg-white">
-                    <SelectValue placeholder="Selecione a empresa" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {empresas.map((emp) => (
-                      <SelectItem key={emp.id} value={emp.id}>
-                        {emp.razao_social || emp.nome_fantasia}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-slate-500">
-                  Todos os lançamentos do arquivo serão atribuídos a esta empresa.
-                </p>
-              </div>
+          {/* MODO 1: Assistente Guiado de 12 Meses (Novo) */}
+          {excelModo === '12meses' && (
+            <ImportarExcel12Meses
+              empresas={empresas}
+              planoContas={planoContas}
+              empresaAtivaId={selectedEmpresaId}
+              isGrupoAtivo={isGrupoAtivo}
+              grupoNome={grupoAtivo?.nome}
+              onIrParaLancamentos={() => navigate('/lancamentos')}
+            />
+          )}
 
-              <div className="space-y-2">
-                <Label htmlFor="excelFile" className="font-medium text-slate-700">
-                  Arquivo Excel (.xlsx, .xls) *
-                </Label>
-                <Input
-                  id="excelFile"
-                  type="file"
-                  accept=".xlsx, .xls"
-                  onChange={handleExcelFileChange}
-                  className="bg-white cursor-pointer"
-                />
-                <p className="text-xs text-slate-500">
-                  Selecione a planilha com os dados a serem importados.
-                </p>
-              </div>
-            </div>
-
-            {/* Tabela de Pré-visualização Excel */}
-            {excelParsedRows.length > 0 && (
-              <div className="space-y-4 pt-4 border-t border-slate-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="font-semibold text-slate-800">
-                      Pré-visualização dos Registros ({excelParsedRows.length})
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {excelParsedRows.filter((r) => r.status === 'valido').length} válidos,{' '}
-                      {excelParsedRows.filter((r) => r.status === 'erro').length} com erro.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={handleImportExcel}
-                    disabled={
-                      excelImporting ||
-                      !excelEmpresaId ||
-                      excelParsedRows.filter((r) => r.status === 'valido').length === 0
-                    }
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-2 shadow-sm"
-                  >
-                    {excelImporting ? (
-                      <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                        Gravando lançamentos...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" />
-                        Confirmar e Importar (
-                        {excelParsedRows.filter((r) => r.status === 'valido').length})
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                <div className="border border-slate-200 rounded-xl overflow-hidden">
-                  <div className="max-h-96 overflow-y-auto">
-                    <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-50 text-slate-600 font-semibold uppercase sticky top-0 border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Status</th>
-                          <th className="py-2.5 px-3">Cód. Plano</th>
-                          <th className="py-2.5 px-3">Conta</th>
-                          <th className="py-2.5 px-3">Centro</th>
-                          <th className="py-2.5 px-3">Data</th>
-                          <th className="py-2.5 px-3 text-right">Valor</th>
-                          <th className="py-2.5 px-3">Histórico</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {excelParsedRows.map((row, idx) => (
-                          <tr
-                            key={idx}
-                            className={
-                              row.status === 'erro' ? 'bg-rose-50/50' : 'hover:bg-slate-50/60'
-                            }
-                          >
-                            <td className="py-2.5 px-3">
-                              {row.status === 'valido' ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
-                                  <CheckCircle className="w-3.5 h-3.5" /> Válido
-                                </span>
-                              ) : (
-                                <span
-                                  className="inline-flex items-center gap-1 text-rose-600 font-medium"
-                                  title={row.erro_msg}
-                                >
-                                  <AlertCircle className="w-3.5 h-3.5" /> {row.erro_msg}
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-2.5 px-3 font-mono font-medium">
-                              {row.codigo_pc || '-'}
-                            </td>
-                            <td className="py-2.5 px-3">{row.conta_nome || '-'}</td>
-                            <td className="py-2.5 px-3">{row.centro_nome || '-'}</td>
-                            <td className="py-2.5 px-3 font-mono">{row.data}</td>
-                            <td className="py-2.5 px-3 text-right font-mono font-medium">
-                              {new Intl.NumberFormat('pt-BR', {
-                                style: 'currency',
-                                currency: 'BRL',
-                              }).format(row.valor)}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-500 max-w-xs truncate">
-                              {row.historico || '-'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Mensagem de sucesso do Excel */}
-            {excelSuccess && (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+          {/* MODO 2: Importação Excel Padrão / Existente (Intacto) */}
+          {excelModo === 'lote' && (
+            <div className="space-y-6">
+              {/* Download Modelo */}
+              <div className="bg-emerald-50/50 border border-emerald-200 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-xl">
+                    <FileSpreadsheet className="w-6 h-6" />
+                  </div>
                   <div>
-                    <p className="text-sm font-semibold text-emerald-950">
-                      {excelImportedCount} lançamentos importados com sucesso!
-                    </p>
-                    <p className="text-xs text-emerald-700">
-                      Os registros já estão disponíveis na consulta e relatórios da empresa.
+                    <h3 className="font-semibold text-emerald-950">
+                      Planilha Modelo de Lançamentos (.xlsx)
+                    </h3>
+                    <p className="text-xs text-emerald-800 mt-0.5">
+                      Baixe o modelo pré-formatado com as colunas necessárias para importar seus
+                      dados sem erros.
                     </p>
                   </div>
                 </div>
                 <Button
+                  variant="outline"
                   size="sm"
-                  onClick={() => navigate('/lancamentos')}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5"
+                  onClick={handleDownloadExcelTemplate}
+                  disabled={baixandoModeloExcel}
+                  className="bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50 gap-2 shrink-0 font-medium"
                 >
-                  Ir para Lançamentos
-                  <ArrowRight className="w-3.5 h-3.5" />
+                  {baixandoModeloExcel ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      Gerando Modelo...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      Baixar Planilha Modelo
+                    </>
+                  )}
                 </Button>
               </div>
-            )}
-          </div>
+
+              {/* Configuração da Importação Excel */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="excelEmpresa" className="font-medium text-slate-700">
+                      Empresa de Destino *
+                    </Label>
+                    <Select value={excelEmpresaId} onValueChange={setExcelEmpresaId}>
+                      <SelectTrigger id="excelEmpresa" className="bg-white">
+                        <SelectValue placeholder="Selecione a empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {empresas.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id}>
+                            {emp.razao_social || emp.nome_fantasia}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-500">
+                      Todos os lançamentos do arquivo serão atribuídos a esta empresa.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="excelFile" className="font-medium text-slate-700">
+                      Arquivo Excel (.xlsx, .xls) *
+                    </Label>
+                    <Input
+                      id="excelFile"
+                      type="file"
+                      accept=".xlsx, .xls"
+                      onChange={handleExcelFileChange}
+                      className="bg-white cursor-pointer"
+                    />
+                    <p className="text-xs text-slate-500">
+                      Selecione a planilha com os dados a serem importados.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tabela de Pré-visualização Excel */}
+                {excelParsedRows.length > 0 && (
+                  <div className="space-y-4 pt-4 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-semibold text-slate-800">
+                          Pré-visualização dos Registros ({excelParsedRows.length})
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {excelParsedRows.filter((r) => r.status === 'valido').length} válidos,{' '}
+                          {excelParsedRows.filter((r) => r.status === 'erro').length} com erro.
+                        </p>
+                      </div>
+                      <Button
+                        onClick={handleImportExcel}
+                        disabled={
+                          excelImporting ||
+                          !excelEmpresaId ||
+                          excelParsedRows.filter((r) => r.status === 'valido').length === 0
+                        }
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium gap-2 shadow-sm"
+                      >
+                        {excelImporting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Gravando lançamentos...
+                          </>
+                        ) : (
+                          <>
+                            <Check className="w-4 h-4" />
+                            Confirmar e Importar (
+                            {excelParsedRows.filter((r) => r.status === 'valido').length})
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-xl overflow-hidden">
+                      <div className="max-h-96 overflow-y-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-slate-50 text-slate-600 font-semibold uppercase sticky top-0 border-b border-slate-200">
+                            <tr>
+                              <th className="py-2.5 px-3">Status</th>
+                              <th className="py-2.5 px-3">Cód. Plano</th>
+                              <th className="py-2.5 px-3">Conta</th>
+                              <th className="py-2.5 px-3">Centro</th>
+                              <th className="py-2.5 px-3">Data</th>
+                              <th className="py-2.5 px-3 text-right">Valor</th>
+                              <th className="py-2.5 px-3">Histórico</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {excelParsedRows.map((row, idx) => (
+                              <tr
+                                key={idx}
+                                className={
+                                  row.status === 'erro' ? 'bg-rose-50/50' : 'hover:bg-slate-50/60'
+                                }
+                              >
+                                <td className="py-2.5 px-3">
+                                  {row.status === 'valido' ? (
+                                    <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                                      <CheckCircle className="w-3.5 h-3.5" /> Válido
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className="inline-flex items-center gap-1 text-rose-600 font-medium"
+                                      title={row.erro_msg}
+                                    >
+                                      <AlertCircle className="w-3.5 h-3.5" /> {row.erro_msg}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 font-mono font-medium">
+                                  {row.codigo_pc || '-'}
+                                </td>
+                                <td className="py-2.5 px-3">{row.conta_nome || '-'}</td>
+                                <td className="py-2.5 px-3">{row.centro_nome || '-'}</td>
+                                <td className="py-2.5 px-3 font-mono">{row.data}</td>
+                                <td className="py-2.5 px-3 text-right font-mono font-medium">
+                                  {new Intl.NumberFormat('pt-BR', {
+                                    style: 'currency',
+                                    currency: 'BRL',
+                                  }).format(row.valor)}
+                                </td>
+                                <td className="py-2.5 px-3 text-slate-500 max-w-xs truncate">
+                                  {row.historico || '-'}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Mensagem de sucesso do Excel */}
+                {excelSuccess && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                      <div>
+                        <p className="text-sm font-semibold text-emerald-950">
+                          {excelImportedCount} lançamentos importados com sucesso!
+                        </p>
+                        <p className="text-xs text-emerald-700">
+                          Os registros já estão disponíveis na consulta e relatórios da empresa.
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => navigate('/lancamentos')}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5"
+                    >
+                      Ir para Lançamentos
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 
