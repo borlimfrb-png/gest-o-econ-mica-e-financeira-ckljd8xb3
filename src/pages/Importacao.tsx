@@ -27,6 +27,7 @@ import {
   Bot,
   BookOpen,
   Calendar,
+  Layers,
 } from 'lucide-react'
 import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import { ImportarDespesasIA } from '@/components/ImportarDespesasIA'
@@ -98,6 +99,7 @@ import {
 } from '@/lib/pdfToExcel'
 import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
 import { ImportarExcel12Meses } from '@/components/ImportarExcel12Meses'
+import { ImportarExcel12MesesColunas } from '@/components/ImportarExcel12MesesColunas'
 import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { gerarPlanilhaModeloImportacaoExcel } from '@/lib/modeloImportacaoExcel'
@@ -144,7 +146,7 @@ export default function Importacao() {
   // ----------------------------------------------------
   // Aba Excel (Estados)
   // ----------------------------------------------------
-  const [excelModo, setExcelModo] = useState<'lote' | '12meses'>('12meses')
+  const [excelModo, setExcelModo] = useState<'colunas12m' | '12meses' | 'lote'>('colunas12m')
   const [excelEmpresaId, setExcelEmpresaId] = useState('')
   const [excelFile, setExcelFile] = useState<File | null>(null)
   const [excelParsedRows, setExcelParsedRows] = useState<
@@ -2958,23 +2960,23 @@ export default function Importacao() {
         <TabsContent value="excel" className="space-y-6 focus:outline-none">
           {/* Seletor de Modo na Tela Importar Excel */}
           <div className="bg-white border border-slate-200 rounded-xl p-2 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-lg w-full sm:w-auto">
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-lg w-full sm:w-auto overflow-x-auto">
               <button
                 type="button"
-                onClick={() => setExcelModo('12meses')}
-                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  excelModo === '12meses'
-                    ? 'bg-blue-600 text-white shadow-xs'
+                onClick={() => setExcelModo('colunas12m')}
+                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
+                  excelModo === 'colunas12m'
+                    ? 'bg-teal-700 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
                 }`}
               >
-                <Calendar className="w-4 h-4" />
-                <span>Importar 12 Meses (Passo a Passo)</span>
+                <Layers className="w-4 h-4" />
+                <span>12 Meses em Colunas (Jan a Dez)</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
-                    excelModo === '12meses'
-                      ? 'bg-blue-500/40 text-blue-100'
-                      : 'bg-blue-100 text-blue-700'
+                    excelModo === 'colunas12m'
+                      ? 'bg-teal-500/40 text-teal-100'
+                      : 'bg-teal-100 text-teal-800'
                   }`}
                 >
                   Novo
@@ -2983,8 +2985,21 @@ export default function Importacao() {
 
               <button
                 type="button"
+                onClick={() => setExcelModo('12meses')}
+                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
+                  excelModo === '12meses'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                <span>12 Meses (Um Arquivo por Mês)</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setExcelModo('lote')}
-                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-4 py-2 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap ${
                   excelModo === 'lote'
                     ? 'bg-emerald-700 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -2995,14 +3010,28 @@ export default function Importacao() {
               </button>
             </div>
 
-            <span className="text-xs text-slate-500 hidden md:inline px-3">
-              {excelModo === '12meses'
-                ? 'Fluxo sequencial: valida e confirma cada mês antes de liberar o próximo.'
-                : 'Importe lançamentos avulsos ou de múltiplos períodos em um único arquivo.'}
+            <span className="text-xs text-slate-500 hidden xl:inline px-3">
+              {excelModo === 'colunas12m'
+                ? 'Planilha única com 12 colunas de meses (Jan a Dez); gravação sequencial mês a mês.'
+                : excelModo === '12meses'
+                  ? 'Fluxo sequencial: valida e confirma cada mês antes de liberar o próximo.'
+                  : 'Importe lançamentos avulsos ou de múltiplos períodos em um único arquivo.'}
             </span>
           </div>
 
-          {/* MODO 1: Assistente Guiado de 12 Meses (Novo) */}
+          {/* MODO 1: Nova Opção - 12 Meses em Colunas (Jan a Dez) */}
+          {excelModo === 'colunas12m' && (
+            <ImportarExcel12MesesColunas
+              empresas={empresas}
+              planoContas={planoContas}
+              empresaAtivaId={selectedEmpresaId}
+              isGrupoAtivo={isGrupoAtivo}
+              grupoNome={grupoAtivo?.nome}
+              onIrParaLancamentos={() => navigate('/lancamentos')}
+            />
+          )}
+
+          {/* MODO 2: Assistente Guiado de 12 Meses Existente (Intacto) */}
           {excelModo === '12meses' && (
             <ImportarExcel12Meses
               empresas={empresas}
@@ -3014,7 +3043,7 @@ export default function Importacao() {
             />
           )}
 
-          {/* MODO 2: Importação Excel Padrão / Existente (Intacto) */}
+          {/* MODO 3: Importação Excel Padrão / Lote Aberto Existente (Intacto) */}
           {excelModo === 'lote' && (
             <div className="space-y-6">
               {/* Download Modelo */}
