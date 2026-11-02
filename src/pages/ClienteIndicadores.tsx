@@ -90,6 +90,8 @@ export default function ClienteIndicadores() {
     }
   }, [selectedAno])
 
+  const isGrupoSelecionado = Boolean(selectedEmpresaId && selectedEmpresaId.startsWith('grupo-'))
+
   const empresaIdAlvo =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
       ? selectedEmpresaId
@@ -101,12 +103,57 @@ export default function ClienteIndicadores() {
     try {
       setLoading(true)
 
+      const extrairSomaBalanco = (b: BalancoRecord): number => {
+        return (
+          (b.caixa_equivalentes || 0) +
+          (b.aplicacoes_financeiras || 0) +
+          (b.contas_receber || 0) +
+          (b.estoques || 0) +
+          (b.impostos_recuperar || 0) +
+          (b.outros_ativo_circulante || 0) +
+          (b.realizavel_longo_prazo || 0) +
+          (b.investimentos || 0) +
+          (b.imobilizado || 0) +
+          (b.intangivel || 0) +
+          (b.fornecedores || 0) +
+          (b.emprestimos_curto_prazo || 0) +
+          (b.obrigacoes_trabalhistas || 0) +
+          (b.obrigacoes_tributarias || 0) +
+          (b.outros_passivo_circulante || 0) +
+          (b.emprestimos_longo_prazo || 0) +
+          (b.outras_obrigacoes_longo_prazo || 0) +
+          (b.capital_social || 0) +
+          (b.reservas_lucros || 0) +
+          (b.lucros_acumulados || 0)
+        )
+      }
+
+      const selecionarMelhorBalanco = (list: BalancoRecord[]): BalancoRecord | null => {
+        const doAno = list.filter((b) => Number(b.ano) === Number(anoInicial))
+        const comDados = doAno.filter((b) => extrairSomaBalanco(b) > 0)
+        if (comDados.length === 0) return null
+        comDados.sort((a, b) => Number(b.mes ?? 12) - Number(a.mes ?? 12))
+        return comDados[0]
+      }
+
       let lancsPromise: Promise<LancamentoRecord[]>
       let contasPromise: Promise<ContaRecord[]>
       let planosPromise: Promise<PlanoContaRecord[]>
       let balancoPromise: Promise<BalancoRecord | null>
 
-      if (empresaIdAlvo) {
+      if (isGrupoSelecionado && selectedEmpresaId) {
+        lancsPromise = lancamentosService.getAll({ expandRelations: true })
+        contasPromise = contasService.getAll(
+          empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined,
+        )
+        planosPromise = planoContasService.getAll(
+          empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined,
+        )
+        balancoPromise = balancosService
+          .getByEmpresa(selectedEmpresaId)
+          .then((list) => selecionarMelhorBalanco(list))
+          .catch(() => null)
+      } else if (empresaIdAlvo) {
         lancsPromise = lancamentosService.getAll({
           empresaId: empresaIdAlvo,
           expandRelations: true,
@@ -115,14 +162,20 @@ export default function ClienteIndicadores() {
         planosPromise = planoContasService.getAll({ empresaId: empresaIdAlvo })
         balancoPromise = balancosService
           .getByEmpresa(empresaIdAlvo)
-          .then((list) => list.find((b) => b.ano === anoInicial) || null)
+          .then((list) => selecionarMelhorBalanco(list))
           .catch(() => null)
       } else if (empresasIdsAtivas.length > 0) {
         const empOpts = { empresasIds: empresasIdsAtivas }
         lancsPromise = lancamentosService.getAll({ expandRelations: true })
         contasPromise = contasService.getAll(empOpts)
         planosPromise = planoContasService.getAll(empOpts)
-        balancoPromise = Promise.resolve(null)
+        balancoPromise = balancosService
+          .getAll()
+          .then((allList) => {
+            const listAtivas = allList.filter((b) => empresasIdsAtivas.includes(b.empresa))
+            return selecionarMelhorBalanco(listAtivas)
+          })
+          .catch(() => null)
       } else {
         lancsPromise = Promise.resolve([])
         contasPromise = Promise.resolve([])
@@ -155,7 +208,7 @@ export default function ClienteIndicadores() {
 
   useEffect(() => {
     carregarDados()
-  }, [empresaIdAlvo, anoInicial])
+  }, [empresaIdAlvo, anoInicial, isGrupoSelecionado, selectedEmpresaId, empresasIdsAtivas])
 
   useRealtime('lancamentos', () => carregarDados())
   useRealtime('contas', () => carregarDados())

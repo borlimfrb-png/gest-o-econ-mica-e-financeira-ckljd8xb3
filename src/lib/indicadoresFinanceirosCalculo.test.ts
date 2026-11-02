@@ -244,6 +244,80 @@ describe('Motor de Indicadores Financeiros Clássicos', () => {
     expect(ml?.valor).toBeCloseTo(50)
   })
 
+  it('considera temBalancoNoPeriodo === false e indicadores patrimoniais nulos quando balanço está cadastrado mas totalmente zerado', () => {
+    const balancoZerado: BalancoRecord = {
+      id: 'b-zerado',
+      collectionId: 'balancos',
+      collectionName: 'balancos',
+      empresa: 'emp-1',
+      ano: 2025,
+      mes: 11,
+      caixa_equivalentes: 0,
+      aplicacoes_financeiras: 0,
+      contas_receber: 0,
+      estoques: 0,
+      impostos_recuperar: 0,
+      outros_ativo_circulante: 0,
+      realizavel_longo_prazo: 0,
+      investimentos: 0,
+      imobilizado: 0,
+      intangivel: 0,
+      fornecedores: 0,
+      emprestimos_curto_prazo: 0,
+      obrigacoes_trabalhistas: 0,
+      obrigacoes_tributarias: 0,
+      outros_passivo_circulante: 0,
+      emprestimos_longo_prazo: 0,
+      outras_obrigacoes_longo_prazo: 0,
+      capital_social: 0,
+      reservas_lucros: 0,
+      lucros_acumulados: 0,
+      created: '2025-01-01',
+      updated: '2025-01-01',
+    }
+
+    const res = calcularPainelIndicadoresFinanceiros({
+      balanco: balancoZerado,
+      lancamentos: lancamentosMock,
+      contas: contasMock,
+      meses,
+      ano: 2025,
+    })
+
+    expect(res.temBalancoNoPeriodo).toBe(false)
+
+    const lc = res.indicadores.find((i) => i.id === 'liquidez_corrente')
+    expect(lc?.valor).toBeNull()
+    expect(lc?.temDadosBalanco).toBe(false)
+
+    const roe = res.indicadores.find((i) => i.id === 'roe')
+    expect(roe?.valor).toBeNull()
+    expect(roe?.temDadosBalanco).toBe(false)
+  })
+
+  it('considera temBalancoNoPeriodo === true e calcula liquidez/ROE quando BalancoRecord real possui dados', () => {
+    const res = calcularPainelIndicadoresFinanceiros({
+      balanco: balancoMock,
+      lancamentos: lancamentosMock,
+      contas: contasMock,
+      meses,
+      ano: 2025,
+    })
+
+    expect(res.temBalancoNoPeriodo).toBe(true)
+    expect(res.totaisBalanco.ativoTotal).toBe(500000)
+    expect(res.totaisBalanco.patrimonioLiquido).toBe(300000)
+    expect(res.totaisBalanco.passivoCirculante).toBe(150000)
+
+    const lc = res.indicadores.find((i) => i.id === 'liquidez_corrente')
+    expect(lc?.valor).toBeCloseTo(2.0)
+    expect(lc?.temDadosBalanco).toBe(true)
+
+    const roe = res.indicadores.find((i) => i.id === 'roe')
+    expect(roe?.valor).toBeCloseTo(33.33, 1)
+    expect(roe?.temDadosBalanco).toBe(true)
+  })
+
   it('classifica corretamente os status conforme faixas padrão de mercado', () => {
     expect(classificarStatusIndicador('liquidez_corrente', 2.0).status).toBe('Excelente')
     expect(classificarStatusIndicador('liquidez_corrente', 1.2).status).toBe('Adequada')

@@ -213,15 +213,15 @@ export function calcularPainelIndicadoresFinanceiros(params: {
   const lucroLiquidoTotal = matrizDre.lucroPrejuizo.totalPeriodo
 
   // 2. Balanço Patrimonial (se houver)
+  const bCalc = calcularBalanco(balanco || undefined)
+
   const temBalancoNoPeriodo = Boolean(
     balanco &&
-    (balanco.ativo_total ||
-      balanco.patrimonio_liquido ||
-      balanco.passivo_circulante ||
-      balanco.ativo_circulante),
+    (bCalc.ativoTotal > 0 ||
+      bCalc.patrimonioLiquido > 0 ||
+      bCalc.passivoCirculante > 0 ||
+      bCalc.ativoCirculante > 0),
   )
-
-  const bCalc = calcularBalanco(balanco || undefined)
 
   const ac = bCalc.ativoCirculante
   const rlp = balanco?.realizavel_longo_prazo || 0
