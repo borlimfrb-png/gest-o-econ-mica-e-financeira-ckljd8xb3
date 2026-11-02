@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-02T13:14:08.544Z",
+  "generatedAt": "2026-11-02T16:38:19.817Z",
   "collections": [
     {
       "name": "users",
@@ -698,6 +698,12 @@
           "required": false,
           "system": false,
           "collectionRef": "empresas"
+        },
+        {
+          "name": "sequencia",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [

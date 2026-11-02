@@ -201,6 +201,8 @@ export type TipoCentro = 'Receita' | 'Despesa'
 
 export interface CentroRecord extends RecordModel {
   nome: string
+  codigo?: string
+  sequencia?: number | null
   descricao?: string
   tipo: TipoCentro
   meta_mensal?: number

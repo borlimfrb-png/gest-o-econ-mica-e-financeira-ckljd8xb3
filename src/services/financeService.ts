@@ -827,6 +827,8 @@ export const centrosService = {
   async create(data: {
     nome: string
     tipo: TipoCentro
+    codigo?: string
+    sequencia?: number | null
     descricao?: string
     meta_mensal?: number
     meta_anual?: number
@@ -840,9 +842,15 @@ export const centrosService = {
       data.meta_anual !== undefined && !isNaN(Number(data.meta_anual))
         ? Number(data.meta_anual)
         : undefined
+    const sequencia =
+      data.sequencia !== undefined && data.sequencia !== null && !isNaN(Number(data.sequencia))
+        ? Number(data.sequencia)
+        : null
     return await pb.collection('centros').create<CentroRecord>({
       nome: data.nome.trim(),
       tipo: data.tipo,
+      codigo: data.codigo?.trim() || undefined,
+      sequencia,
       descricao: data.descricao?.trim() || undefined,
       meta_mensal: metaMensal,
       meta_anual: metaAnual,
@@ -854,10 +862,27 @@ export const centrosService = {
   async update(
     id: string,
     data: Partial<
-      Pick<CentroRecord, 'nome' | 'tipo' | 'descricao' | 'meta_mensal' | 'meta_anual' | 'empresa'>
+      Pick<
+        CentroRecord,
+        | 'nome'
+        | 'tipo'
+        | 'codigo'
+        | 'sequencia'
+        | 'descricao'
+        | 'meta_mensal'
+        | 'meta_anual'
+        | 'empresa'
+      >
     >,
   ): Promise<CentroRecord> {
-    return await pb.collection('centros').update<CentroRecord>(id, data)
+    const payload: Record<string, unknown> = { ...data }
+    if (data.sequencia !== undefined) {
+      payload.sequencia =
+        data.sequencia !== null && data.sequencia !== undefined && !isNaN(Number(data.sequencia))
+          ? Number(data.sequencia)
+          : null
+    }
+    return await pb.collection('centros').update<CentroRecord>(id, payload)
   },
 
   async delete(id: string): Promise<boolean> {
