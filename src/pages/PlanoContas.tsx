@@ -92,6 +92,7 @@ import {
   Tag,
 } from 'lucide-react'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
+import { ModalEditarConta } from '@/components/ModalEditarConta'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
@@ -161,7 +162,13 @@ export default function PlanoContas() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [saving, setSaving] = useState(false)
 
-  // Modal edição
+  const isCliente = user?.role === 'cliente'
+
+  // Modal edição de Conta Contábil (ao clicar no código da conta)
+  const [contaParaEditar, setContaParaEditar] = useState<ContaRecord | null>(null)
+  const [modalEditarContaOpen, setModalEditarContaOpen] = useState(false)
+
+  // Modal edição de Vínculo do Plano
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<PlanoContaRecord | null>(null)
 
@@ -469,6 +476,11 @@ export default function PlanoContas() {
     })
     setErrors({})
     setEditOpen(true)
+  }
+
+  const openEditarConta = (conta: ContaRecord) => {
+    setContaParaEditar(conta)
+    setModalEditarContaOpen(true)
   }
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -1159,9 +1171,27 @@ export default function PlanoContas() {
                         >
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-mono font-semibold text-blue-700 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(i)}
+                                className={`font-mono font-semibold text-[11px] text-left transition-colors ${
+                                  isCliente
+                                    ? 'text-slate-700 cursor-default'
+                                    : 'text-blue-700 hover:text-blue-900 hover:underline cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Vínculo ${i.codigo || '—'} (perfil sem permissão de edição)`
+                                    : `Clique no número para editar o vínculo ${i.codigo || '—'}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Vínculo ${i.codigo || '—'}`
+                                    : `Editar vínculo ${i.codigo || '—'}`
+                                }
+                              >
                                 {i.codigo || '—'}
-                              </span>
+                              </button>
                               {isCadastrada && (
                                 <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] px-1.5 py-0 font-bold hover:bg-amber-100 shadow-2xs">
                                   Cadastrada
@@ -1171,9 +1201,27 @@ export default function PlanoContas() {
                           </td>
                           <td className="py-3 px-4">
                             {i.codigo_empresa ? (
-                              <span className="font-mono font-semibold text-slate-800 text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(i)}
+                                className={`font-mono font-semibold text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition-colors text-left ${
+                                  isCliente
+                                    ? 'text-slate-800 cursor-default'
+                                    : 'text-slate-800 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Código da empresa ${i.codigo_empresa}`
+                                    : `Clique para editar o vínculo / código ${i.codigo_empresa}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Código da empresa ${i.codigo_empresa}`
+                                    : `Editar vínculo com código da empresa ${i.codigo_empresa}`
+                                }
+                              >
                                 {i.codigo_empresa}
-                              </span>
+                              </button>
                             ) : (
                               <span className="text-slate-400 font-mono">—</span>
                             )}
@@ -1186,7 +1234,27 @@ export default function PlanoContas() {
                                     TIPO_CONTA_BADGE[conta.tipo] || ''
                                   }`}
                                 >
-                                  <span className="font-mono">{conta.codigo || '—'}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditarConta(conta)}
+                                    className={`font-mono transition-colors text-left ${
+                                      isCliente
+                                        ? 'cursor-default opacity-85'
+                                        : 'hover:underline cursor-pointer'
+                                    }`}
+                                    title={
+                                      isCliente
+                                        ? `Conta ${conta.codigo || '—'} (perfil sem permissão de edição)`
+                                        : `Clique no número para editar a conta ${conta.nome}`
+                                    }
+                                    aria-label={
+                                      isCliente
+                                        ? `Conta ${conta.codigo || '—'}`
+                                        : `Editar conta contábil ${conta.codigo || '—'} - ${conta.nome}`
+                                    }
+                                  >
+                                    {conta.codigo || '—'}
+                                  </button>
                                   <span className="mx-1">·</span>
                                   {conta.nome}
                                 </Badge>
@@ -1567,6 +1635,17 @@ export default function PlanoContas() {
         onOpenChange={setClassificacaoDreOpen}
         contas={contas}
         onSuccess={loadData}
+      />
+
+      {/* Modal: Edição da Conta Contábil ao clicar no número/código da conta */}
+      <ModalEditarConta
+        open={modalEditarContaOpen}
+        onOpenChange={setModalEditarContaOpen}
+        conta={contaParaEditar}
+        readOnly={isCliente}
+        onSuccess={() => {
+          loadData()
+        }}
       />
     </div>
   )

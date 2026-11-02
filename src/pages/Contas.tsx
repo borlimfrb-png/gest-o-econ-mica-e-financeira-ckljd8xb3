@@ -130,6 +130,8 @@ export default function Contas() {
   const [errors, setErrors] = useState<FormErrors>({})
   const [saving, setSaving] = useState(false)
 
+  const isCliente = user?.role === 'cliente'
+
   // Modal edição
   const [editOpen, setEditOpen] = useState(false)
   const [editing, setEditing] = useState<ContaRecord | null>(null)
@@ -788,9 +790,27 @@ export default function Contas() {
                         {contasFiltradas.map((c) => (
                           <tr key={c.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="py-2 px-3">
-                              <span className="font-mono font-semibold text-blue-700 text-[10.5px]">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(c)}
+                                className={`font-mono font-semibold text-[10.5px] text-left transition-colors ${
+                                  isCliente
+                                    ? 'text-slate-700 cursor-default'
+                                    : 'text-blue-700 hover:text-blue-900 hover:underline cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Código ${c.codigo || '—'} (perfil sem permissão de edição)`
+                                    : `Clique no número para editar a conta ${c.nome}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Conta ${c.codigo || '—'}`
+                                    : `Editar conta ${c.codigo || '—'} - ${c.nome}`
+                                }
+                              >
                                 {c.codigo || '—'}
-                              </span>
+                              </button>
                             </td>
                             <td className="py-2 px-3">
                               <div className="flex items-center gap-2">
@@ -1060,9 +1080,27 @@ export default function Contas() {
                                             className="flex items-center gap-2 pl-16 pr-4 py-2 hover:bg-white transition-colors group"
                                           >
                                             <FileText className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                                            <span className="font-mono font-semibold text-blue-700 text-[11px] w-16 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => openEdit(c)}
+                                              className={`font-mono font-semibold text-[11px] w-16 shrink-0 text-left transition-colors ${
+                                                isCliente
+                                                  ? 'text-slate-700 cursor-default'
+                                                  : 'text-blue-700 hover:text-blue-900 hover:underline cursor-pointer'
+                                              }`}
+                                              title={
+                                                isCliente
+                                                  ? `Código ${c.codigo || '—'} (perfil sem permissão de edição)`
+                                                  : `Clique no número para editar a conta ${c.nome}`
+                                              }
+                                              aria-label={
+                                                isCliente
+                                                  ? `Conta ${c.codigo || '—'}`
+                                                  : `Editar conta ${c.codigo || '—'} - ${c.nome}`
+                                              }
+                                            >
                                               {c.codigo || '—'}
-                                            </span>
+                                            </button>
                                             <span className="text-xs font-medium text-slate-800 truncate">
                                               {c.nome}
                                             </span>
