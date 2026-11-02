@@ -138,8 +138,8 @@ export default function AnaliseEconomicaFinanceira() {
     }
   }, [isCliente, empresaAtivaId, selectedAno])
 
-  const atalhos: HubShortcut[] = useMemo(
-    () => [
+  const atalhos: HubShortcut[] = useMemo(() => {
+    const lista: HubShortcut[] = [
       {
         id: 'balanco',
         titulo: 'Balanço Patrimonial',
@@ -282,7 +282,11 @@ export default function AnaliseEconomicaFinanceira() {
         rota: () => (isCliente ? '/cliente/indicadores' : '/gerencial/indicadores'),
         metricasTexto: 'Liquidez, Endividamento, ROE/ROA, Margens e Prazos Médios PMR/PMP',
       },
-      {
+    ]
+
+    // Comparativo DRE x Balanço é exclusivo para perfis internos (não cliente)
+    if (!isCliente) {
+      lista.push({
         id: 'comparativo-mensal',
         titulo: 'Comparativo DRE × Balanço',
         subtitulo: 'Visão Mês a Mês: Fluxo × Estoque',
@@ -294,28 +298,30 @@ export default function AnaliseEconomicaFinanceira() {
         gradient: 'from-[#0B1F3A] via-[#13334A] to-[#18465C]',
         borderGlow: 'hover:border-sky-400/70 hover:shadow-sky-500/15',
         iconBg: 'bg-gradient-to-tr from-teal-500/25 to-sky-600/20 text-sky-300 border-sky-400/40',
-        rota: () => (isCliente ? '/cliente/comparativo-mensal' : '/gerencial/comparativo-mensal'),
+        rota: () => '/gerencial/comparativo-mensal',
         metricasTexto: 'Receita, Lucro, Ativo, Passivo, PL, Liquidez e ROE mês a mês',
-      },
-      {
-        id: 'agente-ia',
-        titulo: 'Agente de IA Borlim',
-        subtitulo: 'Consultoria Econômico-Financeira Inteligente',
-        descricao:
-          'Assistente de IA nativo com histórico exclusivo por empresa ativa. Responde sobre faturamento, despesas fixas/variáveis, margens, centros de custo e planos de ação.',
-        badge: 'IA Nativa',
-        badgeVariant: 'purple',
-        icon: Bot,
-        gradient: 'from-[#0B1F3A] via-[#1E1945] to-[#2D1B54]',
-        borderGlow: 'hover:border-purple-400/80 hover:shadow-purple-500/20',
-        iconBg:
-          'bg-gradient-to-tr from-purple-500/30 to-violet-600/25 text-purple-300 border-purple-400/50 shadow-purple-950/40',
-        rota: () => (isCliente ? '/cliente/agente-ia' : '/gerencial/agente-ia'),
-        metricasTexto: 'Consultas, diagnósticos e histórico isolados por empresa ativa',
-      },
-    ],
-    [isCliente],
-  )
+      })
+    }
+
+    lista.push({
+      id: 'agente-ia',
+      titulo: 'Agente de IA Borlim',
+      subtitulo: 'Consultoria Econômico-Financeira Inteligente',
+      descricao:
+        'Assistente de IA nativo com histórico exclusivo por empresa ativa. Responde sobre faturamento, despesas fixas/variáveis, margens, centros de custo e planos de ação.',
+      badge: 'IA Nativa',
+      badgeVariant: 'purple',
+      icon: Bot,
+      gradient: 'from-[#0B1F3A] via-[#1E1945] to-[#2D1B54]',
+      borderGlow: 'hover:border-purple-400/80 hover:shadow-purple-500/20',
+      iconBg:
+        'bg-gradient-to-tr from-purple-500/30 to-violet-600/25 text-purple-300 border-purple-400/50 shadow-purple-950/40',
+      rota: () => (isCliente ? '/cliente/agente-ia' : '/gerencial/agente-ia'),
+      metricasTexto: 'Consultas, diagnósticos e histórico isolados por empresa ativa',
+    })
+
+    return lista
+  }, [isCliente])
 
   return (
     <div className="space-y-6 pb-8 animate-fadeIn">
@@ -430,7 +436,7 @@ export default function AnaliseEconomicaFinanceira() {
             </h2>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            11 módulos executivos estruturados
+            {atalhos.length} módulos executivos estruturados
           </span>
         </div>
 

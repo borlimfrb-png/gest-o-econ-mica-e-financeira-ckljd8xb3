@@ -460,14 +460,6 @@ const App = () => (
                       }
                     />
                     <Route
-                      path="/cliente/comparativo-mensal"
-                      element={
-                        <ModuloRoute modulo="cliente_comparativo_mensal">
-                          <ComparativoMensalDreBalanco />
-                        </ModuloRoute>
-                      }
-                    />
-                    <Route
                       path="/cliente/agente-ia"
                       element={
                         <ModuloRoute modulo="cliente_agente_ia">

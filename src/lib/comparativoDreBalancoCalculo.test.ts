@@ -217,6 +217,43 @@ describe('Motor de Cálculo Comparativo DRE x Balanço Mensal', () => {
   })
 
   describe('calcularComparativoMensalDreBalanco — Emparelhamento e Indicadores', () => {
+    it('calcula a DRE pelo mesmo motor da DRE Gerencial (calcularDreGerencialMatriz)', () => {
+      // 12 meses de lançamentos para certificar equivalência matemática
+      const lancamentos: LancamentoRecord[] = [
+        criarLancamento('l1', 'emp-1', '2024-01-10', 100000, 'entrada', 'c-rec', 'pc-rec'),
+        criarLancamento('l2', 'emp-1', '2024-01-15', 20000, 'saida', 'c-custo', 'pc-custo'),
+        criarLancamento('l3', 'emp-1', '2024-01-20', 30000, 'saida', 'c-fixa', 'pc-fixa'),
+        criarLancamento('l4', 'emp-1', '2024-06-05', 200000, 'entrada', 'c-rec', 'pc-rec'),
+        criarLancamento('l5', 'emp-1', '2024-06-10', 40000, 'saida', 'c-custo', 'pc-custo'),
+      ]
+
+      const res = calcularComparativoMensalDreBalanco({
+        ano: 2024,
+        lancamentos,
+        contas: contasMock,
+        planoContas: planosMock,
+        balancos: [],
+        empresaNome: 'Empresa Teste',
+      })
+
+      // Jan: Rec 100k, CustosVar 20k, DespFix 30k => Lucro 50k
+      expect(res.meses[0].receitaBruta).toBe(100000)
+      expect(res.meses[0].custosVariaveis).toBe(20000)
+      expect(res.meses[0].despesasFixas).toBe(30000)
+      expect(res.meses[0].resultadoLiquido).toBe(50000)
+
+      // Jun: Rec 200k, CustosVar 40k => Lucro 160k
+      expect(res.meses[5].receitaBruta).toBe(200000)
+      expect(res.meses[5].custosVariaveis).toBe(40000)
+      expect(res.meses[5].resultadoLiquido).toBe(160000)
+
+      // Total Exercicio
+      expect(res.totalExercicio.receitaBruta).toBe(300000)
+      expect(res.totalExercicio.custosVariaveis).toBe(60000)
+      expect(res.totalExercicio.despesasFixas).toBe(30000)
+      expect(res.totalExercicio.resultadoLiquido).toBe(210000)
+    })
+
     it('emparelha os 12 meses de DRE e Balanço com totalizadores corretos', () => {
       const lancamentos: LancamentoRecord[] = [
         // Janeiro 2024: Venda 100.000, Var 20.000, Fixa 30.000, Fin 5.000 => Lucro 45.000

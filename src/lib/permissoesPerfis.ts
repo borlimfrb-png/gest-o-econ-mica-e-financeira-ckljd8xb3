@@ -21,7 +21,6 @@ export type ModuloSistema =
   | 'lancamentos'
   | 'gerencial_dre'
   | 'gerencial_comparativo_mensal'
-  | 'cliente_comparativo_mensal'
   | 'gerencial_despesas_fixas'
   | 'gerencial_despesas_variaveis'
   | 'gerencial_comparativo_despesas'
@@ -207,7 +206,6 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'cliente_crescimento',
       'cliente_dashboard_bi',
       'cliente_indicadores',
-      'cliente_comparativo_mensal',
       'cliente_agente_ia',
       'gerencial_dre',
       'gerencial_despesas_fixas',

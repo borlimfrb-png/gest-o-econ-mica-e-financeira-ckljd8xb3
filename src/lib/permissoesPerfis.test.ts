@@ -33,6 +33,7 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'minha_empresa',
     'admin_usuarios',
     'lancamentos',
+    'gerencial_comparativo_mensal',
     'gerencial_comparativo_despesas',
     'gerencial_fluxo_caixa',
     'gerencial_indicador_crescimento',
@@ -122,6 +123,14 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('cliente', 'gerencial_indicadores')).toBe(false)
     expect(perfilTemAcesso('admin', 'gerencial_dashboard_bi')).toBe(true)
     expect(perfilTemAcesso('admin', 'gerencial_indicadores')).toBe(true)
+  })
+
+  it('garante que gerencial_comparativo_mensal é liberado para perfis internos e bloqueado para cliente', () => {
+    expect(perfilTemAcesso('admin', 'gerencial_comparativo_mensal')).toBe(true)
+    expect(perfilTemAcesso('empresa', 'gerencial_comparativo_mensal')).toBe(true)
+    expect(perfilTemAcesso('financeiro', 'gerencial_comparativo_mensal')).toBe(true)
+    expect(perfilTemAcesso('cliente', 'gerencial_comparativo_mensal')).toBe(false)
+    expect(perfilTemAcesso('comercial', 'gerencial_comparativo_mensal')).toBe(false)
   })
 
   it('deve listar todos os perfis do sistema na LISTA_PERFIS incluindo cliente', () => {
