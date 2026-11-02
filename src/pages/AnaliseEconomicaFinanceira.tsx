@@ -283,6 +283,21 @@ export default function AnaliseEconomicaFinanceira() {
         metricasTexto: 'Liquidez, Endividamento, ROE/ROA, Margens e Prazos Médios PMR/PMP',
       },
       {
+        id: 'comparativo-mensal',
+        titulo: 'Comparativo DRE × Balanço',
+        subtitulo: 'Visão Mês a Mês: Fluxo × Estoque',
+        descricao:
+          'Comparação mensal de Jan a Dez entre números da DRE Gerencial (faturamento, custos, lucro) e Balanço Patrimonial (ativo, passivo, PL) com indicadores e gráficos.',
+        badge: 'Mês a Mês',
+        badgeVariant: 'emerald',
+        icon: Scale,
+        gradient: 'from-[#0B1F3A] via-[#13334A] to-[#18465C]',
+        borderGlow: 'hover:border-sky-400/70 hover:shadow-sky-500/15',
+        iconBg: 'bg-gradient-to-tr from-teal-500/25 to-sky-600/20 text-sky-300 border-sky-400/40',
+        rota: () => (isCliente ? '/cliente/comparativo-mensal' : '/gerencial/comparativo-mensal'),
+        metricasTexto: 'Receita, Lucro, Ativo, Passivo, PL, Liquidez e ROE mês a mês',
+      },
+      {
         id: 'agente-ia',
         titulo: 'Agente de IA Borlim',
         subtitulo: 'Consultoria Econômico-Financeira Inteligente',
@@ -415,7 +430,7 @@ export default function AnaliseEconomicaFinanceira() {
             </h2>
           </div>
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            10 módulos executivos estruturados
+            11 módulos executivos estruturados
           </span>
         </div>
 

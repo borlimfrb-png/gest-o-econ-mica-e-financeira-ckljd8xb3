@@ -44,6 +44,7 @@ const GerencialDashboardBi = lazy(() => import('./pages/GerencialDashboardBi'))
 const ClienteDashboardBi = lazy(() => import('./pages/ClienteDashboardBi'))
 const GerencialIndicadores = lazy(() => import('./pages/GerencialIndicadores'))
 const ClienteIndicadores = lazy(() => import('./pages/ClienteIndicadores'))
+const ComparativoMensalDreBalanco = lazy(() => import('./pages/ComparativoMensalDreBalanco'))
 const Financeiro = lazy(() => import('./pages/Financeiro'))
 const BaixaRecebiveis = lazy(() => import('./pages/BaixaRecebiveis'))
 const Contratos = lazy(() => import('./pages/Contratos'))
@@ -447,6 +448,22 @@ const App = () => (
                       element={
                         <ModuloRoute modulo="cliente_indicadores">
                           <ClienteIndicadores />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/comparativo-mensal"
+                      element={
+                        <ModuloRoute modulo="gerencial_comparativo_mensal">
+                          <ComparativoMensalDreBalanco />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/cliente/comparativo-mensal"
+                      element={
+                        <ModuloRoute modulo="cliente_comparativo_mensal">
+                          <ComparativoMensalDreBalanco />
                         </ModuloRoute>
                       }
                     />
