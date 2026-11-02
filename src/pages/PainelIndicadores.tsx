@@ -8,6 +8,7 @@ import {
   centrosService,
   planoContasService,
   lancamentosService,
+  contasService,
 } from '@/services/financeService'
 import type {
   BalancoRecord,
@@ -16,7 +17,10 @@ import type {
   PlanoContaRecord,
   LancamentoRecord,
   EmpresaRecord,
+  ContaRecord,
 } from '@/types/finance'
+import { gerarListaMeses, type DreMatrizResultado } from '@/lib/dreGerencialTypes'
+import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
 import {
   calcularBalanco,
   calcularDre,
@@ -123,6 +127,9 @@ export default function PainelIndicadores() {
     selectedEmpresa,
     selectedCentroCustoId,
     setSelectedCentroCustoId,
+    isGrupoAtivo,
+    grupoAtivo,
+    empresasIdsAtivas,
   } = useFilter()
   const { minhaEmpresa, corPrimaria, logoUrl } = useMinhaEmpresa()
   const { toast } = useToast()
@@ -132,6 +139,7 @@ export default function PainelIndicadores() {
   const [dres, setDres] = useState<DreRecord[]>([])
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [contas, setContas] = useState<ContaRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [loading, setLoading] = useState<boolean>(true)
 
@@ -284,28 +292,68 @@ export default function PainelIndicadores() {
   }, [selectedEmpresa?.segmento, benchmarksMap])
 
   // Carregar dados das coleções (Empresa Principal + Centros + Plano de Contas + Lançamentos)
+  const isGrupo = Boolean(
+    isGrupoAtivo || (selectedEmpresaId && selectedEmpresaId.startsWith('grupo-')),
+  )
+  const empresasIdsAlvo = useMemo(() => {
+    if (!isGrupo) return selectedEmpresaId ? [selectedEmpresaId] : []
+    if (empresasIdsAtivas && empresasIdsAtivas.length > 0) return empresasIdsAtivas
+    if (grupoAtivo?.empresas && grupoAtivo.empresas.length > 0) return grupoAtivo.empresas
+    return selectedEmpresaId ? [selectedEmpresaId] : []
+  }, [isGrupo, empresasIdsAtivas, grupoAtivo, selectedEmpresaId])
+
   const loadData = async () => {
     if (!selectedEmpresaId) {
       setBalancos([])
       setDres([])
+      setContas([])
       setLancamentos([])
       setLoading(false)
       return
     }
     try {
       setLoading(true)
-      const [bList, dList, cList, pList, lList] = await Promise.all([
-        balancosService.getByEmpresa(selectedEmpresaId),
-        dreService.getByEmpresa(selectedEmpresaId),
-        centrosService.getAll(),
-        planoContasService.getAll(),
-        lancamentosService.getAll({ empresaId: selectedEmpresaId }),
+
+      let balancosPromise: Promise<BalancoRecord[]>
+      let lancamentosPromise: Promise<LancamentoRecord[]>
+      let dresPromise: Promise<DreRecord[]>
+
+      if (isGrupo && empresasIdsAlvo.length > 0) {
+        balancosPromise = balancosService
+          .getAll()
+          .then((all) => all.filter((b) => empresasIdsAlvo.includes(b.empresa)))
+          .catch(() => [])
+        lancamentosPromise = lancamentosService
+          .getAll({ expandRelations: true })
+          .then((all) => all.filter((l) => empresasIdsAlvo.includes(l.empresa)))
+          .catch(() => [])
+        dresPromise = dreService
+          .getAll()
+          .then((all) => all.filter((d) => empresasIdsAlvo.includes(d.empresa)))
+          .catch(() => [])
+      } else {
+        balancosPromise = balancosService.getByEmpresa(selectedEmpresaId).catch(() => [])
+        lancamentosPromise = lancamentosService
+          .getAll({ empresaId: selectedEmpresaId, expandRelations: true })
+          .catch(() => [])
+        dresPromise = dreService.getByEmpresa(selectedEmpresaId).catch(() => [])
+      }
+
+      const [bList, dList, cList, pList, lList, contasList] = await Promise.all([
+        balancosPromise,
+        dresPromise,
+        centrosService.getAll().catch(() => []),
+        planoContasService.getAll().catch(() => []),
+        lancamentosPromise,
+        contasService.getAll().catch(() => []),
       ])
+
       setBalancos(bList)
       setDres(dList)
       setCentros(cList)
       setPlanoContas(pList)
       setLancamentos(lList)
+      setContas(contasList)
     } catch (err) {
       console.error('Erro ao carregar dados contábeis:', err)
       toast({
@@ -327,10 +375,15 @@ export default function PainelIndicadores() {
       return
     }
     try {
+      const isGrupoB = empresaBId.startsWith('grupo-')
       const [bList, dList, lList] = await Promise.all([
-        balancosService.getByEmpresa(empresaBId),
-        dreService.getByEmpresa(empresaBId),
-        lancamentosService.getAll({ empresaId: empresaBId }),
+        balancosService.getByEmpresa(empresaBId).catch(() => []),
+        dreService.getByEmpresa(empresaBId).catch(() => []),
+        lancamentosService
+          .getAll(
+            isGrupoB ? { expandRelations: true } : { empresaId: empresaBId, expandRelations: true },
+          )
+          .catch(() => []),
       ])
       setBalancosB(bList)
       setDresB(dList)
@@ -342,7 +395,7 @@ export default function PainelIndicadores() {
 
   useEffect(() => {
     loadData()
-  }, [selectedEmpresaId])
+  }, [selectedEmpresaId, isGrupo, empresasIdsAlvo])
 
   useEffect(() => {
     if (compararAtivo && empresaBId) {
@@ -380,7 +433,223 @@ export default function PainelIndicadores() {
     return map
   }, [planoContas])
 
-  // Função auxiliar para derivar DRE e Balanço a partir dos lançamentos de um centro específico
+  // Soma dos grupos patrimoniais para validação de dados reais no balanço
+  const extrairSomaBalanco = (b?: BalancoRecord | null): number => {
+    if (!b) return 0
+    return (
+      (b.caixa_equivalentes || 0) +
+      (b.aplicacoes_financeiras || 0) +
+      (b.contas_receber || 0) +
+      (b.estoques || 0) +
+      (b.impostos_recuperar || 0) +
+      (b.outros_ativo_circulante || 0) +
+      (b.realizavel_longo_prazo || 0) +
+      (b.investimentos || 0) +
+      (b.imobilizado || 0) +
+      (b.intangivel || 0) +
+      (b.fornecedores || 0) +
+      (b.emprestimos_curto_prazo || 0) +
+      (b.obrigacoes_trabalhistas || 0) +
+      (b.obrigacoes_tributarias || 0) +
+      (b.outros_passivo_circulante || 0) +
+      (b.emprestimos_longo_prazo || 0) +
+      (b.outras_obrigacoes_longo_prazo || 0) +
+      (b.capital_social || 0) +
+      (b.reservas_lucros || 0) +
+      (b.lucros_acumulados || 0)
+    )
+  }
+
+  // Escolhe o balanço mais recente do ano que tenha dados (> 0)
+  const selecionarMelhorBalanco = (
+    list: BalancoRecord[],
+    anoAlvo: number,
+  ): BalancoRecord | null => {
+    const doAno = list.filter((b) => Number(b.ano) === Number(anoAlvo))
+    const comDados = doAno.filter((b) => extrairSomaBalanco(b) > 0)
+    if (comDados.length > 0) {
+      comDados.sort((a, b) => Number(b.mes ?? 12) - Number(a.mes ?? 12))
+      return comDados[0]
+    }
+    if (doAno.length === 0) return null
+    const sorted = [...doAno].sort((a, b) => Number(b.mes ?? 12) - Number(a.mes ?? 12))
+    return sorted[0]
+  }
+
+  // Consolidação de balanços para grupos econômicos somando os grupos patrimoniais
+  const consolidarBalancosGrupo = (
+    listaBalancos: BalancoRecord[],
+    membrosIds: string[],
+    anoAlvo: number,
+  ): BalancoRecord | null => {
+    const balancosMembros: BalancoRecord[] = []
+
+    for (const empId of membrosIds) {
+      const balancosEmp = listaBalancos.filter(
+        (b) => b.empresa === empId && Number(b.ano) === Number(anoAlvo),
+      )
+      const melhor = selecionarMelhorBalanco(balancosEmp, anoAlvo)
+      if (melhor && extrairSomaBalanco(melhor) > 0) {
+        balancosMembros.push(melhor)
+      }
+    }
+
+    if (balancosMembros.length === 0) {
+      const qualquerBalanco = listaBalancos.filter(
+        (b) => membrosIds.includes(b.empresa) && Number(b.ano) === Number(anoAlvo),
+      )
+      if (qualquerBalanco.length === 0) return null
+    }
+
+    return {
+      id: `consolidado-grupo-${selectedEmpresaId}-${anoAlvo}`,
+      collectionId: 'balancos',
+      collectionName: 'balancos',
+      created: '',
+      updated: '',
+      empresa: selectedEmpresaId,
+      ano: anoAlvo,
+      mes: 12,
+      fechado: balancosMembros.length > 0 && balancosMembros.every((b) => b.fechado),
+      caixa_equivalentes: balancosMembros.reduce((acc, b) => acc + (b.caixa_equivalentes || 0), 0),
+      aplicacoes_financeiras: balancosMembros.reduce(
+        (acc, b) => acc + (b.aplicacoes_financeiras || 0),
+        0,
+      ),
+      contas_receber: balancosMembros.reduce((acc, b) => acc + (b.contas_receber || 0), 0),
+      estoques: balancosMembros.reduce((acc, b) => acc + (b.estoques || 0), 0),
+      impostos_recuperar: balancosMembros.reduce((acc, b) => acc + (b.impostos_recuperar || 0), 0),
+      outros_ativo_circulante: balancosMembros.reduce(
+        (acc, b) => acc + (b.outros_ativo_circulante || 0),
+        0,
+      ),
+      realizavel_longo_prazo: balancosMembros.reduce(
+        (acc, b) => acc + (b.realizavel_longo_prazo || 0),
+        0,
+      ),
+      investimentos: balancosMembros.reduce((acc, b) => acc + (b.investimentos || 0), 0),
+      imobilizado: balancosMembros.reduce((acc, b) => acc + (b.imobilizado || 0), 0),
+      intangivel: balancosMembros.reduce((acc, b) => acc + (b.intangivel || 0), 0),
+      fornecedores: balancosMembros.reduce((acc, b) => acc + (b.fornecedores || 0), 0),
+      emprestimos_curto_prazo: balancosMembros.reduce(
+        (acc, b) => acc + (b.emprestimos_curto_prazo || 0),
+        0,
+      ),
+      obrigacoes_trabalhistas: balancosMembros.reduce(
+        (acc, b) => acc + (b.obrigacoes_trabalhistas || 0),
+        0,
+      ),
+      obrigacoes_tributarias: balancosMembros.reduce(
+        (acc, b) => acc + (b.obrigacoes_tributarias || 0),
+        0,
+      ),
+      outros_passivo_circulante: balancosMembros.reduce(
+        (acc, b) => acc + (b.outros_passivo_circulante || 0),
+        0,
+      ),
+      emprestimos_longo_prazo: balancosMembros.reduce(
+        (acc, b) => acc + (b.emprestimos_longo_prazo || 0),
+        0,
+      ),
+      outras_obrigacoes_longo_prazo: balancosMembros.reduce(
+        (acc, b) => acc + (b.outras_obrigacoes_longo_prazo || 0),
+        0,
+      ),
+      capital_social: balancosMembros.reduce((acc, b) => acc + (b.capital_social || 0), 0),
+      reservas_lucros: balancosMembros.reduce((acc, b) => acc + (b.reservas_lucros || 0), 0),
+      lucros_acumulados: balancosMembros.reduce((acc, b) => acc + (b.lucros_acumulados || 0), 0),
+      vinculos_contas: {},
+    }
+  }
+
+  const obterBalancoAno = (
+    anoAlvo: number,
+    listBalancos: BalancoRecord[],
+    membrosGrupo?: string[],
+  ): BalancoRecord | null => {
+    if (membrosGrupo && membrosGrupo.length > 0) {
+      return consolidarBalancosGrupo(listBalancos, membrosGrupo, anoAlvo)
+    }
+    return selecionarMelhorBalanco(listBalancos, anoAlvo)
+  }
+
+  // Converte a matriz de DRE gerencial para o formato padronizado DreRecord
+  const converterMatrizDreParaRecord = (
+    matrizDre: DreMatrizResultado,
+    anoAlvo: number,
+    empresaAlvo: string,
+  ): DreRecord => {
+    let receitaTotal = 0
+    let despesasVariaveisTotal = 0
+    let despesasFixasTotal = 0
+    let despesasFinanceirasTotal = 0
+    let receitasFinanceirasTotal = 0
+
+    for (const grupo of matrizDre.grupos) {
+      if (grupo.classificacao === 'Receita') {
+        receitaTotal = grupo.totalPeriodo
+      } else if (grupo.classificacao === 'Despesa Variável') {
+        despesasVariaveisTotal = grupo.totalPeriodo
+      } else if (grupo.classificacao === 'Despesa Fixa') {
+        despesasFixasTotal = grupo.totalPeriodo
+      } else if (grupo.classificacao === 'Despesa Financeira') {
+        despesasFinanceirasTotal = grupo.totalPeriodo
+      } else if (grupo.classificacao === 'Receita Financeira') {
+        receitasFinanceirasTotal = grupo.totalPeriodo
+      }
+    }
+
+    const naoClassificados = matrizDre.naoClassificados?.totalPeriodo || 0
+
+    return {
+      id: `dre-gerencial-${empresaAlvo}-${anoAlvo}`,
+      collectionId: 'dre',
+      collectionName: 'dre',
+      created: '',
+      updated: '',
+      empresa: empresaAlvo,
+      ano: anoAlvo,
+      mes: 12,
+      receita_bruta: receitaTotal,
+      deducoes_receita: 0,
+      custo_mercadorias: despesasVariaveisTotal,
+      despesas_operacionais: despesasFixasTotal + naoClassificados,
+      despesas_financeiras: despesasFinanceirasTotal,
+      outras_receitas_despesas: receitasFinanceirasTotal,
+      imposto_renda: 0,
+    }
+  }
+
+  // Apura a DRE do exercício via lançamentos (motor DRE Gerencial) ou fallback para coleção
+  const obterDreDoAno = (
+    anoAlvo: number,
+    listaLancamentos: LancamentoRecord[],
+    listaContas: ContaRecord[],
+    listaPlanoContas: PlanoContaRecord[],
+    dresFallback: DreRecord[],
+    empresaAlvo: string,
+  ): DreRecord | null => {
+    const mesesAno = gerarListaMeses(anoAlvo, 1, 12)
+    const lancsDoAno = listaLancamentos.filter((l) => {
+      if (!l.data) return false
+      const lAno = Number(l.data.slice(0, 4))
+      return lAno === anoAlvo
+    })
+
+    if (lancsDoAno.length > 0) {
+      const matrizDre = calcularDreGerencialMatriz(
+        lancsDoAno,
+        listaContas,
+        mesesAno,
+        listaPlanoContas,
+      )
+      return converterMatrizDreParaRecord(matrizDre, anoAlvo, empresaAlvo)
+    }
+
+    return dresFallback.find((d) => Number(d.ano) === Number(anoAlvo)) || null
+  }
+
+  // Função para derivar DRE e Balanço a partir dos lançamentos de um centro específico (sem fabricação de dados)
   const aplicarFiltroCentro = (
     balancoBase: BalancoRecord | null,
     dreBase: DreRecord | null,
@@ -394,110 +663,81 @@ export default function PainelIndicadores() {
 
     // Filtrar lançamentos do ano e do centro
     const lancamentosAno = listaLancamentos.filter((l) => {
-      const lancAno = new Date(l.data).getFullYear()
+      if (!l.data) return false
+      const lancAno = Number(l.data.slice(0, 4))
       if (lancAno !== anoAlvo) return false
-      // Verifica centro via plano_conta expandido ou mapa
-      const cId = l.expand?.plano_conta?.centro || mapaContaCentro.get(l.plano_conta)
+      const cId =
+        l.expand?.plano_conta?.expand?.centro?.id ||
+        l.expand?.plano_conta?.centro ||
+        mapaContaCentro.get(l.plano_conta)
       return cId === centroId
     })
 
     if (!lancamentosAno.length) {
-      // Se não houver lançamentos no centro para o ano, ajusta proporcionalmente se houver demonstração
-      return { balanco: balancoBase, dre: dreBase }
-    }
-
-    // Calcular agregados de receitas, custos, despesas a partir dos lançamentos do centro
-    let receitaBrutaCentro = 0
-    let deducoesCentro = 0
-    let custosCentro = 0
-    let despOpCentro = 0
-    let despAdmCentro = 0
-    let despComCentro = 0
-    let despFinCentro = 0
-    let recFinCentro = 0
-
-    for (const l of lancamentosAno) {
-      const tipoConta = (l.expand?.plano_conta?.expand?.conta?.tipo || '').toLowerCase()
-      const nomeConta = (l.expand?.plano_conta?.expand?.conta?.nome || '').toLowerCase()
-      const val = Number(l.valor) || 0
-
-      if (tipoConta.includes('receita')) {
-        if (nomeConta.includes('dedu') || nomeConta.includes('imposto')) {
-          deducoesCentro += Math.abs(val)
-        } else {
-          receitaBrutaCentro += Math.abs(val)
-        }
-      } else if (tipoConta.includes('custo')) {
-        custosCentro += Math.abs(val)
-      } else if (tipoConta.includes('despesa')) {
-        if (nomeConta.includes('financ') || nomeConta.includes('juro')) {
-          despFinCentro += Math.abs(val)
-        } else if (nomeConta.includes('venda') || nomeConta.includes('comerc')) {
-          despComCentro += Math.abs(val)
-        } else if (nomeConta.includes('adm')) {
-          despAdmCentro += Math.abs(val)
-        } else {
-          despOpCentro += Math.abs(val)
-        }
+      // Centro de custo sem lançamentos: valores zerados/ausentes, NUNCA fabricados/estimados
+      const dreVazia: DreRecord = {
+        id: `dre-centro-${centroId}-${anoAlvo}`,
+        collectionId: 'dre',
+        collectionName: 'dre',
+        created: '',
+        updated: '',
+        empresa: selectedEmpresaId,
+        ano: anoAlvo,
+        mes: 12,
+        receita_bruta: 0,
+        deducoes_receita: 0,
+        custo_mercadorias: 0,
+        despesas_operacionais: 0,
+        despesas_financeiras: 0,
+        outras_receitas_despesas: 0,
+        imposto_renda: 0,
       }
+      return { balanco: null, dre: dreVazia }
     }
 
-    const totalDespesasOp = despOpCentro + despAdmCentro + despComCentro
+    // Com lançamentos no centro: calcula via motor DRE Gerencial sem estimativas nem fabricação
+    const mesesAno = gerarListaMeses(anoAlvo, 1, 12)
+    const matrizDreCentro = calcularDreGerencialMatriz(
+      lancamentosAno,
+      contas,
+      mesesAno,
+      planoContas,
+    )
+    const dreCentro = converterMatrizDreParaRecord(matrizDreCentro, anoAlvo, selectedEmpresaId)
 
-    // Cria DRE recortada do centro
-    const dreCentro: DreRecord = {
-      id: dreBase?.id ? `dre-centro-${centroId}-${anoAlvo}` : `dre-centro-${centroId}-${anoAlvo}`,
-      collectionId: dreBase?.collectionId || '',
-      collectionName: dreBase?.collectionName || 'dres',
-      created: dreBase?.created || '',
-      updated: dreBase?.updated || '',
-      empresa: selectedEmpresaId,
-      ano: anoAlvo,
-      receita_bruta: receitaBrutaCentro || (dreBase ? dreBase.receita_bruta * 0.5 : 0),
-      deducoes_receita: deducoesCentro || (dreBase ? dreBase.deducoes_receita * 0.5 : 0),
-      custo_mercadorias: custosCentro || (dreBase ? dreBase.custo_mercadorias * 0.5 : 0),
-      despesas_operacionais: totalDespesasOp || (dreBase ? dreBase.despesas_operacionais * 0.5 : 0),
-      despesas_financeiras: despFinCentro || (dreBase ? dreBase.despesas_financeiras * 0.5 : 0),
-      outras_receitas_despesas:
-        recFinCentro || (dreBase ? dreBase.outras_receitas_despesas * 0.5 : 0),
-      imposto_renda: dreBase ? dreBase.imposto_renda * 0.5 : 0,
-    }
-
-    // Se houver balanço base, mantém ou particiona
-    const balancoCentro: BalancoRecord | null = balancoBase
-      ? {
-          ...balancoBase,
-          id: `balanco-centro-${centroId}-${anoAlvo}`,
-        }
-      : null
-
-    return { balanco: balancoCentro, dre: dreCentro }
+    return { balanco: balancoBase, dre: dreCentro }
   }
 
   // Demonstrações originais
   const rawBalancoAtual = useMemo(
-    () => balancos.find((b) => b.ano === selectedAno) || null,
-    [balancos, selectedAno],
+    () => obterBalancoAno(selectedAno, balancos, isGrupo ? empresasIdsAlvo : undefined),
+    [balancos, selectedAno, isGrupo, empresasIdsAlvo],
   )
   const rawDreAtual = useMemo(
-    () => dres.find((d) => d.ano === selectedAno) || null,
-    [dres, selectedAno],
+    () => obterDreDoAno(selectedAno, lancamentos, contas, planoContas, dres, selectedEmpresaId),
+    [selectedAno, lancamentos, contas, planoContas, dres, selectedEmpresaId],
   )
 
   const ano1 = selectedAno - 1
   const ano2 = selectedAno - 2
 
   const rawBalancoAno1 = useMemo(
-    () => balancos.find((b) => b.ano === ano1) || null,
-    [balancos, ano1],
+    () => obterBalancoAno(ano1, balancos, isGrupo ? empresasIdsAlvo : undefined),
+    [balancos, ano1, isGrupo, empresasIdsAlvo],
   )
-  const rawDreAno1 = useMemo(() => dres.find((d) => d.ano === ano1) || null, [dres, ano1])
+  const rawDreAno1 = useMemo(
+    () => obterDreDoAno(ano1, lancamentos, contas, planoContas, dres, selectedEmpresaId),
+    [ano1, lancamentos, contas, planoContas, dres, selectedEmpresaId],
+  )
 
   const rawBalancoAno2 = useMemo(
-    () => balancos.find((b) => b.ano === ano2) || null,
-    [balancos, ano2],
+    () => obterBalancoAno(ano2, balancos, isGrupo ? empresasIdsAlvo : undefined),
+    [balancos, ano2, isGrupo, empresasIdsAlvo],
   )
-  const rawDreAno2 = useMemo(() => dres.find((d) => d.ano === ano2) || null, [dres, ano2])
+  const rawDreAno2 = useMemo(
+    () => obterDreDoAno(ano2, lancamentos, contas, planoContas, dres, selectedEmpresaId),
+    [ano2, lancamentos, contas, planoContas, dres, selectedEmpresaId],
+  )
 
   // Demonstrações ajustadas pelo Centro de Custo Selecionado
   const { balanco: balancoAtual, dre: dreAtual } = useMemo(
@@ -513,20 +753,43 @@ export default function PainelIndicadores() {
       rawBalancoAtual,
       rawDreAtual,
       lancamentos,
+      contas,
+      planoContas,
       selectedAno,
       selectedCentroCustoId,
       mapaContaCentro,
+      selectedEmpresaId,
     ],
   )
 
   const { balanco: balancoAno1, dre: dreAno1 } = useMemo(
     () => aplicarFiltroCentro(rawBalancoAno1, rawDreAno1, lancamentos, ano1, selectedCentroCustoId),
-    [rawBalancoAno1, rawDreAno1, lancamentos, ano1, selectedCentroCustoId, mapaContaCentro],
+    [
+      rawBalancoAno1,
+      rawDreAno1,
+      lancamentos,
+      contas,
+      planoContas,
+      ano1,
+      selectedCentroCustoId,
+      mapaContaCentro,
+      selectedEmpresaId,
+    ],
   )
 
   const { balanco: balancoAno2, dre: dreAno2 } = useMemo(
     () => aplicarFiltroCentro(rawBalancoAno2, rawDreAno2, lancamentos, ano2, selectedCentroCustoId),
-    [rawBalancoAno2, rawDreAno2, lancamentos, ano2, selectedCentroCustoId, mapaContaCentro],
+    [
+      rawBalancoAno2,
+      rawDreAno2,
+      lancamentos,
+      contas,
+      planoContas,
+      ano2,
+      selectedCentroCustoId,
+      mapaContaCentro,
+      selectedEmpresaId,
+    ],
   )
 
   // Indicadores consolidados dos 3 anos (Empresa Principal)
@@ -576,12 +839,12 @@ export default function PainelIndicadores() {
     [empresas, empresaBId],
   )
   const balancoBAtual = useMemo(
-    () => balancosB.find((b) => b.ano === anoEmpresaB) || null,
+    () => obterBalancoAno(anoEmpresaB, balancosB),
     [balancosB, anoEmpresaB],
   )
   const dreBAtual = useMemo(
-    () => dresB.find((d) => d.ano === anoEmpresaB) || null,
-    [dresB, anoEmpresaB],
+    () => obterDreDoAno(anoEmpresaB, lancamentosB, contas, planoContas, dresB, empresaBId),
+    [anoEmpresaB, lancamentosB, contas, planoContas, dresB, empresaBId],
   )
   const indBAtual = useMemo(
     () =>
@@ -4580,8 +4843,10 @@ export default function PainelIndicadores() {
         }}
         balancoAtual={balancoAtual}
         dreAtual={dreAtual}
-        balancosAno={balancos}
-        dresAno={dres}
+        balancosAno={
+          [rawBalancoAno2, rawBalancoAno1, rawBalancoAtual].filter(Boolean) as BalancoRecord[]
+        }
+        dresAno={[rawDreAno2, rawDreAno1, rawDreAtual].filter(Boolean) as DreRecord[]}
         radarItems={radarItems}
         benchmarkAtivo={benchmarkAtivo}
         selectedSetorBenchmark={selectedSetorBenchmark}
