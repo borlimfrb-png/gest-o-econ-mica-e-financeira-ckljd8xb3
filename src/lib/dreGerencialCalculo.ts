@@ -65,6 +65,7 @@ export function calcularDreGerencialMatriz(
       centroId?: string
       centroNome?: string
       centroCodigo?: string
+      centroSequencia?: number | null
       tipoDespesaId?: string
       tipoDespesaNome?: string
       tipoDespesaCodigo?: string
@@ -76,10 +77,16 @@ export function calcularDreGerencialMatriz(
     for (const p of planoContas) {
       const cId = p.conta
       if (cId && !contaMetadados.has(cId)) {
+        const cExpand = p.expand?.centro
+        const cSeq =
+          cExpand?.sequencia != null && !isNaN(Number(cExpand.sequencia))
+            ? Number(cExpand.sequencia)
+            : undefined
         contaMetadados.set(cId, {
-          centroId: p.expand?.centro?.id || p.centro || undefined,
-          centroNome: p.expand?.centro?.nome || undefined,
-          centroCodigo: (p.expand?.centro as any)?.codigo || undefined,
+          centroId: cExpand?.id || p.centro || undefined,
+          centroNome: cExpand?.nome || undefined,
+          centroCodigo: (cExpand as any)?.codigo || undefined,
+          centroSequencia: cSeq,
           tipoDespesaId: p.expand?.tipo_despesa?.id || p.tipo_despesa || undefined,
           tipoDespesaNome: p.expand?.tipo_despesa?.nome || undefined,
           tipoDespesaCodigo: p.expand?.tipo_despesa?.codigo || undefined,
@@ -171,6 +178,10 @@ export function calcularDreGerencialMatriz(
       centroExpandido?.id || expandPlanoConta?.centro || planoDoMapa?.centro || undefined
     const centroNome = centroExpandido?.nome || undefined
     const centroCodigo = (centroExpandido as any)?.codigo || undefined
+    const centroSequencia =
+      centroExpandido?.sequencia != null && !isNaN(Number(centroExpandido.sequencia))
+        ? Number(centroExpandido.sequencia)
+        : undefined
 
     const tipoDespesaExpandido =
       expandPlanoConta?.expand?.tipo_despesa || planoDoMapa?.expand?.tipo_despesa
@@ -188,6 +199,7 @@ export function calcularDreGerencialMatriz(
         centroId,
         centroNome,
         centroCodigo,
+        centroSequencia,
         tipoDespesaId,
         tipoDespesaNome,
         tipoDespesaCodigo,
@@ -198,6 +210,7 @@ export function calcularDreGerencialMatriz(
         atualMeta.centroId = centroId
         atualMeta.centroNome = centroNome
         atualMeta.centroCodigo = centroCodigo
+        atualMeta.centroSequencia = centroSequencia
       }
       if (!atualMeta.tipoDespesaNome && tipoDespesaNome) {
         atualMeta.tipoDespesaId = tipoDespesaId
@@ -298,6 +311,7 @@ export function calcularDreGerencialMatriz(
       centroId: meta?.centroId,
       centroNome: meta?.centroNome,
       centroCodigo: meta?.centroCodigo,
+      centroSequencia: meta?.centroSequencia,
       tipoDespesaId: meta?.tipoDespesaId,
       tipoDespesaNome: meta?.tipoDespesaNome,
       tipoDespesaCodigo: meta?.tipoDespesaCodigo,
@@ -478,6 +492,7 @@ export function calcularComparativoDre(
         centroId: ref.centroId,
         centroNome: ref.centroNome,
         centroCodigo: ref.centroCodigo,
+        centroSequencia: ref.centroSequencia,
         tipoDespesaId: ref.tipoDespesaId,
         tipoDespesaNome: ref.tipoDespesaNome,
         tipoDespesaCodigo: ref.tipoDespesaCodigo,
@@ -553,6 +568,7 @@ export function calcularComparativoDre(
       centroId: ref.centroId,
       centroNome: ref.centroNome,
       centroCodigo: ref.centroCodigo,
+      centroSequencia: ref.centroSequencia,
       tipoDespesaId: ref.tipoDespesaId,
       tipoDespesaNome: ref.tipoDespesaNome,
       tipoDespesaCodigo: ref.tipoDespesaCodigo,

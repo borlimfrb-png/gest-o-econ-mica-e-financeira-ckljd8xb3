@@ -46,6 +46,7 @@ export interface ContaMatrizItem {
   centroId?: string
   centroNome?: string
   centroCodigo?: string
+  centroSequencia?: number | null
   tipoDespesaId?: string
   tipoDespesaNome?: string
   tipoDespesaCodigo?: string
@@ -124,10 +125,14 @@ export function compararContasDre(
 }
 
 /**
- * Ordenação conforme regra de negócio:
- * 1º Conta Contábil (código hierárquico contábil e desempate alfabético pelo nome via compararContasDre) como critério PRINCIPAL
- * 2º Centro de Custo (nome ou código do centro; contas com centro vêm antes, vazias por último) como desempate
- * 3º Tipo de Despesa (nome ou código do tipo; tipos com valor vêm antes, vazios por último dentro do centro) como segundo desempate
+ * Ordenação dos itens na DRE Gerencial:
+ * 1º Centro de Custo:
+ *    - Contas COM centro vêm antes de contas SEM centro
+ *    - Entre centros com sequência definida (numérica crescente: 1, 2, 10...)
+ *    - Centros SEM sequência (null/undefined) vêm depois dos sequenciados, em ordem estável por código do centro e nome (localeCompare 'pt-BR')
+ *    - Empate de sequência desempata por código do centro e nome
+ * 2º Tipo de Despesa (dentro do mesmo centro: preenchido antes de vazio, ordenado pt-BR)
+ * 3º Conta Contábil (código hierárquico contábil e desempate por nome via compararContasDre)
  */
 export function compararCentroTipoConta(
   a: {
@@ -135,6 +140,7 @@ export function compararCentroTipoConta(
     nome: string
     centroNome?: string | null
     centroCodigo?: string | null
+    centroSequencia?: number | null
     tipoDespesaNome?: string | null
     tipoDespesaCodigo?: string | null
   },
@@ -143,30 +149,62 @@ export function compararCentroTipoConta(
     nome: string
     centroNome?: string | null
     centroCodigo?: string | null
+    centroSequencia?: number | null
     tipoDespesaNome?: string | null
     tipoDespesaCodigo?: string | null
   },
 ): number {
-  // 1º Conta Contábil (Código hierárquico + Nome) - CRITÉRIO PRINCIPAL
-  const cmpConta = compararContasDre(a, b)
-  if (cmpConta !== 0) {
-    return cmpConta
+  // 1º Centro de Custo
+  const temCentroA = Boolean((a.centroNome || a.centroCodigo || '').trim())
+  const temCentroB = Boolean((b.centroNome || b.centroCodigo || '').trim())
+
+  if (temCentroA && !temCentroB) return -1
+  if (!temCentroA && temCentroB) return 1
+
+  if (temCentroA && temCentroB) {
+    const seqA =
+      a.centroSequencia != null && !isNaN(Number(a.centroSequencia))
+        ? Number(a.centroSequencia)
+        : null
+    const seqB =
+      b.centroSequencia != null && !isNaN(Number(b.centroSequencia))
+        ? Number(b.centroSequencia)
+        : null
+
+    if (seqA !== null && seqB !== null) {
+      if (seqA !== seqB) return seqA - seqB
+      // Empate de sequência: desempata por código do centro e nome
+      const codA = (a.centroCodigo || '').trim()
+      const codB = (b.centroCodigo || '').trim()
+      if (codA !== codB) {
+        return codA.localeCompare(codB, 'pt-BR', { sensitivity: 'base' })
+      }
+      const nomeA = (a.centroNome || '').trim()
+      const nomeB = (b.centroNome || '').trim()
+      const cmpNome = nomeA.localeCompare(nomeB, 'pt-BR', { sensitivity: 'base' })
+      if (cmpNome !== 0) return cmpNome
+    } else if (seqA !== null && seqB === null) {
+      return -1
+    } else if (seqA === null && seqB !== null) {
+      return 1
+    } else {
+      // Ambos sem sequência: ordem estável por código do centro e nome
+      const codA = (a.centroCodigo || '').trim()
+      const codB = (b.centroCodigo || '').trim()
+      if (codA && codB && codA !== codB) {
+        return codA.localeCompare(codB, 'pt-BR', { sensitivity: 'base' })
+      }
+      if (codA && !codB) return -1
+      if (!codA && codB) return 1
+
+      const nomeA = (a.centroNome || '').trim()
+      const nomeB = (b.centroNome || '').trim()
+      const cmpNome = nomeA.localeCompare(nomeB, 'pt-BR', { sensitivity: 'base' })
+      if (cmpNome !== 0) return cmpNome
+    }
   }
 
-  // 2º Centro de Custo (desempate: preenchido antes de vazio, ordenado pt-BR)
-  const centroA = (a.centroNome || a.centroCodigo || '').trim()
-  const centroB = (b.centroNome || b.centroCodigo || '').trim()
-
-  if (centroA && centroB) {
-    const cmpCentro = centroA.localeCompare(centroB, 'pt-BR', { sensitivity: 'base' })
-    if (cmpCentro !== 0) return cmpCentro
-  } else if (centroA && !centroB) {
-    return -1 // preenchido vem antes de vazio
-  } else if (!centroA && centroB) {
-    return 1
-  }
-
-  // 3º Tipo de Despesa (segundo desempate: preenchido antes de vazio, ordenado pt-BR)
+  // 2º Tipo de Despesa (dentro do mesmo centro)
   const tipoA = (a.tipoDespesaNome || a.tipoDespesaCodigo || '').trim()
   const tipoB = (b.tipoDespesaNome || b.tipoDespesaCodigo || '').trim()
 
@@ -174,9 +212,15 @@ export function compararCentroTipoConta(
     const cmpTipo = tipoA.localeCompare(tipoB, 'pt-BR', { sensitivity: 'base' })
     if (cmpTipo !== 0) return cmpTipo
   } else if (tipoA && !tipoB) {
-    return -1 // preenchido vem antes de vazio
+    return -1
   } else if (!tipoA && tipoB) {
     return 1
+  }
+
+  // 3º Conta Contábil (Código hierárquico + Nome)
+  const cmpConta = compararContasDre(a, b)
+  if (cmpConta !== 0) {
+    return cmpConta
   }
 
   return 0
@@ -233,6 +277,7 @@ export interface ContaComparativoItem {
   centroId?: string
   centroNome?: string
   centroCodigo?: string
+  centroSequencia?: number | null
   tipoDespesaId?: string
   tipoDespesaNome?: string
   tipoDespesaCodigo?: string

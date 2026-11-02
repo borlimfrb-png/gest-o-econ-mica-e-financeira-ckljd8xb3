@@ -100,6 +100,7 @@ function todayIso(): string {
 interface CentroFormData {
   nome: string
   tipo: TipoCentro
+  sequencia: string
   descricao: string
   meta_mensal: string
   meta_anual: string
@@ -108,6 +109,7 @@ interface CentroFormData {
 const EMPTY_CENTRO: CentroFormData = {
   nome: '',
   tipo: 'Despesa',
+  sequencia: '',
   descricao: '',
   meta_mensal: '',
   meta_anual: '',
@@ -459,6 +461,7 @@ export default function Centros() {
         descricao: centroForm.descricao,
         meta_mensal: parseMeta(centroForm.meta_mensal),
         meta_anual: parseMeta(centroForm.meta_anual),
+        sequencia: centroForm.sequencia.trim() === '' ? undefined : Number(centroForm.sequencia),
         empresa: empresaParaCriar,
       })
       toast({
@@ -483,6 +486,7 @@ export default function Centros() {
     setCentroForm({
       nome: c.nome,
       tipo: c.tipo,
+      sequencia: c.sequencia != null ? String(c.sequencia) : '',
       descricao: c.descricao || '',
       meta_mensal:
         c.meta_mensal !== undefined && c.meta_mensal !== null ? String(c.meta_mensal) : '',
@@ -503,6 +507,7 @@ export default function Centros() {
         descricao: centroForm.descricao,
         meta_mensal: parseMeta(centroForm.meta_mensal),
         meta_anual: parseMeta(centroForm.meta_anual),
+        sequencia: centroForm.sequencia.trim() === '' ? undefined : Number(centroForm.sequencia),
       })
       toast({ title: 'Centro atualizado', description: 'As alterações foram salvas.' })
       setEditCentroOpen(false)
@@ -938,6 +943,28 @@ export default function Centros() {
                   </div>
 
                   <div className="space-y-1.5">
+                    <Label
+                      htmlFor="centro-sequencia"
+                      className="text-xs font-semibold text-slate-700"
+                    >
+                      Sequência (DRE Gerencial)
+                    </Label>
+                    <Input
+                      id="centro-sequencia"
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="Ex: 1, 2, 3..."
+                      value={centroForm.sequencia}
+                      onChange={(e) => setCentroField('sequencia', e.target.value)}
+                      className="h-9 text-xs"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Ordem de exibição dos centros no DRE Gerencial.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
                     <Label htmlFor="centro-tipo" className="text-xs font-semibold text-slate-700">
                       Tipo *
                     </Label>
@@ -1087,93 +1114,129 @@ export default function Centros() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {centros.map((c) => {
-                        const stats = statsPorCentro.get(c.id) || { count: 0, total: 0 }
-                        const isSel = c.id === selectedCentroId
-                        return (
-                          <tr
-                            key={c.id}
-                            onClick={() => setSelectedCentroId(c.id)}
-                            className={`cursor-pointer transition-colors ${
-                              isSel ? 'bg-blue-50/80' : 'hover:bg-slate-50/80'
-                            }`}
-                          >
-                            <td className="py-3 px-4">
-                              <div className="flex items-center gap-2.5">
-                                <div
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                    c.tipo === 'Receita'
-                                      ? 'bg-emerald-50 text-emerald-600'
-                                      : 'bg-rose-50 text-rose-600'
-                                  }`}
-                                >
-                                  <Receipt className="w-4 h-4" />
+                      {[...centros]
+                        .sort((a, b) => {
+                          const sa =
+                            a.sequencia != null && !isNaN(Number(a.sequencia))
+                              ? Number(a.sequencia)
+                              : null
+                          const sb =
+                            b.sequencia != null && !isNaN(Number(b.sequencia))
+                              ? Number(b.sequencia)
+                              : null
+                          if (sa !== null && sb !== null) {
+                            if (sa !== sb) return sa - sb
+                            return (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR')
+                          }
+                          if (sa !== null && sb === null) return -1
+                          if (sa === null && sb !== null) return 1
+                          return (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR')
+                        })
+                        .map((c) => {
+                          const stats = statsPorCentro.get(c.id) || { count: 0, total: 0 }
+                          const isSel = c.id === selectedCentroId
+                          return (
+                            <tr
+                              key={c.id}
+                              onClick={() => setSelectedCentroId(c.id)}
+                              className={`cursor-pointer transition-colors ${
+                                isSel ? 'bg-blue-50/80' : 'hover:bg-slate-50/80'
+                              }`}
+                            >
+                              <td className="py-3 px-4">
+                                <div className="flex items-center gap-2.5">
+                                  <div
+                                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                      c.tipo === 'Receita'
+                                        ? 'bg-emerald-50 text-emerald-600'
+                                        : 'bg-rose-50 text-rose-600'
+                                    }`}
+                                  >
+                                    <Receipt className="w-4 h-4" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="font-semibold text-slate-900 block truncate">
+                                        {c.nome}
+                                      </span>
+                                      {c.codigo && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] font-mono px-1.5 py-0 text-slate-600 border-slate-300"
+                                        >
+                                          {c.codigo}
+                                        </Badge>
+                                      )}
+                                      {c.sequencia != null && (
+                                        <Badge
+                                          className="text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0 hover:bg-amber-50"
+                                          title="Sequência no DRE"
+                                        >
+                                          Seq #{c.sequencia}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {c.descricao ? (
+                                      <span className="text-[11px] text-slate-500 block truncate">
+                                        {c.descricao}
+                                      </span>
+                                    ) : null}
+                                  </div>
                                 </div>
-                                <div className="min-w-0">
-                                  <span className="font-semibold text-slate-900 block truncate">
-                                    {c.nome}
-                                  </span>
-                                  {c.descricao ? (
-                                    <span className="text-[11px] text-slate-500 block truncate">
-                                      {c.descricao}
-                                    </span>
-                                  ) : null}
+                              </td>
+                              <td className="py-3 px-4">
+                                <TipoBadge tipo={c.tipo} />
+                              </td>
+                              <td className="py-3 px-4 text-center font-medium text-slate-700">
+                                {stats.count}
+                              </td>
+                              <td className="py-3 px-4 text-right font-semibold text-slate-800 whitespace-nowrap">
+                                {formatBrl(stats.total)}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedCentroId(c.id)
+                                      setConsultarContasOpen(true)
+                                    }}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                    title="Verificar contas cadastradas vinculadas a este centro"
+                                  >
+                                    <BookOpen className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      openEditCentro(c)
+                                    }}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                    title="Editar centro"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      confirmDeleteCentro(c)
+                                    }}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                    title="Excluir centro"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4">
-                              <TipoBadge tipo={c.tipo} />
-                            </td>
-                            <td className="py-3 px-4 text-center font-medium text-slate-700">
-                              {stats.count}
-                            </td>
-                            <td className="py-3 px-4 text-right font-semibold text-slate-800 whitespace-nowrap">
-                              {formatBrl(stats.total)}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setSelectedCentroId(c.id)
-                                    setConsultarContasOpen(true)
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                  title="Verificar contas cadastradas vinculadas a este centro"
-                                >
-                                  <BookOpen className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    openEditCentro(c)
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                  title="Editar centro"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                </Button>
-                                <Button
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    confirmDeleteCentro(c)
-                                  }}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                  title="Excluir centro"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
+                              </td>
+                            </tr>
+                          )
+                        })}
                     </tbody>
                   </table>
                 </DoubleHorizontalScroll>
@@ -1841,6 +1904,24 @@ export default function Centros() {
                   readOnly
                   value={editingCentro?.codigo || ''}
                   className="h-9 text-xs font-mono font-semibold text-slate-600 bg-slate-50 border-slate-200 cursor-not-allowed"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-centro-sequencia"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Sequência (DRE Gerencial)
+                </Label>
+                <Input
+                  id="edit-centro-sequencia"
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Ex: 1, 2, 3... (opcional)"
+                  value={centroForm.sequencia}
+                  onChange={(e) => setCentroField('sequencia', e.target.value)}
+                  className="h-9 text-xs"
                 />
               </div>
               <div className="space-y-1.5">

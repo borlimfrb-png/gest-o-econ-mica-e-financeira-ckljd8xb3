@@ -847,6 +847,77 @@ describe('DRE Gerencial - Cálculos e Geração de Matriz', () => {
         ])
       })
 
+      it('ordena centros pela sequência cadastrada (1, 2, 10), sem sequência por último e desempate por código', () => {
+        const contas = [
+          // Centro sem sequência, código CC-99
+          {
+            nome: 'Conta Sem Seq CC99',
+            codigo: '1.1',
+            centroNome: 'Z Centro',
+            centroCodigo: 'CC-99',
+            centroSequencia: null,
+          },
+          // Centro sem sequência, código CC-05
+          {
+            nome: 'Conta Sem Seq CC05',
+            codigo: '1.1',
+            centroNome: 'A Centro',
+            centroCodigo: 'CC-05',
+            centroSequencia: undefined,
+          },
+          // Centro sequência 10
+          {
+            nome: 'Conta Seq 10',
+            codigo: '1.1',
+            centroNome: 'Centro Dez',
+            centroCodigo: 'CC-10',
+            centroSequencia: 10,
+          },
+          // Centro sequência 2
+          {
+            nome: 'Conta Seq 2',
+            codigo: '1.1',
+            centroNome: 'Centro Dois',
+            centroCodigo: 'CC-02',
+            centroSequencia: 2,
+          },
+          // Centro sequência 1 - emparelhado pelo código B
+          {
+            nome: 'Conta Seq 1 Cod B',
+            codigo: '1.1',
+            centroNome: 'Centro Um B',
+            centroCodigo: 'CC-01B',
+            centroSequencia: 1,
+          },
+          // Centro sequência 1 - emparelhado pelo código A
+          {
+            nome: 'Conta Seq 1 Cod A',
+            codigo: '1.1',
+            centroNome: 'Centro Um A',
+            centroCodigo: 'CC-01A',
+            centroSequencia: 1,
+          },
+          // Conta sem centro nenhum
+          {
+            nome: 'Conta Sem Centro',
+            codigo: '1.1',
+            centroNome: '',
+            centroCodigo: '',
+          },
+        ]
+
+        const ordenadas = [...contas].sort(compararCentroTipoConta)
+        expect(ordenadas.map((c) => c.nome)).toEqual([
+          'Conta Seq 1 Cod A', // seq 1, código CC-01A
+          'Conta Seq 1 Cod B', // seq 1, código CC-01B
+          'Conta Seq 2', // seq 2
+          'Conta Seq 10', // seq 10 (numérica antes de sem sequência)
+          'Conta Sem Seq CC05', // sem seq, desempate código CC-05
+          'Conta Sem Seq CC99', // sem seq, desempate código CC-99
+          'Conta Sem Centro', // sem centro por último
+        ])
+      })
+
       it('DRE Gerencial agrupa e ordena respeitando 1º Centro -> 2º Tipo -> 3º Conta', () => {
         const meses = gerarListaMeses(2023, 1, 1)
 
