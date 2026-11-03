@@ -61,6 +61,9 @@ import {
   gruposEmpresariaisService,
   consolidarBalancosPorGrupo,
   consolidarDrePorGrupo,
+  lancamentosService,
+  planoContasService,
+  contasService,
 } from '@/services/financeService'
 import { produtosService } from '@/services/formacaoPrecoService'
 import { recebiveisService } from '@/services/recebiveisService'
@@ -83,6 +86,8 @@ import {
   consolidarDreAnual,
 } from '@/lib/financeCalculations'
 import { calcularScoreBscMomento, extrairFormulasDemonstracoes } from '@/lib/bscMonthlyCalculations'
+import { calcularAnaliseRentabilidade } from '@/lib/analiseRentabilidadeCalculo'
+import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 
 import type {
   EmpresaRecord,
@@ -95,6 +100,9 @@ import type {
   BscKpiRecord,
   BscIniciativaRecord,
   BiApresentacaoRecord,
+  LancamentoRecord,
+  PlanoContaRecord,
+  ContaRecord,
 } from '@/types/finance'
 
 import { Button } from '@/components/ui/button'
@@ -227,6 +235,9 @@ export default function DashboardBi() {
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscalRecord[]>([])
   const [kpisBsc, setKpisBsc] = useState<BscKpiRecord[]>([])
   const [iniciativasBsc, setIniciativasBsc] = useState<BscIniciativaRecord[]>([])
+  const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
+  const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [contas, setContas] = useState<ContaRecord[]>([])
 
   // Apresentações Salvas de BI
   const [apresentacoes, setApresentacoes] = useState<BiApresentacaoRecord[]>([])
@@ -256,6 +267,9 @@ export default function DashboardBi() {
   useRealtime('bsc_kpis', reloadData)
   useRealtime('bsc_iniciativas', reloadData)
   useRealtime('bi_apresentacoes', reloadApresentacoes)
+  useRealtime('lancamentos', reloadData)
+  useRealtime('plano_contas', reloadData)
+  useRealtime('contas', reloadData)
 
   // Carga inicial e sob filtros
   useEffect(() => {
@@ -277,7 +291,19 @@ export default function DashboardBi() {
         }
 
         // Buscar demonstrações e operacionais
-        const [balRes, dreRes, prodRes, recRes, nfRes, kpiRes, iniRes, aprRes] = await Promise.all([
+        const [
+          balRes,
+          dreRes,
+          prodRes,
+          recRes,
+          nfRes,
+          kpiRes,
+          iniRes,
+          aprRes,
+          lancRes,
+          planRes,
+          contasRes,
+        ] = await Promise.all([
           balancosService.getAll(),
           dreService.getAll(),
           produtosService.getAll(),
@@ -286,6 +312,11 @@ export default function DashboardBi() {
           bscService.getAll().catch(() => [] as BscKpiRecord[]),
           bscService.getAllIniciativas().catch(() => [] as BscIniciativaRecord[]),
           biApresentacoesService.listar().catch(() => [] as BiApresentacaoRecord[]),
+          lancamentosService
+            .getAll({ expandRelations: true })
+            .catch(() => [] as LancamentoRecord[]),
+          planoContasService.getAll().catch(() => [] as PlanoContaRecord[]),
+          contasService.getAll().catch(() => [] as ContaRecord[]),
         ])
 
         if (cancelado) return
@@ -297,6 +328,9 @@ export default function DashboardBi() {
         setKpisBsc(kpiRes)
         setIniciativasBsc(iniRes)
         setApresentacoes(aprRes)
+        setLancamentos(lancRes)
+        setPlanoContas(planRes)
+        setContas(contasRes)
       } catch (err) {
         console.error('Erro ao carregar dados do Dashboard BI:', err)
         toast({
@@ -358,18 +392,102 @@ export default function DashboardBi() {
     return dres.filter((d) => d.empresa === selectedEmpresaId)
   }, [dres, isGrupoAtivo, idsEmpresasEscopo, selectedEmpresaId])
 
+  const lancamentosEscopo = useMemo(() => {
+    if (isGrupoAtivo) {
+      return lancamentos.filter((l) => idsEmpresasEscopo.has(l.empresa))
+    }
+    if (selectedEmpresaId) {
+      return lancamentos.filter((l) => l.empresa === selectedEmpresaId)
+    }
+    return lancamentos
+  }, [lancamentos, isGrupoAtivo, idsEmpresasEscopo, selectedEmpresaId])
+
+  // Helper para gerar DreRecord sintético a partir dos lançamentos contábeis
+  const criarDreSintetico = useCallback(
+    (ano: number): DreRecord | null => {
+      if (!lancamentosEscopo || lancamentosEscopo.length === 0) return null
+      const meses = gerarListaMeses(ano, 1, 12)
+      const rent = calcularAnaliseRentabilidade(lancamentosEscopo, contas, meses, planoContas)
+
+      const temDadosNoAno =
+        rent.faturamentoTotal > 0 ||
+        rent.despesasFixasTotal > 0 ||
+        rent.despesasVariaveisTotal > 0 ||
+        rent.despesasFinanceirasTotal > 0 ||
+        rent.lucroTotal !== 0
+
+      if (!temDadosNoAno) return null
+
+      const empresaAlvo = selectedEmpresaId || 'empresa'
+      const record: DreRecord = {
+        id: `sintetico-${ano}-${empresaAlvo}`,
+        collectionId: 'dres',
+        collectionName: 'dres',
+        created: new Date().toISOString(),
+        updated: new Date().toISOString(),
+        empresa: empresaAlvo,
+        ano,
+        mes: 12,
+        receita_bruta: rent.faturamentoTotal,
+        deducoes_receita: 0,
+        custo_mercadorias: rent.despesasVariaveisTotal,
+        despesas_operacionais: rent.despesasFixasTotal,
+        despesas_financeiras: rent.despesasFinanceirasTotal,
+        outras_receitas_despesas: rent.receitasFinanceirasTotal,
+        imposto_renda: 0,
+        ...({
+          receita_liquida: rent.faturamentoTotal,
+          custos_operacionais: rent.despesasVariaveisTotal,
+          despesas_fixas: rent.despesasFixasTotal,
+          despesas_variaveis: rent.despesasVariaveisTotal,
+          resultado: rent.lucroTotal,
+        } as any),
+      }
+      return record
+    },
+    [lancamentosEscopo, contas, planoContas, selectedEmpresaId],
+  )
+
   // Balanço e DRE consolidados do Ano Atual e do Ano Anterior
   const { balancoAtual, dreAtual, balancoAnt, dreAnt } = useMemo(() => {
     const anoA = selectedAno || new Date().getFullYear()
     const anoB = anoComparativo
 
     const bAtual = consolidarBalancoAnual(balancosEscopo, anoA)
-    const dAtual = consolidarDreAnual(dresEscopo, anoA)
+    let dAtual = consolidarDreAnual(dresEscopo, anoA)
     const bAnt = consolidarBalancoAnual(balancosEscopo, anoB)
-    const dAnt = consolidarDreAnual(dresEscopo, anoB)
+    let dAnt = consolidarDreAnual(dresEscopo, anoB)
+
+    // Fallback: se dreAtual for null/sem dados E houver lançamentos, monta DreRecord sintético
+    const dreAtualSemDados =
+      !dAtual ||
+      (!dAtual.receita_bruta &&
+        !dAtual.despesas_operacionais &&
+        !dAtual.custo_mercadorias &&
+        !dAtual.despesas_financeiras)
+    if (dreAtualSemDados) {
+      const sinteticoA = criarDreSintetico(anoA)
+      if (sinteticoA) {
+        dAtual = sinteticoA
+      }
+    }
+
+    // Fallback para dreAnt (anoComparativo)
+    const dreAntSemDados =
+      !dAnt ||
+      (!dAnt.receita_bruta &&
+        !dAnt.despesas_operacionais &&
+        !dAnt.custo_mercadorias &&
+        !dAnt.despesas_financeiras)
+    if (dreAntSemDados) {
+      const sinteticoB = criarDreSintetico(anoB)
+      if (sinteticoB) {
+        dAnt = sinteticoB
+      }
+    }
 
     return { balancoAtual: bAtual, dreAtual: dAtual, balancoAnt: bAnt, dreAnt: dAnt }
-  }, [selectedAno, anoComparativo, balancosEscopo, dresEscopo])
+  }, [selectedAno, anoComparativo, balancosEscopo, dresEscopo, criarDreSintetico])
 
   // Indicadores calculados Ano Atual
   const indAtual = useMemo(() => {
@@ -394,11 +512,56 @@ export default function DashboardBi() {
   )
   const cgAnt = useMemo(() => calcularCapitalGiro(balancoAnt, dreAnt), [balancoAnt, dreAnt])
 
-  // Série Mensal para gráficos de linha (caso haja dados mensais)
+  // Série Mensal para gráficos de linha (caso haja dados mensais ou via lançamentos)
   const serieMensal = useMemo(() => {
     const anoA = selectedAno || new Date().getFullYear()
-    return gerarComparativoMensalAno(balancosEscopo, dresEscopo, anoA)
-  }, [selectedAno, balancosEscopo, dresEscopo])
+    const serie = gerarComparativoMensalAno(balancosEscopo, dresEscopo, anoA)
+    const temDados = serie.some((m) => m.temDados)
+    if (!temDados && lancamentosEscopo.length > 0) {
+      const meses = gerarListaMeses(anoA, 1, 12)
+      const rent = calcularAnaliseRentabilidade(lancamentosEscopo, contas, meses, planoContas)
+      const temMovimento = rent.itensPorMes.some(
+        (i) => i.faturamento > 0 || i.lucroApurado !== 0 || i.despesasFixas > 0,
+      )
+      if (temMovimento) {
+        return rent.itensPorMes.map((item, idx) => ({
+          mesNum: idx + 1,
+          mesNome: item.rotuloCompleto,
+          mesAbrev: item.rotuloCurto.split('/')[0],
+          temDados: item.faturamento > 0 || item.lucroApurado !== 0,
+          temBalanco: false,
+          temDre: true,
+          fechado: false,
+          ativoTotal: 0,
+          ativoCirculante: 0,
+          ativoNaoCirculante: 0,
+          passivoTotal: 0,
+          passivoCirculante: 0,
+          passivoNaoCirculante: 0,
+          patrimonioLiquido: 0,
+          caixaEquivalentes: 0,
+          contasReceber: 0,
+          estoques: 0,
+          receitaBruta: item.faturamento,
+          deducoes: 0,
+          receitaLiquida: item.faturamento,
+          custoMercadorias: item.despesasVariaveis,
+          lucroBruto: item.faturamento - item.despesasVariaveis,
+          despesasOperacionais: item.despesasFixas,
+          resultadoOperacional: item.faturamento - item.despesasVariaveis - item.despesasFixas,
+          despesasFinanceiras: item.despesasFinanceiras,
+          outrasReceitasDespesas: item.receitasFinanceiras,
+          impostoRenda: 0,
+          lucroLiquido: item.lucroApurado,
+          ebitda: item.lucroApurado + item.despesasFinanceiras,
+          margemLiquida: item.margemSobreFaturamento,
+          liquidezCorrente: null,
+          endividamentoGeral: null,
+        }))
+      }
+    }
+    return serie
+  }, [selectedAno, balancosEscopo, dresEscopo, lancamentosEscopo, contas, planoContas])
 
   const temDadosMensais = useMemo(() => {
     return serieMensal.filter((m) => m.temDados).length > 1
@@ -1421,9 +1584,15 @@ export default function DashboardBi() {
                   <DollarSign className="w-4 h-4 text-blue-600" />
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {formatCurrency(calcBalAtual.ativoTotal)}
+                  {balancoAtual ? formatCurrency(calcBalAtual.ativoTotal) : '—'}
                 </div>
-                {renderVariacao(calcBalAtual.ativoTotal, calcBalAnt.ativoTotal)}
+                {balancoAtual ? (
+                  renderVariacao(calcBalAtual.ativoTotal, calcBalAnt.ativoTotal)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -1435,9 +1604,15 @@ export default function DashboardBi() {
                   <Scale className="w-4 h-4 text-rose-600" />
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {formatCurrency(calcBalAtual.passivoTotal)}
+                  {balancoAtual ? formatCurrency(calcBalAtual.passivoTotal) : '—'}
                 </div>
-                {renderVariacao(calcBalAtual.passivoTotal, calcBalAnt.passivoTotal, true)}
+                {balancoAtual ? (
+                  renderVariacao(calcBalAtual.passivoTotal, calcBalAnt.passivoTotal, true)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -1449,9 +1624,15 @@ export default function DashboardBi() {
                   <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {formatCurrency(calcBalAtual.patrimonioLiquido)}
+                  {balancoAtual ? formatCurrency(calcBalAtual.patrimonioLiquido) : '—'}
                 </div>
-                {renderVariacao(calcBalAtual.patrimonioLiquido, calcBalAnt.patrimonioLiquido)}
+                {balancoAtual ? (
+                  renderVariacao(calcBalAtual.patrimonioLiquido, calcBalAnt.patrimonioLiquido)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -1511,13 +1692,19 @@ export default function DashboardBi() {
                 <div className="flex items-center justify-between text-xs text-slate-500">
                   <span className="font-semibold">ROE (Retorno s/ PL)</span>
                   <span className="text-[11px] font-semibold text-slate-400">
-                    ROA: {formatPercent(indAtual.roa, 1)}
+                    ROA: {balancoAtual ? formatPercent(indAtual.roa, 1) : '—'}
                   </span>
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {formatPercent(indAtual.roe, 1)}
+                  {balancoAtual ? formatPercent(indAtual.roe, 1) : '—'}
                 </div>
-                {renderVariacao(indAtual.roe, indAnt.roe)}
+                {balancoAtual ? (
+                  renderVariacao(indAtual.roe, indAnt.roe)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -1527,13 +1714,21 @@ export default function DashboardBi() {
                 <div className="flex items-center justify-between text-xs text-slate-500">
                   <span className="font-semibold">Liquidez Corrente</span>
                   <span className="text-[11px] font-semibold text-slate-400">
-                    Seca: {formatNumber(indAtual.liquidezSeca, 2)}x
+                    Seca: {balancoAtual ? `${formatNumber(indAtual.liquidezSeca, 2)}x` : '—'}
                   </span>
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {formatNumber(indAtual.liquidezCorrente, 2)}x
+                  {balancoAtual && indAtual.liquidezCorrente !== null
+                    ? `${formatNumber(indAtual.liquidezCorrente, 2)}x`
+                    : '—'}
                 </div>
-                {renderVariacao(indAtual.liquidezCorrente, indAnt.liquidezCorrente)}
+                {balancoAtual ? (
+                  renderVariacao(indAtual.liquidezCorrente, indAnt.liquidezCorrente)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -1545,9 +1740,15 @@ export default function DashboardBi() {
                   <span className="text-[10px] text-slate-400">Passivo / Ativo</span>
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {formatPercent(indAtual.endividamentoGeral, 1)}
+                  {balancoAtual ? formatPercent(indAtual.endividamentoGeral, 1) : '—'}
                 </div>
-                {renderVariacao(indAtual.endividamentoGeral, indAnt.endividamentoGeral, true)}
+                {balancoAtual ? (
+                  renderVariacao(indAtual.endividamentoGeral, indAnt.endividamentoGeral, true)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
@@ -1559,11 +1760,13 @@ export default function DashboardBi() {
                   <Clock className="w-4 h-4 text-amber-500" />
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {cgAtual.pmr !== null ? `${Math.round(cgAtual.pmr)} dias` : '—'}
+                  {balancoAtual && cgAtual.pmr !== null ? `${Math.round(cgAtual.pmr)} dias` : '—'}
                 </div>
                 <div className="text-[11px] text-slate-500">
                   PMP:{' '}
-                  <strong>{cgAtual.pmp !== null ? `${Math.round(cgAtual.pmp)} dias` : '—'}</strong>
+                  <strong>
+                    {balancoAtual && cgAtual.pmp !== null ? `${Math.round(cgAtual.pmp)} dias` : '—'}
+                  </strong>
                 </div>
               </CardContent>
             </Card>
@@ -1576,11 +1779,17 @@ export default function DashboardBi() {
                   <RefreshCw className="w-4 h-4 text-sky-600" />
                 </div>
                 <div className="text-2xl font-black text-[#0B1F3A] dark:text-white">
-                  {cgAtual.cicloFinanceiro !== null
+                  {balancoAtual && cgAtual.cicloFinanceiro !== null
                     ? `${Math.round(cgAtual.cicloFinanceiro)} dias`
                     : '—'}
                 </div>
-                {renderVariacao(cgAtual.cicloFinanceiro, cgAnt.cicloFinanceiro, true)}
+                {balancoAtual ? (
+                  renderVariacao(cgAtual.cicloFinanceiro, cgAnt.cicloFinanceiro, true)
+                ) : (
+                  <span className="text-[10px] text-slate-400">
+                    sem balanço cadastrado para o exercício
+                  </span>
+                )}
               </CardContent>
             </Card>
 
