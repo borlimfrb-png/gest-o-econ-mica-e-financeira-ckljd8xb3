@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -52,57 +51,37 @@ import {
   DollarSign,
   TrendingUp,
   Percent,
-  Layers,
   ArrowLeft,
   Calendar,
-  Building2,
   Printer,
   Download,
   Sparkles,
   FileSpreadsheet,
   PieChart as PieIcon,
-  Activity,
-  CheckCircle2,
-  AlertTriangle,
-  RefreshCw,
   Scale,
+  BarChart3,
 } from 'lucide-react'
 import {
   exportarDashboardBiExcel,
   exportarDashboardBiCsv,
   type DadosExportacaoDashboardBi,
 } from '@/lib/dashboardBiExport'
-
-const CORES_DONUT = [
-  '#0284C7',
-  '#10B981',
-  '#F59E0B',
-  '#6366F1',
-  '#EC4899',
-  '#8B5CF6',
-  '#14B8A6',
-  '#F97316',
-]
-
-function formatBrl(val: number | undefined | null): string {
-  if (val === undefined || val === null || !Number.isFinite(val)) return 'R$ 0,00'
-  return val.toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-}
-
-function formatPercent(val: number | null | undefined, casas = 2): string {
-  if (val === null || val === undefined || !Number.isFinite(val)) return '—'
-  return `${val >= 0 ? '+' : ''}${val.toFixed(casas)}%`
-}
+import {
+  CORES_DONUT_BI,
+  PALETA_BI,
+  KpiCardBi,
+  KpiCardBiSkeleton,
+  EstadoVazioGraficoBi,
+  gridPropsBI,
+  legendStyleBI,
+  tickPropsBI,
+  tooltipLabelStyleBI,
+  tooltipStyleBI,
+} from '@/components/dashboardBiVisual'
 
 export default function GerencialDashboardBi() {
   const navigate = useNavigate()
   const { toast } = useToast()
-  const { user } = useAuth()
   const {
     selectedEmpresaId,
     selectedEmpresa,
@@ -213,12 +192,12 @@ export default function GerencialDashboardBi() {
     return gerarListaMeses(anoInicial, mesInicial, qtdMeses)
   }, [anoInicial, mesInicial, qtdMeses])
 
-  // Motor oficial DRE / Rentabilidade para garantir que os números NUNCA divergem da DRE
+  // Motor oficial DRE / Rentabilidade — números idênticos à DRE Gerencial (paridade EBITDA)
   const analiseRentabilidade = useMemo<AnaliseRentabilidadeResultado>(() => {
     return calcularAnaliseRentabilidade(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
 
-  // Liquidez Corrente via balanço
+  // Liquidez Corrente via balanço (null = sem balanço no exercício → nunca vira zero)
   const liquidezCorrente = useMemo<number | null>(() => {
     if (!balanco) return null
     const b = calcularBalanco(balanco)
@@ -244,6 +223,10 @@ export default function GerencialDashboardBi() {
       }
     })
   }, [analiseRentabilidade])
+
+  const temMovimentoMensal = dadosEvolucaoMensal.some(
+    (d) => d.faturamento > 0 || d.despesasTotais > 0,
+  )
 
   // Composição de despesas por centro de custo (Donut)
   const centrosDonut = useMemo(() => {
@@ -345,10 +328,13 @@ export default function GerencialDashboardBi() {
     window.print()
   }
 
+  const cardChartClass =
+    'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm rounded-xl print:break-inside-avoid'
+
   return (
-    <div className="space-y-6 pb-10 animate-fadeIn print:p-0 print:m-0 print:bg-white print:text-black">
+    <div className="space-y-5 pb-10 animate-fadeIn print:p-0 print:m-0 print:bg-white print:text-black">
       {/* Banner Superior Executivo Borlim */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0B1F3A] via-[#0E284E] to-[#143A6E] border border-blue-900/40 p-6 sm:p-7 text-white shadow-xl shadow-slate-900/10 print:hidden">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0B1F3A] via-[#0E284E] to-[#143A6E] border border-blue-900/40 p-5 sm:p-6 text-white shadow-lg shadow-slate-900/10 print:hidden">
         <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
         <div className="absolute -bottom-24 -left-24 w-96 h-96 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
 
@@ -372,14 +358,14 @@ export default function GerencialDashboardBi() {
                 showSubtitle={false}
                 className="shadow-xs scale-90 origin-left"
               />
-              <Badge className="bg-cyan-500/20 text-cyan-200 border-cyan-400/30 text-xs font-semibold px-2.5 py-0.5 backdrop-blur-md">
+              <Badge className="bg-cyan-500/15 text-cyan-200 border-cyan-400/30 text-xs font-semibold px-2.5 py-0.5 backdrop-blur-md">
                 <Sparkles className="w-3 h-3 mr-1 text-cyan-300" />
                 Dashboard BI Interativo Gerencial
               </Badge>
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white flex items-center gap-2.5">
-              <span>Painel Executivo & BI Interativo</span>
+              <span>Painel Executivo &amp; BI Interativo</span>
             </h1>
 
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
@@ -389,7 +375,7 @@ export default function GerencialDashboardBi() {
           </div>
 
           {/* Controles de Período e Exportação */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 bg-white/5 border border-white/15 p-3 rounded-2xl backdrop-blur-md">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0 bg-white/5 border border-white/15 p-3 rounded-xl backdrop-blur-md">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-cyan-300" />
               <Select
@@ -431,7 +417,7 @@ export default function GerencialDashboardBi() {
                 size="sm"
                 variant="outline"
                 onClick={handleExportarExcel}
-                className="h-8 px-2.5 text-xs bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-200 border-emerald-400/30 gap-1.5 cursor-pointer"
+                className="h-8 px-2.5 text-xs bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-200 border-emerald-400/30 gap-1.5 cursor-pointer"
                 title="Exportar Excel"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -442,7 +428,7 @@ export default function GerencialDashboardBi() {
                 size="sm"
                 variant="outline"
                 onClick={handleExportarCsv}
-                className="h-8 px-2.5 text-xs bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-200 border-cyan-400/30 gap-1.5 cursor-pointer"
+                className="h-8 px-2.5 text-xs bg-cyan-600/15 hover:bg-cyan-600/25 text-cyan-200 border-cyan-400/30 gap-1.5 cursor-pointer"
                 title="Exportar CSV"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -483,107 +469,88 @@ export default function GerencialDashboardBi() {
       </div>
 
       {/* Grid de KPIs Consolidados */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3.5">
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Faturamento
-            </span>
-            <div className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-slate-100 mt-1">
-              {formatBrl(analiseRentabilidade.faturamentoTotal)}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Receita DRE</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Lucro Apurado
-            </span>
-            <div
-              className={`text-base sm:text-lg font-extrabold mt-1 ${
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        {loading ? (
+          Array.from({ length: 7 }).map((_, i) => <KpiCardBiSkeleton key={`kpi-sk-${i}`} />)
+        ) : (
+          <>
+            <KpiCardBi
+              label="Faturamento"
+              valor={formatBrl(analiseRentabilidade.faturamentoTotal)}
+              apoio="Receita DRE"
+              icon={DollarSign}
+              accent="text-sky-700 dark:text-sky-400"
+              accentBar="bg-sky-600"
+            />
+            <KpiCardBi
+              label="Lucro Apurado"
+              valor={formatBrl(analiseRentabilidade.lucroTotal)}
+              apoio="Resultado Líquido"
+              icon={TrendingUp}
+              accent={
                 analiseRentabilidade.lucroTotal >= 0
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-rose-600 dark:text-rose-400'
-              }`}
-            >
-              {formatBrl(analiseRentabilidade.lucroTotal)}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Resultado Líquido</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Margem Líquida
-            </span>
-            <div className="text-base sm:text-lg font-extrabold text-sky-600 dark:text-sky-400 mt-1">
-              {formatPercent(analiseRentabilidade.margemSobreFaturamentoTotal)}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">s/ Faturamento</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Despesas Fixas
-            </span>
-            <div className="text-base sm:text-lg font-extrabold text-slate-800 dark:text-slate-200 mt-1">
-              {formatBrl(analiseRentabilidade.despesasFixasTotal)}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Estrutura fixa</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Desp. Variáveis
-            </span>
-            <div className="text-base sm:text-lg font-extrabold text-amber-600 dark:text-amber-400 mt-1">
-              {formatBrl(analiseRentabilidade.despesasVariaveisTotal)}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Comerciais / Venda</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Desp. Financeiras
-            </span>
-            <div className="text-base sm:text-lg font-extrabold text-purple-600 dark:text-purple-400 mt-1">
-              {formatBrl(analiseRentabilidade.despesasFinanceirasTotal)}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">Juros & Encargos</span>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm col-span-2 md:col-span-1">
-          <CardContent className="p-4">
-            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">
-              Liquidez Corrente
-            </span>
-            <div className="text-base sm:text-lg font-extrabold text-teal-600 dark:text-teal-400 mt-1">
-              {liquidezCorrente !== null ? `${liquidezCorrente.toFixed(2)}x` : '—'}
-            </div>
-            <span className="text-[10px] text-slate-500 mt-0.5 block">
-              {liquidezCorrente !== null ? 'AC / PC (Balanço)' : 'Sem balanço'}
-            </span>
-          </CardContent>
-        </Card>
+                  ? 'text-emerald-700 dark:text-emerald-400'
+                  : 'text-rose-700 dark:text-rose-400'
+              }
+              accentBar={analiseRentabilidade.lucroTotal >= 0 ? 'bg-emerald-600' : 'bg-rose-600'}
+            />
+            <KpiCardBi
+              label="Margem Líquida"
+              valor={formatPercent(analiseRentabilidade.margemSobreFaturamentoTotal)}
+              apoio="s/ Faturamento"
+              icon={Percent}
+              accent="text-sky-700 dark:text-sky-400"
+              accentBar="bg-sky-500"
+            />
+            <KpiCardBi
+              label="Despesas Fixas"
+              valor={formatBrl(analiseRentabilidade.despesasFixasTotal)}
+              apoio="Estrutura fixa"
+              icon={Percent}
+              accent="text-slate-700 dark:text-slate-300"
+              accentBar="bg-slate-400"
+            />
+            <KpiCardBi
+              label="Desp. Variáveis"
+              valor={formatBrl(analiseRentabilidade.despesasVariaveisTotal)}
+              apoio="Comerciais / Venda"
+              icon={Percent}
+              accent="text-amber-700 dark:text-amber-400"
+              accentBar="bg-amber-500"
+            />
+            <KpiCardBi
+              label="Desp. Financeiras"
+              valor={formatBrl(analiseRentabilidade.despesasFinanceirasTotal)}
+              apoio="Juros & Encargos"
+              icon={Percent}
+              accent="text-violet-700 dark:text-violet-400"
+              accentBar="bg-violet-500"
+            />
+            <KpiCardBi
+              label="Liquidez Corrente"
+              valor={liquidezCorrente !== null ? `${liquidezCorrente.toFixed(2)}x` : '—'}
+              apoio={
+                liquidezCorrente !== null
+                  ? 'AC / PC (Balanço)'
+                  : 'Sem balanço cadastrado p/ exercício'
+              }
+              icon={Scale}
+              accent="text-teal-700 dark:text-teal-400"
+              accentBar="bg-teal-600"
+              semDado={liquidezCorrente === null}
+              className="col-span-2 md:col-span-1"
+            />
+          </>
+        )}
       </div>
 
       {/* Gráfico 1: Evolução Mensal Faturamento vs Despesas e Lucro Apurado */}
-      <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm print:break-inside-avoid">
+      <Card className={cardChartClass}>
         <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-sky-500" />
+                <TrendingUp className="w-4 h-4 text-sky-600" />
                 Evolução Mensal — Faturamento vs. Despesas e Lucro Líquido
               </CardTitle>
               <CardDescription className="text-xs text-slate-500 mt-0.5">
@@ -591,88 +558,114 @@ export default function GerencialDashboardBi() {
                 margem líquida
               </CardDescription>
             </div>
+            <Badge
+              variant="outline"
+              className="hidden sm:inline-flex text-[10px] text-slate-500 border-slate-200 bg-slate-50"
+            >
+              {periodoDescricao} · {anoInicial}
+            </Badge>
           </div>
         </CardHeader>
         <CardContent className="pt-5">
-          <div className="h-[320px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={dadosEvolucaoMensal}
-                margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
-                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis
-                  yAxisId="left"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={(val) => `${val}%`}
-                  domain={[-20, 80]}
-                />
-                <RechartsTooltip
-                  formatter={(val: any, name: string) => {
-                    if (name.includes('Margem')) return [`${Number(val).toFixed(2)}%`, name]
-                    return [formatBrl(Number(val)), name]
-                  }}
-                  contentStyle={{
-                    backgroundColor: '#0B1F3A',
-                    borderColor: '#334155',
-                    color: '#fff',
-                    borderRadius: '8px',
-                  }}
-                />
-                <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
-                <Bar
-                  yAxisId="left"
-                  dataKey="faturamento"
-                  name="Faturamento (Receita)"
-                  fill="#0284C7"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  yAxisId="left"
-                  dataKey="despesasTotais"
-                  name="Despesas Totais"
-                  fill="#EF4444"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="lucroApurado"
-                  name="Lucro Apurado (R$)"
-                  stroke="#10B981"
-                  strokeWidth={3}
-                  dot={{ r: 4, fill: '#10B981' }}
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="margemLiquida"
-                  name="Margem Líquida (%)"
-                  stroke="#F59E0B"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  dot={{ r: 3, fill: '#F59E0B' }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
+          {loading ? (
+            <div className="h-[320px] w-full flex items-center justify-center">
+              <SkeletonGraficoBi />
+            </div>
+          ) : !temMovimentoMensal ? (
+            <div className="h-[320px] w-full">
+              <EstadoVazioGraficoBi
+                icon={BarChart3}
+                titulo="Sem movimento no período"
+                descricao={`Não há lançamentos de faturamento ou despesas em ${periodoDescricao || 'a janela selecionada'} (${anoInicial}). Importe o balancete ou registre lançamentos na DRE para visualizar a evolução mensal.`}
+              />
+            </div>
+          ) : (
+            <div className="h-[320px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={dadosEvolucaoMensal}
+                  margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                >
+                  <CartesianGrid {...gridPropsBI} />
+                  <XAxis
+                    dataKey="mes"
+                    tick={tickPropsBI}
+                    tickLine={false}
+                    axisLine={{ stroke: PALETA_BI.grid }}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={tickPropsBI}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => `R$ ${(val / 1000).toFixed(0)}k`}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={tickPropsBI}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => `${val}%`}
+                    domain={[-20, 80]}
+                  />
+                  <RechartsTooltip
+                    formatter={(val: any, name: string) => {
+                      if (name.includes('Margem')) return [`${Number(val).toFixed(2)}%`, name]
+                      return [formatBrl(Number(val)), name]
+                    }}
+                    contentStyle={tooltipStyleBI}
+                    labelStyle={tooltipLabelStyleBI}
+                    cursor={{ fill: 'rgba(11, 31, 58, 0.05)' }}
+                  />
+                  <Legend wrapperStyle={legendStyleBI} iconSize={10} />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="faturamento"
+                    name="Faturamento (Receita)"
+                    fill={PALETA_BI.azulAcao}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    yAxisId="left"
+                    dataKey="despesasTotais"
+                    name="Despesas Totais"
+                    fill={PALETA_BI.vermelho}
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="lucroApurado"
+                    name="Lucro Apurado (R$)"
+                    stroke={PALETA_BI.verde}
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: PALETA_BI.verde }}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="margemLiquida"
+                    name="Margem Líquida (%)"
+                    stroke={PALETA_BI.celeste}
+                    strokeWidth={2}
+                    strokeDasharray="4 4"
+                    dot={{ r: 3, fill: PALETA_BI.celeste }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Grid Inferior: Donut Centros de Custo + Evolução das Margens */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
         {/* Composição de Despesas por Centro de Custo */}
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm print:break-inside-avoid">
+        <Card className={cardChartClass}>
           <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <PieIcon className="w-4 h-4 text-emerald-500" />
+              <PieIcon className="w-4 h-4 text-teal-600" />
               Composição de Despesas por Centro de Custo
             </CardTitle>
             <CardDescription className="text-xs text-slate-500 mt-0.5">
@@ -680,76 +673,85 @@ export default function GerencialDashboardBi() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4 flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="h-[240px] w-full md:w-1/2">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={centrosDonut.itens}
-                    dataKey="valor"
-                    nameKey="centro"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={3}
-                  >
-                    {centrosDonut.itens.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={CORES_DONUT[index % CORES_DONUT.length]} />
-                    ))}
-                  </Pie>
-                  <RechartsTooltip
-                    formatter={(val: any) => [formatBrl(Number(val)), 'Gasto Acumulado']}
-                    contentStyle={{
-                      backgroundColor: '#0B1F3A',
-                      borderColor: '#334155',
-                      color: '#fff',
-                      borderRadius: '8px',
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="w-full md:w-1/2 space-y-2 max-h-[240px] overflow-y-auto pr-2">
-              {centrosDonut.itens.length === 0 ? (
-                <p className="text-xs text-slate-400">
-                  Nenhuma despesa com centro de custo vinculada no período.
-                </p>
-              ) : (
-                centrosDonut.itens.map((c, i) => (
-                  <div key={c.centro} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                        style={{ backgroundColor: CORES_DONUT[i % CORES_DONUT.length] }}
-                      />
-                      <span
-                        className="truncate font-medium text-slate-700 dark:text-slate-300"
-                        title={c.centro}
+            {loading ? (
+              <div className="h-[240px] w-full flex items-center justify-center">
+                <SkeletonGraficoBi donut />
+              </div>
+            ) : centrosDonut.itens.length === 0 ? (
+              <div className="h-[240px] w-full">
+                <EstadoVazioGraficoBi
+                  icon={PieIcon}
+                  titulo="Sem despesas por centro de custo"
+                  descricao={`Nenhum lançamento de débito com centro de custo vinculado em ${periodoDescricao || 'a janela selecionada'}. Vincule centros de custo no plano de contas para acompanhar a composição dos gastos.`}
+                />
+              </div>
+            ) : (
+              <>
+                <div className="h-[240px] w-full md:w-1/2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={centrosDonut.itens}
+                        dataKey="valor"
+                        nameKey="centro"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={55}
+                        outerRadius={85}
+                        paddingAngle={3}
                       >
-                        {c.centro}
-                      </span>
+                        {centrosDonut.itens.map((_, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={CORES_DONUT_BI[index % CORES_DONUT_BI.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip
+                        formatter={(val: any) => [formatBrl(Number(val)), 'Gasto Acumulado']}
+                        contentStyle={tooltipStyleBI}
+                        labelStyle={tooltipLabelStyleBI}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="w-full md:w-1/2 space-y-2 max-h-[240px] overflow-y-auto pr-2">
+                  {centrosDonut.itens.map((c, i) => (
+                    <div key={c.centro} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div
+                          className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-black/5"
+                          style={{ backgroundColor: CORES_DONUT_BI[i % CORES_DONUT_BI.length] }}
+                        />
+                        <span
+                          className="truncate font-medium text-slate-700 dark:text-slate-300"
+                          title={c.centro}
+                        >
+                          {c.centro}
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
+                          {formatBrl(c.valor)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 ml-1.5 tabular-nums">
+                          ({c.participacao.toFixed(1)}%)
+                        </span>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <span className="font-bold text-slate-900 dark:text-slate-100">
-                        {formatBrl(c.valor)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 ml-1.5">
-                        ({c.participacao.toFixed(1)}%)
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
         {/* Evolução das Margens (Bruta, Operacional e Líquida) */}
-        <Card className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-sm print:break-inside-avoid">
+        <Card className={cardChartClass}>
           <CardHeader className="pb-3 border-b border-slate-100 dark:border-slate-800">
             <CardTitle className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Percent className="w-4 h-4 text-purple-500" />
+              <Percent className="w-4 h-4 text-violet-600" />
               Evolução das Margens de Rentabilidade (%)
             </CardTitle>
             <CardDescription className="text-xs text-slate-500 mt-0.5">
@@ -757,62 +759,126 @@ export default function GerencialDashboardBi() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-5">
-            <div className="h-[240px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart
-                  data={dadosEvolucaoMensal}
-                  margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" opacity={0.2} vertical={false} />
-                  <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(val) => `${val}%`}
-                    domain={[-10, 100]}
-                  />
-                  <RechartsTooltip
-                    formatter={(val: any, name: string) => [`${Number(val).toFixed(2)}%`, name]}
-                    contentStyle={{
-                      backgroundColor: '#0B1F3A',
-                      borderColor: '#334155',
-                      color: '#fff',
-                      borderRadius: '8px',
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '6px' }} />
-                  <Line
-                    type="monotone"
-                    dataKey="margemBruta"
-                    name="Margem Bruta (%)"
-                    stroke="#10B981"
-                    strokeWidth={2.5}
-                    dot={{ r: 3 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="margemOperacional"
-                    name="Margem Operacional (%)"
-                    stroke="#0284C7"
-                    strokeWidth={2.5}
-                    dot={{ r: 3 }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="margemLiquida"
-                    name="Margem Líquida (%)"
-                    stroke="#EC4899"
-                    strokeWidth={2.5}
-                    strokeDasharray="3 3"
-                    dot={{ r: 3 }}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+            {loading ? (
+              <div className="h-[240px] w-full flex items-center justify-center">
+                <SkeletonGraficoBi />
+              </div>
+            ) : !temMovimentoMensal ? (
+              <div className="h-[240px] w-full">
+                <EstadoVazioGraficoBi
+                  icon={Percent}
+                  titulo="Sem margens no período"
+                  descricao={`Sem faturamento ou despesas registrados em ${periodoDescricao || 'a janela selecionada'} (${anoInicial}). As curvas de margem aparecem assim que houver lançamentos na DRE.`}
+                />
+              </div>
+            ) : (
+              <div className="h-[240px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart
+                    data={dadosEvolucaoMensal}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                  >
+                    <CartesianGrid {...gridPropsBI} />
+                    <XAxis
+                      dataKey="mes"
+                      tick={tickPropsBI}
+                      tickLine={false}
+                      axisLine={{ stroke: PALETA_BI.grid }}
+                    />
+                    <YAxis
+                      tick={tickPropsBI}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(val) => `${val}%`}
+                      domain={[-10, 100]}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: any, name: string) => [`${Number(val).toFixed(2)}%`, name]}
+                      contentStyle={tooltipStyleBI}
+                      labelStyle={tooltipLabelStyleBI}
+                    />
+                    <Legend wrapperStyle={{ ...legendStyleBI, paddingTop: '6px' }} iconSize={10} />
+                    <Line
+                      type="monotone"
+                      dataKey="margemBruta"
+                      name="Margem Bruta (%)"
+                      stroke={PALETA_BI.verde}
+                      strokeWidth={2.5}
+                      dot={{ r: 3 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="margemOperacional"
+                      name="Margem Operacional (%)"
+                      stroke={PALETA_BI.azulAcao}
+                      strokeWidth={2.5}
+                      dot={{ r: 3 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="margemLiquida"
+                      name="Margem Líquida (%)"
+                      stroke={PALETA_BI.celeste}
+                      strokeWidth={2.5}
+                      strokeDasharray="3 3"
+                      dot={{ r: 3 }}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
 
       <DocumentPrintFooter />
+    </div>
+  )
+}
+
+// formatadores locais (mesmo padrão da tela do cliente)
+function formatBrl(val: number | undefined | null): string {
+  if (val === undefined || val === null || !Number.isFinite(val)) return 'R$ 0,00'
+  return val.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+function formatPercent(val: number | null | undefined, casas = 2): string {
+  if (val === null || val === undefined || !Number.isFinite(val)) return '—'
+  return `${val >= 0 ? '+' : ''}${val.toFixed(casas)}%`
+}
+
+/** Esqueleto genérico de gráfico (barras ou donut) */
+function SkeletonGraficoBi({ donut = false }: { donut?: boolean }) {
+  if (donut) {
+    return (
+      <div className="flex items-center gap-6 w-full justify-center">
+        <div className="w-40 h-40 rounded-full border-[14px] border-slate-100 dark:border-slate-800" />
+        <div className="space-y-2.5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-3 rounded bg-slate-100 dark:bg-slate-800"
+              style={{ width: 120 - i * 14 }}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-end gap-2 sm:gap-3 h-3/4 w-full px-6">
+      {[55, 75, 45, 85, 65, 95, 50, 70, 60, 80, 40, 90].map((h, i) => (
+        <div
+          key={i}
+          className="flex-1 rounded-t bg-slate-100 dark:bg-slate-800 animate-pulse"
+          style={{ height: `${h}%`, animationDelay: `${i * 80}ms` }}
+        />
+      ))}
     </div>
   )
 }
