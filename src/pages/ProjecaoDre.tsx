@@ -1,8 +1,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
-import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
-import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import {
+  contasService,
+  lancamentosService,
+  planoContasService,
+  balancosService,
+} from '@/services/financeService'
+import type {
+  ContaRecord,
+  LancamentoRecord,
+  PlanoContaRecord,
+  BalancoRecord,
+} from '@/types/finance'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
 import { calcularProjecaoDre, montarLinhasMesesProjecao } from '@/lib/projecaoDreCalculo'
@@ -34,6 +44,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
+import { SecaoBalançoProjetado } from '@/components/SecaoBalançoProjetado'
 import {
   CalendarClock,
   Download,
@@ -79,6 +90,7 @@ export default function ProjecaoDre() {
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [balancos, setBalancos] = useState<BalancoRecord[]>([])
 
   const [exercicio, setExercicio] = useState<number>(selectedAno || ANO_ATUAL)
 
@@ -92,6 +104,7 @@ export default function ProjecaoDre() {
       let lancsPromise: Promise<LancamentoRecord[]>
       let contasPromise: Promise<ContaRecord[]>
       let planosPromise: Promise<PlanoContaRecord[]>
+      let balancosPromise: Promise<BalancoRecord[]>
 
       if (isGrupoAtivo && grupoAtivo && grupoAtivo.empresas && grupoAtivo.empresas.length > 0) {
         const empIds = new Set(grupoAtivo.empresas)
@@ -101,6 +114,10 @@ export default function ProjecaoDre() {
           .then((list) => list.filter((l) => empIds.has(l.empresa)))
         contasPromise = contasService.getAll(opts)
         planosPromise = planoContasService.getAll(opts)
+        balancosPromise = balancosService
+          .getAll()
+          .then((list) => list.filter((b) => empIds.has(b.empresa)))
+          .catch(() => [])
       } else if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
         lancsPromise = lancamentosService.getAll({
           empresaId: selectedEmpresaId,
@@ -108,23 +125,34 @@ export default function ProjecaoDre() {
         })
         contasPromise = contasService.getAll({ empresaId: selectedEmpresaId })
         planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
+        balancosPromise = balancosService.getByEmpresa(selectedEmpresaId).catch(() => [])
       } else {
         const empOpts =
           empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
         lancsPromise = lancamentosService.getAll({ expandRelations: true })
         contasPromise = contasService.getAll(empOpts)
         planosPromise = planoContasService.getAll(empOpts)
+        balancosPromise = balancosService
+          .getAll()
+          .then((list) =>
+            empresasIdsAtivas.length > 0
+              ? list.filter((b) => empresasIdsAtivas.includes(b.empresa))
+              : list,
+          )
+          .catch(() => [])
       }
 
-      const [contasList, lancamentosList, planosList] = await Promise.all([
+      const [contasList, lancamentosList, planosList, balancosList] = await Promise.all([
         contasPromise,
         lancsPromise,
         planosPromise,
+        balancosPromise,
       ])
 
       setContas(Array.from(new Map(contasList.map((i) => [i.id, i])).values()))
       setLancamentos(lancamentosList)
       setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
+      setBalancos(balancosList)
     } catch (err: any) {
       console.error('Erro ao carregar dados da Projeção de DRE:', err)
       toast({
@@ -547,6 +575,15 @@ export default function ProjecaoDre() {
               <DocumentPrintFooter />
             </CardContent>
           </Card>
+
+          <SecaoBalançoProjetado
+            balancos={balancos}
+            projecao={projecao}
+            exercicio={exercicio}
+            entidadeNome={entidadeNome}
+            isGrupo={isGrupoAtivo}
+            nomeGrupo={isGrupoAtivo && grupoAtivo ? grupoAtivo.nome : undefined}
+          />
         </>
       )}
     </div>
