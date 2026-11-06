@@ -248,6 +248,24 @@ export default function Configuracoes() {
     }
   }
 
+  /**
+   * Traduz erros do backend (PocketBase) para mensagens legíveis na troca de senha.
+   */
+  const traduzirErroSenha = (err: any): string => {
+    const msgCampo = err?.data?.data
+    if (msgCampo) {
+      if (msgCampo.oldPassword?.message)
+        return `Senha atual incorreta. ${msgCampo.oldPassword.message}`
+      if (msgCampo.password?.message) return `Nova senha inválida. ${msgCampo.password.message}`
+      if (msgCampo.passwordConfirm?.message)
+        return `Confirmação inválida. ${msgCampo.passwordConfirm.message}`
+    }
+    if (err?.status === 400) {
+      return 'Não foi possível alterar a senha. Verifique se a senha atual está correta e se a nova senha tem no mínimo 8 caracteres.'
+    }
+    return err?.message || 'Não foi possível alterar a senha. Tente novamente em instantes.'
+  }
+
   // Handler para Senha
   const handleSalvarSenha = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -282,6 +300,21 @@ export default function Configuracoes() {
 
     setSavingPassword(true)
     try {
+      // 1. Validação da senha atual: confirma as credenciais vigentes via auth-with-password
+      // antes de permitir qualquer alteração, garantindo que só o titular da conta troca a senha.
+      try {
+        await pb.collection('users').authWithPassword(user.email || '', oldPassword)
+      } catch {
+        toast({
+          variant: 'destructive',
+          title: 'Senha atual incorreta',
+          description:
+            'A senha informada não corresponde à senha de acesso desta conta. Verifique e tente novamente.',
+        })
+        return
+      }
+
+      // 2. Troca da própria senha do usuário autenticado (nunca de outro usuário).
       await pb.collection('users').update(user.id, {
         oldPassword,
         password,
@@ -294,17 +327,16 @@ export default function Configuracoes() {
 
       toast({
         title: 'Senha alterada com sucesso!',
-        description: 'Sua nova senha de acesso foi salva.',
+        description:
+          'Sua nova senha de acesso foi salva. Ela valerá no próximo login — use-a na próxima vez que entrar no sistema.',
+        duration: 7000,
       })
     } catch (err: any) {
       console.error('Erro ao alterar senha:', err)
       toast({
         variant: 'destructive',
         title: 'Erro ao alterar senha',
-        description:
-          err?.data?.data?.oldPassword?.message ||
-          err?.message ||
-          'Verifique se a senha atual está correta.',
+        description: traduzirErroSenha(err),
       })
     } finally {
       setSavingPassword(false)
@@ -691,7 +723,10 @@ export default function Configuracoes() {
               <div className="flex items-center justify-between pt-2">
                 <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
                   <Shield className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span>A senha deve ser mantida em sigilo.</span>
+                  <span>
+                    Aqui você altera apenas a sua própria senha. A nova senha valerá no próximo
+                    login.
+                  </span>
                 </div>
 
                 <Button

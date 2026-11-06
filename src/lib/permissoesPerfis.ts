@@ -207,6 +207,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'cliente_dashboard_bi',
       'cliente_indicadores',
       'cliente_agente_ia',
+      'configuracoes',
       'gerencial_dre',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',

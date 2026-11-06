@@ -20,6 +20,7 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'gerencial_despesas_variaveis',
     'gerencial_analise_faturamento',
     'empresas',
+    'configuracoes',
   ]
 
   const modulosBloqueadosCliente: ModuloSistema[] = [
@@ -54,7 +55,6 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'relatorios',
     'relatorio_anual',
     'agente_ia',
-    'configuracoes',
   ]
 
   it('deve definir a rota inicial do perfil cliente como o hub /analise-economica-financeira', () => {
@@ -131,6 +131,14 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('financeiro', 'gerencial_comparativo_mensal')).toBe(true)
     expect(perfilTemAcesso('cliente', 'gerencial_comparativo_mensal')).toBe(false)
     expect(perfilTemAcesso('comercial', 'gerencial_comparativo_mensal')).toBe(false)
+  })
+
+  it('garante que o módulo configuracoes (troca da própria senha) é liberado para todos os perfis autenticados', () => {
+    expect(perfilTemAcesso('cliente', 'configuracoes')).toBe(true)
+    expect(perfilTemAcesso('admin', 'configuracoes')).toBe(true)
+    expect(perfilTemAcesso('empresa', 'configuracoes')).toBe(true)
+    expect(perfilTemAcesso('financeiro', 'configuracoes')).toBe(true)
+    expect(perfilTemAcesso('comercial', 'configuracoes')).toBe(true)
   })
 
   it('deve listar todos os perfis do sistema na LISTA_PERFIS incluindo cliente', () => {
