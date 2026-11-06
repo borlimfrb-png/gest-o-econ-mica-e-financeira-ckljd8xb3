@@ -35,9 +35,61 @@ export interface GrupoProjecao {
   valoresPorMes: Record<string, number>
 }
 
+export interface ParametrosProjecaoDre {
+  /**
+   * Método de projeção dos meses futuros:
+   * - 'media_mensal': média mensal fixa das rubricas com movimento (padrão);
+   * - 'crescimento': média composta mês a mês — média × (1+i)^n, onde n é o
+   *   n-ésimo mês projetado a partir do último mês realizado.
+   */
+  modo: 'media_mensal' | 'crescimento'
+  /** percentual de crescimento mensal (0 a 100) — usado apenas no modo 'crescimento' */
+  percentualCrescimento: number
+}
+
+export const PARAMETROS_PROJECAO_PADRAO: ParametrosProjecaoDre = {
+  modo: 'media_mensal',
+  percentualCrescimento: 0,
+}
+
+/** Arredondamento padrão do app: 2 casas (centavos). */
+export function arredondar2(v: number): number {
+  return Math.round((v + Number.EPSILON) * 100) / 100
+}
+
+/** Percentual em formato brasileiro (vírgula decimal), padrão Borlim. */
+export function formatPercentualBr(v: number): string {
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
+
+/**
+ * Rótulo curto do método ativo, para legendas de tabela (ex.: "média mensal",
+ * "crescimento de 5% a.m.").
+ */
+export function rotuloCurtoMetodoProjecaoDre(p: ParametrosProjecaoDre): string {
+  if (p.modo === 'crescimento' && p.percentualCrescimento !== 0) {
+    return `crescimento de ${formatPercentualBr(p.percentualCrescimento)}% a.m.`
+  }
+  return 'média mensal'
+}
+
+/**
+ * Descreve o método de projeção ativo da DRE, para notas metodológicas.
+ * Ex.: "projetada pela média mensal dos meses realizados" ou
+ * "projetada com crescimento de 5% a.m. sobre a média dos meses realizados".
+ */
+export function descricaoMetodoProjecaoDre(p: ParametrosProjecaoDre): string {
+  if (p.modo === 'crescimento' && p.percentualCrescimento !== 0) {
+    return `projetada com crescimento de ${formatPercentualBr(p.percentualCrescimento)}% a.m. sobre a média dos meses realizados`
+  }
+  return 'projetada pela média mensal dos meses realizados'
+}
+
 export interface ProjecaoResultado {
   /** mês-chave dos meses realizados com movimento (base da média) */
   mesesRealizadosComMovimento: string[]
+  /** parâmetros usados nesta projeção (modo + % de crescimento) */
+  parametrosAplicados: ParametrosProjecaoDre
   /** rubricas na mesma ordem da DRE Gerencial */
   grupos: GrupoProjecao[]
   /** rubrica informativa (fora do resultado), mesma convenção da DRE Gerencial */
@@ -72,8 +124,17 @@ export function calcularProjecaoDre(
   matrizAtual: DreMatrizResultado,
   matrizAnoAnterior: DreMatrizResultado | null,
   mesesExercicio: MesItem[],
+  parametros: ParametrosProjecaoDre = PARAMETROS_PROJECAO_PADRAO,
 ): ProjecaoResultado {
   const chavesMeses = mesesExercicio.map((m) => m.chave)
+  const usarCrescimento =
+    parametros.modo === 'crescimento' && isFinite(parametros.percentualCrescimento)
+  const fatorCrescimento = 1 + (usarCrescimento ? parametros.percentualCrescimento / 100 : 0)
+
+  const parametrosAplicados: ParametrosProjecaoDre = {
+    modo: parametros.modo,
+    percentualCrescimento: usarCrescimento ? parametros.percentualCrescimento : 0,
+  }
 
   // 1. Detecta meses realizados COM movimento (qualquer rubrica com valor ≠ 0)
   const mesesComMovimento: string[] = []
@@ -90,6 +151,24 @@ export function calcularProjecaoDre(
     mediaPorClassificacao.set(g.classificacao, soma / divisor)
   }
 
+  // Expoente de composição de cada mês projetado (1-based, a partir do último
+  // mês realizado): 1º mês projetado = média × (1+i)^1, e assim por diante.
+  const expoenteCrescimento = new Map<string, number>()
+  let nProj = 0
+  for (const chave of chavesMeses) {
+    if (!mesesComMovimento.includes(chave)) {
+      nProj += 1
+      expoenteCrescimento.set(chave, nProj)
+    }
+  }
+
+  /** Valor projetado do mês conforme o método ativo (média ou média composta). */
+  const valorProjetado = (media: number, chave: string): number => {
+    if (!usarCrescimento) return media
+    const n = expoenteCrescimento.get(chave) || 1
+    return arredondar2(media * Math.pow(fatorCrescimento, n))
+  }
+
   // 3. Para cada mês do exercício: se tem movimento = realizado (mantém valor da
   //    matriz oficial); senão = projetado (aplica a média por rubrica). Mês sem
   //    movimento e sem média = zero.
@@ -102,7 +181,9 @@ export function calcularProjecaoDre(
 
     for (const chave of chavesMeses) {
       const temMovimento = mesesComMovimento.includes(chave)
-      const valor = temMovimento ? grupoReal?.valoresPorMes[chave] || 0 : media
+      const valor = temMovimento
+        ? grupoReal?.valoresPorMes[chave] || 0
+        : valorProjetado(media, chave)
       valoresPorMes[chave] = valor
       if (temMovimento) realizadoTotal += valor
       else projetadoTotal += valor
@@ -129,7 +210,7 @@ export function calcularProjecaoDre(
   let ncProjetadoTotal = 0
   for (const chave of chavesMeses) {
     const temMovimento = mesesComMovimento.includes(chave)
-    const valor = temMovimento ? ncReal.valoresPorMes[chave] || 0 : mediaNc
+    const valor = temMovimento ? ncReal.valoresPorMes[chave] || 0 : valorProjetado(mediaNc, chave)
     valoresNc[chave] = valor
     if (temMovimento) ncRealTotal += valor
     else ncProjetadoTotal += valor
@@ -199,6 +280,7 @@ export function calcularProjecaoDre(
 
   return {
     mesesRealizadosComMovimento: mesesComMovimento,
+    parametrosAplicados,
     grupos,
     naoClassificados,
     lucroPrejuizoRealizado: lpRealizado,

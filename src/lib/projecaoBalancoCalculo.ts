@@ -1,5 +1,6 @@
 import type { BalancoRecord } from '@/types/finance'
-import type { ProjecaoResultado } from './projecaoDreCalculo'
+import type { ProjecaoResultado, ParametrosProjecaoDre } from './projecaoDreCalculo'
+import { PARAMETROS_PROJECAO_PADRAO, descricaoMetodoProjecaoDre } from './projecaoDreCalculo'
 import { calcularBalanco } from './financeCalculations'
 import { extrairSomaBalanco } from './comparativoDreBalancoCalculo'
 
@@ -17,6 +18,8 @@ import { extrairSomaBalanco } from './comparativoDreBalancoCalculo'
  * - Contas a receber, estoques e fornecedores usam circulação (dias médios
  *   da DRE projetada); sem base para dias, % da receita anual projetada.
  * - Demais linhas mantêm o saldo realizado (nota metodológica na tela).
+ * - As notas metodológicas refletem o método da DRE projetada ativo na tela
+ *   (média mensal ou crescimento % — ver projecaoDreCalculo.ts).
  */
 
 export type MetodoLinhaBalanço =
@@ -50,6 +53,8 @@ export interface BalancoProjetadoResultado {
   ajusteFechamento: number
   /** true quando o caixa de fechamento ficou negativo */
   caixaNegativo: boolean
+  /** descrição do método da DRE projetada ativo (média mensal ou crescimento %) */
+  descricaoMetodoDre: string
   lucroProjetadoUsado: number
   linhas: LinhaBalançoProjetado[]
   ativoTotalRealizado: number
@@ -60,17 +65,16 @@ export interface BalancoProjetadoResultado {
   diferencaFechamento: number
 }
 
-const NOTAS: Record<MetodoLinhaBalanço, string> = {
-  caixa_fechamento:
-    'Caixa e equivalentes = linha de fechamento: caixa do último balanço realizado + geração de caixa da DRE projetada (resultado do período), ajustado para equilibrar Ativo = Passivo + PL.',
-  circulacao_receber:
-    'Contas a receber = dias médios de recebimento (PMR) sobre a receita diária projetada; sem base para dias, % da receita anual projetada.',
-  circulacao_estoques:
-    'Estoques = dias médios de estoque (PME) sobre o custo diário projetado (despesa variável); sem base, % da receita anual projetada.',
-  circulacao_fornecedores:
-    'Fornecedores = dias médios de pagamento (PMP) sobre o custo diário projetado; sem base, % da receita anual projetada.',
-  mantem_realizado:
-    'Mantém o saldo do último balanço realizado com dados — sem base de projeção para esta linha.',
+function notasMetodo(p: ParametrosProjecaoDre): Record<MetodoLinhaBalanço, string> {
+  const metodoDre = descricaoMetodoProjecaoDre(p)
+  return {
+    caixa_fechamento: `Caixa e equivalentes = linha de fechamento: caixa do último balanço realizado + geração de caixa da DRE ${metodoDre}, ajustado para equilibrar Ativo = Passivo + PL.`,
+    circulacao_receber: `Contas a receber = dias médios de recebimento (PMR) sobre a receita diária ${metodoDre}; sem base para dias, % da receita anual projetada.`,
+    circulacao_estoques: `Estoques = dias médios de estoque (PME) sobre o custo diário ${metodoDre} (despesa variável); sem base, % da receita anual projetada.`,
+    circulacao_fornecedores: `Fornecedores = dias médios de pagamento (PMP) sobre o custo diário ${metodoDre}; sem base, % da receita anual projetada.`,
+    mantem_realizado:
+      'Mantém o saldo do último balanço realizado com dados — sem base de projeção para esta linha.',
+  }
 }
 
 const DIAS_ANO = 365
@@ -113,7 +117,8 @@ export function selecionarUltimoBalancoComDados(
 
 /**
  * Motor principal: projeta cada linha patrimonial coerente com a DRE
- * projetada e fecha o balanço pelo caixa (linha de fechamento).
+ * projetada (com os parâmetros ativos na tela) e fecha o balanço pelo
+ * caixa (linha de fechamento).
  */
 export function calcularBalancoProjetado(params: {
   balancos: BalancoRecord[]
@@ -121,6 +126,10 @@ export function calcularBalancoProjetado(params: {
   projecao: ProjecaoResultado
 }): BalancoProjetadoResultado {
   const { balancos, exercicio, projecao } = params
+  // Método ativo da DRE projetada — vem de parametrosAplicados do motor da projeção.
+  const parametrosAtivos: ParametrosProjecaoDre =
+    projecao.parametrosAplicados ?? PARAMETROS_PROJECAO_PADRAO
+  const NOTAS = notasMetodo(parametrosAtivos)
 
   const { balanco: balancoReal, mes: mesBalancoReal } = selecionarUltimoBalancoComDados(
     balancos,
@@ -404,6 +413,7 @@ export function calcularBalancoProjetado(params: {
     caixaDerivadoBruto,
     ajusteFechamento,
     caixaNegativo: caixaProjetadoFinal < 0,
+    descricaoMetodoDre: descricaoMetodoProjecaoDre(parametrosAtivos),
     lucroProjetadoUsado,
     linhas,
     ativoTotalRealizado: calcReal.ativoTotal,

@@ -15,7 +15,14 @@ import type {
 } from '@/types/finance'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
-import { calcularProjecaoDre, montarLinhasMesesProjecao } from '@/lib/projecaoDreCalculo'
+import {
+  calcularProjecaoDre,
+  montarLinhasMesesProjecao,
+  rotuloCurtoMetodoProjecaoDre,
+  descricaoMetodoProjecaoDre,
+  formatPercentualBr,
+  type ParametrosProjecaoDre,
+} from '@/lib/projecaoDreCalculo'
 import { exportarProjecaoDreExcel, exportarProjecaoDreCsv } from '@/lib/projecaoDreExport'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -55,7 +62,9 @@ import {
   FolderOpen,
   RefreshCw,
   Info,
+  SlidersHorizontal,
 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
 
 const ANO_ATUAL = new Date().getFullYear()
 const ANOS_OPCOES = Array.from({ length: 7 }, (_, i) => ANO_ATUAL - 4 + i)
@@ -93,6 +102,12 @@ export default function ProjecaoDre() {
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
 
   const [exercicio, setExercicio] = useState<number>(selectedAno || ANO_ATUAL)
+
+  // Parâmetros da projeção (estado de tela — não persistidos): modo + % de crescimento.
+  const [parametros, setParametros] = useState<ParametrosProjecaoDre>({
+    modo: 'media_mensal',
+    percentualCrescimento: 0,
+  })
 
   useEffect(() => {
     if (selectedAno) setExercicio(selectedAno)
@@ -197,8 +212,9 @@ export default function ProjecaoDre() {
         matrizAtual,
         matrizAnoAnterior.meses.length > 0 ? matrizAnoAnterior : null,
         mesesExercicio,
+        parametros,
       ),
-    [matrizAtual, matrizAnoAnterior, mesesExercicio],
+    [matrizAtual, matrizAnoAnterior, mesesExercicio, parametros],
   )
 
   const linhasMeses = useMemo(
@@ -224,6 +240,22 @@ export default function ProjecaoDre() {
     } else {
       exportarProjecaoDreCsv(projecao, mesesExercicio, opcoes)
     }
+  }
+
+  // Parâmetros → descrição reativa dos controles
+  const modoSelecionado = parametros.modo === 'crescimento' ? 'crescimento' : 'media_mensal'
+  const setModo = (modo: ParametrosProjecaoDre['modo']) => setParametros((p) => ({ ...p, modo }))
+  const setPercentual = (valor: number) =>
+    setParametros((p) => ({ ...p, percentualCrescimento: valor }))
+  const percentualInput = String(parametros.percentualCrescimento).replace('.', ',')
+  const onChangePercentualInput = (texto: string) => {
+    const normalizado = texto.trim().replace(',', '.').replace('%', '').replace(/\s/g, '')
+    if (normalizado === '' || normalizado === '-') {
+      setPercentual(0)
+      return
+    }
+    const num = Number(normalizado)
+    if (!isNaN(num)) setPercentual(num)
   }
 
   const nomeMesPorChave = new Map(linhasMeses.map((lm) => [lm.chave, lm]))
@@ -345,6 +377,86 @@ export default function ProjecaoDre() {
         </Card>
       ) : (
         <>
+          {/* Parâmetros da Projeção — controles reativos (estado de tela) */}
+          <Card className="border-slate-200">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg text-[#0B1F3A] flex items-center gap-2">
+                <SlidersHorizontal className="h-5 w-5 text-amber-600" />
+                Parâmetros da Projeção
+              </CardTitle>
+              <CardDescription>
+                Definem como os meses projetados são calculados. O Balanço Projetado acompanha na
+                hora — sem recarregar.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-wrap items-end gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+                  Método
+                </label>
+                <div className="flex rounded-md border border-slate-300 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setModo('media_mensal')}
+                    className={`px-3 py-2 text-sm transition-colors ${
+                      modoSelecionado === 'media_mensal'
+                        ? 'bg-[#0B1F3A] text-white font-medium'
+                        : 'bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Média mensal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModo('crescimento')}
+                    className={`px-3 py-2 text-sm transition-colors border-l border-slate-300 ${
+                      modoSelecionado === 'crescimento'
+                        ? 'bg-[#0B1F3A] text-white font-medium'
+                        : 'bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Crescimento %
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label
+                  htmlFor="percentual-crescimento"
+                  className="text-xs font-medium text-slate-500 uppercase tracking-wide"
+                >
+                  Crescimento mensal (%)
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="percentual-crescimento"
+                    inputMode="decimal"
+                    value={percentualInput}
+                    disabled={modoSelecionado !== 'crescimento'}
+                    onChange={(e) => onChangePercentualInput(e.target.value)}
+                    className="w-28"
+                    placeholder="0"
+                  />
+                  {modoSelecionado === 'crescimento' && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPercentual(0)}
+                      disabled={parametros.percentualCrescimento === 0}
+                    >
+                      Zerar
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {modoSelecionado === 'crescimento'
+                    ? `Cada mês projetado = média × (1 + ${formatPercentualBr(parametros.percentualCrescimento)}%)ⁿ, composto a partir do último mês realizado.`
+                    : 'Cada mês projetado = média mensal fixa das rubricas com movimento.'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="border-slate-200">
@@ -388,7 +500,9 @@ export default function ProjecaoDre() {
                   {projecao.mesesRealizadosComMovimento.length} mês(es)
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Média mensal por rubrica dos meses com movimento
+                  {rotuloCurtoMetodoProjecaoDre(projecao.parametrosAplicados) === 'média mensal'
+                    ? 'Média mensal por rubrica dos meses com movimento'
+                    : `Média dos meses com movimento + ${rotuloCurtoMetodoProjecaoDre(projecao.parametrosAplicados)}`}
                 </p>
               </CardContent>
             </Card>
@@ -442,7 +556,7 @@ export default function ProjecaoDre() {
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="inline-block w-3 h-3 rounded-sm bg-amber-50 border border-amber-300" />
-                  Projetado (média mensal)
+                  Projetado ({rotuloCurtoMetodoProjecaoDre(projecao.parametrosAplicados)})
                 </span>
                 <span className="inline-flex items-center gap-1 text-amber-700">
                   <Info className="h-3.5 w-3.5" />
@@ -569,7 +683,7 @@ export default function ProjecaoDre() {
               <p className="text-xs text-muted-foreground mt-3 flex items-start gap-1.5">
                 <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                 Meses realizados seguem exatamente a DRE Gerencial (mesmo motor de cálculo). A
-                projeção aplica a média mensal de cada rubrica dos meses com movimento — é uma
+                projeção é {descricaoMetodoProjecaoDre(projecao.parametrosAplicados)} — é uma
                 estimativa, não dado contábil. Mês sem movimento = zero.
               </p>
               <DocumentPrintFooter />

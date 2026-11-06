@@ -239,3 +239,105 @@ describe('calcularBalancoProjetado', () => {
     expect(resNeg.linhas.find((l) => l.chave === 'caixa')!.projetado).toBeLessThan(0)
   })
 })
+
+describe('calcularBalancoProjetado — parâmetros da projeção (integração profunda)', () => {
+  function projecaoComParametros(
+    parametros?: Parameters<typeof calcularProjecaoDre>[3],
+  ): ProjecaoResultado {
+    // DRE: 3 meses com movimento; receita 100k/mês, despesa variável 40k/mês, fixa 30k/mês
+    const lancamentos: LancamentoRecord[] = []
+    for (let m = 1; m <= 3; m++) {
+      lancamentos.push(lancamento(`l-rec-${m}`, 'pc-rec', 100000, m))
+      lancamentos.push(lancamento(`l-desp-var-${m}`, 'pc-desp-var', 40000, m))
+      lancamentos.push(lancamento(`l-desp-fix-${m}`, 'pc-desp-fix', 30000, m))
+    }
+    const matriz = calcularDreGerencialMatriz(
+      lancamentos,
+      [contaRec, contaDesp, contaFix],
+      meses2025,
+      [],
+    )
+    const matrizVaziaAnterior = calcularDreGerencialMatriz(
+      [],
+      [contaRec, contaDesp, contaFix],
+      gerarListaMeses(2024, 1, 12),
+      [],
+    )
+    return calcularProjecaoDre(matriz, matrizVaziaAnterior, meses2025, parametros)
+  }
+
+  it('com crescimento 5% a.m. o PL projetado sobe (lucro maior) e o fechamento se mantém', () => {
+    const pMed = projecaoComParametros({ modo: 'media_mensal', percentualCrescimento: 0 })
+    const pCres = projecaoComParametros({ modo: 'crescimento', percentualCrescimento: 5 })
+    const balMed = calcularBalancoProjetado({
+      balancos: [balancoBase],
+      exercicio: 2025,
+      projecao: pMed,
+    })
+    const balCres = calcularBalancoProjetado({
+      balancos: [balancoBase],
+      exercicio: 2025,
+      projecao: pCres,
+    })
+
+    // Lucro do ano maior → PL projetado maior
+    expect(pCres.lucroPrejuizoTotalAno).toBeGreaterThan(pMed.lucroPrejuizoTotalAno)
+    expect(balCres.lucroProjetadoUsado).toBe(pCres.lucroPrejuizoTotalAno)
+    const plMed = calcularSubtotaisBalanço(balMed).find((s) => s.chave === 'secao_pl')!
+    const plCres = calcularSubtotaisBalanço(balCres).find((s) => s.chave === 'secao_pl')!
+    expect(plCres.projetado).toBeGreaterThan(plMed.projetado)
+
+    // Nota metodológica do PL reflete o método ativo
+    const linhaLucrosCres = balCres.linhas.find((l) => l.chave === 'lucros_acumulados')!
+    expect(linhaLucrosCres.notaMetodo).toContain('crescimento de 5% a.m.')
+    expect(balCres.descricaoMetodoDre).toContain('crescimento de 5% a.m.')
+  })
+
+  it('fechamento Ativo = Passivo + PL com parâmetro ajustado (5% e -10%)', () => {
+    for (const parametros of [
+      { modo: 'crescimento' as const, percentualCrescimento: 5 },
+      { modo: 'crescimento' as const, percentualCrescimento: -10 },
+    ]) {
+      const balRes = calcularBalancoProjetado({
+        balancos: [balancoBase],
+        exercicio: 2025,
+        projecao: projecaoComParametros(parametros),
+      })
+      expect(balRes.diferencaFechamento).toBeLessThan(0.01)
+      expect(balRes.ativoTotalProjetado).toBeCloseTo(balRes.passivoPlTotalProjetado, 2)
+      // Caixa continua sendo a linha de fechamento
+      const caixa = balRes.linhas.find((l) => l.chave === 'caixa')!
+      expect(caixa.projetado).toBeCloseTo(balRes.caixaDerivadoBruto + balRes.ajusteFechamento, 2)
+    }
+  })
+
+  it('PL projetado = PL realizado + lucro recalculado com o parâmetro', () => {
+    const pCres = projecaoComParametros({ modo: 'crescimento', percentualCrescimento: 5 })
+    const balRes = calcularBalancoProjetado({
+      balancos: [balancoBase],
+      exercicio: 2025,
+      projecao: pCres,
+    })
+    const plRealizado = 175000 // capital 100k + reservas 20k + acumulados 55k
+    const plProj = calcularSubtotaisBalanço(balRes).find((s) => s.chave === 'secao_pl')!
+    expect(plProj.projetado).toBeCloseTo(plRealizado + pCres.lucroPrejuizoTotalAno, 2)
+  })
+
+  it('capital de giro reage à receita projetada ajustada (contas a receber 5% > média)', () => {
+    const pMed = projecaoComParametros({ modo: 'media_mensal', percentualCrescimento: 0 })
+    const pCres = projecaoComParametros({ modo: 'crescimento', percentualCrescimento: 5 })
+    const balMed = calcularBalancoProjetado({
+      balancos: [balancoBase],
+      exercicio: 2025,
+      projecao: pMed,
+    })
+    const balCres = calcularBalancoProjetado({
+      balancos: [balancoBase],
+      exercicio: 2025,
+      projecao: pCres,
+    })
+    const crMed = balMed.linhas.find((l) => l.chave === 'contas_receber')!.projetado
+    const crCres = balCres.linhas.find((l) => l.chave === 'contas_receber')!.projetado
+    expect(crCres).toBeGreaterThan(crMed)
+  })
+})

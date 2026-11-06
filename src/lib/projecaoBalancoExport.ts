@@ -52,8 +52,7 @@ function montarLinhas(res: BalancoProjetadoResultado): LinhaExportBalanço[] {
     'Balanço Realizado': '',
     'Balanço Projetado': '',
     Variação: '',
-    'Nota Metodológica':
-      'Caixa = linha de fechamento (caixa realizado + geração DRE projetada, ajustado para fechar Ativo = Passivo + PL). PL = PL realizado + resultado da DRE (realizado + projetado).',
+    'Nota Metodológica': `Balanço Projetado — DRE ${res.descricaoMetodoDre}. Caixa = linha de fechamento (caixa realizado + geração da DRE ${res.descricaoMetodoDre}, ajustado para fechar Ativo = Passivo + PL). PL = PL realizado + resultado da DRE (realizado + projetado).`,
   })
 
   const fmt = (v: number) => v

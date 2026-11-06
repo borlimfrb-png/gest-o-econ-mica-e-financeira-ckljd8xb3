@@ -174,8 +174,8 @@ export function SecaoBalançoProjetado({
               </CardTitle>
               <CardDescription>
                 Cada linha patrimonial projetada a partir do último balanço realizado com dados (
-                {resultado.rotuloBalancoRealizado}) e coerente com a DRE projetada. O caixa é a
-                linha de fechamento do balanço.
+                {resultado.rotuloBalancoRealizado}) e coerente com a DRE projetada (
+                {resultado.descricaoMetodoDre}). O caixa é a linha de fechamento do balanço.
               </CardDescription>
             </div>
           </div>
@@ -314,6 +314,9 @@ export function SecaoBalançoProjetado({
           </Badge>
           <Badge variant="outline" className="border-slate-300 text-slate-600">
             Lucro projetado incorporado ao PL: {formatBrl(projecao.lucroPrejuizoTotalAno)}
+          </Badge>
+          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-800">
+            Método: DRE {resultado.descricaoMetodoDre}
           </Badge>
         </div>
       </CardContent>

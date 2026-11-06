@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx'
 import type { ProjecaoResultado } from './projecaoDreCalculo'
-import { montarLinhasMesesProjecao } from './projecaoDreCalculo'
+import { montarLinhasMesesProjecao, descricaoMetodoProjecaoDre } from './projecaoDreCalculo'
 import type { MesItem } from './dreGerencialTypes'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
 
@@ -125,7 +125,7 @@ function montarLinhas(projecao: ProjecaoResultado, mesesExercicio: MesItem[]): L
   }
   if (projecao.mesesRealizadosComMovimento.length > 0) {
     rows.push({
-      Estrutura: `Base da projeção: média mensal de ${projecao.mesesRealizadosComMovimento.length} mês(es) com movimento`,
+      Estrutura: `Base da projeção: ${projecao.mesesRealizadosComMovimento.length} mês(es) com movimento; método: DRE ${descricaoMetodoProjecaoDre(projecao.parametrosAplicados)}`,
       Tipo: 'Nota',
     })
   }
