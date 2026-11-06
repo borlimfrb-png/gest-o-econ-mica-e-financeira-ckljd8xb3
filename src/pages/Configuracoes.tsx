@@ -10,9 +10,9 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
+  KeyRound,
   User,
   Camera,
-  KeyRound,
   Bell,
   CheckCircle2,
   Lock,
@@ -430,7 +430,7 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      <div className="grid grid-cols-1 gap-6 auto-rows-min">
         {/* CARD 1: FOTO DE PERFIL */}
         <Card className="bg-white border-slate-200 shadow-2xs">
           <CardHeader className="pb-3 border-b border-slate-100">
@@ -606,15 +606,17 @@ export default function Configuracoes() {
           </CardContent>
         </Card>
 
-        {/* CARD 3: ALTERAR SENHA */}
-        <Card className="bg-white border-slate-200 shadow-2xs">
-          <CardHeader className="pb-3 border-b border-slate-100">
+        {/* CARD 3: ALTERAR SENHA — primeiro card da tela, visível para QUALQUER usuário
+            autenticado, sem exceção de perfil (order-first no grid). */}
+        <Card className="bg-white border-blue-200 shadow-2xs ring-1 ring-blue-200/70 order-first">
+          <CardHeader className="pb-3 border-b border-blue-100">
             <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
               <KeyRound className="w-4 h-4 text-blue-600" />
-              Segurança e Alteração de Senha
+              Alterar senha de acesso
             </CardTitle>
             <CardDescription className="text-xs">
-              Mantenha sua conta protegida utilizando uma senha forte com no mínimo 8 caracteres.
+              Troque aqui a sua própria senha de login (mínimo 8 caracteres). A nova senha valerá no
+              próximo login.
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-5">

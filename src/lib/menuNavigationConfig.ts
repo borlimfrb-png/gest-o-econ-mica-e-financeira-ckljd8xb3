@@ -1019,6 +1019,18 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
     modulo: 'importacao',
     subtitulo: 'Carga de Dados',
   },
+  // Acesso universal: troca da própria senha vale para QUALQUER usuário autenticado
+  // (admin, empresa, financeiro, comercial e cliente) — sem exceção de perfil.
+  {
+    id: 'configuracoes',
+    label: 'Configurações',
+    icon: Settings,
+    tipo: 'link',
+    path: '/configuracoes',
+    modulo: 'configuracoes',
+    badge: 'Conta',
+    subtitulo: 'Perfil, troca de senha e preferências da conta',
+  },
   {
     id: 'agente-ia',
     label: 'Agente IA',

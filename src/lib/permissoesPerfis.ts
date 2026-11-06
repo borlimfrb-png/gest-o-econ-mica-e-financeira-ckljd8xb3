@@ -192,7 +192,14 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     descricao:
       'Acesso restrito ao ciclo comercial: Recebíveis, Contratos, Notas Fiscais e Minha Empresa. Bloqueado de módulos contábeis, valuation, formação de preço e administrativos.',
     badgeCor: 'bg-amber-100 text-amber-800 border-amber-200',
-    modulosPermitidos: ['baixa_recebiveis', 'contratos', 'notas_fiscais', 'minha_empresa'],
+    modulosPermitidos: [
+      'baixa_recebiveis',
+      'contratos',
+      'notas_fiscais',
+      'minha_empresa',
+      // Troca da própria senha: vale para QUALQUER usuário autenticado, sem exceção de perfil.
+      'configuracoes',
+    ],
   },
   cliente: {
     id: 'cliente',

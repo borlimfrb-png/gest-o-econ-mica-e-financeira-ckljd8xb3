@@ -7,6 +7,7 @@ import {
   LISTA_PERFIS,
   type ModuloSistema,
 } from './permissoesPerfis'
+import { MENU_GRUPOS, filtrarMenuPorPerfil } from './menuNavigationConfig'
 
 describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
   const modulosPermitidosCliente: ModuloSistema[] = [
@@ -139,6 +140,30 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('empresa', 'configuracoes')).toBe(true)
     expect(perfilTemAcesso('financeiro', 'configuracoes')).toBe(true)
     expect(perfilTemAcesso('comercial', 'configuracoes')).toBe(true)
+  })
+
+  it('garante que o item Configurações aparece no menu para todos os perfis autenticados apontando para /configuracoes', () => {
+    const adminItem = filtrarMenuPorPerfil(MENU_GRUPOS, 'admin', true, '/empresas').find(
+      (g) => g.id === 'configuracoes',
+    )
+    const comercialItem = filtrarMenuPorPerfil(MENU_GRUPOS, 'comercial', false, '/empresas').find(
+      (g) => g.id === 'configuracoes',
+    )
+    const clienteItem = filtrarMenuPorPerfil(MENU_GRUPOS, 'cliente', false, '/empresas').find(
+      (g) => g.id === 'configuracoes',
+    )
+    const financeiroItem = filtrarMenuPorPerfil(MENU_GRUPOS, 'financeiro', false, '/empresas').find(
+      (g) => g.id === 'configuracoes',
+    )
+    const empresaItem = filtrarMenuPorPerfil(MENU_GRUPOS, 'empresa', false, '/empresas').find(
+      (g) => g.id === 'configuracoes',
+    )
+
+    expect(adminItem?.path).toBe('/configuracoes')
+    expect(comercialItem?.path).toBe('/configuracoes')
+    expect(clienteItem?.path).toBe('/configuracoes')
+    expect(financeiroItem?.path).toBe('/configuracoes')
+    expect(empresaItem?.path).toBe('/configuracoes')
   })
 
   it('deve listar todos os perfis do sistema na LISTA_PERFIS incluindo cliente', () => {
