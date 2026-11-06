@@ -1152,6 +1152,16 @@ export function filtrarMenuPorPerfil(
           },
         ],
       },
+      {
+        id: 'cliente-configuracoes',
+        label: 'Configurações',
+        icon: Settings,
+        tipo: 'link',
+        path: '/configuracoes',
+        modulo: 'configuracoes',
+        badge: 'Conta',
+        subtitulo: 'Perfil, troca de senha e preferências da conta',
+      },
     ]
   }
 
