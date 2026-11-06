@@ -35,6 +35,7 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'minha_empresa',
     'admin_usuarios',
     'lancamentos',
+    'gerencial_projecao_dre',
     'gerencial_comparativo_mensal',
     'gerencial_comparativo_despesas',
     'gerencial_fluxo_caixa',
@@ -132,6 +133,14 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('financeiro', 'gerencial_comparativo_mensal')).toBe(true)
     expect(perfilTemAcesso('cliente', 'gerencial_comparativo_mensal')).toBe(false)
     expect(perfilTemAcesso('comercial', 'gerencial_comparativo_mensal')).toBe(false)
+  })
+
+  it('garante que gerencial_projecao_dre é liberado para perfis internos e bloqueado para cliente', () => {
+    expect(perfilTemAcesso('admin', 'gerencial_projecao_dre')).toBe(true)
+    expect(perfilTemAcesso('empresa', 'gerencial_projecao_dre')).toBe(true)
+    expect(perfilTemAcesso('financeiro', 'gerencial_projecao_dre')).toBe(true)
+    expect(perfilTemAcesso('cliente', 'gerencial_projecao_dre')).toBe(false)
+    expect(perfilTemAcesso('comercial', 'gerencial_projecao_dre')).toBe(false)
   })
 
   it('garante que o módulo configuracoes (troca da própria senha) é liberado para todos os perfis autenticados', () => {

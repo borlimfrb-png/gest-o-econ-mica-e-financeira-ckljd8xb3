@@ -30,6 +30,7 @@ const Contas = lazy(() => import('./pages/Contas'))
 const PlanoContas = lazy(() => import('./pages/PlanoContas'))
 const Lancamentos = lazy(() => import('./pages/Lancamentos'))
 const DreGerencial = lazy(() => import('./pages/DreGerencial'))
+const ProjecaoDre = lazy(() => import('./pages/ProjecaoDre'))
 const DespesasFixasAnalise = lazy(() => import('./pages/DespesasFixasAnalise'))
 const DespesasVariaveisAnalise = lazy(() => import('./pages/DespesasVariaveisAnalise'))
 const AnaliseFaturamento = lazy(() => import('./pages/AnaliseFaturamento'))
@@ -336,6 +337,14 @@ const App = () => (
                       element={
                         <ModuloRoute modulo="gerencial_dre">
                           <DreGerencial />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/projecao-dre"
+                      element={
+                        <ModuloRoute modulo="gerencial_projecao_dre">
+                          <ProjecaoDre />
                         </ModuloRoute>
                       }
                     />

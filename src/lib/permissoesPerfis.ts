@@ -20,6 +20,7 @@ export type ModuloSistema =
   | 'admin_usuarios'
   | 'lancamentos'
   | 'gerencial_dre'
+  | 'gerencial_projecao_dre'
   | 'gerencial_comparativo_mensal'
   | 'gerencial_despesas_fixas'
   | 'gerencial_despesas_variaveis'
@@ -79,6 +80,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'admin_usuarios',
       'lancamentos',
       'gerencial_dre',
+      'gerencial_projecao_dre',
       'gerencial_comparativo_mensal',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',
@@ -125,6 +127,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'minha_empresa',
       'lancamentos',
       'gerencial_dre',
+      'gerencial_projecao_dre',
       'gerencial_comparativo_mensal',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',
@@ -163,6 +166,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'dashboard',
       'lancamentos',
       'gerencial_dre',
+      'gerencial_projecao_dre',
       'gerencial_comparativo_mensal',
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',

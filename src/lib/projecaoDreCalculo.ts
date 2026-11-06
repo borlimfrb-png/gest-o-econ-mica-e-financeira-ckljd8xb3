@@ -200,6 +200,7 @@ export function calcularProjecaoDre(
   return {
     mesesRealizadosComMovimento: mesesComMovimento,
     grupos,
+    naoClassificados,
     lucroPrejuizoRealizado: lpRealizado,
     lucroPrejuizoProjetado: lpProjetado,
     lucroPrejuizoTotalAno: lpTotalAno,
