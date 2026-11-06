@@ -236,7 +236,7 @@ export function calcularBalancoProjetado(params: {
   // Caixa derivado do fluxo
   const caixaRealTotal = somaSaldoRealizado(balancoReal?.caixa_equivalentes) + aplicReal
   const caixaDerivadoBruto = caixaRealTotal + projecao.lucroPrejuizoProjetado
-  const ajusteFechamento = passivoPlSemCaixaProjetado - ativoSemCaixaProjetado
+  const ajusteFechamento = passivoPlSemCaixaProjetado - ativoSemCaixaProjetado - caixaDerivadoBruto
   const caixaProjetadoFinal = caixaDerivadoBruto + ajusteFechamento
 
   const passivoPlTotalProjetado = passivoPlSemCaixaProjetado
@@ -462,4 +462,64 @@ export function calcularSubtotaisBalanço(res: BalancoProjetadoResultado): {
       projetado,
     }
   })
+}
+
+/**
+ * Subtotais nos totais consolidados que a seção Balanço Projetado renderiza:
+ * Ativo Total, Passivo Total e Patrimônio Líquido (realizado, projetado e
+ * variação). Reaproveita as somas já conferidas do motor — Ativo Total
+ * projetado = Passivo + PL projetados (fechamento pelo caixa).
+ */
+export function calcularSubtotaisBalanco(res: BalancoProjetadoResultado): {
+  chave: string
+  rotulo: string
+  lado: LinhaBalançoProjetado['lado']
+  realizado: number
+  projetado: number
+  variacao: number
+}[] {
+  const ativoReal = res.linhas
+    .filter((l) => l.lado === 'ativo' && !l.chave.startsWith('secao_'))
+    .reduce((acc, l) => acc + l.realizado, 0)
+  const ativoProj = res.linhas
+    .filter((l) => l.lado === 'ativo' && !l.chave.startsWith('secao_'))
+    .reduce((acc, l) => acc + l.projetado, 0)
+  const passivoReal = res.linhas
+    .filter((l) => l.lado === 'passivo' && !l.chave.startsWith('secao_'))
+    .reduce((acc, l) => acc + l.realizado, 0)
+  const passivoProj = res.linhas
+    .filter((l) => l.lado === 'passivo' && !l.chave.startsWith('secao_'))
+    .reduce((acc, l) => acc + l.projetado, 0)
+  const plReal = res.linhas
+    .filter((l) => l.lado === 'pl' && !l.chave.startsWith('secao_'))
+    .reduce((acc, l) => acc + l.realizado, 0)
+  const plProj = res.linhas
+    .filter((l) => l.lado === 'pl' && !l.chave.startsWith('secao_'))
+    .reduce((acc, l) => acc + l.projetado, 0)
+  return [
+    {
+      chave: 'ativo_total',
+      rotulo: 'Total Ativo',
+      lado: 'ativo',
+      realizado: ativoReal,
+      projetado: ativoProj,
+      variacao: ativoProj - ativoReal,
+    },
+    {
+      chave: 'passivo_total',
+      rotulo: 'Total Passivo',
+      lado: 'passivo',
+      realizado: passivoReal,
+      projetado: passivoProj,
+      variacao: passivoProj - passivoReal,
+    },
+    {
+      chave: 'patrimonio_liquido',
+      rotulo: 'Total Patrimônio Líquido',
+      lado: 'pl',
+      realizado: plReal,
+      projetado: plProj,
+      variacao: plProj - plReal,
+    },
+  ]
 }

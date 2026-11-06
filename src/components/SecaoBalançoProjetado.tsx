@@ -5,7 +5,7 @@ import { calcularBalancoProjetado, calcularSubtotaisBalanco } from '@/lib/projec
 import {
   exportarBalancoProjetadoExcel,
   exportarBalancoProjetadoCsv,
-  type OpcoesExportacaoBalancoProjetado,
+  type OpcoesExportacaoBalançoProjetado,
 } from '@/lib/projecaoBalancoExport'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -31,7 +31,7 @@ interface Props {
   balancos: BalancoRecord[]
   projecao: ProjecaoResultado
   exercicio: number
-  empresaNome?: string
+  entidadeNome?: string
   isGrupo?: boolean
   nomeGrupo?: string
 }
@@ -55,7 +55,7 @@ export function SecaoBalançoProjetado({
   balancos,
   projecao,
   exercicio,
-  empresaNome,
+  entidadeNome,
   isGrupo,
   nomeGrupo,
 }: Props) {
@@ -68,8 +68,8 @@ export function SecaoBalançoProjetado({
 
   const subtotais = useMemo(() => calcularSubtotaisBalanco(resultado), [resultado])
 
-  const opcoesExportacao: OpcoesExportacaoBalancoProjetado = {
-    empresaNome,
+  const opcoesExportacao: OpcoesExportacaoBalançoProjetado = {
+    empresaNome: entidadeNome,
     isGrupo,
     nomeGrupo,
     exercicioAno: exercicio,
