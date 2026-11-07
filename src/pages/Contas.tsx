@@ -456,7 +456,7 @@ export default function Contas() {
 
   return (
     <div className="space-y-6 animate-fadeIn">
-      {/* Cabeçalho */}
+      {/* Cabeçalho — listagem com fluxo vertical contínuo da página inteira (sem overflow-y interno) */}
       <div>
         <h1 className="text-xl font-bold text-[#0B1F3A] tracking-tight">Cadastro de Contas</h1>
         <p className="text-xs text-[#5B6B7F]">
