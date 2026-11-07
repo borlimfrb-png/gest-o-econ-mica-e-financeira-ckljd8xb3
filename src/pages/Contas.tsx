@@ -1,9 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import {
-  contasService,
-  lancamentosCentroService,
-  centrosService,
-} from '@/services/financeService'
+import { contasService, lancamentosCentroService, centrosService } from '@/services/financeService'
 import type {
   ContaRecord,
   TipoConta,
@@ -80,6 +76,20 @@ const GRUPOS_POR_TIPO: Record<TipoConta, string[]> = {
 }
 
 interface ContaFormData extends ContaEdicaoForm {}
+
+const EMPTY_FORM: ContaFormData = {
+  nome: '',
+  tipo: 'Despesa',
+  grupo: '',
+  centro: '',
+  descricao: '',
+  classificacao_dre: '',
+  nao_exibir_dre: false,
+  nao_exibir_fluxo_caixa: false,
+  nao_exibir_em_nada: false,
+}
+
+type FormErrors = Partial<Record<keyof ContaFormData | 'general', string>>
 
 // Cores do badge por tipo de conta
 const TIPO_BADGE: Record<TipoConta, string> = {
@@ -1178,221 +1188,6 @@ export default function Contas() {
         onSelectConta={openEdit}
         onReordenar={handleReordenar}
       />
-      {/* (modal antigo apertado removido — substituído por DialogEditarConta) */}
-      {false && (
-        <Dialog open={editOpen} onOpenChange={setEditOpen}>
-          <DialogContent className="sm:max-w-[480px] bg-white">
-          <form onSubmit={handleUpdate}>
-            <DialogHeader>
-              <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">
-                <Pencil className="w-4 h-4 text-blue-600" />
-                Editar Conta
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-500">
-                Atualize as informações da conta. O código não pode ser alterado. Campos com * são
-                obrigatórios.
-              </DialogDescription>
-            </DialogHeader>
-
-            {errors.general && (
-              <Alert
-                variant="destructive"
-                className="mt-4 bg-red-50 border-red-200 text-red-800 py-2"
-              >
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <AlertDescription className="text-xs font-medium">
-                  {errors.general}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-3 py-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-conta-codigo" className="text-xs font-semibold text-slate-700">
-                  Código
-                </Label>
-                <Input
-                  id="edit-conta-codigo"
-                  readOnly
-                  value={editing?.codigo || ''}
-                  className="h-9 text-xs font-mono font-semibold text-slate-600 bg-slate-50 border-slate-200 cursor-not-allowed"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-conta-nome" className="text-xs font-semibold text-slate-700">
-                  Nome *
-                </Label>
-                <Input
-                  id="edit-conta-nome"
-                  value={form.nome}
-                  onChange={(e) => setField('nome', e.target.value)}
-                  className={`h-9 text-xs ${errors.nome ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                />
-                {errors.nome && (
-                  <p className="text-[11px] text-red-600 font-medium">{errors.nome}</p>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-conta-tipo" className="text-xs font-semibold text-slate-700">
-                    Tipo *
-                  </Label>
-                  <Select
-                    value={form.tipo}
-                    onValueChange={(val) => setField('tipo', val as TipoConta)}
-                  >
-                    <SelectTrigger id="edit-conta-tipo" className="h-9 text-xs bg-white">
-                      <SelectValue placeholder="Selecione o tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIPOS_CONTA.map((t) => (
-                        <SelectItem key={t} value={t} className="text-xs">
-                          {t}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label
-                    htmlFor="edit-conta-grupo"
-                    className="text-xs font-semibold text-slate-700"
-                  >
-                    Grupo
-                  </Label>
-                  <Select value={form.grupo} onValueChange={(val) => setField('grupo', val)}>
-                    <SelectTrigger id="edit-conta-grupo" className="h-9 text-xs bg-white">
-                      <SelectValue placeholder="Opcional" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(GRUPOS_POR_TIPO[form.tipo] || []).map((g) => (
-                        <SelectItem key={g} value={g} className="text-xs">
-                          {g}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="edit-conta-classificacao-dre"
-                  className="text-xs font-semibold text-slate-700"
-                >
-                  Classificação DRE Gerencial
-                </Label>
-                <Select
-                  value={form.classificacao_dre || 'nenhum'}
-                  onValueChange={(val) =>
-                    setField('classificacao_dre', val === 'nenhum' ? '' : (val as ClassificacaoDre))
-                  }
-                >
-                  <SelectTrigger id="edit-conta-classificacao-dre" className="h-9 text-xs bg-white">
-                    <SelectValue placeholder="Selecione a classificação DRE" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="nenhum" className="text-xs text-slate-400">
-                      (Nenhum / usar heurística automática)
-                    </SelectItem>
-                    {CLASSIFICACOES_DRE.map((clf) => (
-                      <SelectItem key={clf} value={clf} className="text-xs">
-                        {clf}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label
-                  htmlFor="edit-conta-descricao"
-                  className="text-xs font-semibold text-slate-700"
-                >
-                  Descrição
-                </Label>
-                <Input
-                  id="edit-conta-descricao"
-                  value={form.descricao}
-                  onChange={(e) => setField('descricao', e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-
-              {/* Marcações de Exclusão nos Relatórios Gerenciais na Edição */}
-              <div className="pt-2 border-t border-slate-100 space-y-2">
-                <Label className="text-xs font-semibold text-slate-700 block">
-                  Exclusões de Relatórios Gerenciais (Flags)
-                </Label>
-                <div className="space-y-2 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 font-medium">
-                    <input
-                      type="checkbox"
-                      checked={form.nao_exibir_dre}
-                      disabled={form.nao_exibir_em_nada}
-                      onChange={(e) => {
-                        setField('nao_exibir_dre', e.target.checked)
-                        if (e.target.checked) setField('nao_exibir_em_nada', false)
-                      }}
-                      className="rounded border-slate-300 text-rose-600 focus:ring-rose-500"
-                    />
-                    <span>Não exibir na DRE Gerencial</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-700 font-medium">
-                    <input
-                      type="checkbox"
-                      checked={form.nao_exibir_fluxo_caixa}
-                      disabled={form.nao_exibir_em_nada}
-                      onChange={(e) => {
-                        setField('nao_exibir_fluxo_caixa', e.target.checked)
-                        if (e.target.checked) setField('nao_exibir_em_nada', false)
-                      }}
-                      className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
-                    />
-                    <span>Não exibir no Fluxo de Caixa (DRE)</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-900 font-semibold pt-1 border-t border-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={form.nao_exibir_em_nada}
-                      onChange={(e) => {
-                        const val = e.target.checked
-                        setField('nao_exibir_em_nada', val)
-                        if (val) {
-                          setField('nao_exibir_dre', false)
-                          setField('nao_exibir_fluxo_caixa', false)
-                        }
-                      }}
-                      className="rounded border-slate-300 text-red-700 focus:ring-red-600"
-                    />
-                    <span className="text-red-700">Não exibir em nada (ambos os relatórios)</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditOpen(false)}
-                disabled={saving}
-                className="text-xs h-9"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={saving}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
-              >
-                {saving ? 'Salvando...' : 'Salvar Alterações'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       {/* ============ CONFIRMAÇÃO EXCLUSÃO ============ */}
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent className="bg-white">

@@ -1042,6 +1042,7 @@ export const contasService = {
     empresa?: string
     classificacao_dre?: ContaRecord['classificacao_dre']
     nao_exibir_dre?: boolean
+    nao_exibir_fluxo_caixa?: boolean
     nao_exibir_em_nada?: boolean
     ordem?: number
     centro?: string
