@@ -270,10 +270,13 @@ export interface ContaRecord extends RecordModel {
   nao_exibir_dre?: boolean
   nao_exibir_fluxo_caixa?: boolean
   nao_exibir_em_nada?: boolean
+  ordem?: number | null
+  centro?: string | null
   user: string
   empresa?: string
   expand?: {
     empresa?: EmpresaRecord
+    centro?: CentroRecord
   }
 }
 

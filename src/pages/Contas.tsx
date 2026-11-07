@@ -1,6 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
-import { contasService, lancamentosCentroService } from '@/services/financeService'
-import type { ContaRecord, TipoConta, LancamentoCentroRecord } from '@/types/finance'
+import {
+  contasService,
+  lancamentosCentroService,
+  centrosService,
+} from '@/services/financeService'
+import type {
+  ContaRecord,
+  TipoConta,
+  LancamentoCentroRecord,
+  CentroRecord,
+  ClassificacaoDre,
+} from '@/types/finance'
+import { CLASSIFICACOES_DRE } from '@/types/finance'
+import { sugerirClassificacaoDre } from '@/lib/dreClassificacaoHeuristica'
+import { DialogEditarConta } from '@/components/contas/DialogEditarConta'
+import type { ContaEdicaoForm } from '@/components/contas/DialogEditarConta'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -11,14 +25,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+
 import {
   Select,
   SelectContent,
@@ -72,33 +79,7 @@ const GRUPOS_POR_TIPO: Record<TipoConta, string[]> = {
   Despesa: ['Despesas Operacionais', 'Despesas Financeiras', 'Outras Despesas'],
 }
 
-import type { ClassificacaoDre } from '@/types/finance'
-import { CLASSIFICACOES_DRE } from '@/types/finance'
-import { sugerirClassificacaoDre } from '@/lib/dreClassificacaoHeuristica'
-
-interface ContaFormData {
-  nome: string
-  tipo: TipoConta
-  grupo: string
-  descricao: string
-  classificacao_dre: ClassificacaoDre | ''
-  nao_exibir_dre: boolean
-  nao_exibir_fluxo_caixa: boolean
-  nao_exibir_em_nada: boolean
-}
-
-const EMPTY_FORM: ContaFormData = {
-  nome: '',
-  tipo: 'Ativo',
-  grupo: '',
-  descricao: '',
-  classificacao_dre: '',
-  nao_exibir_dre: false,
-  nao_exibir_fluxo_caixa: false,
-  nao_exibir_em_nada: false,
-}
-
-type FormErrors = Partial<Record<keyof ContaFormData | 'general', string>>
+interface ContaFormData extends ContaEdicaoForm {}
 
 // Cores do badge por tipo de conta
 const TIPO_BADGE: Record<TipoConta, string> = {
@@ -116,6 +97,7 @@ export default function Contas() {
   const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
 
   const [contas, setContas] = useState<ContaRecord[]>([])
+  const [centros, setCentros] = useState<CentroRecord[]>([])
   const [lancamentos, setLancamentos] = useState<LancamentoCentroRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [abaContas, setAbaContas] = useState<'lista' | 'plano'>('lista')
@@ -149,11 +131,13 @@ export default function Contas() {
     try {
       setLoading(true)
       const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
-      const [list, lancList] = await Promise.all([
+      const [list, centrosList, lancList] = await Promise.all([
         contasService.getAll(opts),
+        centrosService.getAll(opts),
         lancamentosCentroService.getAll(opts),
       ])
       setContas(list)
+      setCentros(centrosList)
       setLancamentos(lancList)
       // Próximo código com base nos códigos já existentes
       setProximoCodigo(contasService.proximoCodigo(list.map((c) => c.codigo || '')))
@@ -326,6 +310,7 @@ export default function Contas() {
       nome: c.nome,
       tipo: c.tipo,
       grupo: c.grupo || '',
+      centro: c.centro || '',
       descricao: c.descricao || '',
       classificacao_dre: c.classificacao_dre || '',
       nao_exibir_dre: !!c.nao_exibir_dre,
@@ -334,6 +319,21 @@ export default function Contas() {
     })
     setErrors({})
     setEditOpen(true)
+  }
+
+  // Drag & drop: persiste a nova ordem (e, se a conta mudou de grupo de
+  // centro de custo na listagem, grava também o novo centro).
+  const handleReordenar = async (
+    idsOrdenados: string[],
+    movida?: { id: string; centro: string | null },
+  ) => {
+    await contasService.reordenar(idsOrdenados)
+    if (movida) {
+      await contasService.update(movida.id, { centro: movida.centro })
+    }
+    window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+    window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+    loadData()
   }
 
   const toggleFlagRapida = async (
@@ -384,6 +384,7 @@ export default function Contas() {
         nome: form.nome,
         tipo: form.tipo,
         grupo: form.grupo,
+        centro: form.centro || null,
         descricao: form.descricao,
         classificacao_dre: (form.classificacao_dre as ClassificacaoDre) || undefined,
         nao_exibir_dre: form.nao_exibir_dre,
@@ -1160,9 +1161,27 @@ export default function Contas() {
         </TabsContent>
       </Tabs>
 
-      {/* ============ MODAL EDIÇÃO ============ */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-[480px] bg-white">
+      {/* ============ TELA DE EDIÇÃO (GRANDE) ============ */}
+      <DialogEditarConta
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        conta={editing}
+        contas={contas}
+        centros={centros}
+        isCliente={isCliente}
+        saving={saving}
+        errors={errors}
+        form={form}
+        onFieldChange={setField}
+        onSave={handleUpdate}
+        onDelete={confirmDelete}
+        onSelectConta={openEdit}
+        onReordenar={handleReordenar}
+      />
+      {/* (modal antigo apertado removido — substituído por DialogEditarConta) */}
+      {false && (
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent className="sm:max-w-[480px] bg-white">
           <form onSubmit={handleUpdate}>
             <DialogHeader>
               <DialogTitle className="text-base font-bold text-[#0B1F3A] flex items-center gap-2">

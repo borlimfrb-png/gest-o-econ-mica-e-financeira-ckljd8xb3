@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T22:06:51.169Z",
+  "generatedAt": "2026-11-07T12:09:54.120Z",
   "collections": [
     {
       "name": "users",
@@ -966,6 +966,12 @@
         {
           "name": "nao_exibir_em_nada",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "ordem",
+          "type": "number",
           "required": false,
           "system": false
         }

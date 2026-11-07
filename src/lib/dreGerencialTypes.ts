@@ -43,6 +43,7 @@ export interface ContaMatrizItem {
   classificacao: ClassificacaoDre | 'NaoClassificado'
   valoresPorMes: Record<string, number> // chaveMes -> soma líquida do mês
   totalPeriodo: number
+  ordem?: number | null
   centroId?: string
   centroNome?: string
   centroCodigo?: string
@@ -99,14 +100,21 @@ export function compararCodigosHierarquicos(codA?: string | null, codB?: string 
 
 /**
  * Função de ordenação determinística para itens de contas da DRE:
- * 1. Primeiro pelo código hierárquico contábil (segmentos numéricos)
- * 2. Contas sem código ficam por último
- * 3. Desempate alfabético pelo nome da conta
+ * 1. Ordem manual (campo "ordem", definida no drag & drop de /contas), quando
+ *    ambas as contas têm ordem definida
+ * 2. Código hierárquico contábil (segmentos numéricos)
+ * 3. Contas sem código ficam por último
+ * 4. Desempate alfabético pelo nome da conta
  */
 export function compararContasDre(
-  a: { codigo?: string | null; nome: string },
-  b: { codigo?: string | null; nome: string },
+  a: { codigo?: string | null; nome: string; ordem?: number | null },
+  b: { codigo?: string | null; nome: string; ordem?: number | null },
 ): number {
+  // 0. Ordem manual (drag & drop) quando disponível para as duas contas
+  const ordemA = a.ordem != null && !isNaN(Number(a.ordem)) ? Number(a.ordem) : null
+  const ordemB = b.ordem != null && !isNaN(Number(b.ordem)) ? Number(b.ordem) : null
+  if (ordemA !== null && ordemB !== null && ordemA !== ordemB) return ordemA - ordemB
+
   const codA = (a.codigo || '').trim()
   const codB = (b.codigo || '').trim()
 
@@ -132,12 +140,13 @@ export function compararContasDre(
  *    - Centros SEM sequência (null/undefined) vêm depois dos sequenciados, em ordem estável por código do centro e nome (localeCompare 'pt-BR')
  *    - Empate de sequência desempata por código do centro e nome
  * 2º Tipo de Despesa (dentro do mesmo centro: preenchido antes de vazio, ordenado pt-BR)
- * 3º Conta Contábil (código hierárquico contábil e desempate por nome via compararContasDre)
+ * 3º Conta Contábil (ordem manual do drag & drop, depois código hierárquico e nome)
  */
 export function compararCentroTipoConta(
   a: {
     codigo?: string | null
     nome: string
+    ordem?: number | null
     centroNome?: string | null
     centroCodigo?: string | null
     centroSequencia?: number | null
@@ -147,6 +156,7 @@ export function compararCentroTipoConta(
   b: {
     codigo?: string | null
     nome: string
+    ordem?: number | null
     centroNome?: string | null
     centroCodigo?: string | null
     centroSequencia?: number | null
@@ -217,13 +227,8 @@ export function compararCentroTipoConta(
     return 1
   }
 
-  // 3º Conta Contábil (Código hierárquico + Nome)
-  const cmpConta = compararContasDre(a, b)
-  if (cmpConta !== 0) {
-    return cmpConta
-  }
-
-  return 0
+  // 3º Conta Contábil (ordem manual do drag & drop, depois código hierárquico + nome)
+  return compararContasDre(a, b)
 }
 
 export interface GrupoMatrizItem {
@@ -274,6 +279,7 @@ export interface ContaComparativoItem {
   diferenca: number
   percentual: number | null
   favoravel: boolean
+  ordem?: number | null
   centroId?: string
   centroNome?: string
   centroCodigo?: string

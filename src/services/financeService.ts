@@ -1012,7 +1012,8 @@ export const tiposDespesaService = {
 export const contasService = {
   async getAll(options?: QueryEmpresasOptions): Promise<ContaRecord[]> {
     const params: Record<string, unknown> = {
-      sort: 'codigo',
+      // Ordem manual (drag & drop) primeiro; código como desempate estável.
+      sort: 'ordem,codigo',
     }
     const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
     if (filter) {
@@ -1041,9 +1042,24 @@ export const contasService = {
     empresa?: string
     classificacao_dre?: ContaRecord['classificacao_dre']
     nao_exibir_dre?: boolean
-    nao_exibir_fluxo_caixa?: boolean
     nao_exibir_em_nada?: boolean
+    ordem?: number
+    centro?: string
   }): Promise<ContaRecord> {
+    // Nova conta nasce no fim da lista (base 1000, passo 100 — deixa espaço
+    // para o drag & drop reordenar sem renumerar tudo).
+    let ordem = data.ordem
+    if (ordem === undefined) {
+      try {
+        const ultima = await pb.collection('contas').getFirstListItem('', {
+          sort: '-ordem',
+        })
+        ordem = Math.ceil(Number(ultima.ordem) / 100) * 100 + 100
+      } catch {
+        ordem = 1000
+      }
+      ordem = Number(ordem)
+    }
     return await pb.collection('contas').create<ContaRecord>({
       nome: data.nome.trim(),
       tipo: data.tipo,
@@ -1054,6 +1070,8 @@ export const contasService = {
       nao_exibir_dre: !!data.nao_exibir_dre,
       nao_exibir_fluxo_caixa: !!data.nao_exibir_fluxo_caixa,
       nao_exibir_em_nada: !!data.nao_exibir_em_nada,
+      ordem,
+      centro: data.centro || undefined,
       user: currentUserId(),
     } as any)
   },
@@ -1072,6 +1090,8 @@ export const contasService = {
         | 'nao_exibir_dre'
         | 'nao_exibir_fluxo_caixa'
         | 'nao_exibir_em_nada'
+        | 'ordem'
+        | 'centro'
       >
     >,
   ): Promise<ContaRecord> {
@@ -1086,7 +1106,27 @@ export const contasService = {
       payload.nao_exibir_fluxo_caixa = !!data.nao_exibir_fluxo_caixa
     if (data.nao_exibir_em_nada !== undefined)
       payload.nao_exibir_em_nada = !!data.nao_exibir_em_nada
+    if (data.centro !== undefined) payload.centro = data.centro || null
     return await pb.collection('contas').update<ContaRecord>(id, payload)
+  },
+
+  /**
+   * Persiste a nova ordenação das contas (drag & drop).
+   * Salva em duas passes com bases de numeração separadas: a primeira passa
+   * afasta tudo para valores temporários altos (evita violar o índice único
+   * enquanto as linhas são atualizadas), a segunda grava a posição final.
+   */
+  async reordenar(orderedIds: string[]): Promise<void> {
+    let tempBase = 1000000
+    for (const id of orderedIds) {
+      await pb.collection('contas').update(id, { ordem: tempBase })
+      tempBase += 1000
+    }
+    let i = 1000
+    for (const id of orderedIds) {
+      await pb.collection('contas').update(id, { ordem: i })
+      i += 100
+    }
   },
 
   async delete(id: string): Promise<boolean> {
