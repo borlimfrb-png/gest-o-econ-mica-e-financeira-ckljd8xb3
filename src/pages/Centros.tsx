@@ -64,6 +64,7 @@ import {
   Receipt,
   Download,
   CalendarDays,
+  GripVertical,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
@@ -147,6 +148,12 @@ export default function Centros() {
   const { user, isAdmin } = useAuth()
   const { minhaEmpresa } = useMinhaEmpresa()
   const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
+  const isCliente = user?.role === 'cliente'
+
+  // Drag & drop de centros
+  const [arrastandoCentroId, setArrastandoCentroId] = useState<string | null>(null)
+  const [indiceSoltarCentroEm, setIndiceSoltarCentroEm] = useState<number | null>(null)
+  const [salvandoOrdemCentros, setSalvandoOrdemCentros] = useState(false)
 
   // Desagrega empresas do grupo para busca segura e sem duplicidades
   const empresasIdsDoGrupo = useMemo(() => {
@@ -657,6 +664,65 @@ export default function Centros() {
     setDeleteLancOpen(true)
   }
 
+  // Lista ordenada de centros respeitando sequencia e nome
+  const centrosOrdenados = useMemo(() => {
+    return [...centros].sort((a, b) => {
+      const sa = a.sequencia != null && !isNaN(Number(a.sequencia)) ? Number(a.sequencia) : null
+      const sb = b.sequencia != null && !isNaN(Number(b.sequencia)) ? Number(b.sequencia) : null
+      if (sa !== null && sb !== null) {
+        if (sa !== sb) return sa - sb
+        return (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR')
+      }
+      if (sa !== null && sb === null) return -1
+      if (sa === null && sb !== null) return 1
+      return (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR')
+    })
+  }, [centros])
+
+  // Drag & drop handlers para reordenar centros
+  const handleSoltarCentro = async (indiceDestino: number) => {
+    if (isCliente) return
+    const idOrigem = arrastandoCentroId
+    setArrastandoCentroId(null)
+    setIndiceSoltarCentroEm(null)
+    if (!idOrigem) return
+
+    const listaAtual = [...centrosOrdenados]
+    const idxOrigem = listaAtual.findIndex((c) => c.id === idOrigem)
+    if (idxOrigem < 0 || idxOrigem === indiceDestino) return
+
+    const [itemMovido] = listaAtual.splice(idxOrigem, 1)
+    if (!itemMovido) return
+    listaAtual.splice(indiceDestino, 0, itemMovido)
+
+    const novaListaComSeq = listaAtual.map((c, i) => ({
+      ...c,
+      sequencia: (i + 1) * 10,
+    }))
+    setCentros(novaListaComSeq)
+    setSalvandoOrdemCentros(true)
+
+    try {
+      await centrosService.reordenar(listaAtual.map((c) => c.id))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+      toast({
+        title: 'Ordem dos Centros de Custo salva',
+        description: `Centro "${itemMovido.nome}" reordenado com sucesso.`,
+      })
+    } catch (err: any) {
+      console.error('Erro ao reordenar centros:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao reordenar centros',
+        description: err?.message || 'Falha ao salvar a nova ordem no servidor.',
+      })
+      await loadData()
+    } finally {
+      setSalvandoOrdemCentros(false)
+    }
+  }
+
   const handleDeleteLanc = async () => {
     if (!lancToDelete) return
     setDeletingLanc(true)
@@ -902,184 +968,188 @@ export default function Centros() {
         {/* ============ COLUNA ESQUERDA: CENTROS ============ */}
         <div className="space-y-6">
           {/* Card Novo Centro */}
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
-                <PieChart className="w-4 h-4 text-blue-600" />
-                Novo Centro de Custo
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Crie um centro de receita ou despesa para agrupar lançamentos.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <form onSubmit={handleCreateCentro} className="space-y-3">
-                {centroErrors.general && (
-                  <Alert
-                    variant="destructive"
-                    className="bg-red-50 border-red-200 text-red-800 py-2"
-                  >
-                    <AlertCircle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-xs font-medium">
-                      {centroErrors.general}
-                    </AlertDescription>
-                  </Alert>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="centro-nome" className="text-xs font-semibold text-slate-700">
-                      Nome *
-                    </Label>
-                    <Input
-                      id="centro-nome"
-                      placeholder="Ex: Marketing, Operações, TI, Vendas"
-                      value={centroForm.nome}
-                      onChange={(e) => setCentroField('nome', e.target.value)}
-                      className={`h-9 text-xs ${centroErrors.nome ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                    />
-                    {centroErrors.nome && (
-                      <p className="text-[11px] text-red-600 font-medium">{centroErrors.nome}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="centro-sequencia"
-                      className="text-xs font-semibold text-slate-700"
+          {!isCliente && (
+            <Card className="bg-white border-slate-200 shadow-xs">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                  <PieChart className="w-4 h-4 text-blue-600" />
+                  Novo Centro de Custo
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Crie um centro de receita ou despesa para agrupar lançamentos.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-4">
+                <form onSubmit={handleCreateCentro} className="space-y-3">
+                  {centroErrors.general && (
+                    <Alert
+                      variant="destructive"
+                      className="bg-red-50 border-red-200 text-red-800 py-2"
                     >
-                      Sequência (DRE Gerencial)
-                    </Label>
-                    <Input
-                      id="centro-sequencia"
-                      type="number"
-                      min="1"
-                      step="1"
-                      placeholder="Ex: 1, 2, 3..."
-                      value={centroForm.sequencia}
-                      onChange={(e) => setCentroField('sequencia', e.target.value)}
-                      className="h-9 text-xs"
-                    />
-                    <p className="text-[11px] text-slate-400">
-                      Ordem de exibição dos centros no DRE Gerencial.
-                    </p>
-                  </div>
+                      <AlertCircle className="h-4 w-4 text-red-600" />
+                      <AlertDescription className="text-xs font-medium">
+                        {centroErrors.general}
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="centro-nome" className="text-xs font-semibold text-slate-700">
+                        Nome *
+                      </Label>
+                      <Input
+                        id="centro-nome"
+                        placeholder="Ex: Marketing, Operações, TI, Vendas"
+                        value={centroForm.nome}
+                        onChange={(e) => setCentroField('nome', e.target.value)}
+                        className={`h-9 text-xs ${centroErrors.nome ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                      />
+                      {centroErrors.nome && (
+                        <p className="text-[11px] text-red-600 font-medium">{centroErrors.nome}</p>
+                      )}
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="centro-tipo" className="text-xs font-semibold text-slate-700">
-                      Tipo *
-                    </Label>
-                    <Select
-                      value={centroForm.tipo}
-                      onValueChange={(val) => setCentroField('tipo', val as TipoCentro)}
-                    >
-                      <SelectTrigger id="centro-tipo" className="h-9 text-xs bg-white">
-                        <SelectValue placeholder="Selecione o tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TIPOS.map((t) => (
-                          <SelectItem key={t} value={t} className="text-xs">
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {centroErrors.tipo && (
-                      <p className="text-[11px] text-red-600 font-medium">{centroErrors.tipo}</p>
-                    )}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label
-                      htmlFor="centro-descricao"
-                      className="text-xs font-semibold text-slate-700"
-                    >
-                      Descrição
-                    </Label>
-                    <Input
-                      id="centro-descricao"
-                      placeholder="Opcional"
-                      value={centroForm.descricao}
-                      onChange={(e) => setCentroField('descricao', e.target.value)}
-                      className="h-9 text-xs"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label
-                      htmlFor="centro-meta-mensal"
-                      className="text-xs font-semibold text-slate-700"
-                    >
-                      Meta mensal (R$)
-                    </Label>
-                    <Input
-                      id="centro-meta-mensal"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      placeholder="Opcional — ex: 5000.00"
-                      value={centroForm.meta_mensal}
-                      onChange={(e) => setCentroField('meta_mensal', e.target.value)}
-                      className={`h-9 text-xs ${
-                        centroErrors.meta_mensal ? 'border-red-500 focus-visible:ring-red-500' : ''
-                      }`}
-                    />
-                    {centroErrors.meta_mensal ? (
-                      <p className="text-[11px] text-red-600 font-medium">
-                        {centroErrors.meta_mensal}
-                      </p>
-                    ) : (
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="centro-sequencia"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Sequência (DRE Gerencial)
+                      </Label>
+                      <Input
+                        id="centro-sequencia"
+                        type="number"
+                        min="1"
+                        step="1"
+                        placeholder="Ex: 1, 2, 3..."
+                        value={centroForm.sequencia}
+                        onChange={(e) => setCentroField('sequencia', e.target.value)}
+                        className="h-9 text-xs"
+                      />
                       <p className="text-[11px] text-slate-400">
-                        Usada no comparativo de orçado vs realizado do mês.
+                        Ordem de exibição dos centros no DRE Gerencial.
                       </p>
-                    )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="centro-tipo" className="text-xs font-semibold text-slate-700">
+                        Tipo *
+                      </Label>
+                      <Select
+                        value={centroForm.tipo}
+                        onValueChange={(val) => setCentroField('tipo', val as TipoCentro)}
+                      >
+                        <SelectTrigger id="centro-tipo" className="h-9 text-xs bg-white">
+                          <SelectValue placeholder="Selecione o tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {TIPOS.map((t) => (
+                            <SelectItem key={t} value={t} className="text-xs">
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {centroErrors.tipo && (
+                        <p className="text-[11px] text-red-600 font-medium">{centroErrors.tipo}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor="centro-descricao"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Descrição
+                      </Label>
+                      <Input
+                        id="centro-descricao"
+                        placeholder="Opcional"
+                        value={centroForm.descricao}
+                        onChange={(e) => setCentroField('descricao', e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label
+                        htmlFor="centro-meta-mensal"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Meta mensal (R$)
+                      </Label>
+                      <Input
+                        id="centro-meta-mensal"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        placeholder="Opcional — ex: 5000.00"
+                        value={centroForm.meta_mensal}
+                        onChange={(e) => setCentroField('meta_mensal', e.target.value)}
+                        className={`h-9 text-xs ${
+                          centroErrors.meta_mensal
+                            ? 'border-red-500 focus-visible:ring-red-500'
+                            : ''
+                        }`}
+                      />
+                      {centroErrors.meta_mensal ? (
+                        <p className="text-[11px] text-red-600 font-medium">
+                          {centroErrors.meta_mensal}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-400">
+                          Usada no comparativo de orçado vs realizado do mês.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label
+                        htmlFor="centro-meta-anual"
+                        className="text-xs font-semibold text-slate-700"
+                      >
+                        Meta anual (R$)
+                      </Label>
+                      <Input
+                        id="centro-meta-anual"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        placeholder="Opcional — ex: 60000.00"
+                        value={centroForm.meta_anual}
+                        onChange={(e) => setCentroField('meta_anual', e.target.value)}
+                        className={`h-9 text-xs ${
+                          centroErrors.meta_anual ? 'border-red-500 focus-visible:ring-red-500' : ''
+                        }`}
+                      />
+                      {centroErrors.meta_anual ? (
+                        <p className="text-[11px] text-red-600 font-medium">
+                          {centroErrors.meta_anual}
+                        </p>
+                      ) : (
+                        <p className="text-[11px] text-slate-400">
+                          Usada no comparativo anual com projeção de atingimento.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label
-                      htmlFor="centro-meta-anual"
-                      className="text-xs font-semibold text-slate-700"
+                  <div className="flex justify-end">
+                    <Button
+                      type="submit"
+                      disabled={savingCentro}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
                     >
-                      Meta anual (R$)
-                    </Label>
-                    <Input
-                      id="centro-meta-anual"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      placeholder="Opcional — ex: 60000.00"
-                      value={centroForm.meta_anual}
-                      onChange={(e) => setCentroField('meta_anual', e.target.value)}
-                      className={`h-9 text-xs ${
-                        centroErrors.meta_anual ? 'border-red-500 focus-visible:ring-red-500' : ''
-                      }`}
-                    />
-                    {centroErrors.meta_anual ? (
-                      <p className="text-[11px] text-red-600 font-medium">
-                        {centroErrors.meta_anual}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-slate-400">
-                        Usada no comparativo anual com projeção de atingimento.
-                      </p>
-                    )}
+                      <Plus className="w-4 h-4 mr-1.5" />
+                      {savingCentro ? 'Salvando...' : 'Salvar Centro'}
+                    </Button>
                   </div>
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={savingCentro}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
-                  >
-                    <Plus className="w-4 h-4 mr-1.5" />
-                    {savingCentro ? 'Salvando...' : 'Salvar Centro'}
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+                </form>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Tabela de Centros */}
           <Card className="bg-white border-slate-200 shadow-xs">
@@ -1105,6 +1175,7 @@ export default function Centros() {
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                        <th className="py-3 px-2 w-8 text-center text-slate-400">#</th>
                         <th className="py-3 px-4">Código</th>
                         <th className="py-3 px-4">Nome</th>
                         <th className="py-3 px-4">Tipo</th>
@@ -1114,129 +1185,171 @@ export default function Centros() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {[...centros]
-                        .sort((a, b) => {
-                          const sa =
-                            a.sequencia != null && !isNaN(Number(a.sequencia))
-                              ? Number(a.sequencia)
-                              : null
-                          const sb =
-                            b.sequencia != null && !isNaN(Number(b.sequencia))
-                              ? Number(b.sequencia)
-                              : null
-                          if (sa !== null && sb !== null) {
-                            if (sa !== sb) return sa - sb
-                            return (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR')
-                          }
-                          if (sa !== null && sb === null) return -1
-                          if (sa === null && sb !== null) return 1
-                          return (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR')
-                        })
-                        .map((c) => {
-                          const stats = statsPorCentro.get(c.id) || { count: 0, total: 0 }
-                          const isSel = c.id === selectedCentroId
-                          return (
-                            <tr
-                              key={c.id}
-                              onClick={() => setSelectedCentroId(c.id)}
-                              className={`cursor-pointer transition-colors ${
-                                isSel ? 'bg-blue-50/80' : 'hover:bg-slate-50/80'
-                              }`}
-                            >
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-2.5">
-                                  <div
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                      c.tipo === 'Receita'
-                                        ? 'bg-emerald-50 text-emerald-600'
-                                        : 'bg-rose-50 text-rose-600'
-                                    }`}
-                                  >
-                                    <Receipt className="w-4 h-4" />
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="font-semibold text-slate-900 block truncate">
-                                        {c.nome}
-                                      </span>
-                                      {c.codigo && (
-                                        <Badge
-                                          variant="outline"
-                                          className="text-[10px] font-mono px-1.5 py-0 text-slate-600 border-slate-300"
-                                        >
-                                          {c.codigo}
-                                        </Badge>
-                                      )}
-                                      {c.sequencia != null && (
-                                        <Badge
-                                          className="text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0 hover:bg-amber-50"
-                                          title="Sequência no DRE"
-                                        >
-                                          Seq #{c.sequencia}
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {c.descricao ? (
-                                      <span className="text-[11px] text-slate-500 block truncate">
-                                        {c.descricao}
-                                      </span>
-                                    ) : null}
-                                  </div>
+                      {centrosOrdenados.map((c, idx) => {
+                        const stats = statsPorCentro.get(c.id) || { count: 0, total: 0 }
+                        const isSel = c.id === selectedCentroId
+                        const estaArrastando = arrastandoCentroId === c.id
+                        const ehAlvoSoltar =
+                          indiceSoltarCentroEm === idx &&
+                          arrastandoCentroId !== null &&
+                          arrastandoCentroId !== c.id
+
+                        return (
+                          <tr
+                            key={c.id}
+                            onClick={() => setSelectedCentroId(c.id)}
+                            draggable={!isCliente && !salvandoOrdemCentros}
+                            onDragStart={(e) => {
+                              if (isCliente || salvandoOrdemCentros) {
+                                e.preventDefault()
+                                return
+                              }
+                              setArrastandoCentroId(c.id)
+                              e.dataTransfer.effectAllowed = 'move'
+                              e.dataTransfer.setData('text/plain', c.id)
+                            }}
+                            onDragOver={(e) => {
+                              if (isCliente || salvandoOrdemCentros) return
+                              e.preventDefault()
+                              e.dataTransfer.dropEffect = 'move'
+                              if (indiceSoltarCentroEm !== idx) {
+                                setIndiceSoltarCentroEm(idx)
+                              }
+                            }}
+                            onDragLeave={(e) => {
+                              if (isCliente) return
+                              const related = e.relatedTarget as Node | null
+                              if (related && (e.currentTarget as Node).contains(related)) {
+                                return
+                              }
+                              if (indiceSoltarCentroEm === idx) {
+                                setIndiceSoltarCentroEm(null)
+                              }
+                            }}
+                            onDrop={(e) => {
+                              if (isCliente || salvandoOrdemCentros) return
+                              e.preventDefault()
+                              handleSoltarCentro(idx)
+                            }}
+                            onDragEnd={() => {
+                              setArrastandoCentroId(null)
+                              setIndiceSoltarCentroEm(null)
+                            }}
+                            className={`transition-colors select-none ${
+                              isSel ? 'bg-blue-50/80' : 'hover:bg-slate-50/80'
+                            } ${estaArrastando ? 'opacity-40 bg-amber-50' : ''} ${
+                              ehAlvoSoltar ? 'border-t-2 border-blue-600 bg-blue-50/40' : ''
+                            } ${
+                              !isCliente ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                            }`}
+                          >
+                            <td className="py-3 px-2 text-center text-slate-400">
+                              {!isCliente ? (
+                                <span
+                                  className="inline-flex items-center justify-center cursor-grab active:cursor-grabbing text-slate-400 hover:text-slate-600"
+                                  title="Clique e arraste para reordenar"
+                                >
+                                  <GripVertical className="w-3.5 h-3.5" />
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-300 font-mono">
+                                  {idx + 1}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-[11px] font-semibold text-slate-700">
+                              {c.codigo || '—'}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <div
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                    c.tipo === 'Receita'
+                                      ? 'bg-emerald-50 text-emerald-600'
+                                      : 'bg-rose-50 text-rose-600'
+                                  }`}
+                                >
+                                  <Receipt className="w-4 h-4" />
                                 </div>
-                              </td>
-                              <td className="py-3 px-4">
-                                <TipoBadge tipo={c.tipo} />
-                              </td>
-                              <td className="py-3 px-4 text-center font-medium text-slate-700">
-                                {stats.count}
-                              </td>
-                              <td className="py-3 px-4 text-right font-semibold text-slate-800 whitespace-nowrap">
-                                {formatBrl(stats.total)}
-                              </td>
-                              <td className="py-3 px-4 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      setSelectedCentroId(c.id)
-                                      setConsultarContasOpen(true)
-                                    }}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                    title="Verificar contas cadastradas vinculadas a este centro"
-                                  >
-                                    <BookOpen className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      openEditCentro(c)
-                                    }}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                    title="Editar centro"
-                                  >
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      confirmDeleteCentro(c)
-                                    }}
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                    title="Excluir centro"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-slate-900 block truncate">
+                                      {c.nome}
+                                    </span>
+                                    {c.sequencia != null && (
+                                      <Badge
+                                        className="text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 px-1.5 py-0 hover:bg-amber-50"
+                                        title="Sequência no DRE"
+                                      >
+                                        Seq #{c.sequencia}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {c.descricao ? (
+                                    <span className="text-[11px] text-slate-500 block truncate">
+                                      {c.descricao}
+                                    </span>
+                                  ) : null}
                                 </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">
+                              <TipoBadge tipo={c.tipo} />
+                            </td>
+                            <td className="py-3 px-4 text-center font-medium text-slate-700">
+                              {stats.count}
+                            </td>
+                            <td className="py-3 px-4 text-right font-semibold text-slate-800 whitespace-nowrap">
+                              {formatBrl(stats.total)}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSelectedCentroId(c.id)
+                                    setConsultarContasOpen(true)
+                                  }}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                  title="Verificar contas cadastradas vinculadas a este centro"
+                                >
+                                  <BookOpen className="w-3.5 h-3.5" />
+                                </Button>
+                                {!isCliente && (
+                                  <>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        openEditCentro(c)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Editar centro"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        confirmDeleteCentro(c)
+                                      }}
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                      title="Excluir centro"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </DoubleHorizontalScroll>
@@ -1539,154 +1652,156 @@ export default function Centros() {
               </Card>
 
               {/* Card Novo Lançamento */}
-              <Card className="bg-white border-slate-200 shadow-xs">
-                <CardHeader className="pb-3 border-b border-slate-100">
-                  <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
-                    <Plus className="w-4 h-4 text-blue-600" />
-                    Novo Lançamento
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Registre uma movimentação para este centro.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <form onSubmit={handleCreateLanc} className="space-y-3">
-                    {lancErrors.general && (
-                      <Alert
-                        variant="destructive"
-                        className="bg-red-50 border-red-200 text-red-800 py-2"
-                      >
-                        <AlertCircle className="h-4 w-4 text-red-600" />
-                        <AlertDescription className="text-xs font-medium">
-                          {lancErrors.general}
-                        </AlertDescription>
-                      </Alert>
-                    )}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div className="space-y-1.5 sm:col-span-2">
-                        <Label
-                          htmlFor="lanc-tipo-despesa"
-                          className="text-xs font-semibold text-slate-700"
+              {!isCliente && (
+                <Card className="bg-white border-slate-200 shadow-xs">
+                  <CardHeader className="pb-3 border-b border-slate-100">
+                    <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                      <Plus className="w-4 h-4 text-blue-600" />
+                      Novo Lançamento
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Registre uma movimentação para este centro.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="pt-4">
+                    <form onSubmit={handleCreateLanc} className="space-y-3">
+                      {lancErrors.general && (
+                        <Alert
+                          variant="destructive"
+                          className="bg-red-50 border-red-200 text-red-800 py-2"
                         >
-                          Tipo de Despesa
-                        </Label>
-                        <Select
-                          value={lancForm.tipo_despesa}
-                          onValueChange={(val) => setLancField('tipo_despesa', val)}
-                        >
-                          <SelectTrigger id="lanc-tipo-despesa" className="h-9 text-xs bg-white">
-                            <SelectValue placeholder="Selecione (opcional)" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {tiposDespesa.map((t) => (
-                              <SelectItem key={t.id} value={t.id} className="text-xs">
-                                {t.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {tiposDespesa.length === 0 && (
-                          <p className="text-[11px] text-slate-400">
-                            Nenhum tipo cadastrado. Crie em "Tipos de Despesas".
-                          </p>
-                        )}
-                        {lancForm.tipo_despesa ? (
-                          <button
-                            type="button"
-                            onClick={() => setLancField('tipo_despesa', '')}
-                            className="text-[11px] text-slate-500 hover:text-red-600 font-medium self-start"
-                          >
-                            Remover tipo de despesa
-                          </button>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-1.5 sm:col-span-2">
-                        <div className="flex items-center justify-between">
+                          <AlertCircle className="h-4 w-4 text-red-600" />
+                          <AlertDescription className="text-xs font-medium">
+                            {lancErrors.general}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1.5 sm:col-span-2">
                           <Label
-                            htmlFor="lanc-conta"
+                            htmlFor="lanc-tipo-despesa"
                             className="text-xs font-semibold text-slate-700"
                           >
-                            Conta
+                            Tipo de Despesa
                           </Label>
-                          <button
-                            type="button"
-                            onClick={() => setConsultarContasOpen(true)}
-                            className="text-[11px] text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                          <Select
+                            value={lancForm.tipo_despesa}
+                            onValueChange={(val) => setLancField('tipo_despesa', val)}
                           >
-                            <SearchCheck className="w-3 h-3" />
-                            Consultar Contas
-                          </button>
+                            <SelectTrigger id="lanc-tipo-despesa" className="h-9 text-xs bg-white">
+                              <SelectValue placeholder="Selecione (opcional)" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {tiposDespesa.map((t) => (
+                                <SelectItem key={t.id} value={t.id} className="text-xs">
+                                  {t.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {tiposDespesa.length === 0 && (
+                            <p className="text-[11px] text-slate-400">
+                              Nenhum tipo cadastrado. Crie em "Tipos de Despesas".
+                            </p>
+                          )}
+                          {lancForm.tipo_despesa ? (
+                            <button
+                              type="button"
+                              onClick={() => setLancField('tipo_despesa', '')}
+                              className="text-[11px] text-slate-500 hover:text-red-600 font-medium self-start"
+                            >
+                              Remover tipo de despesa
+                            </button>
+                          ) : null}
                         </div>
-                        <SeletorPlanoContaCombobox
-                          id="lanc-conta"
-                          value={lancForm.conta}
-                          onValueChange={(val) => setLancField('conta', val)}
-                          contas={contasOrdenadas}
-                          empresaAtivaId={effectiveEmpresaId}
-                          allowClear
-                          emptyLabel="Nenhuma conta"
-                          clearValue=""
-                          placeholder="Selecione (opcional)"
-                          className="h-9 min-h-[36px] text-xs py-1"
-                        />
-                        {contas.length === 0 ? (
-                          <p className="text-[11px] text-slate-400">
-                            Nenhuma conta cadastrada. Crie em "Contas".
-                          </p>
-                        ) : (
-                          <p className="text-[11px] text-slate-400">
-                            {selectedCentro?.tipo === 'Receita'
-                              ? 'Contas do tipo Receita aparecem primeiro.'
-                              : 'Contas do tipo Despesa aparecem primeiro.'}
-                          </p>
-                        )}
+
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <div className="flex items-center justify-between">
+                            <Label
+                              htmlFor="lanc-conta"
+                              className="text-xs font-semibold text-slate-700"
+                            >
+                              Conta
+                            </Label>
+                            <button
+                              type="button"
+                              onClick={() => setConsultarContasOpen(true)}
+                              className="text-[11px] text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1"
+                            >
+                              <SearchCheck className="w-3 h-3" />
+                              Consultar Contas
+                            </button>
+                          </div>
+                          <SeletorPlanoContaCombobox
+                            id="lanc-conta"
+                            value={lancForm.conta}
+                            onValueChange={(val) => setLancField('conta', val)}
+                            contas={contasOrdenadas}
+                            empresaAtivaId={effectiveEmpresaId}
+                            allowClear
+                            emptyLabel="Nenhuma conta"
+                            clearValue=""
+                            placeholder="Selecione (opcional)"
+                            className="h-9 min-h-[36px] text-xs py-1"
+                          />
+                          {contas.length === 0 ? (
+                            <p className="text-[11px] text-slate-400">
+                              Nenhuma conta cadastrada. Crie em "Contas".
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-slate-400">
+                              {selectedCentro?.tipo === 'Receita'
+                                ? 'Contas do tipo Receita aparecem primeiro.'
+                                : 'Contas do tipo Despesa aparecem primeiro.'}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label
+                            htmlFor="lanc-descricao"
+                            className="text-xs font-semibold text-slate-700"
+                          >
+                            Descrição
+                          </Label>
+                          <Textarea
+                            id="lanc-descricao"
+                            placeholder="Ex: Campanha Google Ads, Salários Janeiro"
+                            value={lancForm.descricao}
+                            onChange={(e) => setLancField('descricao', e.target.value)}
+                            className="min-h-[80px] text-xs resize-y"
+                          />
+                        </div>
+
+                        <div className="sm:col-span-2 flex items-center gap-2 pt-1">
+                          <Checkbox
+                            id="lanc-concluido"
+                            checked={lancForm.concluido}
+                            onCheckedChange={(val) => setLancField('concluido', val === true)}
+                          />
+                          <Label
+                            htmlFor="lanc-concluido"
+                            className="text-xs font-semibold text-slate-700 cursor-pointer"
+                          >
+                            Concluído
+                          </Label>
+                        </div>
                       </div>
 
-                      <div className="space-y-1.5 sm:col-span-2">
-                        <Label
-                          htmlFor="lanc-descricao"
-                          className="text-xs font-semibold text-slate-700"
+                      <div className="flex justify-end">
+                        <Button
+                          type="submit"
+                          disabled={savingLanc}
+                          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
                         >
-                          Descrição
-                        </Label>
-                        <Textarea
-                          id="lanc-descricao"
-                          placeholder="Ex: Campanha Google Ads, Salários Janeiro"
-                          value={lancForm.descricao}
-                          onChange={(e) => setLancField('descricao', e.target.value)}
-                          className="min-h-[80px] text-xs resize-y"
-                        />
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          {savingLanc ? 'Salvando...' : 'Adicionar Lançamento'}
+                        </Button>
                       </div>
-
-                      <div className="sm:col-span-2 flex items-center gap-2 pt-1">
-                        <Checkbox
-                          id="lanc-concluido"
-                          checked={lancForm.concluido}
-                          onCheckedChange={(val) => setLancField('concluido', val === true)}
-                        />
-                        <Label
-                          htmlFor="lanc-concluido"
-                          className="text-xs font-semibold text-slate-700 cursor-pointer"
-                        >
-                          Concluído
-                        </Label>
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button
-                        type="submit"
-                        disabled={savingLanc}
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
-                      >
-                        <Plus className="w-4 h-4 mr-1.5" />
-                        {savingLanc ? 'Salvando...' : 'Adicionar Lançamento'}
-                      </Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
+                    </form>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Tabela de Lançamentos */}
               <Card className="bg-white border-slate-200 shadow-xs">
@@ -1831,24 +1946,32 @@ export default function Centros() {
                                 </td>
                                 <td className="py-3 px-4 text-right">
                                   <div className="flex items-center justify-end gap-1.5">
-                                    <Button
-                                      onClick={() => openEditLanc(l)}
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                      title="Editar lançamento"
-                                    >
-                                      <Pencil className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button
-                                      onClick={() => confirmDeleteLanc(l)}
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                      title="Excluir lançamento"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
+                                    {!isCliente ? (
+                                      <>
+                                        <Button
+                                          onClick={() => openEditLanc(l)}
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                          title="Editar lançamento"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                        </Button>
+                                        <Button
+                                          onClick={() => confirmDeleteLanc(l)}
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                          title="Excluir lançamento"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                      </>
+                                    ) : (
+                                      <span className="text-[11px] text-slate-400 italic">
+                                        Somente visualização
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
                               </tr>

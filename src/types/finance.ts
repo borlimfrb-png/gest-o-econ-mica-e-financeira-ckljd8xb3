@@ -236,6 +236,7 @@ export interface TipoDespesaRecord extends RecordModel {
   codigo?: string
   nome: string
   descricao?: string
+  ordem?: number | null
   user: string
   empresa?: string
   expand?: {

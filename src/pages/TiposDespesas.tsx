@@ -28,7 +28,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Tags, Plus, Pencil, Trash2, AlertCircle } from 'lucide-react'
+import { Tags, Plus, Pencil, Trash2, AlertCircle, GripVertical, Check, Loader2 } from 'lucide-react'
+import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
 interface TipoDespesaFormData {
@@ -43,6 +44,7 @@ export default function TiposDespesas() {
   const { toast } = useToast()
   const { selectedEmpresaId, isGrupoAtivo, grupoAtivo } = useFilter()
   const { user } = useAuth()
+  const isCliente = user?.role === 'cliente'
   const effectiveEmpresaId = selectedEmpresaId || user?.empresa || ''
 
   // Desagrega empresas do grupo para busca segura e sem duplicidades
@@ -56,6 +58,12 @@ export default function TiposDespesas() {
   const [tipos, setTipos] = useState<TipoDespesaRecord[]>([])
   const [contagemLancamentos, setContagemLancamentos] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+
+  // Drag & Drop reordenação
+  const [arrastandoTipoId, setArrastandoTipoId] = useState<string | null>(null)
+  const [indiceSoltarEm, setIndiceSoltarEm] = useState<number | null>(null)
+  const [salvandoOrdemTipos, setSalvandoOrdemTipos] = useState(false)
+  const [ordemSalvaSucesso, setOrdemSalvaSucesso] = useState(false)
 
   // Form criação
   const [form, setForm] = useState<TipoDespesaFormData>(EMPTY_FORM)
@@ -168,6 +176,7 @@ export default function TiposDespesas() {
   }
 
   const openEdit = (t: TipoDespesaRecord) => {
+    if (isCliente) return
     setEditing(t)
     setForm({ nome: t.nome, descricao: t.descricao || '' })
     setErrors({})
@@ -176,7 +185,7 @@ export default function TiposDespesas() {
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editing || !validate(form)) return
+    if (isCliente || !editing || !validate(form)) return
     setSaving(true)
     try {
       await tiposDespesaService.update(editing.id, {
@@ -198,6 +207,7 @@ export default function TiposDespesas() {
   }
 
   const confirmDelete = (t: TipoDespesaRecord) => {
+    if (isCliente) return
     setToDelete(t)
     setDeleteOpen(true)
   }
@@ -230,6 +240,82 @@ export default function TiposDespesas() {
     [contagemLancamentos],
   )
 
+  const tiposOrdenados = useMemo(() => {
+    return [...tipos].sort((a, b) => {
+      const ordA = a.ordem != null ? a.ordem : 999999
+      const ordB = b.ordem != null ? b.ordem : 999999
+      if (ordA !== ordB) return ordA - ordB
+      return (a.nome || '').localeCompare(b.nome || '')
+    })
+  }, [tipos])
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    if (isCliente || salvandoOrdemTipos) {
+      e.preventDefault()
+      return
+    }
+    setArrastandoTipoId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+  }
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (isCliente || salvandoOrdemTipos) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (indiceSoltarEm !== index) {
+      setIndiceSoltarEm(index)
+    }
+  }
+
+  const handleDragLeave = () => {
+    if (isCliente) return
+    setIndiceSoltarEm(null)
+  }
+
+  const handleSoltar = async (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    setIndiceSoltarEm(null)
+    if (isCliente || salvandoOrdemTipos) return
+
+    const draggedId = arrastandoTipoId || e.dataTransfer.getData('text/plain')
+    setArrastandoTipoId(null)
+    if (!draggedId) return
+
+    const currentIndex = tiposOrdenados.findIndex((t) => t.id === draggedId)
+    if (currentIndex === -1 || currentIndex === dropIndex) return
+
+    const novaLista = [...tiposOrdenados]
+    const [removido] = novaLista.splice(currentIndex, 1)
+    novaLista.splice(dropIndex, 0, removido)
+
+    // Otimista
+    setTipos(novaLista)
+    setSalvandoOrdemTipos(true)
+
+    try {
+      const idsOrdenados = novaLista.map((t) => t.id)
+      await tiposDespesaService.reordenar(idsOrdenados)
+      setOrdemSalvaSucesso(true)
+      setTimeout(() => setOrdemSalvaSucesso(false), 2500)
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      toast({
+        title: 'Ordem atualizada',
+        description: 'A nova ordem dos tipos de despesa foi salva com sucesso.',
+      })
+    } catch (err: any) {
+      console.error('Erro ao reordenar tipos de despesa:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao salvar ordem',
+        description: err?.message || 'Não foi possível salvar a nova ordem.',
+      })
+      await loadData()
+    } finally {
+      setSalvandoOrdemTipos(false)
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Cabeçalho */}
@@ -242,91 +328,113 @@ export default function TiposDespesas() {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         {/* ============ COLUNA ESQUERDA: FORMULÁRIO ============ */}
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardHeader className="pb-3 border-b border-slate-100">
-            <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
-              <Tags className="w-4 h-4 text-blue-600" />
-              Novo Tipo de Despesa
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Crie um tipo para classificar lançamentos de despesa nos centros de custo.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <form onSubmit={handleCreate} className="space-y-3">
-              {errors.general && (
-                <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800 py-2">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-xs font-medium">
-                    {errors.general}
-                  </AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="tipo-nome" className="text-xs font-semibold text-slate-700">
-                  Nome *
-                </Label>
-                <Input
-                  id="tipo-nome"
-                  placeholder="Ex: Aluguel, Folha de Pagamento, Impostos, Marketing"
-                  value={form.nome}
-                  onChange={(e) => setField('nome', e.target.value)}
-                  className={`h-9 text-xs ${errors.nome ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                />
-                {errors.nome && (
-                  <p className="text-[11px] text-red-600 font-medium">{errors.nome}</p>
+        {!isCliente && (
+          <Card className="bg-white border-slate-200 shadow-xs">
+            <CardHeader className="pb-3 border-b border-slate-100">
+              <CardTitle className="text-sm font-bold text-[#0B1F3A] flex items-center gap-2">
+                <Tags className="w-4 h-4 text-blue-600" />
+                Novo Tipo de Despesa
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Crie um tipo para classificar lançamentos de despesa nos centros de custo.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <form onSubmit={handleCreate} className="space-y-3">
+                {errors.general && (
+                  <Alert
+                    variant="destructive"
+                    className="bg-red-50 border-red-200 text-red-800 py-2"
+                  >
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-xs font-medium">
+                      {errors.general}
+                    </AlertDescription>
+                  </Alert>
                 )}
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="tipo-descricao" className="text-xs font-semibold text-slate-700">
-                  Descrição
-                </Label>
-                <Input
-                  id="tipo-descricao"
-                  placeholder="Opcional"
-                  value={form.descricao}
-                  onChange={(e) => setField('descricao', e.target.value)}
-                  className="h-9 text-xs"
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  disabled={saving}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
-                >
-                  <Plus className="w-4 h-4 mr-1.5" />
-                  {saving ? 'Salvando...' : 'Salvar Tipo'}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tipo-nome" className="text-xs font-semibold text-slate-700">
+                    Nome *
+                  </Label>
+                  <Input
+                    id="tipo-nome"
+                    placeholder="Ex: Aluguel, Folha de Pagamento, Impostos, Marketing"
+                    value={form.nome}
+                    onChange={(e) => setField('nome', e.target.value)}
+                    className={`h-9 text-xs ${errors.nome ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  />
+                  {errors.nome && (
+                    <p className="text-[11px] text-red-600 font-medium">{errors.nome}</p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tipo-descricao" className="text-xs font-semibold text-slate-700">
+                    Descrição
+                  </Label>
+                  <Input
+                    id="tipo-descricao"
+                    placeholder="Opcional"
+                    value={form.descricao}
+                    onChange={(e) => setField('descricao', e.target.value)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    disabled={saving}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs h-9 shadow-xs"
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    {saving ? 'Salvando...' : 'Salvar Tipo'}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ============ COLUNA DIREITA: TABELA ============ */}
-        <Card className="bg-white border-slate-200 shadow-xs">
-          <CardHeader className="pb-3 border-b border-slate-100">
-            <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-              Tipos Cadastrados ({tipos.length})
-            </CardTitle>
-            <CardDescription className="text-xs">
-              {totalVinculados} lançamento(s) vinculado(s) no total.
-            </CardDescription>
+        <Card className={`bg-white border-slate-200 shadow-xs ${isCliente ? 'xl:col-span-2' : ''}`}>
+          <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                Tipos Cadastrados ({tiposOrdenados.length})
+              </CardTitle>
+              <CardDescription className="text-xs">
+                {totalVinculados} lançamento(s) vinculado(s) no total.
+                {!isCliente && ' Arraste pelo cabo para reordenar.'}
+              </CardDescription>
+            </div>
+            {salvandoOrdemTipos && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                Salvando ordem...
+              </span>
+            )}
+            {ordemSalvaSucesso && (
+              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1">
+                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                Ordem salva
+              </span>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
               <div className="py-12 flex justify-center items-center">
                 <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : tipos.length === 0 ? (
+            ) : tiposOrdenados.length === 0 ? (
               <div className="py-12 text-center text-xs text-slate-500">
-                Nenhum tipo de despesa cadastrado. Use o formulário ao lado para criar o primeiro.
+                Nenhum tipo de despesa cadastrado.
+                {!isCliente && ' Use o formulário ao lado para criar o primeiro.'}
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <DoubleHorizontalScroll>
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                      <th className="py-3 px-4 w-10 text-center">#</th>
                       <th className="py-3 px-4">Código</th>
                       <th className="py-3 px-4">Nome</th>
                       <th className="py-3 px-4">Descrição</th>
@@ -335,10 +443,36 @@ export default function TiposDespesas() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {tipos.map((t) => {
+                    {tiposOrdenados.map((t, idx) => {
                       const count = contagemLancamentos[t.id] || 0
+                      const isDragging = arrastandoTipoId === t.id
+                      const isDropTarget = indiceSoltarEm === idx && !isDragging
                       return (
-                        <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
+                        <tr
+                          key={t.id}
+                          draggable={!isCliente && !salvandoOrdemTipos}
+                          onDragStart={(e) => handleDragStart(e, t.id)}
+                          onDragOver={(e) => handleDragOver(e, idx)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleSoltar(e, idx)}
+                          className={`hover:bg-slate-50/80 transition-colors ${
+                            isDragging ? 'opacity-40 bg-blue-50/40' : ''
+                          } ${isDropTarget ? 'border-t-2 border-blue-500 bg-blue-50/30' : ''}`}
+                        >
+                          <td className="py-3 px-3 text-center text-slate-400">
+                            {!isCliente ? (
+                              <div
+                                className="cursor-grab active:cursor-grabbing inline-flex items-center justify-center p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-700"
+                                title="Clique e arraste para reordenar"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </div>
+                            ) : (
+                              <span className="text-[11px] font-mono text-slate-400">
+                                {idx + 1}
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3 px-4">
                             <span className="font-mono font-semibold text-blue-700 text-[11px]">
                               {t.codigo || '—'}
@@ -372,24 +506,32 @@ export default function TiposDespesas() {
                           </td>
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                onClick={() => openEdit(t)}
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                title="Editar tipo"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </Button>
-                              <Button
-                                onClick={() => confirmDelete(t)}
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
-                                title="Excluir tipo"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
+                              {!isCliente ? (
+                                <>
+                                  <Button
+                                    onClick={() => openEdit(t)}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                    title="Editar tipo"
+                                  >
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </Button>
+                                  <Button
+                                    onClick={() => confirmDelete(t)}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                    title="Excluir tipo"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                </>
+                              ) : (
+                                <span className="text-[11px] text-slate-400 italic">
+                                  Somente visualização
+                                </span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -397,7 +539,7 @@ export default function TiposDespesas() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              </DoubleHorizontalScroll>
             )}
           </CardContent>
         </Card>

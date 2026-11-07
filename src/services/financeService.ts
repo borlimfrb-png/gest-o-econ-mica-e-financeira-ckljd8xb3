@@ -815,13 +815,31 @@ export interface QueryEmpresasOptions {
 export const centrosService = {
   async getAll(options?: QueryEmpresasOptions): Promise<CentroRecord[]> {
     const params: Record<string, unknown> = {
-      sort: 'nome',
+      sort: 'sequencia,nome',
     }
     const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
     if (filter) {
       params.filter = filter
     }
     return await pb.collection('centros').getFullList<CentroRecord>(params)
+  },
+
+  /**
+   * Persiste a nova ordenação dos centros de custo (drag & drop).
+   * Salva em duas passes com bases de numeração separadas para evitar
+   * conflitos temporários durante a atualização.
+   */
+  async reordenar(orderedIds: string[]): Promise<void> {
+    let tempBase = 1000000
+    for (const id of orderedIds) {
+      await pb.collection('centros').update(id, { sequencia: tempBase })
+      tempBase += 1000
+    }
+    let seq = 10
+    for (const id of orderedIds) {
+      await pb.collection('centros').update(id, { sequencia: seq })
+      seq += 10
+    }
   },
 
   async create(data: {
@@ -963,7 +981,7 @@ export const lancamentosCentroService = {
 export const tiposDespesaService = {
   async getAll(options?: QueryEmpresasOptions): Promise<TipoDespesaRecord[]> {
     const params: Record<string, unknown> = {
-      sort: 'nome',
+      sort: 'ordem,nome',
     }
     const filter = buildEmpresasFilter(options?.empresaId, options?.empresasIds)
     if (filter) {
@@ -984,14 +1002,33 @@ export const tiposDespesaService = {
     return 'TD-' + String(maxN + 1).padStart(3, '0')
   },
 
+  /**
+   * Persiste a nova ordenação dos tipos de despesa (drag & drop).
+   * Salva em duas passes com bases de numeração separadas.
+   */
+  async reordenar(orderedIds: string[]): Promise<void> {
+    let tempBase = 1000000
+    for (const id of orderedIds) {
+      await pb.collection('tipos_despesa').update(id, { ordem: tempBase })
+      tempBase += 1000
+    }
+    let ordem = 10
+    for (const id of orderedIds) {
+      await pb.collection('tipos_despesa').update(id, { ordem })
+      ordem += 10
+    }
+  },
+
   async create(data: {
     nome: string
     descricao?: string
+    ordem?: number | null
     empresa?: string
   }): Promise<TipoDespesaRecord> {
     return await pb.collection('tipos_despesa').create<TipoDespesaRecord>({
       nome: data.nome.trim(),
       descricao: data.descricao?.trim() || undefined,
+      ordem: data.ordem !== undefined && data.ordem !== null ? Number(data.ordem) : null,
       empresa: data.empresa || undefined,
       user: currentUserId(),
     } as any)
@@ -999,7 +1036,7 @@ export const tiposDespesaService = {
 
   async update(
     id: string,
-    data: Partial<Pick<TipoDespesaRecord, 'nome' | 'descricao' | 'empresa'>>,
+    data: Partial<Pick<TipoDespesaRecord, 'nome' | 'descricao' | 'ordem' | 'empresa'>>,
   ): Promise<TipoDespesaRecord> {
     return await pb.collection('tipos_despesa').update<TipoDespesaRecord>(id, data)
   },
