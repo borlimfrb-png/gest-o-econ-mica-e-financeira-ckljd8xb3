@@ -52,6 +52,7 @@ import {
 import {
   FolderTree,
   Plus,
+  GripVertical,
   Pencil,
   Trash2,
   AlertCircle,
@@ -192,6 +193,11 @@ export default function PlanoContas() {
   const [filtroConta, setFiltroConta] = useState<string>('todos')
   const [filtroCentro, setFiltroCentro] = useState<string>('todos')
 
+  // Drag & drop de contas na listagem (mesmo mecanismo da tela /contas)
+  const [arrastandoContaId, setArrastandoContaId] = useState<string | null>(null)
+  const [indiceSoltarEm, setIndiceSoltarEm] = useState<number | null>(null)
+  const [reordenando, setReordenando] = useState(false)
+
   const loadData = async () => {
     try {
       setLoading(true)
@@ -296,7 +302,7 @@ export default function PlanoContas() {
   // Itens filtrados por busca (código, nome da conta, nome do centro) e dropdowns
   const itensFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
-    return itens.filter((i) => {
+    const filtrados = itens.filter((i) => {
       // Filtro por Conta
       if (filtroConta !== 'todos' && i.conta !== filtroConta) {
         return false
@@ -332,6 +338,16 @@ export default function PlanoContas() {
         codTipo.includes(q) ||
         desc.includes(q)
       )
+    })
+
+    // Exibe na ordem manual das contas (campo `ordem`), mesma ordem usada
+    // pela DRE Gerencial e pela tela /contas.
+    const ordemDe = (id: string) => contaMap.get(id)?.ordem ?? Number.MAX_SAFE_INTEGER
+    return filtrados.sort((a, b) => {
+      const oa = ordemDe(a.conta)
+      const ob = ordemDe(b.conta)
+      if (oa !== ob) return oa - ob
+      return (a.codigo || '').localeCompare(b.codigo || '')
     })
   }, [itens, busca, filtroConta, filtroCentro, contaMap, centroMap, tipoMap])
 
@@ -514,6 +530,61 @@ export default function PlanoContas() {
   const confirmDelete = (i: PlanoContaRecord) => {
     setToDelete(i)
     setDeleteOpen(true)
+  }
+
+  // Soltar uma conta arrastada sobre outra linha: reordena de verdade
+  // (contasService.reordenar, campo `ordem` persistido) e, se a linha alvo
+  // pertence a outro centro de custo, move a conta para esse centro.
+  const handleSoltarConta = async (indiceAlvo: number) => {
+    const idArrastado = arrastandoContaId
+    setArrastandoContaId(null)
+    setIndiceSoltarEm(null)
+    if (!idArrastado || isCliente || reordenando) return
+
+    const contaArrastada = contaMap.get(idArrastado)
+    const itemAlvo = itensFiltrados[indiceAlvo]
+    if (!contaArrastada || !itemAlvo || itemAlvo.conta === idArrastado) return
+
+    // Ordem global (todas as contas carregadas, fora dos filtros) para não
+    // perder contas que estejam escondidas pelo filtro ativo.
+    const ordemDe = (id: string) => contaMap.get(id)?.ordem ?? Number.MAX_SAFE_INTEGER
+    const idsGlobais = [...contas].sort((a, b) => ordemDe(a.id) - ordemDe(b.id)).map((c) => c.id)
+    const posOrigem = idsGlobais.indexOf(idArrastado)
+    const contaAlvo = contaMap.get(itemAlvo.conta)
+    if (posOrigem < 0 || !contaAlvo) return
+    const posAlvo = idsGlobais.indexOf(itemAlvo.conta)
+    idsGlobais.splice(posOrigem, 1)
+    idsGlobais.splice(posAlvo, 0, idArrastado)
+
+    const centroOrigem = contaArrastada.centro || null
+    const centroAlvo = contaAlvo.centro || null
+    const movida = centroAlvo !== centroOrigem
+
+    setReordenando(true)
+    try {
+      await contasService.reordenar(idsGlobais)
+      if (movida) {
+        await contasService.update(idArrastado, { centro: centroAlvo })
+      }
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+      toast({
+        title: movida ? 'Conta movida e reordenada' : 'Ordem atualizada',
+        description: movida
+          ? `"${contaArrastada.nome}" foi movida para o centro de custo de "${contaAlvo.nome}" e reordenada.`
+          : `"${contaArrastada.nome}" agora aparece na posição de "${contaAlvo.nome}".`,
+      })
+      loadData()
+    } catch (err: any) {
+      console.error(err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao reordenar',
+        description: err?.message || 'Não foi possível salvar a nova ordem da conta.',
+      })
+    } finally {
+      setReordenando(false)
+    }
   }
 
   const handleDelete = async () => {
@@ -828,7 +899,7 @@ export default function PlanoContas() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+      <div className="space-y-6">
         {/* ============ COLUNA ESQUERDA: FORMULÁRIO ============ */}
         <Card className="bg-white border-slate-200 shadow-xs">
           <CardHeader className="pb-3 border-b border-slate-100">
@@ -841,7 +912,10 @@ export default function PlanoContas() {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
-            <form onSubmit={handleCreate} className="space-y-3">
+            <form
+              onSubmit={handleCreate}
+              className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 items-start"
+            >
               {errors.general && (
                 <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800 py-2">
                   <AlertCircle className="h-4 w-4 text-red-600" />
@@ -989,7 +1063,7 @@ export default function PlanoContas() {
                 />
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end md:col-span-2 xl:col-span-3">
                 <Button
                   type="submit"
                   disabled={saving}
@@ -1145,6 +1219,7 @@ export default function PlanoContas() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                      <th className="py-3 px-2 w-8" aria-label="Reordenar"></th>
                       <th className="py-3 px-4">Código</th>
                       <th className="py-3 px-4">Cód. Empresa</th>
                       <th className="py-3 px-4">Conta</th>
@@ -1155,7 +1230,7 @@ export default function PlanoContas() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {itensFiltrados.map((i) => {
+                    {itensFiltrados.map((i, idx) => {
                       const conta = contaMap.get(i.conta)
                       const centro = centroMap.get(i.centro)
                       const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
@@ -1163,12 +1238,55 @@ export default function PlanoContas() {
                       return (
                         <tr
                           key={i.id}
+                          draggable={!isCliente && !reordenando}
+                          onDragStart={(e) => {
+                            if (isCliente || reordenando) {
+                              e.preventDefault()
+                              return
+                            }
+                            setArrastandoContaId(i.conta)
+                            e.dataTransfer.effectAllowed = 'move'
+                            try {
+                              e.dataTransfer.setData('text/plain', i.conta)
+                            } catch {
+                              /* navegador sem dataTransfer */
+                            }
+                          }}
+                          onDragOver={(e) => {
+                            if (isCliente || !arrastandoContaId) return
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setIndiceSoltarEm((atual) => (atual === idx ? atual : idx))
+                          }}
+                          onDragLeave={() =>
+                            setIndiceSoltarEm((atual) => (atual === idx ? null : atual))
+                          }
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            handleSoltarConta(idx)
+                          }}
+                          onDragEnd={() => {
+                            setArrastandoContaId(null)
+                            setIndiceSoltarEm(null)
+                          }}
                           className={`transition-colors align-top ${
                             isCadastrada
                               ? 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-l-amber-500'
                               : 'hover:bg-slate-50/80'
-                          }`}
+                          } ${!isCliente ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                            indiceSoltarEm === idx ? 'ring-2 ring-blue-400 bg-blue-50/60' : ''
+                          } ${arrastandoContaId === i.conta ? 'opacity-50' : ''}`}
                         >
+                          <td className="py-3 px-2 align-middle">
+                            {!isCliente && (
+                              <span
+                                className="inline-flex items-center justify-center w-6 h-6 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                                title="Arraste para reordenar a conta ou soltar sobre outro centro de custo"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3 px-4">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <button
