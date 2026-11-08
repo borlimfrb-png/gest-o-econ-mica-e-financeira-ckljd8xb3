@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ContaRecord, CentroRecord, TipoConta, ClassificacaoDre } from '@/types/finance'
+import type {
+  ContaRecord,
+  CentroRecord,
+  TipoConta,
+  ClassificacaoDre,
+  TipoDespesaRecord,
+} from '@/types/finance'
 import { CLASSIFICACOES_DRE } from '@/types/finance'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -59,6 +65,7 @@ export interface ContaEdicaoForm {
   centro: string
   descricao: string
   classificacao_dre: ClassificacaoDre | ''
+  tipo_despesa?: string
   nao_exibir_dre: boolean
   nao_exibir_fluxo_caixa: boolean
   nao_exibir_em_nada: boolean
@@ -77,6 +84,7 @@ interface DialogEditarContaProps {
   conta: ContaRecord | null
   contas: ContaRecord[]
   centros: CentroRecord[]
+  tiposDespesa?: TipoDespesaRecord[]
   isCliente: boolean
   saving: boolean
   errors: { nome?: string; general?: string }
@@ -104,6 +112,7 @@ export function DialogEditarConta({
   conta,
   contas,
   centros,
+  tiposDespesa,
   isCliente,
   saving,
   errors,
@@ -424,6 +433,42 @@ export function DialogEditarConta({
                 </Select>
               </div>
             </div>
+
+            {tiposDespesa && tiposDespesa.length > 0 && (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="edit-conta-tipo-despesa"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Tipo de Despesa (Vínculo do Plano de Contas)
+                </Label>
+                <Select
+                  value={form.tipo_despesa || 'nenhum'}
+                  onValueChange={(val) =>
+                    onFieldChange('tipo_despesa', val === 'nenhum' ? '' : val)
+                  }
+                >
+                  <SelectTrigger id="edit-conta-tipo-despesa" className="h-10 text-sm bg-white">
+                    <SelectValue placeholder="Selecione o tipo de despesa (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nenhum" className="text-sm text-slate-400">
+                      Nenhum / Não atribuído
+                    </SelectItem>
+                    {tiposDespesa.map((td) => (
+                      <SelectItem key={td.id} value={td.id} className="text-sm">
+                        {td.codigo ? `[${td.codigo}] ` : ''}
+                        {td.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-slate-400">
+                  Associa a conta a uma categoria de despesa fixa ou variável para relatórios
+                  gerenciais.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label

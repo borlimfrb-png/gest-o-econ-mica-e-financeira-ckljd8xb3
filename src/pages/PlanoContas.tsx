@@ -4,6 +4,7 @@ import {
   centrosService,
   empresasService,
   planoContasService,
+  tiposDespesaService,
 } from '@/services/financeService'
 import type {
   ContaRecord,
@@ -12,9 +13,11 @@ import type {
   TipoConta,
   ClassificacaoDre,
   PlanoContaRecord,
+  TipoDespesaRecord,
 } from '@/types/finance'
 import { DialogEditarConta } from '@/components/contas/DialogEditarConta'
 import type { ContaEdicaoForm } from '@/components/contas/DialogEditarConta'
+import { ModalQuickRegisterConta } from '@/components/ModalQuickRegisterConta'
 import { ModalCopiarModeloPadrao } from '@/components/ModalCopiarModeloPadrao'
 import { ModalImportarPlanoContas } from '@/components/ModalImportarPlanoContas'
 import { ModalCopiarPlanoEmpresas } from '@/components/ModalCopiarPlanoEmpresas'
@@ -107,6 +110,7 @@ export default function PlanoContas() {
   const [centros, setCentros] = useState<CentroRecord[]>([])
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
   const [planoContasRecords, setPlanoContasRecords] = useState<PlanoContaRecord[]>([])
+  const [tiposDespesa, setTiposDespesa] = useState<TipoDespesaRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   // Filtros
@@ -114,6 +118,7 @@ export default function PlanoContas() {
   const [filtroCentro, setFiltroCentro] = useState<string>('todos')
 
   // Modais de ações
+  const [modalNovaContaOpen, setModalNovaContaOpen] = useState(false)
   const [modalModeloPadraoOpen, setModalModeloPadraoOpen] = useState(false)
   const [modalImportarOpen, setModalImportarOpen] = useState(false)
   const [modalCopiarEmpresasOpen, setModalCopiarEmpresasOpen] = useState(false)
@@ -145,11 +150,12 @@ export default function PlanoContas() {
     setLoading(true)
     try {
       const opts = selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined
-      const [contasDiretas, centrosList, empresasList, planosList] = await Promise.all([
+      const [contasDiretas, centrosList, empresasList, planosList, tiposList] = await Promise.all([
         contasService.getAll(opts),
         centrosService.getAll(opts),
         empresasService.getAll(),
         planoContasService.getAll(opts).catch(() => []),
+        tiposDespesaService.getAll(opts).catch(() => []),
       ])
 
       // Consolidação de contas: se há vínculos em plano_contas para a empresa ativa,
@@ -172,6 +178,7 @@ export default function PlanoContas() {
       setCentros(centrosList)
       setEmpresas(empresasList)
       setPlanoContasRecords(planosList)
+      setTiposDespesa(tiposList)
       setOrdemIds(null)
       setCentroOverride({})
     } catch (err: any) {
@@ -206,6 +213,7 @@ export default function PlanoContas() {
   useRealtime('contas', loadData)
   useRealtime('centros_custos', loadData)
   useRealtime('plano_contas', loadData)
+  useRealtime('tipos_despesa', loadData)
 
   const selectedEmpresa = useMemo(
     () => empresas.find((e) => e.id === selectedEmpresaId) || null,
@@ -223,6 +231,12 @@ export default function PlanoContas() {
     for (const ce of centros) m.set(ce.id, ce)
     return m
   }, [centros])
+
+  const tipoDespesaMap = useMemo(() => {
+    const m = new Map<string, TipoDespesaRecord>()
+    for (const td of tiposDespesa) m.set(td.id, td)
+    return m
+  }, [tiposDespesa])
 
   // Centros ordenados segundo a regra compararCentroTipoConta (mesma da DRE Gerencial)
   const centrosOrdenados = useMemo(() => {
@@ -256,6 +270,24 @@ export default function PlanoContas() {
     }
     return map
   }, [planoContasRecords])
+
+  // Mapa de vínculo conta -> TipoDespesaRecord a partir de plano_contas
+  const tipoDespesaPorConta = useMemo(() => {
+    const map = new Map<string, TipoDespesaRecord>()
+    for (const p of planoContasRecords) {
+      const contaId = p.conta || p.expand?.conta?.id
+      if (!contaId) continue
+      if (p.expand?.tipo_despesa) {
+        map.set(contaId, p.expand.tipo_despesa as TipoDespesaRecord)
+      } else if (p.tipo_despesa) {
+        const td = tipoDespesaMap.get(p.tipo_despesa)
+        if (td) {
+          map.set(contaId, td)
+        }
+      }
+    }
+    return map
+  }, [planoContasRecords, tipoDespesaMap])
 
   // Contas com centro efetivo (vínculo plano_contas prioritário com fallback para conta.centro)
   // e suporte ao override otimista do drag & drop
@@ -516,6 +548,7 @@ export default function PlanoContas() {
   const openEdit = (c: ContaRecord) => {
     if (isCliente) return
     setEditingConta(c)
+    const tdVinculado = tipoDespesaPorConta.get(c.id)
     setEditForm({
       nome: c.nome,
       tipo: c.tipo,
@@ -523,6 +556,7 @@ export default function PlanoContas() {
       centro: c.centro || '',
       descricao: c.descricao || '',
       classificacao_dre: c.classificacao_dre || '',
+      tipo_despesa: tdVinculado?.id || '',
       nao_exibir_dre: !!c.nao_exibir_dre,
       nao_exibir_fluxo_caixa: !!c.nao_exibir_fluxo_caixa,
       nao_exibir_em_nada: !!c.nao_exibir_em_nada,
@@ -560,13 +594,23 @@ export default function PlanoContas() {
         nao_exibir_em_nada: editForm.nao_exibir_em_nada,
       })
 
-      // Se houver registro de plano_contas para a conta, atualiza o centro no vínculo também
+      // Se houver registro de plano_contas para a conta, atualiza o centro e tipo_despesa no vínculo também
       const registroPlano = planoContasRecords.find(
         (p) => (p.conta || p.expand?.conta?.id) === editingConta.id,
       )
       if (registroPlano) {
         await planoContasService.update(registroPlano.id, {
           centro: editForm.centro || '',
+          tipo_despesa: editForm.tipo_despesa || '',
+        })
+      } else if (editForm.centro) {
+        // Se ainda não existia vínculo em plano_contas para a empresa ativa, cria agora
+        await planoContasService.create({
+          empresa: selectedEmpresaId || undefined,
+          conta: editingConta.id,
+          centro: editForm.centro,
+          tipo_despesa: editForm.tipo_despesa || undefined,
+          descricao: editForm.descricao.trim() || undefined,
         })
       }
 
@@ -652,6 +696,7 @@ export default function PlanoContas() {
       'Nome da Conta',
       'Tipo',
       'Classificação DRE',
+      'Tipo de Despesa',
       'Grupo',
       'Ordem',
       'Descrição',
@@ -661,6 +706,9 @@ export default function PlanoContas() {
 
     for (const grupo of gruposFiltrados) {
       for (const c of grupo.contas) {
+        const td = tipoDespesaPorConta.get(c.id)
+        const tipoDespesaStr = td ? (td.codigo ? `[${td.codigo}] ${td.nome}` : td.nome) : '—'
+
         linhas.push(
           [
             grupo.sequencia != null ? String(grupo.sequencia) : '—',
@@ -670,6 +718,7 @@ export default function PlanoContas() {
             c.nome,
             c.tipo,
             c.classificacao_dre || '—',
+            tipoDespesaStr,
             c.grupo || '—',
             c.ordem != null ? String(c.ordem) : '—',
             c.descricao || '',
@@ -717,6 +766,17 @@ export default function PlanoContas() {
         <div className="flex flex-wrap items-center gap-2">
           {podeEditar && (
             <>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => setModalNovaContaOpen(true)}
+                className="text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-xs"
+                title="Cadastrar uma nova conta vinculada ao centro de custo"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5" />
+                Nova Conta
+              </Button>
+
               <Button
                 variant="outline"
                 size="sm"
@@ -973,6 +1033,7 @@ export default function PlanoContas() {
                             <th className="py-2 px-3">Nome da Conta</th>
                             <th className="py-2 px-3 w-28">Tipo</th>
                             <th className="py-2 px-3 w-36">Classificação DRE</th>
+                            <th className="py-2 px-3 w-40">Tipo de Despesa</th>
                             <th className="py-2 px-3 w-36">Grupo</th>
                             <th className="py-2 px-3 text-right w-20">Ações</th>
                           </tr>
@@ -1091,6 +1152,25 @@ export default function PlanoContas() {
                                   )}
                                 </td>
 
+                                <td className="py-2 px-3">
+                                  {(() => {
+                                    const td = tipoDespesaPorConta.get(c.id)
+                                    if (td) {
+                                      return (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-[10px] font-medium px-2 py-0.5 bg-slate-50 text-slate-700 border-slate-200 truncate max-w-[150px]"
+                                          title={td.nome}
+                                        >
+                                          {td.codigo ? `[${td.codigo}] ` : ''}
+                                          {td.nome}
+                                        </Badge>
+                                      )
+                                    }
+                                    return <span className="text-[11px] text-slate-400">—</span>
+                                  })()}
+                                </td>
+
                                 <td className="py-2 px-3 text-slate-600 text-xs truncate max-w-xs">
                                   {c.grupo || '—'}
                                 </td>
@@ -1135,6 +1215,35 @@ export default function PlanoContas() {
         </CardContent>
       </Card>
 
+      {/* ============ MODAL RÁPIDO DE NOVA CONTA ============ */}
+      {podeEditar && (
+        <ModalQuickRegisterConta
+          open={modalNovaContaOpen}
+          onOpenChange={setModalNovaContaOpen}
+          centros={centrosOrdenados}
+          tiposDespesas={tiposDespesa}
+          initialCentroId={
+            filtroCentro && filtroCentro !== 'todos' && filtroCentro !== 'sem_centro'
+              ? filtroCentro
+              : undefined
+          }
+          onSuccess={async (novoPlano) => {
+            // Se o novo plano de contas foi criado sem empresa e temos empresa selecionada,
+            // garantimos que o vínculo seja associado à empresa ativa
+            if (novoPlano && selectedEmpresaId && !novoPlano.empresa) {
+              try {
+                await planoContasService.update(novoPlano.id, { empresa: selectedEmpresaId })
+              } catch (err) {
+                console.warn('Aviso ao associar empresa ao plano recém-criado:', err)
+              }
+            }
+            window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+            window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+            await loadData()
+          }}
+        />
+      )}
+
       {/* ============ DIÁLOGO GRANDE DE EDIÇÃO DA CONTA ============ */}
       <DialogEditarConta
         open={editOpen}
@@ -1142,6 +1251,7 @@ export default function PlanoContas() {
         conta={editingConta}
         contas={contas}
         centros={centros}
+        tiposDespesa={tiposDespesa}
         isCliente={isCliente}
         saving={savingEdit}
         errors={editErrors}

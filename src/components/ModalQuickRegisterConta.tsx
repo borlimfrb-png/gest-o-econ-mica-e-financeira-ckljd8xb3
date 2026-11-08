@@ -30,16 +30,18 @@ import { Loader2, Plus, Sparkles } from 'lucide-react'
 interface ModalQuickRegisterContaProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  initialName: string
+  initialName?: string
+  initialCentroId?: string
   centros: CentroRecord[]
   tiposDespesas: TipoDespesaRecord[]
-  onSuccess: (newPlano: PlanoContaRecord) => void
+  onSuccess: (newPlano?: PlanoContaRecord) => void
 }
 
 export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = ({
   open,
   onOpenChange,
-  initialName,
+  initialName = '',
+  initialCentroId,
   centros,
   tiposDespesas,
   onSuccess,
@@ -92,12 +94,14 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
         setGrupo('Despesas Operacionais')
       }
 
-      if (centros.length > 0 && !centroId) {
+      if (initialCentroId && centros.some((c) => c.id === initialCentroId)) {
+        setCentroId(initialCentroId)
+      } else if (centros.length > 0) {
         setCentroId(centros[0].id)
       }
       setTipoDespesaId('')
     }
-  }, [open, initialName, centros])
+  }, [open, initialName, initialCentroId, centros])
 
   // Ajusta grupo padrão quando muda tipo
   const handleTipoChange = (newTipo: TipoConta) => {
