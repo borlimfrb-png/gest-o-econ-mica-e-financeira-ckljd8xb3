@@ -300,6 +300,22 @@ export default function PlanoContas() {
     return map
   }, [centros])
 
+  // Centros na ordem da sequência — mesmo critério da listagem e da DRE
+  // Gerencial (compararCentroTipoConta: sequencia, depois código e nome).
+  // Alimenta o seletor "Visualizar por centro" no topo da listagem.
+  const centrosOrdenadosSequencia = useMemo(() => {
+    const chaveCentro = (c: CentroRecord) => ({
+      codigo: null,
+      nome: c.nome || '',
+      centroNome: c.nome || null,
+      centroCodigo: c.codigo || null,
+      centroSequencia: c.sequencia ?? null,
+    })
+    return [...centros].sort(
+      (a, b) => compararCentroTipoConta(chaveCentro(a), chaveCentro(b)) || (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR'),
+    )
+  }, [centros])
+
   // Itens filtrados por busca (código, nome da conta, nome do centro) e dropdowns
   const itensFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase()
@@ -1159,32 +1175,27 @@ export default function PlanoContas() {
                 />
               </div>
 
-              {/* Filtro por Centro */}
+              {/* Visualizar por centro: filtra a listagem para um centro de custo
+                  por vez ("Todos os centros" restaura a visão completa). Os itens
+                  seguem a mesma ordem da sequência usada na listagem. */}
               <div className="relative">
+                <Building2 className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <Select value={filtroCentro} onValueChange={setFiltroCentro}>
-                  <SelectTrigger className="h-8 text-xs bg-white">
+                  <SelectTrigger
+                    className="h-8 text-xs bg-white pl-8"
+                    title="Visualizar o plano de contas de um centro de custo por vez"
+                  >
                     <SelectValue placeholder="Todos os centros" />
                   </SelectTrigger>
                   <SelectContent className="max-h-72">
                     <SelectItem value="todos" className="text-xs font-medium">
                       Todos os centros
                     </SelectItem>
-                    {TIPOS_CENTRO.map((tipo) => {
-                      const lista = centrosPorTipo.get(tipo) || []
-                      if (lista.length === 0) return null
-                      return (
-                        <SelectGroup key={tipo}>
-                          <SelectLabel className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            {tipo}
-                          </SelectLabel>
-                          {lista.map((c) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">
-                              {c.codigo || '—'} - {c.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      )
-                    })}
+                    {centrosOrdenadosSequencia.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.codigo || '—'} - {c.nome} ({c.tipo})
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1192,6 +1203,598 @@ export default function PlanoContas() {
 
             {(busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos') && (
               <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Filter className="w-3 h-3 text-blue-600" />
+                  Filtros ativos: exibindo {itensFiltrados.length} de {itens.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusca('')
+                    setFiltroConta('todos')
+                    setFiltroCentro('todos')
+                  }}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                >
+                  Limpar filtros
+                </button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : itens.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                  <FolderTree className="w-7 h-7 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhum vínculo cadastrado</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                  Use o formulário ao lado para criar o primeiro vínculo do seu plano de contas.
+                </p>
+              </div>
+            ) : itensFiltrados.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-500">
+                Nenhum item encontrado para a busca.
+              </div>
+            ) : (
+              <DoubleHorizontalScroll>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                      <th className="py-3 px-2 w-8" aria-label="Reordenar"></th>
+                      <th className="py-3 px-4">Código</th>
+                      <th className="py-3 px-4">Cód. Empresa</th>
+                      <th className="py-3 px-4">Conta</th>
+                      <th className="py-3 px-4">Centro</th>
+                      <th className="py-3 px-4">Tipo de Despesa</th>
+                      <th className="py-3 px-4">Descrição</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {itensFiltrados.map((i, idx) => {
+                      const conta = contaMap.get(i.conta)
+                      const centro = centroMap.get(i.centro)
+                      const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
+                      const isCadastrada = Boolean(i.id)
+                      return (
+                        <tr
+                          key={i.id}
+                          draggable={!isCliente && !reordenando}
+                          onDragStart={(e) => {
+                            if (isCliente || reordenando) {
+                              e.preventDefault()
+                              return
+                            }
+                            setArrastandoContaId(i.conta)
+                            e.dataTransfer.effectAllowed = 'move'
+                            try {
+                              e.dataTransfer.setData('text/plain', i.conta)
+                            } catch {
+                              /* navegador sem dataTransfer */
+                            }
+            </div>
+
+            {(busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos') && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Filter className="w-3 h-3 text-blue-600" />
+                  Filtros ativos: exibindo {itensFiltrados.length} de {itens.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusca('')
+                    setFiltroConta('todos')
+                    setFiltroCentro('todos')
+                  }}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                >
+                  Limpar filtros
+                </button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : itens.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                  <FolderTree className="w-7 h-7 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhum vínculo cadastrado</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                  Use o formulário ao lado para criar o primeiro vínculo do seu plano de contas.
+                </p>
+              </div>
+            ) : itensFiltrados.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-500">
+                Nenhum item encontrado para a busca.
+              </div>
+            ) : (
+              <DoubleHorizontalScroll>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                      <th className="py-3 px-2 w-8" aria-label="Reordenar"></th>
+                      <th className="py-3 px-4">Código</th>
+                      <th className="py-3 px-4">Cód. Empresa</th>
+                      <th className="py-3 px-4">Conta</th>
+                      <th className="py-3 px-4">Centro</th>
+                      <th className="py-3 px-4">Tipo de Despesa</th>
+                      <th className="py-3 px-4">Descrição</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {itensFiltrados.map((i, idx) => {
+                      const conta = contaMap.get(i.conta)
+                      const centro = centroMap.get(i.centro)
+                      const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
+                      const isCadastrada = Boolean(i.id)
+                      return (
+                        <tr
+                          key={i.id}
+                          draggable={!isCliente && !reordenando}
+                          onDragStart={(e) => {
+                            if (isCliente || reordenando) {
+                              e.preventDefault()
+                              return
+                            }
+                            setArrastandoContaId(i.conta)
+                            e.dataTransfer.effectAllowed = 'move'
+                            try {
+                              e.dataTransfer.setData('text/plain', i.conta)
+                            } catch {
+                              /* navegador sem dataTransfer */
+                            }
+            </div>
+
+            {(busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos') && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                  <Filter className="w-3 h-3 text-blue-600" />
+                  Filtros ativos: exibindo {itensFiltrados.length} de {itens.length}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBusca('')
+                    setFiltroConta('todos')
+                    setFiltroCentro('todos')
+                  }}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                >
+                  Limpar filtros
+                </button>
+              </div>
+            )}
+          </CardHeader>
+          <CardContent className="p-0">
+            {loading ? (
+              <div className="py-12 flex justify-center items-center">
+                <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : itens.length === 0 ? (
+              <div className="py-16 flex flex-col items-center justify-center text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+                  <FolderTree className="w-7 h-7 text-slate-400" />
+                </div>
+                <h3 className="text-sm font-bold text-[#0B1F3A]">Nenhum vínculo cadastrado</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-xs">
+                  Use o formulário ao lado para criar o primeiro vínculo do seu plano de contas.
+                </p>
+              </div>
+            ) : itensFiltrados.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-500">
+                Nenhum item encontrado para a busca.
+              </div>
+            ) : (
+              <DoubleHorizontalScroll>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50/70 text-slate-600 font-semibold">
+                      <th className="py-3 px-2 w-8" aria-label="Reordenar"></th>
+                      <th className="py-3 px-4">Código</th>
+                      <th className="py-3 px-4">Cód. Empresa</th>
+                      <th className="py-3 px-4">Conta</th>
+                      <th className="py-3 px-4">Centro</th>
+                      <th className="py-3 px-4">Tipo de Despesa</th>
+                      <th className="py-3 px-4">Descrição</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {itensFiltrados.map((i, idx) => {
+                      const conta = contaMap.get(i.conta)
+                      const centro = centroMap.get(i.centro)
+                      const tipo = i.tipo_despesa ? tipoMap.get(i.tipo_despesa) : undefined
+                      const isCadastrada = Boolean(i.id)
+                      return (
+                        <tr
+                          key={i.id}
+                          draggable={!isCliente && !reordenando}
+                          onDragStart={(e) => {
+                            if (isCliente || reordenando) {
+                              e.preventDefault()
+                              return
+                            }
+                            setArrastandoContaId(i.conta)
+                            e.dataTransfer.effectAllowed = 'move'
+                            try {
+                              e.dataTransfer.setData('text/plain', i.conta)
+                            } catch {
+                              /* navegador sem dataTransfer */
+                            }
+                          }}
+                          onDragOver={(e) => {
+                            if (isCliente || !arrastandoContaId) return
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setIndiceSoltarEm((atual) => (atual === idx ? atual : idx))
+                          }}
+                          onDragLeave={() =>
+                            setIndiceSoltarEm((atual) => (atual === idx ? null : atual))
+                          }
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            handleSoltarConta(idx)
+                          }}
+                          onDragEnd={() => {
+                            setArrastandoContaId(null)
+                            setIndiceSoltarEm(null)
+                          }}
+                          className={`transition-colors align-top ${
+                            isCadastrada
+                              ? 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-l-amber-500'
+                              : 'hover:bg-slate-50/80'
+                          } ${!isCliente ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                            indiceSoltarEm === idx ? 'ring-2 ring-blue-400 bg-blue-50/60' : ''
+                          } ${arrastandoContaId === i.conta ? 'opacity-50' : ''}`}
+                        >
+                          <td className="py-3 px-2 align-middle">
+                            {!isCliente && (
+                              <span
+                                className="inline-flex items-center justify-center w-6 h-6 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                                title="Arraste para reordenar a conta ou soltar sobre outro centro de custo"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(i)}
+                                className={`font-mono font-semibold text-[11px] text-left transition-colors ${
+                                  isCliente
+                                    ? 'text-slate-700 cursor-default'
+                                    : 'text-blue-700 hover:text-blue-900 hover:underline cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Vínculo ${i.codigo || '—'} (perfil sem permissão de edição)`
+                                    : `Clique no número para editar o vínculo ${i.codigo || '—'}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Vínculo ${i.codigo || '—'}`
+                                    : `Editar vínculo ${i.codigo || '—'}`
+                                }
+                              >
+                                {i.codigo || '—'}
+                              </button>
+                              {isCadastrada && (
+                                <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] px-1.5 py-0 font-bold hover:bg-amber-100 shadow-2xs">
+                                  Cadastrada
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {i.codigo_empresa ? (
+                              <button
+                                type="button"
+                                onClick={() => openEdit(i)}
+                                className={`font-mono font-semibold text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition-colors text-left ${
+                                  isCliente
+                                    ? 'text-slate-800 cursor-default'
+                                    : 'text-slate-800 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Código da empresa ${i.codigo_empresa}`
+                                    : `Clique para editar o vínculo / código ${i.codigo_empresa}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Código da empresa ${i.codigo_empresa}`
+                                    : `Editar vínculo com código da empresa ${i.codigo_empresa}`
+                                }
+                              >
+                                {i.codigo_empresa}
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 font-mono">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {conta ? (
+                              <div className="flex flex-col gap-1">
+                                <Badge
+                                  className={`text-[10px] font-semibold px-2 py-0.5 border w-fit ${
+                                    TIPO_CONTA_BADGE[conta.tipo] || ''
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditarConta(conta)}
+                                    className={`font-mono transition-colors text-left ${
+                                      isCliente
+                                        ? 'cursor-default opacity-85'
+                                        : 'hover:underline cursor-pointer'
+                                    }`}
+                                    title={
+                                      isCliente
+                                        ? `Conta ${conta.codigo || '—'} (perfil sem permissão de edição)`
+                                        : `Clique no número para editar a conta ${conta.nome}`
+                                    }
+                                    aria-label={
+                                      isCliente
+                                        ? `Conta ${conta.codigo || '—'}`
+                                        : `Editar conta contábil ${conta.codigo || '—'} - ${conta.nome}`
+                                    }
+                                  >
+                                    {conta.codigo || '—'}
+                                  </button>
+                                  <span className="mx-1">·</span>
+                                  {conta.nome}
+                                </Badge>
+
+                                {/* Badges de Exclusão de Relatórios Gerenciais */}
+                                <div className="flex items-center gap-1 flex-wrap mt-0.5">
+                                  {conta.nao_exibir_em_nada && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-red-600 text-white border-red-700 font-bold shadow-2xs">
+                                      🛑 Oculta em tudo
+                                    </Badge>
+                                  )}
+                                  {!conta.nao_exibir_em_nada && conta.nao_exibir_dre && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-rose-100 text-rose-800 border-rose-300 font-medium">
+                                      🚫 Não DRE
+                                    </Badge>
+                                  )}
+                                  {!conta.nao_exibir_em_nada && conta.nao_exibir_fluxo_caixa && (
+                                    <Badge className="text-[9px] px-1.5 py-0 bg-amber-100 text-amber-800 border-amber-300 font-medium">
+                                      🚫 Não Fluxo
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Conta removida</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {centro ? (
+                              <Badge
+                                className={`text-[10px] font-semibold px-2 py-0.5 border w-fit ${
+                                  TIPO_CENTRO_BADGE[centro.tipo] || ''
+                                }`}
+                              >
+                                <span className="font-mono">{centro.codigo || '—'}</span>
+                                <span className="mx-1">·</span>
+                                {centro.nome}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400 italic">Centro removido</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {tipo ? (
+                              <Badge className="text-[10px] font-semibold px-2 py-0.5 border bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-50 w-fit">
+                                <span className="font-mono">{tipo.codigo || '—'}</span>
+                                <span className="mx-1">·</span>
+                                {tipo.nome}
+                              </Badge>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-slate-700 max-w-[220px]">
+                            {i.descricao ? (
+                              <span className="block truncate" title={i.descricao}>
+                                {i.descricao}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                onClick={() => openEdit(i)}
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                title="Editar vínculo"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button
+                                onClick={() => confirmDelete(i)}
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50"
+                                title="Excluir vínculo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </DoubleHorizontalScroll>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+                          onDragOver={(e) => {
+                            if (isCliente || !arrastandoContaId) return
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setIndiceSoltarEm((atual) => (atual === idx ? atual : idx))
+                          }}
+                          onDragLeave={() =>
+                            setIndiceSoltarEm((atual) => (atual === idx ? null : atual))
+                          }
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            handleSoltarConta(idx)
+                          }}
+                          onDragEnd={() => {
+                            setArrastandoContaId(null)
+                            setIndiceSoltarEm(null)
+                          }}
+                          className={`transition-colors align-top ${
+                            isCadastrada
+                              ? 'bg-amber-50/70 hover:bg-amber-100/60 border-l-4 border-l-amber-500'
+                              : 'hover:bg-slate-50/80'
+                          } ${!isCliente ? 'cursor-grab active:cursor-grabbing' : ''} ${
+                            indiceSoltarEm === idx ? 'ring-2 ring-blue-400 bg-blue-50/60' : ''
+                          } ${arrastandoContaId === i.conta ? 'opacity-50' : ''}`}
+                        >
+                          <td className="py-3 px-2 align-middle">
+                            {!isCliente && (
+                              <span
+                                className="inline-flex items-center justify-center w-6 h-6 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                                title="Arraste para reordenar a conta ou soltar sobre outro centro de custo"
+                              >
+                                <GripVertical className="w-3.5 h-3.5" />
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => openEdit(i)}
+                                className={`font-mono font-semibold text-[11px] text-left transition-colors ${
+                                  isCliente
+                                    ? 'text-slate-700 cursor-default'
+                                    : 'text-blue-700 hover:text-blue-900 hover:underline cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Vínculo ${i.codigo || '—'} (perfil sem permissão de edição)`
+                                    : `Clique no número para editar o vínculo ${i.codigo || '—'}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Vínculo ${i.codigo || '—'}`
+                                    : `Editar vínculo ${i.codigo || '—'}`
+                                }
+                              >
+                                {i.codigo || '—'}
+                              </button>
+                              {isCadastrada && (
+                                <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[9px] px-1.5 py-0 font-bold hover:bg-amber-100 shadow-2xs">
+                                  Cadastrada
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            {i.codigo_empresa ? (
+                              <button
+                                type="button"
+                                onClick={() => openEdit(i)}
+                                className={`font-mono font-semibold text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 transition-colors text-left ${
+                                  isCliente
+                                    ? 'text-slate-800 cursor-default'
+                                    : 'text-slate-800 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 cursor-pointer'
+                                }`}
+                                title={
+                                  isCliente
+                                    ? `Código da empresa ${i.codigo_empresa}`
+                                    : `Clique para editar o vínculo / código ${i.codigo_empresa}`
+                                }
+                                aria-label={
+                                  isCliente
+                                    ? `Código da empresa ${i.codigo_empresa}`
+                                    : `Editar vínculo com código da empresa ${i.codigo_empresa}`
+                                }
+                              >
+                                {i.codigo_empresa}
+                              </button>
+                            ) : (
+                              <span className="text-slate-400 font-mono">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            {conta ? (
+                              <div className="flex flex-col gap-1">
+                                <Badge
+                                  className={`text-[10px] font-semibold px-2 py-0.5 border w-fit ${
+                                    TIPO_CONTA_BADGE[conta.tipo] || ''
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditarConta(conta)}
+                                    className={`font-mono transition-colors text-left ${
+                                      isCliente
+                                        ? 'cursor-default opacity-85'
+                                        : 'hover:underline cursor-pointer'
+                                    }`}
+                                    title={
+                                      isCliente
+                                        ? `Conta ${conta.codigo || '—'} (perfil sem permissão de edição)`
+                                        : `Clique no número para editar a conta ${conta.nome}`
+                                    }
+                          onDragOver={(e) => {
+                            if (isCliente || !arrastandoContaId) return
+                            e.preventDefault()
+                            e.dataTransfer.dropEffect = 'move'
+                            setIndiceSoltarEm((atual) => (atual === idx ? atual : idx))
+                          }}
+                          onDragLeave={() =>
+                            setIndiceSoltarEm((atual) => (atual === idx ? null : atual))
+                          }
+                          onDrop={(e) => {
+                            e.preventDefault()
+                            const contaMovida = arrastandoContaId
+                            setArrastandoContaId(null)
+                            setIndiceSoltarEm(null)
+                            if (isCliente || !contaMovida || contaMovida === i.conta) return
+                            const contaDestino = i.conta
+                            const centroDestino = i.centro
+                            const centroOrigem = contaMap.get(contaMovida)?.centro
+                            if (!contaMovida || !contaDestino) return
+                            if (centroOrigem !== centroDestino) {
+                              void handleMoverCentro(contaMovida, centroDestino)
+                            } else {
+                              void handleReordenar(contaMovida, contaDestino)
+                            }
+                          }}
+=======
+            </div>
+
+            {(busca.trim() || filtroConta !== 'todos' || filtroCentro !== 'todos') && (
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-slate-500 flex items-center gap-1">
                 <span className="text-[11px] text-slate-500 flex items-center gap-1">
                   <Filter className="w-3 h-3 text-blue-600" />
                   Filtros ativos: exibindo {itensFiltrados.length} de {itens.length}
