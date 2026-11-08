@@ -100,10 +100,18 @@ const EMPTY_FORM: ContaEdicaoForm = {
 export default function PlanoContas() {
   const { toast } = useToast()
   const { user } = useAuth()
-  const isCliente = user?.role === 'cliente'
-  const podeEditar = !isCliente
-
   const { selectedEmpresaId } = useFilter()
+
+  // Perfis autorizados a editar o plano de contas: admin, empresa, financeiro (cliente e comercial são somente leitura)
+  const isCliente = user?.role === 'cliente'
+  const isComercial = user?.role === 'comercial'
+  const podeEditar = !isCliente && !isComercial
+
+  // Empresa ativa efetiva: garante envio do ID tanto para admin quanto para perfis empresa/financeiro
+  const effectiveEmpresaId =
+    (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : '') ||
+    user?.empresa ||
+    ''
 
   // Dados principais
   const [contas, setContas] = useState<ContaRecord[]>([])
@@ -149,7 +157,7 @@ export default function PlanoContas() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const opts = selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined
+      const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
       const [contasDiretas, centrosList, empresasList, planosList, tiposList] = await Promise.all([
         contasService.getAll(opts),
         centrosService.getAll(opts),
@@ -191,7 +199,7 @@ export default function PlanoContas() {
     } finally {
       setLoading(false)
     }
-  }, [selectedEmpresaId, toast])
+  }, [effectiveEmpresaId, toast])
 
   useEffect(() => {
     loadData()
@@ -606,7 +614,7 @@ export default function PlanoContas() {
       } else if (editForm.centro) {
         // Se ainda não existia vínculo em plano_contas para a empresa ativa, cria agora
         await planoContasService.create({
-          empresa: selectedEmpresaId || undefined,
+          empresa: effectiveEmpresaId || undefined,
           conta: editingConta.id,
           centro: editForm.centro,
           tipo_despesa: editForm.tipo_despesa || undefined,
@@ -1220,6 +1228,7 @@ export default function PlanoContas() {
         <ModalQuickRegisterConta
           open={modalNovaContaOpen}
           onOpenChange={setModalNovaContaOpen}
+          empresaId={effectiveEmpresaId}
           centros={centrosOrdenados}
           tiposDespesas={tiposDespesa}
           initialCentroId={
@@ -1228,11 +1237,11 @@ export default function PlanoContas() {
               : undefined
           }
           onSuccess={async (novoPlano) => {
-            // Se o novo plano de contas foi criado sem empresa e temos empresa selecionada,
+            // Se o novo plano de contas foi criado sem empresa e temos empresa ativa,
             // garantimos que o vínculo seja associado à empresa ativa
-            if (novoPlano && selectedEmpresaId && !novoPlano.empresa) {
+            if (novoPlano && effectiveEmpresaId && !novoPlano.empresa) {
               try {
-                await planoContasService.update(novoPlano.id, { empresa: selectedEmpresaId })
+                await planoContasService.update(novoPlano.id, { empresa: effectiveEmpresaId })
               } catch (err) {
                 console.warn('Aviso ao associar empresa ao plano recém-criado:', err)
               }

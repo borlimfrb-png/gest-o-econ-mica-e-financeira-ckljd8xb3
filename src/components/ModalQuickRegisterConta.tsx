@@ -27,13 +27,20 @@ import type { CentroRecord, TipoDespesaRecord, PlanoContaRecord } from '@/types/
 import { useToast } from '@/hooks/use-toast'
 import { Loader2, Plus, Sparkles } from 'lucide-react'
 
+import { useAuth } from '@/contexts/AuthContext'
+import { useFilter } from '@/contexts/FilterContext'
+import { tiposDespesaService } from '@/services/financeService'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { AlertCircle } from 'lucide-react'
+
 interface ModalQuickRegisterContaProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   initialName?: string
   initialCentroId?: string
+  empresaId?: string
   centros: CentroRecord[]
-  tiposDespesas: TipoDespesaRecord[]
+  tiposDespesas?: TipoDespesaRecord[]
   onSuccess: (newPlano?: PlanoContaRecord) => void
 }
 
@@ -42,23 +49,39 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
   onOpenChange,
   initialName = '',
   initialCentroId,
+  empresaId,
   centros,
-  tiposDespesas,
+  tiposDespesas: initialTiposDespesas = [],
   onSuccess,
 }) => {
   const { toast } = useToast()
+  const { user } = useAuth()
+  const { selectedEmpresaId } = useFilter()
+
+  // Determina a empresa ativa para satisfazer a regra @request.body.empresa = @request.auth.empresa
+  const effectiveEmpresaId =
+    empresaId ||
+    (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-') ? selectedEmpresaId : '') ||
+    user?.empresa ||
+    ''
+
   const [nome, setNome] = useState('')
   const [tipo, setTipo] = useState<TipoConta>('Despesa')
   const [grupo, setGrupo] = useState<GrupoConta>('Despesas Operacionais')
   const [centroId, setCentroId] = useState('')
   const [tipoDespesaId, setTipoDespesaId] = useState('')
   const [codigoEmpresa, setCodigoEmpresa] = useState('')
+  const [listaTiposDespesa, setListaTiposDespesa] =
+    useState<TipoDespesaRecord[]>(initialTiposDespesas)
   const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+
   // Atualiza quando o modal abre ou initialName muda
   useEffect(() => {
     if (open) {
       setNome(initialName || '')
       setCodigoEmpresa('')
+      setErrorMessage(null)
       // Sugere tipo baseado em palavras-chave no nome
       const low = (initialName || '').toLowerCase()
       if (
@@ -100,8 +123,23 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
         setCentroId(centros[0].id)
       }
       setTipoDespesaId('')
+
+      // Se não recebeu tipos de despesa via props ou veio vazia, tenta carregar direto do serviço
+      if (initialTiposDespesas.length > 0) {
+        setListaTiposDespesa(initialTiposDespesas)
+      } else {
+        const opts = effectiveEmpresaId ? { empresaId: effectiveEmpresaId } : undefined
+        tiposDespesaService
+          .getAll(opts)
+          .then((dados) => {
+            setListaTiposDespesa(dados)
+          })
+          .catch((err) => {
+            console.warn('Erro ao carregar tipos de despesa no modal rápido:', err)
+          })
+      }
     }
-  }, [open, initialName, initialCentroId, centros])
+  }, [open, initialName, initialCentroId, centros, initialTiposDespesas, effectiveEmpresaId])
 
   // Ajusta grupo padrão quando muda tipo
   const handleTipoChange = (newTipo: TipoConta) => {
@@ -114,19 +152,25 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    setErrorMessage(null)
+
     if (!nome.trim()) {
+      const msg = 'Informe o nome da conta.'
+      setErrorMessage(msg)
       toast({
         title: 'Nome obrigatório',
-        description: 'Informe o nome da conta.',
+        description: msg,
         variant: 'destructive',
       })
       return
     }
 
     if (!centroId) {
+      const msg = 'Selecione um Centro de Custo para vincular ao Plano de Contas.'
+      setErrorMessage(msg)
       toast({
         title: 'Centro de Custo obrigatório',
-        description: 'Selecione um Centro de Custo para vincular ao Plano de Contas.',
+        description: msg,
         variant: 'destructive',
       })
       return
@@ -134,34 +178,42 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
 
     setLoading(true)
     try {
-      // 1. Cria a Conta (CO-xxx)
+      // 1. Cria a Conta (CO-xxx) propagando empresaId ativa
       const novaConta = await financeService.createConta({
         nome: nome.trim(),
         tipo,
         grupo,
-        descricao: `Criada via importação rápida de PDF`,
+        empresa: effectiveEmpresaId || undefined,
+        descricao: `Criada via Plano de Contas`,
       })
 
-      // 2. Cria o Plano de Contas vinculando Conta + Centro + (TipoDespesa opcional)
+      // 2. Cria o Plano de Contas vinculando Conta + Centro + (TipoDespesa opcional) com empresa ativa
       const novoPlano = await financeService.createPlanoConta({
+        empresa: effectiveEmpresaId || undefined,
         conta: novaConta.id,
         centro: centroId,
         tipo_despesa: tipoDespesaId || undefined,
-        descricao: `${novaConta.nome} - Importado`,
+        descricao: `${novaConta.nome}`,
         codigo_empresa: codigoEmpresa.trim() || undefined,
       })
+
       toast({
-        title: 'Conta e Plano cadastrados!',
-        description: `${novaConta.codigo} (${novaConta.nome}) vinculada a ${novoPlano.codigo}.`,
+        title: 'Conta cadastrada com sucesso!',
+        description: `${novaConta.codigo || ''} ${novaConta.nome} vinculada ao plano de contas.`,
       })
 
       onSuccess(novoPlano)
       onOpenChange(false)
     } catch (err: unknown) {
+      console.error('Erro ao cadastrar conta no modal rápido:', err)
       const error = err as Error
+      const msg =
+        error?.message ||
+        'Falha ao salvar conta ou plano de contas. Verifique se possui permissão na empresa selecionada.'
+      setErrorMessage(msg)
       toast({
-        title: 'Erro ao cadastrar',
-        description: error.message || 'Falha ao salvar conta ou plano de contas.',
+        title: 'Erro ao cadastrar conta',
+        description: msg,
         variant: 'destructive',
       })
     } finally {
@@ -189,6 +241,13 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-4 py-2">
+          {errorMessage && (
+            <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-800 py-2">
+              <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+              <AlertDescription className="text-xs font-medium">{errorMessage}</AlertDescription>
+            </Alert>
+          )}
+
           <div className="space-y-1.5">
             <Label htmlFor="nome">Nome da Conta *</Label>
             <Input
@@ -298,10 +357,11 @@ export const ModalQuickRegisterConta: React.FC<ModalQuickRegisterContaProps> = (
                 <SelectValue placeholder="Nenhum (Opcional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Nenhum</SelectItem>
-                {tiposDespesas.map((t) => (
+                <SelectItem value="none">Nenhum (Opcional)</SelectItem>
+                {listaTiposDespesa.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
-                    {t.codigo || 'TD'} - {t.nome}
+                    {t.codigo ? `[${t.codigo}] ` : ''}
+                    {t.nome}
                   </SelectItem>
                 ))}
               </SelectContent>
