@@ -95,6 +95,7 @@ import {
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { ModalEditarConta } from '@/components/ModalEditarConta'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
+import { compararCentroTipoConta } from '@/lib/dreGerencialTypes'
 
 const TIPOS_CONTA: TipoConta[] = ['Ativo', 'Passivo', 'Patrimônio Líquido', 'Receita', 'Despesa']
 const TIPOS_CENTRO: TipoCentro[] = ['Receita', 'Despesa']
@@ -340,15 +341,29 @@ export default function PlanoContas() {
       )
     })
 
-    // Exibe na ordem manual das contas (campo `ordem`), mesma ordem usada
-    // pela DRE Gerencial e pela tela /contas.
-    const ordemDe = (id: string) => contaMap.get(id)?.ordem ?? Number.MAX_SAFE_INTEGER
-    return filtrados.sort((a, b) => {
-      const oa = ordemDe(a.conta)
-      const ob = ordemDe(b.conta)
-      if (oa !== ob) return oa - ob
-      return (a.codigo || '').localeCompare(b.codigo || '')
-    })
+    // Mesma ordenação da DRE Gerencial e da tela /centros: centros de custo
+    // primeiro pelo campo `sequencia` (menor para maior; sem sequência por
+    // último, com desempate estável por código/nome do centro) e, dentro de
+    // cada centro, as contas na ordem manual do drag & drop (campo `ordem`).
+    // Reaproveita compararCentroTipoConta (sem tipo de despesa, que aqui não
+    // participa da ordenação da listagem).
+    const chaveOrdenacao = (i: PlanoContaRecord) => {
+      const conta = contaMap.get(i.conta)
+      const centro = centroMap.get(i.centro)
+      return {
+        codigo: conta?.codigo,
+        nome: conta?.nome || '',
+        ordem: conta?.ordem ?? null,
+        centroNome: centro?.nome || null,
+        centroCodigo: centro?.codigo || null,
+        centroSequencia: centro?.sequencia ?? null,
+      }
+    }
+    return filtrados.sort(
+      (a, b) =>
+        compararCentroTipoConta(chaveOrdenacao(a), chaveOrdenacao(b)) ||
+        (a.codigo || '').localeCompare(b.codigo || '', 'pt-BR'),
+    )
   }, [itens, busca, filtroConta, filtroCentro, contaMap, centroMap, tipoMap])
 
   // Exportação Excel (.xlsx) do Plano de Contas da empresa selecionada
