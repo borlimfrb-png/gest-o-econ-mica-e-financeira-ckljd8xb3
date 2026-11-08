@@ -145,14 +145,30 @@ export default function PlanoContas() {
     setLoading(true)
     try {
       const opts = selectedEmpresaId ? { empresaId: selectedEmpresaId } : undefined
-      const [contasList, centrosList, empresasList, planosList] = await Promise.all([
+      const [contasDiretas, centrosList, empresasList, planosList] = await Promise.all([
         contasService.getAll(opts),
         centrosService.getAll(opts),
         empresasService.getAll(),
         planoContasService.getAll(opts).catch(() => []),
       ])
 
-      setContas(contasList)
+      // Consolidação de contas: se há vínculos em plano_contas para a empresa ativa,
+      // garantimos que todas as contas referenciadas pelos vínculos estejam na lista
+      // mesmo que a conta não possua o campo empresa preenchido diretamente.
+      const contasMap = new Map<string, ContaRecord>()
+      for (const c of contasDiretas) {
+        contasMap.set(c.id, c)
+      }
+
+      for (const p of planosList) {
+        if (p.expand?.conta && !contasMap.has(p.expand.conta.id)) {
+          contasMap.set(p.expand.conta.id, p.expand.conta as ContaRecord)
+        }
+      }
+
+      const listaFinalContas = Array.from(contasMap.values())
+
+      setContas(listaFinalContas)
       setCentros(centrosList)
       setEmpresas(empresasList)
       setPlanoContasRecords(planosList)
@@ -189,6 +205,7 @@ export default function PlanoContas() {
 
   useRealtime('contas', loadData)
   useRealtime('centros_custos', loadData)
+  useRealtime('plano_contas', loadData)
 
   const selectedEmpresa = useMemo(
     () => empresas.find((e) => e.id === selectedEmpresaId) || null,
@@ -227,13 +244,40 @@ export default function PlanoContas() {
     )
   }, [centros])
 
-  // Contas com overrides otimistas e ordenadas por ordem manual / DRE
+  // Mapa de vínculo conta -> id do centro a partir de plano_contas
+  const vinculoCentroPorConta = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const p of planoContasRecords) {
+      const contaId = p.conta || p.expand?.conta?.id
+      const centroId = p.centro || p.expand?.centro?.id
+      if (contaId && centroId) {
+        map.set(contaId, centroId)
+      }
+    }
+    return map
+  }, [planoContasRecords])
+
+  // Contas com centro efetivo (vínculo plano_contas prioritário com fallback para conta.centro)
+  // e suporte ao override otimista do drag & drop
   const contasComOverride = useMemo<ContaRecord[]>(() => {
-    return contas.map((c) => ({
-      ...c,
-      centro: c.id in centroOverride ? (centroOverride[c.id] ?? undefined) : c.centro,
-    }))
-  }, [contas, centroOverride])
+    const temVinculosPlano = planoContasRecords.length > 0
+
+    return contas.map((c) => {
+      let centroEfetivo: string | undefined = c.centro
+      if (temVinculosPlano) {
+        centroEfetivo = vinculoCentroPorConta.get(c.id) || c.centro
+      }
+
+      if (c.id in centroOverride) {
+        centroEfetivo = centroOverride[c.id] ?? undefined
+      }
+
+      return {
+        ...c,
+        centro: centroEfetivo,
+      }
+    })
+  }, [contas, planoContasRecords.length, vinculoCentroPorConta, centroOverride])
 
   const contasOrdenadas = useMemo<ContaRecord[]>(() => {
     let lista = [...contasComOverride]
@@ -249,7 +293,7 @@ export default function PlanoContas() {
     return lista
   }, [contasComOverride, ordemIds])
 
-  // Agrupamento completo por centro de custo (na ordem da sequência)
+  // Agrupamento completo por centro de custo (na ordem da sequência de centros)
   const todosGruposCentros = useMemo(() => {
     const mapa = new Map<string, ContaRecord[]>()
     for (const c of contasOrdenadas) {
@@ -261,7 +305,7 @@ export default function PlanoContas() {
 
     const resultado: GrupoCentroItem[] = []
 
-    // 1. Centros cadastrados ordenados
+    // 1. Centros cadastrados ordenados (mantém todos os centros, mesmo vazios)
     for (const c of centrosOrdenados) {
       resultado.push({
         centroId: c.id,
@@ -367,6 +411,14 @@ export default function PlanoContas() {
       await contasService.reordenar(ids)
       if (trocouCentro) {
         await contasService.update(movida.id, { centro: centroNovo })
+
+        // Se houver registro de plano_contas para a conta (empresa ativa), atualiza o centro desse vínculo
+        const registroPlano = planoContasRecords.find(
+          (p) => (p.conta || p.expand?.conta?.id) === movida.id,
+        )
+        if (registroPlano) {
+          await planoContasService.update(registroPlano.id, { centro: centroNovo || '' })
+        }
       }
       window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
       window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
@@ -427,6 +479,15 @@ export default function PlanoContas() {
     try {
       await contasService.reordenar(ids)
       await contasService.update(movida.id, { centro: centroNovo })
+
+      // Se houver registro de plano_contas para a conta (empresa ativa), atualiza o centro desse vínculo
+      const registroPlano = planoContasRecords.find(
+        (p) => (p.conta || p.expand?.conta?.id) === movida.id,
+      )
+      if (registroPlano) {
+        await planoContasService.update(registroPlano.id, { centro: centroNovo || '' })
+      }
+
       window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
       window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
       await loadData()
@@ -498,6 +559,16 @@ export default function PlanoContas() {
         nao_exibir_fluxo_caixa: editForm.nao_exibir_fluxo_caixa,
         nao_exibir_em_nada: editForm.nao_exibir_em_nada,
       })
+
+      // Se houver registro de plano_contas para a conta, atualiza o centro no vínculo também
+      const registroPlano = planoContasRecords.find(
+        (p) => (p.conta || p.expand?.conta?.id) === editingConta.id,
+      )
+      if (registroPlano) {
+        await planoContasService.update(registroPlano.id, {
+          centro: editForm.centro || '',
+        })
+      }
 
       window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
       window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
@@ -1083,6 +1154,12 @@ export default function PlanoContas() {
           await contasService.reordenar(ids)
           if (movida) {
             await contasService.update(movida.id, { centro: movida.centro })
+            const registroPlano = planoContasRecords.find(
+              (p) => (p.conta || p.expand?.conta?.id) === movida.id,
+            )
+            if (registroPlano) {
+              await planoContasService.update(registroPlano.id, { centro: movida.centro || '' })
+            }
           }
           window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
           window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
