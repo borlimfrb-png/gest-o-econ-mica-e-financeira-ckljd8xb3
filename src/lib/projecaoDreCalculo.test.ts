@@ -5,6 +5,9 @@ import {
   PARAMETROS_PROJECAO_PADRAO,
   rotuloCurtoMetodoProjecaoDre,
   descricaoMetodoProjecaoDre,
+  calcularProjecaoDrePlurianual,
+  PARAMETROS_PROJECAO_PLURIANUAL_PADRAO,
+  type DadosAnoHistoricoDre,
 } from './projecaoDreCalculo'
 import { calcularDreGerencialMatriz } from './dreGerencialCalculo'
 import { gerarListaMeses } from './dreGerencialTypes'
@@ -178,5 +181,87 @@ describe('calcularProjecaoDre — parâmetros', () => {
     expect(descricaoMetodoProjecaoDre(p)).toBe(
       'projetada com crescimento de 5% a.m. sobre a média dos meses realizados',
     )
+  })
+})
+
+describe('calcularProjecaoDrePlurianual — projeção dos próximos anos baseada na média dos anos anteriores', () => {
+  const historico: DadosAnoHistoricoDre[] = [
+    {
+      ano: 2023,
+      temMovimento: true,
+      totaisPorClassificacao: {
+        Receita: 1000000,
+        'Despesa Variável': 400000,
+        'Despesa Fixa': 250000,
+        'Despesa Financeira': 50000,
+        'Receita Financeira': 20000,
+      },
+      lucroPrejuizo: 320000,
+    },
+    {
+      ano: 2024,
+      temMovimento: true,
+      totaisPorClassificacao: {
+        Receita: 1200000,
+        'Despesa Variável': 480000,
+        'Despesa Fixa': 270000,
+        'Despesa Financeira': 60000,
+        'Receita Financeira': 30000,
+      },
+      lucroPrejuizo: 420000,
+    },
+    {
+      ano: 2025,
+      temMovimento: false, // ano sem dados não entra na média
+      totaisPorClassificacao: {
+        Receita: 0,
+        'Despesa Variável': 0,
+        'Despesa Fixa': 0,
+        'Despesa Financeira': 0,
+        'Receita Financeira': 0,
+      },
+      lucroPrejuizo: 0,
+    },
+  ]
+
+  it('calcula projeção para 3 anos futuros usando a média simples dos anos com movimento', () => {
+    const res = calcularProjecaoDrePlurianual(historico, 2024, {
+      anosFuturos: 3,
+      modo: 'media_simples',
+      percentualCrescimentoAnual: 0,
+    })
+
+    expect(res.anosBaseHistorico).toEqual([2023, 2024])
+    expect(res.anosFuturosProjetados).toEqual([2025, 2026, 2027])
+
+    const rec = res.grupos.find((g) => g.classificacao === 'Receita')!
+    // Média de 1.000.000 e 1.200.000 = 1.100.000
+    expect(rec.mediaHistoricaAnual).toBe(1100000)
+    expect(rec.valoresPorAno[2025]).toBe(1100000)
+    expect(rec.valoresPorAno[2026]).toBe(1100000)
+    expect(rec.valoresPorAno[2027]).toBe(1100000)
+
+    // Lucro projetado baseado nas médias das rubricas
+    // Rec(1.100.000) - DV(440.000) - DF(260.000) - DFin(55.000) + RFin(25.000) = 370.000
+    expect(res.lucroPrejuizoPorAno[2025]).toBe(370000)
+    expect(res.lucroPrejuizoPorAno[2026]).toBe(370000)
+    expect(res.lucroPrejuizoPorAno[2027]).toBe(370000)
+    expect(res.mediaHistoricaLucro).toBe(370000)
+    expect(res.notaMetodologica).toContain('2 exercício(s)')
+  })
+
+  it('aplica taxa de crescimento anual nos anos projetados sucessivos quando configurado', () => {
+    const res = calcularProjecaoDrePlurianual(historico, 2024, {
+      anosFuturos: 2,
+      modo: 'media_com_crescimento',
+      percentualCrescimentoAnual: 10, // +10% a.a.
+    })
+
+    expect(res.anosFuturosProjetados).toEqual([2025, 2026])
+    const rec = res.grupos.find((g) => g.classificacao === 'Receita')!
+    // Ano 1 proj: 1.100.000 * 1.10 = 1.210.000
+    expect(rec.valoresPorAno[2025]).toBe(1210000)
+    // Ano 2 proj: 1.100.000 * (1.10)^2 = 1.331.000
+    expect(rec.valoresPorAno[2026]).toBe(1331000)
   })
 })

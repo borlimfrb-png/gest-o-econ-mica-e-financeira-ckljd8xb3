@@ -209,3 +209,160 @@ export function exportarProjecaoDreCsv(
   document.body.removeChild(link)
   URL.revokeObjectURL(link.href)
 }
+
+/**
+ * ============================================================
+ * EXPORTAÇÃO PLURIANUAL (PRÓXIMOS ANOS) EM EXCEL E CSV
+ * ============================================================
+ */
+
+import type { ProjecaoPlurianualResultado } from './projecaoDreCalculo'
+
+export interface OpcoesExportacaoPlurianual {
+  empresaNome?: string
+  isGrupo?: boolean
+  nomeGrupo?: string
+  exercicioAno?: number
+}
+
+function resolverContextoPlurianual(opcoes?: OpcoesExportacaoPlurianual): ContextoExport {
+  const identificador =
+    opcoes?.isGrupo && opcoes?.nomeGrupo
+      ? `Grupo_${opcoes.nomeGrupo}`
+      : opcoes?.empresaNome || 'Consolidado'
+  const safeEntidade = sanitizeNomeArquivo(identificador)
+  const exercicio = opcoes?.exercicioAno || new Date().getFullYear()
+  return {
+    identificador,
+    exercicio,
+    fileNameBase: `DRE_Projecao_Plurianual_${safeEntidade}_${exercicio}`,
+  }
+}
+
+function montarLinhasPlurianual(projecao: ProjecaoPlurianualResultado): LinhaExport[] {
+  const rows: LinhaExport[] = []
+
+  for (const grupo of projecao.grupos) {
+    const linha: LinhaExport = {
+      Estrutura: grupo.titulo,
+      Tipo: 'Grupo',
+    }
+    for (const col of projecao.colunas) {
+      linha[col.rotulo] = grupo.valoresPorAno[col.ano] || 0
+    }
+    linha['Média Histórica'] = grupo.mediaHistoricaAnual
+    rows.push(linha)
+  }
+
+  rows.push({ Estrutura: '', Tipo: '' })
+
+  // Lucro ou Prejuízo
+  const linhaLp: LinhaExport = {
+    Estrutura: '= Lucro ou Prejuízo (Resultado)',
+    Tipo: 'Resultado',
+  }
+  for (const col of projecao.colunas) {
+    linhaLp[col.rotulo] = projecao.lucroPrejuizoPorAno[col.ano] || 0
+  }
+  linhaLp['Média Histórica'] = projecao.mediaHistoricaLucro
+  rows.push(linhaLp)
+
+  // Margem Líquida %
+  const linhaMargem: LinhaExport = {
+    Estrutura: 'Margem Líquida (%)',
+    Tipo: 'Indicador',
+  }
+  for (const col of projecao.colunas) {
+    const m = projecao.margemLiquidaPorAno[col.ano]
+    linhaMargem[col.rotulo] = m !== null ? `${m.toFixed(2)}%` : '—'
+  }
+  const margemMed =
+    projecao.mediaHistoricaReceita > 0
+      ? (projecao.mediaHistoricaLucro / projecao.mediaHistoricaReceita) * 100
+      : null
+  linhaMargem['Média Histórica'] = margemMed !== null ? `${margemMed.toFixed(2)}%` : '—'
+  rows.push(linhaMargem)
+
+  rows.push({ Estrutura: '', Tipo: '' })
+
+  // Metodologia e Notas
+  rows.push({
+    Estrutura: projecao.notaMetodologica,
+    Tipo: 'Nota Metodológica',
+  })
+
+  return rows
+}
+
+/**
+ * Exporta a Projeção Plurianual de DRE para Excel (.xlsx) no padrão Borlim
+ */
+export function exportarProjecaoDrePlurianualExcel(
+  projecao: ProjecaoPlurianualResultado,
+  opcoes?: OpcoesExportacaoPlurianual,
+) {
+  const ctx = resolverContextoPlurianual(opcoes)
+  const rows = montarLinhasPlurianual(projecao)
+
+  const wb = XLSX.utils.book_new()
+  const ws = XLSX.utils.json_to_sheet(rows)
+  ws['!cols'] = [
+    { wch: 44 }, // Estrutura
+    { wch: 14 }, // Tipo
+    ...projecao.colunas.map(() => ({ wch: 18 })),
+    { wch: 18 }, // Média Histórica
+  ]
+  XLSX.utils.book_append_sheet(wb, ws, 'Projeção Plurianual')
+  XLSX.writeFile(wb, `${ctx.fileNameBase}.xlsx`)
+}
+
+/**
+ * Exporta a Projeção Plurianual de DRE em CSV (ponto e vírgula, UTF-8 BOM)
+ */
+export function exportarProjecaoDrePlurianualCsv(
+  projecao: ProjecaoPlurianualResultado,
+  opcoes?: OpcoesExportacaoPlurianual,
+) {
+  const ctx = resolverContextoPlurianual(opcoes)
+  const rows = montarLinhasPlurianual(projecao)
+  if (rows.length === 0) return
+
+  const escapeCsv = (val: unknown): string => {
+    if (val === null || val === undefined) return ''
+    const s = String(val)
+    if (/[;"\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+  const formatMoedaCsv = (v: unknown) => {
+    if (typeof v !== 'number') return s(v)
+    return v.toFixed(2).replace('.', ',')
+  }
+  const s = (val: unknown) => (val === null || val === undefined ? '' : String(val))
+
+  const colunas = Object.keys(rows[0])
+  const linhas: string[] = [colunas.map(escapeCsv).join(';')]
+
+  for (const row of rows) {
+    linhas.push(
+      colunas
+        .map((c) => {
+          const v = row[c]
+          if (c === 'Estrutura' || c === 'Tipo' || typeof v === 'string') {
+            return escapeCsv(s(v))
+          }
+          return escapeCsv(formatMoedaCsv(v))
+        })
+        .join(';'),
+    )
+  }
+
+  const csvContent = '\uFEFF' + linhas.join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const link = document.createElement('a')
+  link.href = URL.createObjectURL(blob)
+  link.setAttribute('download', `${ctx.fileNameBase}.csv`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(link.href)
+}

@@ -5,6 +5,8 @@ import {
   SINAL_MULTIPLICADOR_GRUPO,
 } from './dreGerencialTypes'
 
+export type { ClassificacaoDre }
+
 /**
  * Projeção de DRE — motor de cálculo dedicado.
  *
@@ -308,4 +310,205 @@ export function montarLinhasMesesProjecao(
     mes: m.mes,
     projetado: !mesesComMovimento.includes(m.chave),
   }))
+}
+
+/**
+ * ============================================================
+ * PROJEÇÃO PLURIANUAL (PRÓXIMOS ANOS) COM BASE NA MÉDIA DOS ANOS ANTERIORES
+ * ============================================================
+ */
+
+export interface DadosAnoHistoricoDre {
+  ano: number
+  /** Se o ano possui lançamentos ou movimento contábil */
+  temMovimento: boolean
+  /** Totais anuais por rubrica da DRE */
+  totaisPorClassificacao: Record<ClassificacaoDre, number>
+  lucroPrejuizo: number
+}
+
+export interface ColunaAnoProjecaoPlurianual {
+  ano: number
+  projetado: boolean
+  rotulo: string
+}
+
+export interface GrupoProjecaoPlurianual {
+  classificacao: ClassificacaoDre
+  titulo: string
+  sinal: number
+  /** Média anual calculada sobre os anos históricos realizados com movimento */
+  mediaHistoricaAnual: number
+  /** Valores por ano (ex.: { 2024: 100000, 2025: 120000, 2026: 110000, ... }) */
+  valoresPorAno: Record<number, number>
+}
+
+export interface ParametrosProjecaoPlurianual {
+  /** Quantidade de anos futuros a projetar (ex.: 3 anos -> N+1, N+2, N+3) */
+  anosFuturos: number
+  /**
+   * Método de cálculo:
+   * - 'media_simples': média aritmética simples das rubricas nos anos realizados com movimento
+   * - 'media_com_crescimento': média anual base corrigida por taxa percentual de expansão anual
+   */
+  modo: 'media_simples' | 'media_com_crescimento'
+  /** Percentual de crescimento anual projetado (% a.a.) */
+  percentualCrescimentoAnual: number
+}
+
+export const PARAMETROS_PROJECAO_PLURIANUAL_PADRAO: ParametrosProjecaoPlurianual = {
+  anosFuturos: 3,
+  modo: 'media_simples',
+  percentualCrescimentoAnual: 0,
+}
+
+export interface ProjecaoPlurianualResultado {
+  anosBaseHistorico: number[]
+  anosFuturosProjetados: number[]
+  colunas: ColunaAnoProjecaoPlurianual[]
+  grupos: GrupoProjecaoPlurianual[]
+  lucroPrejuizoPorAno: Record<number, number>
+  margemLiquidaPorAno: Record<number, number | null>
+  mediaHistoricaLucro: number
+  mediaHistoricaReceita: number
+  parametrosAplicados: ParametrosProjecaoPlurianual
+  notaMetodologica: string
+}
+
+/**
+ * Calcula a projeção de DRE para os próximos anos com base na média dos anos anteriores realizados.
+ *
+ * @param historicoAnos Lista de anos históricos já consolidados pela DRE Gerencial oficial
+ * @param anoBaseExercicio Exercício corrente ativo (ex.: 2025 ou 2026)
+ * @param parametros Parâmetros de quantidade de anos futuros e método (média simples ou crescimento anual)
+ */
+export function calcularProjecaoDrePlurianual(
+  historicoAnos: DadosAnoHistoricoDre[],
+  anoBaseExercicio: number,
+  parametros: ParametrosProjecaoPlurianual = PARAMETROS_PROJECAO_PLURIANUAL_PADRAO,
+): ProjecaoPlurianualResultado {
+  const anosComMovimento = historicoAnos.filter((h) => h.temMovimento).sort((a, b) => a.ano - b.ano)
+
+  const anosBase = anosComMovimento.map((h) => h.ano)
+  const qtdAnosBase = Math.max(anosBase.length, 1)
+
+  const qtdFuturos = Math.max(1, Math.min(parametros.anosFuturos || 3, 5))
+  const usarCrescimento =
+    parametros.modo === 'media_com_crescimento' && isFinite(parametros.percentualCrescimentoAnual)
+  const fatorCrescimento = 1 + (usarCrescimento ? parametros.percentualCrescimentoAnual / 100 : 0)
+
+  // Determina os próximos anos projetados (a partir do maior ano entre anoBaseExercicio e anos históricos)
+  const anoReferencia = Math.max(
+    anoBaseExercicio,
+    anosBase.length > 0 ? Math.max(...anosBase) : anoBaseExercicio,
+  )
+
+  const anosFuturos: number[] = []
+  for (let i = 1; i <= qtdFuturos; i++) {
+    anosFuturos.push(anoReferencia + i)
+  }
+
+  // Média anual de cada rubrica sobre os anos históricos com movimento
+  const mediaPorClassificacao = new Map<ClassificacaoDre, number>()
+  for (const clf of GRUPOS_DRE_ORDEM) {
+    const soma = anosComMovimento.reduce((acc, h) => acc + (h.totaisPorClassificacao[clf] || 0), 0)
+    mediaPorClassificacao.set(clf, soma / qtdAnosBase)
+  }
+
+  // Grupos e valores por ano
+  const grupos: GrupoProjecaoPlurianual[] = GRUPOS_DRE_ORDEM.map((clf) => {
+    const media = mediaPorClassificacao.get(clf) || 0
+    const valoresPorAno: Record<number, number> = {}
+
+    // Anos realizados da base histórica
+    for (const h of anosComMovimento) {
+      valoresPorAno[h.ano] = h.totaisPorClassificacao[clf] || 0
+    }
+
+    // Anos futuros projetados
+    anosFuturos.forEach((anoProj, idx) => {
+      if (!usarCrescimento) {
+        valoresPorAno[anoProj] = arredondar2(media)
+      } else {
+        const expoente = idx + 1
+        valoresPorAno[anoProj] = arredondar2(media * Math.pow(fatorCrescimento, expoente))
+      }
+    })
+
+    return {
+      classificacao: clf,
+      titulo: TITULOS_GRUPOS_DRE[clf],
+      sinal: SINAL_MULTIPLICADOR_GRUPO[clf],
+      mediaHistoricaAnual: media,
+      valoresPorAno,
+    }
+  })
+
+  // Lucro ou Prejuízo por ano = Receita - DespVar - DespFix - DespFin + RecFin
+  const lucroPrejuizoPorAno: Record<number, number> = {}
+  const margemLiquidaPorAno: Record<number, number | null> = {}
+
+  const todosAnos = [...anosBase, ...anosFuturos]
+  const grupoRec = grupos.find((g) => g.classificacao === 'Receita')!
+  const grupoDv = grupos.find((g) => g.classificacao === 'Despesa Variável')!
+  const grupoDf = grupos.find((g) => g.classificacao === 'Despesa Fixa')!
+  const grupoDfin = grupos.find((g) => g.classificacao === 'Despesa Financeira')!
+  const grupoRfin = grupos.find((g) => g.classificacao === 'Receita Financeira')!
+
+  for (const ano of todosAnos) {
+    const rec = grupoRec.valoresPorAno[ano] || 0
+    const dv = grupoDv.valoresPorAno[ano] || 0
+    const df = grupoDf.valoresPorAno[ano] || 0
+    const dfin = grupoDfin.valoresPorAno[ano] || 0
+    const rfin = grupoRfin.valoresPorAno[ano] || 0
+
+    const lp = arredondar2(rec - dv - df - dfin + rfin)
+    lucroPrejuizoPorAno[ano] = lp
+    margemLiquidaPorAno[ano] = rec > 0 ? (lp / rec) * 100 : null
+  }
+
+  const mediaHistoricaLucro =
+    anosBase.length > 0
+      ? anosBase.reduce((acc, a) => acc + (lucroPrejuizoPorAno[a] || 0), 0) / anosBase.length
+      : 0
+
+  const mediaHistoricaReceita = mediaPorClassificacao.get('Receita') || 0
+
+  const colunas: ColunaAnoProjecaoPlurianual[] = todosAnos.map((ano) => {
+    const ehFuturo = anosFuturos.includes(ano)
+    return {
+      ano,
+      projetado: ehFuturo,
+      rotulo: ehFuturo ? `${ano} (proj.)` : `${ano} (real.)`,
+    }
+  })
+
+  const descMetodo =
+    parametros.modo === 'media_com_crescimento' && parametros.percentualCrescimentoAnual !== 0
+      ? `média histórica anual corrigida a ${formatPercentualBr(parametros.percentualCrescimentoAnual)}% a.a.`
+      : 'média anual dos exercícios anteriores com movimento'
+
+  const notaMetodologica =
+    anosBase.length > 0
+      ? `Projeção plurianual baseada em ${anosBase.length} exercício(s) com movimento (${anosBase.join(
+          ', ',
+        )}). Método: ${descMetodo}.`
+      : 'Sem exercícios anteriores com movimento suficientes para calcular a média histórica.'
+
+  return {
+    anosBaseHistorico: anosBase,
+    anosFuturosProjetados: anosFuturos,
+    colunas,
+    grupos,
+    lucroPrejuizoPorAno,
+    margemLiquidaPorAno,
+    mediaHistoricaLucro,
+    mediaHistoricaReceita,
+    parametrosAplicados: {
+      anosFuturos: qtdFuturos,
+      modo: parametros.modo,
+      percentualCrescimentoAnual: usarCrescimento ? parametros.percentualCrescimentoAnual : 0,
+    },
+    notaMetodologica,
+  }
 }

@@ -37,11 +37,13 @@ import {
   formatCurrency,
 } from '@/lib/financeCalculations'
 import { calcularAnaliseRentabilidade } from '@/lib/analiseRentabilidadeCalculo'
+import { calcularAnaliseFaturamento } from '@/lib/analiseFaturamentoCalculo'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BorlimLogo } from '@/components/BorlimLogo'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
   SelectContent,
@@ -100,8 +102,10 @@ export default function AnaliseEconomicaFinanceira() {
   const [balancosAno, setBalancosAno] = useState<BalancoRecord[]>([])
   const [dresAno, setDresAno] = useState<DreRecord[]>([])
   const [lancamentosAno, setLancamentosAno] = useState<LancamentoRecord[]>([])
+  const [todosLancamentosEmpresa, setTodosLancamentosEmpresa] = useState<LancamentoRecord[]>([])
   const [contasCad, setContasCad] = useState<ContaRecord[]>([])
   const [planoCad, setPlanoCad] = useState<PlanoContaRecord[]>([])
+  const [tiposDespesasCad, setTiposDespesasCad] = useState<TipoDespesaRecord[]>([])
 
   const empresaAtivaId =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
@@ -133,6 +137,7 @@ export default function AnaliseEconomicaFinanceira() {
           Promise<LancamentoRecord[]>,
           Promise<ContaRecord[]>,
           Promise<PlanoContaRecord[]>,
+          Promise<TipoDespesaRecord[]>,
         ] = [
           balancosService
             .getByEmpresa(empresaAtivaId)
@@ -144,28 +149,30 @@ export default function AnaliseEconomicaFinanceira() {
             .catch(() => [] as DreRecord[]),
           lancamentosService
             .getAll({ empresaId: empresaAtivaId })
-            .then((list) =>
-              list.filter((l) => {
-                const dataStr = l.data_competencia || l.data_pagamento || l.data_lancamento
-                if (!dataStr) return false
-                return new Date(dataStr).getFullYear() === anoAtivo
-              }),
-            )
             .catch(() => [] as LancamentoRecord[]),
           contasService.getAll().catch(() => [] as ContaRecord[]),
           planoContasService.getAll().catch(() => [] as PlanoContaRecord[]),
+          tiposDespesasService.getAll().catch(() => [] as TipoDespesaRecord[]),
         ]
 
-        const [bList, dList, lList, cList, pList] = await Promise.all(promises)
+        const [bList, dList, allLancs, cList, pList, tdList] = await Promise.all(promises)
 
         if (!cancelado) {
+          const lListAno = allLancs.filter((l) => {
+            const dataStr = l.data_competencia || l.data_pagamento || l.data_lancamento
+            if (!dataStr) return false
+            return new Date(dataStr).getFullYear() === anoAtivo
+          })
+
           setBalancosAno(bList)
           setDresAno(dList)
-          setLancamentosAno(lList)
+          setTodosLancamentosEmpresa(allLancs)
+          setLancamentosAno(lListAno)
           setContasCad(cList)
           setPlanoCad(pList)
+          setTiposDespesasCad(tdList)
 
-          const temAlgumDado = bList.length > 0 || dList.length > 0 || lList.length > 0
+          const temAlgumDado = bList.length > 0 || dList.length > 0 || lListAno.length > 0
           setTemDadosCliente(temAlgumDado)
         }
       } catch (err) {
@@ -266,6 +273,28 @@ export default function AnaliseEconomicaFinanceira() {
     }
   }, [dresAno, balancosAno, lancamentosAno, contasCad, planoCad, anoAtivo, empresaAtivaId])
 
+  // Cálculo dos dados oficiais de vendas/faturamento (paridade exata com /gerencial/analise-faturamento)
+  const dadosVendasHub = useMemo(() => {
+    const meses = gerarListaMeses(anoAtivo, 1, 12)
+    // Usa exatamente a mesma função de motor da tela Análise de Faturamento
+    const res = calcularAnaliseFaturamento(
+      todosLancamentosEmpresa.length > 0 ? todosLancamentosEmpresa : lancamentosAno,
+      contasCad,
+      tiposDespesasCad,
+      meses,
+      anoAtivo,
+    )
+    const mediaMensal = res.mesesComMovimento > 0 ? res.faturamentoTotal / res.mesesComMovimento : 0
+    return {
+      faturamentoTotal: res.faturamentoTotal,
+      mesesComMovimento: res.mesesComMovimento,
+      mediaMensal,
+      mesPico: res.mesPico,
+      mesMenor: res.mesMenor,
+      temMovimento: res.temMovimento,
+    }
+  }, [todosLancamentosEmpresa, lancamentosAno, contasCad, tiposDespesasCad, anoAtivo])
+
   const atalhos: HubShortcut[] = useMemo(() => {
     const lista: HubShortcut[] = [
       {
@@ -346,6 +375,10 @@ export default function AnaliseEconomicaFinanceira() {
           'bg-gradient-to-tr from-blue-500/25 to-cyan-600/20 text-blue-300 border-blue-400/40',
         rota: () => '/gerencial/analise-faturamento',
         metricasTexto: 'Sazonalidade Jan-Dez, participação percentual e comparativos',
+        valorDestaque: dadosVendasHub.temMovimento
+          ? formatCurrency(dadosVendasHub.faturamentoTotal)
+          : null,
+        rotuloDestaque: `Vendas ${anoAtivo}`,
       },
       {
         id: 'rentabilidade',
@@ -620,6 +653,162 @@ export default function AnaliseEconomicaFinanceira() {
         />
       )}
 
+      {/* SEÇÃO 1: PAINEL DE KPIS EXECUTIVOS & DADOS DE VENDAS */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+              Indicadores-Chave (KPIs) & Vendas do Exercício {anoAtivo}
+            </h2>
+          </div>
+          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Integração em tempo real · Motor oficial DRE & Vendas
+          </span>
+        </div>
+
+        {verificandoDados ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-28 rounded-28" />
+            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-28 rounded-2xl" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* KPI 1: Vendas / Faturamento Total (Integração Direta com Análise de Faturamento) */}
+            <div
+              onClick={() => navigate('/gerencial/analise-faturamento')}
+              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 opacity-80" />
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Vendas / Faturamento
+                </span>
+                <Badge
+                  variant="outline"
+                  className="bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800 text-[10px] font-semibold"
+                >
+                  {dadosVendasHub.mesesComMovimento} meses
+                </Badge>
+              </div>
+              <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
+                {formatCurrency(dadosVendasHub.faturamentoTotal)}
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                <span>Média: {formatCurrency(dadosVendasHub.mediaMensal)}/mês</span>
+                <span className="text-blue-600 dark:text-blue-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                  Ver vendas →
+                </span>
+              </div>
+            </div>
+
+            {/* KPI 2: EBITDA (LAJIDA) Operacional */}
+            <div
+              onClick={() =>
+                navigate(isCliente ? '/cliente/dashboard-bi' : '/gerencial/dashboard-bi')
+              }
+              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  EBITDA (LAJIDA)
+                </span>
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] font-semibold ${
+                    ebitdaAtivo >= 0
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200'
+                      : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300 border-red-200'
+                  }`}
+                >
+                  {ebitdaAtivo >= 0 ? 'Positivo' : 'Negativo'}
+                </Badge>
+              </div>
+              <div
+                className={`text-2xl font-black tabular-nums tracking-tight ${
+                  ebitdaAtivo >= 0
+                    ? 'text-emerald-700 dark:text-emerald-400'
+                    : 'text-red-600 dark:text-red-400'
+                }`}
+              >
+                {formatCurrency(ebitdaAtivo)}
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                <span>Geração Caixa Op.</span>
+                <span className="text-emerald-600 dark:text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                  Dashboard BI →
+                </span>
+              </div>
+            </div>
+
+            {/* KPI 3: Valuation Estimado */}
+            <div
+              onClick={() =>
+                navigate(isCliente ? '/cliente/dashboard-bi' : '/indicadores-valuation')
+              }
+              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-sky-400 dark:hover:border-sky-500 transition-all duration-200 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-sky-500 opacity-80" />
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Valuation Estimado
+                </span>
+                <Badge
+                  variant="outline"
+                  className="bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200 text-[10px] font-semibold"
+                >
+                  Gordon FCD
+                </Badge>
+              </div>
+              <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
+                {formatCurrency(valuationAtivo)}
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                <span>Enterprise Value</span>
+                <span className="text-sky-600 dark:text-sky-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                  Valuation →
+                </span>
+              </div>
+            </div>
+
+            {/* KPI 4: Sazonalidade / Mês de Pico de Vendas */}
+            <div
+              onClick={() => navigate('/gerencial/analise-faturamento')}
+              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-400 dark:hover:border-amber-500 transition-all duration-200 relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Pico de Vendas
+                </span>
+                <Badge
+                  variant="outline"
+                  className="bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 text-[10px] font-semibold"
+                >
+                  {dadosVendasHub.mesPico ? dadosVendasHub.mesPico.mesNome : 'S/ dado'}
+                </Badge>
+              </div>
+              <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
+                {dadosVendasHub.mesPico ? formatCurrency(dadosVendasHub.mesPico.valor) : 'R$ 0,00'}
+              </div>
+              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                <span>
+                  {dadosVendasHub.mesPico && dadosVendasHub.faturamentoTotal > 0
+                    ? `${((dadosVendasHub.mesPico.valor / dadosVendasHub.faturamentoTotal) * 100).toFixed(1)}% do ano`
+                    : 'Curva Jan–Dez'}
+                </span>
+                <span className="text-amber-600 dark:text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                  Detalhes →
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Grid de Módulos e Demonstrações Disponíveis */}
       <div>
         <div className="flex items-center justify-between mb-4">
@@ -682,13 +871,16 @@ export default function AnaliseEconomicaFinanceira() {
                     </p>
                   </div>
 
-                  {/* Destaque de Valor Numérico quando aplicável (EBITDA / Valuation) */}
+                  {/* Destaque de Valor Numérico quando aplicável (EBITDA / Valuation / Vendas) com hierarquia visual aprimorada */}
                   {item.valorDestaque && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-white/10 border border-white/15 backdrop-blur-xs flex items-center justify-between">
-                      <span className="text-[11px] uppercase tracking-wider text-slate-300 font-bold">
-                        {item.rotuloDestaque || 'Valor Consolidado'}
-                      </span>
-                      <span className="text-sm font-extrabold text-cyan-200 font-mono">
+                    <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-white/15 to-white/5 border border-white/20 backdrop-blur-sm flex items-center justify-between shadow-inner">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 block">
+                          {item.rotuloDestaque || 'Valor Consolidado'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">Exercício {anoAtivo}</span>
+                      </div>
+                      <span className="text-base font-black text-cyan-200 tabular-nums font-mono drop-shadow-sm">
                         {item.valorDestaque}
                       </span>
                     </div>
