@@ -1,4 +1,5 @@
 import pb from '@/lib/pocketbase/client'
+import { fetchAllRecords } from '@/lib/pocketbase/fetchAll'
 import { auditoriaCadastrosService } from './auditoriaCadastrosService'
 import type {
   EmpresaRecord,
@@ -821,7 +822,7 @@ export const centrosService = {
     if (filter) {
       params.filter = filter
     }
-    return await pb.collection('centros').getFullList<CentroRecord>(params)
+    return await fetchAllRecords<CentroRecord>('centros', params)
   },
 
   /**
@@ -918,7 +919,7 @@ export const lancamentosCentroService = {
     if (empFilter) {
       filters.push(empFilter)
     }
-    return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>({
+    return await fetchAllRecords<LancamentoCentroRecord>('lancamentos_centro', {
       filter: filters.join(' && '),
       sort: '-data',
     })
@@ -932,7 +933,7 @@ export const lancamentosCentroService = {
     if (filter) {
       params.filter = filter
     }
-    return await pb.collection('lancamentos_centro').getFullList<LancamentoCentroRecord>(params)
+    return await fetchAllRecords<LancamentoCentroRecord>('lancamentos_centro', params)
   },
 
   async create(data: {
@@ -987,7 +988,7 @@ export const tiposDespesaService = {
     if (filter) {
       params.filter = filter
     }
-    return await pb.collection('tipos_despesa').getFullList<TipoDespesaRecord>(params)
+    return await fetchAllRecords<TipoDespesaRecord>('tipos_despesa', params)
   },
 
   // Calcula o próximo código (TD-NNN) com base nos códigos já existentes do usuário.
@@ -1056,7 +1057,7 @@ export const contasService = {
     if (filter) {
       params.filter = filter
     }
-    return await pb.collection('contas').getFullList<ContaRecord>(params)
+    return await fetchAllRecords<ContaRecord>('contas', params)
   },
 
   // Calcula o próximo código (CO-NNN) com base nos códigos já existentes do usuário.
@@ -1182,7 +1183,7 @@ export const planoContasService = {
     if (filter) {
       params.filter = filter
     }
-    return await pb.collection('plano_contas').getFullList<PlanoContaRecord>(params)
+    return await fetchAllRecords<PlanoContaRecord>('plano_contas', params)
   },
 
   // Calcula o próximo código (PC-NNN) com base nos códigos já existentes.

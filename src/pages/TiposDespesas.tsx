@@ -28,7 +28,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Tags, Plus, Pencil, Trash2, AlertCircle, GripVertical, Check, Loader2 } from 'lucide-react'
+import {
+  Tags,
+  Plus,
+  Pencil,
+  Trash2,
+  AlertCircle,
+  GripVertical,
+  Check,
+  Loader2,
+  Download,
+} from 'lucide-react'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -249,6 +259,53 @@ export default function TiposDespesas() {
     })
   }, [tipos])
 
+  const handleExportarCsv = () => {
+    if (tiposOrdenados.length === 0) {
+      toast({
+        title: 'Nenhum tipo para exportar',
+        description: 'A lista de tipos de despesa está vazia.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const headers = [
+      'Posição',
+      'Código',
+      'Nome do Tipo de Despesa',
+      'Descrição',
+      'Qtd. Lançamentos',
+    ]
+
+    const rows = tiposOrdenados.map((t, idx) => {
+      const count = contagemLancamentos[t.id] || 0
+      return [
+        String(idx + 1),
+        `"${(t.codigo || '').replace(/"/g, '""')}"`,
+        `"${(t.nome || '').replace(/"/g, '""')}"`,
+        `"${(t.descricao || '').replace(/"/g, '""')}"`,
+        String(count),
+      ]
+    })
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `tipos_despesa_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'CSV exportado com sucesso',
+      description: `${tiposOrdenados.length} tipo(s) de despesa exportado(s) na ordem da tela.`,
+    })
+  }
+
   const handleDragStart = (e: React.DragEvent, id: string) => {
     if (isCliente || salvandoOrdemTipos) {
       e.preventDefault()
@@ -395,8 +452,8 @@ export default function TiposDespesas() {
         )}
 
         {/* ============ COLUNA DIREITA: TABELA ============ */}
-        <Card className={`bg-white border-slate-200 shadow-xs ${isCliente ? 'xl:col-span-2' : ''}`}>
-          <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between gap-4">
+        <Card className="bg-white border-slate-200 shadow-xs">
+          <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between gap-4 flex-wrap">
             <div>
               <CardTitle className="text-sm font-bold text-[#0B1F3A]">
                 Tipos Cadastrados ({tiposOrdenados.length})
@@ -406,19 +463,33 @@ export default function TiposDespesas() {
                 {!isCliente && ' Arraste pelo cabo para reordenar.'}
               </CardDescription>
             </div>
-            {salvandoOrdemTipos && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                Salvando ordem...
-              </span>
-            )}
-            {ordemSalvaSucesso && (
-              <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1">
-                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                Ordem salva
-              </span>
-            )}
-          </CardHeader>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleExportarCsv}
+                disabled={tiposOrdenados.length === 0}
+                className="h-7 text-[11px] font-semibold border-slate-200 hover:bg-slate-50 text-slate-700"
+                title="Exportar tipos de despesa em CSV na mesma ordem da tela"
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5" />
+                Exportar CSV
+              </Button>
+              {salvandoOrdemTipos && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                  Salvando ordem...
+                </span>
+              )}
+              {ordemSalvaSucesso && (
+                <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  Ordem salva
+                </span>
+              )}
+            </div>
+          </CardHeader>{' '}
           <CardContent className="p-0">
             {loading ? (
               <div className="py-12 flex justify-center items-center">

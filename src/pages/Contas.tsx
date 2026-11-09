@@ -53,6 +53,7 @@ import {
   FileText,
   ChevronsDownUp,
   ChevronsUpDown,
+  Download,
 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
@@ -227,6 +228,58 @@ export default function Contas() {
   const recolherTudo = () => {
     setExpandedTipos({})
     setExpandedGrupos({})
+  }
+
+  const handleExportarCsv = () => {
+    if (contasFiltradas.length === 0) {
+      toast({
+        title: 'Nenhuma conta para exportar',
+        description: 'A lista atual está vazia ou os filtros não retornaram registros.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const headers = [
+      'Código',
+      'Nome da Conta',
+      'Tipo',
+      'Grupo',
+      'Classificação DRE',
+      'Ocultar DRE',
+      'Ocultar Fluxo de Caixa',
+      'Ocultar em Tudo',
+      'Descrição',
+    ]
+
+    const rows = contasFiltradas.map((c) => [
+      `"${(c.codigo || '').replace(/"/g, '""')}"`,
+      `"${(c.nome || '').replace(/"/g, '""')}"`,
+      `"${(c.tipo || '').replace(/"/g, '""')}"`,
+      `"${(c.grupo || '').replace(/"/g, '""')}"`,
+      `"${(c.classificacao_dre || '').replace(/"/g, '""')}"`,
+      c.nao_exibir_dre ? 'Sim' : 'Não',
+      c.nao_exibir_fluxo_caixa ? 'Sim' : 'Não',
+      c.nao_exibir_em_nada ? 'Sim' : 'Não',
+      `"${(c.descricao || '').replace(/"/g, '""')}"`,
+    ])
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `cadastro_contas_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: 'CSV exportado com sucesso',
+      description: `${contasFiltradas.length} conta(s) exportada(s) na ordem da tela.`,
+    })
   }
 
   // Contas filtradas (por tipo + busca por nome/código)
@@ -724,11 +777,23 @@ export default function Contas() {
             {/* ============ COLUNA DIREITA: TABELA ============ */}
             <Card className="bg-white border-slate-200 shadow-xs">
               <CardHeader className="pb-3 border-b border-slate-100 space-y-3">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
                   <CardTitle className="text-sm font-bold text-[#0B1F3A]">
                     Contas Cadastradas ({contasFiltradas.length}
                     {filtroTipo !== 'todos' || busca.trim() ? ` de ${contas.length}` : ''})
                   </CardTitle>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleExportarCsv}
+                    disabled={contasFiltradas.length === 0}
+                    className="h-7 text-[11px] font-semibold border-slate-200 hover:bg-slate-50 text-slate-700"
+                    title="Exportar contas cadastradas em CSV na mesma ordem da tela"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Exportar CSV
+                  </Button>
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <div className="flex items-center gap-1.5 w-full sm:w-auto">

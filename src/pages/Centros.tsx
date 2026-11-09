@@ -800,8 +800,75 @@ export default function Centros() {
   const barraWidthAnual = temMetaAnual ? Math.min(pctAnual, 100) : 0
 
   // Exportar resumo Orçado vs Realizado em CSV (todos os centros)
+  // Exportar centros de custo cadastrados em CSV (na mesma ordem da tela)
+  const handleExportCentrosCsv = () => {
+    if (centrosOrdenados.length === 0) {
+      toast({
+        variant: 'destructive',
+        title: 'Nada para exportar',
+        description: 'Não há centros de custo cadastrados.',
+      })
+      return
+    }
+
+    const headers = [
+      'Posição',
+      'Código',
+      'Nome do Centro',
+      'Tipo',
+      'Qtd. Lançamentos',
+      'Total Realizado',
+      'Meta Mensal',
+      'Meta Anual',
+      'Descrição',
+    ]
+
+    const escapeCsv = (val: string | number | undefined | null): string => {
+      if (val === null || val === undefined) return ''
+      const s = String(val)
+      if (/[;"\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+      return s
+    }
+
+    const fmtNum = (n: number) =>
+      n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+    const rows = centrosOrdenados.map((c, idx) => {
+      const stats = statsPorCentro.get(c.id) || { count: 0, total: 0 }
+      return [
+        String(idx + 1),
+        c.codigo || '',
+        c.nome,
+        c.tipo,
+        String(stats.count),
+        fmtNum(stats.total),
+        c.meta_mensal ? fmtNum(Number(c.meta_mensal)) : '',
+        c.meta_anual ? fmtNum(Number(c.meta_anual)) : '',
+        c.descricao || '',
+      ].map(escapeCsv)
+    })
+
+    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    const dataStr = new Date().toISOString().slice(0, 10)
+    link.setAttribute('download', `centros_de_custo_${dataStr}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(link.href)
+
+    toast({
+      title: 'Centros exportados',
+      description: `${centrosOrdenados.length} centro(s) exportado(s) em CSV na ordem da tela.`,
+    })
+  }
+
+  // Exportar resumo Orçado vs Realizado em CSV (todos os centros)
   const handleExportResumo = () => {
-    if (centros.length === 0) {
+    if (centrosOrdenados.length === 0) {
       toast({
         variant: 'destructive',
         title: 'Nada para exportar',
@@ -857,7 +924,7 @@ export default function Centros() {
         .join(';'),
     )
 
-    for (const c of centros) {
+    for (const c of centrosOrdenados) {
       const lancs = lancPorCentro.get(c.id) || []
       const metaMensal = c.meta_mensal ? Number(c.meta_mensal) || 0 : 0
       const realizadoMes = lancs
@@ -1153,13 +1220,27 @@ export default function Centros() {
 
           {/* Tabela de Centros */}
           <Card className="bg-white border-slate-200 shadow-xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-                Centros Cadastrados ({centros.length})
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Clique em um centro para ver e lançar movimentações.
-              </CardDescription>
+            <CardHeader className="pb-3 border-b border-slate-100 flex flex-row items-center justify-between gap-3 flex-wrap">
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                  Centros Cadastrados ({centros.length})
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Clique em um centro para ver e lançar movimentações.
+                </CardDescription>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleExportCentrosCsv}
+                disabled={centrosOrdenados.length === 0}
+                className="h-7 text-[11px] font-semibold border-slate-200 hover:bg-slate-50 text-slate-700"
+                title="Exportar centros de custo em CSV na mesma ordem da tela"
+              >
+                <Download className="w-3.5 h-3.5 mr-1.5" />
+                Exportar CSV
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               {loading ? (
