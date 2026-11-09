@@ -275,12 +275,8 @@ export default function GerencialIndicadoresAvancados() {
   useRealtime('lancamentos', () => carregarDados())
 
   const resultado = useMemo<IndicadoresAvancadosResultado>(() => {
-    return calcularIndicadoresAvancados(balanco, dre, {
-      custoCapitalWacc: custoCapitalWacc / 100,
-      aliquotaIrEfetiva: aliquotaIrEfetiva / 100,
-      baseDiasAno: 360,
-    })
-  }, [balanco, dre, custoCapitalWacc, aliquotaIrEfetiva])
+    return calcularIndicadoresAvancados(balanco, dre, custoCapitalWacc)
+  }, [balanco, dre, custoCapitalWacc])
 
   const handleExportarExcel = () => {
     exportarIndicadoresAvancadosExcel(resultado, selectedEmpresa, anoInicial)
@@ -428,7 +424,7 @@ export default function GerencialIndicadoresAvancados() {
       </div>
 
       {/* Alerta de ausência de demonstrativos */}
-      {!resultado.temDados && (
+      {!resultado.resumo.temDados && (
         <Card className="bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 shadow-sm">
           <CardContent className="p-4 flex items-center gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
@@ -523,12 +519,12 @@ export default function GerencialIndicadoresAvancados() {
               </span>
               <Badge
                 className={`text-[11px] font-bold mt-1 ${
-                  resultado.eva.criouValor
+                  (resultado.eva.eva || 0) >= 0
                     ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
                     : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
                 }`}
               >
-                {resultado.eva.criouValor
+                {(resultado.eva.eva || 0) >= 0
                   ? 'Criação de Valor Real'
                   : 'Destruição de Valor Econômico'}
               </Badge>
@@ -565,7 +561,7 @@ export default function GerencialIndicadoresAvancados() {
                 Custo de Capital (R$)
               </span>
               <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
-                {formatMoeda(resultado.eva.custoCapitalValor)}
+                {formatMoeda(resultado.eva.custoCapital)}
               </span>
               <span className="text-[10.5px] text-slate-400 block mt-0.5">
                 {custoCapitalWacc}% a.a. sobre capital
@@ -574,16 +570,15 @@ export default function GerencialIndicadoresAvancados() {
 
             <div className="bg-slate-50 dark:bg-slate-800/40 p-3 rounded-xl border border-slate-100 dark:border-slate-800">
               <span className="text-[10px] text-slate-400 uppercase font-semibold block">
-                ROIC vs WACC
+                Margem EVA
               </span>
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-sm font-extrabold text-sky-600 dark:text-sky-400">
-                  {formatPercent(resultado.eva.roic)}
+                  {formatPercent(resultado.eva.margemEva)}
                 </span>
-                <span className="text-xs text-slate-400">vs {custoCapitalWacc}%</span>
               </div>
               <span className="text-[10.5px] text-slate-400 block mt-0.5">
-                Retorno sobre capital investido
+                EVA / Receita Líquida
               </span>
             </div>
           </div>
@@ -718,14 +713,14 @@ export default function GerencialIndicadoresAvancados() {
                 Ciclo de Caixa (CCC)
               </span>
               <span className="text-2xl sm:text-3xl font-black font-mono text-purple-600 dark:text-purple-400 tracking-tight">
-                {resultado.cicloCaixa.ccc !== null
-                  ? `${Math.round(resultado.cicloCaixa.ccc)} dias`
+                {resultado.ciclo.cicloConversaoCaixa !== null
+                  ? `${Math.round(resultado.ciclo.cicloConversaoCaixa)} dias`
                   : '—'}
               </span>
               <span className="text-[11px] text-slate-400 block mt-0.5">
                 Ciclo Operacional:{' '}
-                {resultado.cicloCaixa.cicloOperacional !== null
-                  ? `${Math.round(resultado.cicloCaixa.cicloOperacional)} dias`
+                {resultado.ciclo.cicloOperacional !== null
+                  ? `${Math.round(resultado.ciclo.cicloOperacional)} dias`
                   : '—'}
               </span>
             </div>
@@ -740,9 +735,7 @@ export default function GerencialIndicadoresAvancados() {
               </span>
               <div className="flex items-baseline justify-between mt-2">
                 <span className="text-2xl font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {resultado.cicloCaixa.pme !== null
-                    ? `${Math.round(resultado.cicloCaixa.pme)} dias`
-                    : '—'}
+                  {resultado.ciclo.pme !== null ? `${Math.round(resultado.ciclo.pme)} dias` : '—'}
                 </span>
                 <Clock className="w-4 h-4 text-purple-500" />
               </div>
@@ -755,9 +748,7 @@ export default function GerencialIndicadoresAvancados() {
               </span>
               <div className="flex items-baseline justify-between mt-2">
                 <span className="text-2xl font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {resultado.cicloCaixa.pmr !== null
-                    ? `${Math.round(resultado.cicloCaixa.pmr)} dias`
-                    : '—'}
+                  {resultado.ciclo.pmr !== null ? `${Math.round(resultado.ciclo.pmr)} dias` : '—'}
                 </span>
                 <Clock className="w-4 h-4 text-sky-500" />
               </div>
@@ -770,9 +761,7 @@ export default function GerencialIndicadoresAvancados() {
               </span>
               <div className="flex items-baseline justify-between mt-2">
                 <span className="text-2xl font-black text-slate-900 dark:text-slate-100 font-mono">
-                  {resultado.cicloCaixa.pmp !== null
-                    ? `${Math.round(resultado.cicloCaixa.pmp)} dias`
-                    : '—'}
+                  {resultado.ciclo.pmp !== null ? `${Math.round(resultado.ciclo.pmp)} dias` : '—'}
                 </span>
                 <Clock className="w-4 h-4 text-emerald-500" />
               </div>
@@ -806,16 +795,16 @@ export default function GerencialIndicadoresAvancados() {
                 Índice de Cobertura
               </span>
               <span className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-slate-100 tracking-tight">
-                {resultado.coberturaJuros.indice !== null
-                  ? `${formatNumero(resultado.coberturaJuros.indice, 2)}x`
+                {resultado.cobertura.cobertura !== null
+                  ? `${formatNumero(resultado.cobertura.cobertura, 2)}x`
                   : '—'}
               </span>
               <Badge
                 className={`text-[11px] font-bold mt-1 border ${
-                  coresCobertura[resultado.coberturaJuros.classificacao]
+                  coresCobertura[resultado.cobertura.classificacao]
                 }`}
               >
-                {ROTULO_CLASSIFICACAO_COBERTURA[resultado.coberturaJuros.classificacao]}
+                {ROTULO_CLASSIFICACAO_COBERTURA[resultado.cobertura.classificacao]}
               </Badge>
             </div>
           </div>
@@ -828,7 +817,7 @@ export default function GerencialIndicadoresAvancados() {
                 EBITDA (EBIT oficial)
               </span>
               <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
-                {formatMoeda(resultado.coberturaJuros.ebit)}
+                {formatMoeda(resultado.cobertura.ebit)}
               </span>
               <span className="text-[10.5px] text-slate-400 block mt-0.5">
                 Paridade com Dashboard BI
@@ -840,7 +829,7 @@ export default function GerencialIndicadoresAvancados() {
                 Despesas Financeiras
               </span>
               <span className="text-sm font-extrabold text-slate-900 dark:text-slate-100 mt-1 block">
-                {formatMoeda(resultado.coberturaJuros.despesasFinanceiras)}
+                {formatMoeda(resultado.cobertura.despesasFinanceiras)}
               </span>
               <span className="text-[10.5px] text-slate-400 block mt-0.5">
                 Custo da dívida no exercício
@@ -852,7 +841,7 @@ export default function GerencialIndicadoresAvancados() {
                 Diagnóstico de Risco
               </span>
               <p className="text-xs text-slate-700 dark:text-slate-300 font-medium mt-1 leading-snug">
-                {DESCRICAO_CLASSIFICACAO_COBERTURA[resultado.coberturaJuros.classificacao]}
+                {DESCRICAO_CLASSIFICACAO_COBERTURA[resultado.cobertura.classificacao]}
               </p>
             </div>
           </div>

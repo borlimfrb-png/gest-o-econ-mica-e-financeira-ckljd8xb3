@@ -70,6 +70,19 @@ export const ROTULO_CLASSIFICACAO_COBERTURA: Record<
   sem_dados: 'Sem dados',
 }
 
+export const DESCRICAO_CLASSIFICACAO_COBERTURA: Record<
+  CoberturaJurosResultado['classificacao'],
+  string
+> = {
+  confortavel: 'Excelente capacidade de honrar os compromissos financeiros (EBIT > 5x juros).',
+  adequada: 'Situação financeira saudável e dentro de margem segura (EBIT entre 3x e 5x juros).',
+  apertada:
+    'Margem reduzida de segurança; requer atenção ao endividamento (EBIT entre 1,5x e 3x juros).',
+  critica:
+    'Risco de insolvência ou incapacidade de arcar com o serviço da dívida (EBIT < 1,5x juros).',
+  sem_dados: 'Sem despesas financeiras registradas ou dados insuficientes para apuração.',
+}
+
 export function classificarCobertura(c: number | null): CoberturaJurosResultado['classificacao'] {
   if (c === null) return 'sem_dados'
   if (c >= 5) return 'confortavel'

@@ -37,7 +37,7 @@ import {
   formatCurrency,
 } from '@/lib/financeCalculations'
 import { calcularAnaliseRentabilidade } from '@/lib/analiseRentabilidadeCalculo'
-import { gerarListaMeses } from '@/lib/periodosCobranca'
+import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -582,7 +582,10 @@ export default function AnaliseEconomicaFinanceira() {
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectEmpresaOuGrupoItems />
+                      <SelectEmpresaOuGrupoItems
+                        empresas={empresas}
+                        todasEntidades={todasEntidades}
+                      />
                     </SelectContent>
                   </Select>
                 ) : (
