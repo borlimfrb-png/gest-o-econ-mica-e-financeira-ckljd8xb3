@@ -45,6 +45,8 @@ const GerencialDashboardBi = lazy(() => import('./pages/GerencialDashboardBi'))
 const ClienteDashboardBi = lazy(() => import('./pages/ClienteDashboardBi'))
 const GerencialIndicadores = lazy(() => import('./pages/GerencialIndicadores'))
 const ClienteIndicadores = lazy(() => import('./pages/ClienteIndicadores'))
+const GerencialTermometroInsolvencia = lazy(() => import('./pages/GerencialTermometroInsolvencia'))
+const GerencialIndicadoresAvancados = lazy(() => import('./pages/GerencialIndicadoresAvancados'))
 const ComparativoMensalDreBalanco = lazy(() => import('./pages/ComparativoMensalDreBalanco'))
 const Financeiro = lazy(() => import('./pages/Financeiro'))
 const BaixaRecebiveis = lazy(() => import('./pages/BaixaRecebiveis'))
@@ -457,6 +459,22 @@ const App = () => (
                       element={
                         <ModuloRoute modulo="cliente_indicadores">
                           <ClienteIndicadores />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/termometro-insolvencia"
+                      element={
+                        <ModuloRoute modulo="gerencial_termometro_insolvencia">
+                          <GerencialTermometroInsolvencia />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/indicadores-avancados"
+                      element={
+                        <ModuloRoute modulo="gerencial_indicadores_avancados">
+                          <GerencialIndicadoresAvancados />
                         </ModuloRoute>
                       }
                     />

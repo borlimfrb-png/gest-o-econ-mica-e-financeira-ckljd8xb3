@@ -15,12 +15,31 @@ import {
   ChevronRight,
   Gauge,
   Bot,
+  Activity,
+  Calculator,
+  Coins,
+  Cpu,
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { lancamentosService, balancosService, dreService } from '@/services/financeService'
+import {
+  lancamentosService,
+  balancosService,
+  dreService,
+  contasService,
+  planoContasService,
+} from '@/services/financeService'
+import {
+  calcularDre,
+  consolidarDreAnual,
+  consolidarBalancoAnual,
+  calcularBalanco,
+  formatCurrency,
+} from '@/lib/financeCalculations'
+import { calcularAnaliseRentabilidade } from '@/lib/analiseRentabilidadeCalculo'
+import { gerarListaMeses } from '@/lib/periodosCobranca'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BorlimLogo } from '@/components/BorlimLogo'
 import {
@@ -31,6 +50,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { SelectEmpresaOuGrupoItems } from '@/components/SelectEmpresaOuGrupoItems'
+import type {
+  BalancoRecord,
+  DreRecord,
+  LancamentoRecord,
+  ContaRecord,
+  PlanoContaRecord,
+} from '@/types/finance'
 
 interface HubShortcut {
   id: string
@@ -45,6 +71,8 @@ interface HubShortcut {
   iconBg: string
   rota: (empresaId: string | null) => string
   metricasTexto: string
+  valorDestaque?: string | null
+  rotuloDestaque?: string | null
 }
 
 export default function AnaliseEconomicaFinanceira() {
@@ -68,60 +96,81 @@ export default function AnaliseEconomicaFinanceira() {
   const [verificandoDados, setVerificandoDados] = useState<boolean>(false)
   const [temDadosCliente, setTemDadosCliente] = useState<boolean>(true)
 
+  // Dados para cálculo de EBITDA e Valuation do exercício ativo (perfis internos)
+  const [balancosAno, setBalancosAno] = useState<BalancoRecord[]>([])
+  const [dresAno, setDresAno] = useState<DreRecord[]>([])
+  const [lancamentosAno, setLancamentosAno] = useState<LancamentoRecord[]>([])
+  const [contasCad, setContasCad] = useState<ContaRecord[]>([])
+  const [planoCad, setPlanoCad] = useState<PlanoContaRecord[]>([])
+
   const empresaAtivaId =
     selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
       ? selectedEmpresaId
       : selectedEmpresa?.id || null
 
   const empresaNome = selectedEmpresa?.nome || 'Empresa Ativa'
+  const anoAtivo = selectedAno || new Date().getFullYear()
 
   useEffect(() => {
     let cancelado = false
 
-    const verificarPresencaDados = async () => {
-      if (!isCliente) {
-        setTemDadosCliente(true)
-        return
-      }
-
+    const carregarDadosHub = async () => {
       if (!empresaAtivaId) {
-        setTemDadosCliente(false)
+        if (!cancelado) {
+          setTemDadosCliente(false)
+          setBalancosAno([])
+          setDresAno([])
+          setLancamentosAno([])
+        }
         return
       }
 
       setVerificandoDados(true)
       try {
-        const ano = selectedAno || new Date().getFullYear()
-
-        const [balancos, dres, lancs] = await Promise.all([
+        const promises: [
+          Promise<BalancoRecord[]>,
+          Promise<DreRecord[]>,
+          Promise<LancamentoRecord[]>,
+          Promise<ContaRecord[]>,
+          Promise<PlanoContaRecord[]>,
+        ] = [
           balancosService
             .getByEmpresa(empresaAtivaId)
-            .then((list) => list.filter((b) => b.ano === ano))
-            .catch(() => []),
+            .then((list) => list.filter((b) => b.ano === anoAtivo))
+            .catch(() => [] as BalancoRecord[]),
           dreService
             .getByEmpresa(empresaAtivaId)
-            .then((list) => list.filter((d) => d.ano === ano))
-            .catch(() => []),
+            .then((list) => list.filter((d) => d.ano === anoAtivo))
+            .catch(() => [] as DreRecord[]),
           lancamentosService
             .getAll({ empresaId: empresaAtivaId })
             .then((list) =>
               list.filter((l) => {
                 const dataStr = l.data_competencia || l.data_pagamento || l.data_lancamento
                 if (!dataStr) return false
-                return new Date(dataStr).getFullYear() === ano
+                return new Date(dataStr).getFullYear() === anoAtivo
               }),
             )
-            .catch(() => []),
-        ])
+            .catch(() => [] as LancamentoRecord[]),
+          contasService.getAll().catch(() => [] as ContaRecord[]),
+          planoContasService.getAll().catch(() => [] as PlanoContaRecord[]),
+        ]
+
+        const [bList, dList, lList, cList, pList] = await Promise.all(promises)
 
         if (!cancelado) {
-          const temAlgumDado = balancos.length > 0 || dres.length > 0 || lancs.length > 0
+          setBalancosAno(bList)
+          setDresAno(dList)
+          setLancamentosAno(lList)
+          setContasCad(cList)
+          setPlanoCad(pList)
+
+          const temAlgumDado = bList.length > 0 || dList.length > 0 || lList.length > 0
           setTemDadosCliente(temAlgumDado)
         }
       } catch (err) {
-        console.error('Erro ao verificar dados da empresa para o cliente:', err)
+        console.error('Erro ao verificar dados da empresa para o hub:', err)
         if (!cancelado) {
-          // Em caso de falha de requisição, não bloqueia visualmente se tiver dúvida
           setTemDadosCliente(true)
         }
       } finally {
@@ -131,12 +180,91 @@ export default function AnaliseEconomicaFinanceira() {
       }
     }
 
-    verificarPresencaDados()
+    carregarDadosHub()
 
     return () => {
       cancelado = true
     }
-  }, [isCliente, empresaAtivaId, selectedAno])
+  }, [empresaAtivaId, anoAtivo, isCliente])
+
+  // Consolidação DRE e Balanço do exercício ativo (com fallback sintético por lançamentos idêntico ao Dashboard BI)
+  const { ebitdaAtivo, valuationAtivo } = useMemo(() => {
+    let dAtivo = consolidarDreAnual(dresAno, anoAtivo)
+    const bAtivo = consolidarBalancoAnual(balancosAno, anoAtivo)
+
+    // Fallback por lançamentos se DRE não tiver dados
+    const dreSemDados =
+      !dAtivo ||
+      (!dAtivo.receita_bruta &&
+        !dAtivo.despesas_operacionais &&
+        !dAtivo.custo_mercadorias &&
+        !dAtivo.despesas_financeiras)
+
+    if (dreSemDados && lancamentosAno.length > 0) {
+      const meses = gerarListaMeses(anoAtivo, 1, 12)
+      const rent = calcularAnaliseRentabilidade(lancamentosAno, contasCad, meses, planoCad)
+      const temDadosLancs =
+        rent.faturamentoTotal > 0 ||
+        rent.despesasFixasTotal > 0 ||
+        rent.despesasVariaveisTotal > 0 ||
+        rent.despesasFinanceirasTotal > 0 ||
+        rent.lucroTotal !== 0
+
+      if (temDadosLancs) {
+        const sintetico: DreRecord = {
+          id: `sintetico-${anoAtivo}-${empresaAtivaId || 'empresa'}`,
+          collectionId: 'dres',
+          collectionName: 'dres',
+          created: new Date().toISOString(),
+          updated: new Date().toISOString(),
+          empresa: empresaAtivaId || 'empresa',
+          ano: anoAtivo,
+          mes: 12,
+          receita_bruta: rent.faturamentoTotal,
+          deducoes_receita: 0,
+          custo_mercadorias: rent.despesasVariaveisTotal,
+          despesas_operacionais: rent.despesasFixasTotal,
+          despesas_financeiras: rent.despesasFinanceirasTotal,
+          outras_receitas_despesas: rent.receitasFinanceirasTotal,
+          imposto_renda: 0,
+        }
+        dAtivo = sintetico
+      }
+    }
+
+    const calcD = calcularDre(dAtivo)
+    const calcB = calcularBalanco(bAtivo)
+
+    const ebitda = calcD.ebitda
+
+    // Valuation FCD (Gordon padrão: WACC=12%, g=2%, anos=5, crescimento FCF=5%)
+    let valFcd = 0
+    const baseFcf = calcD.ebitda !== 0 ? calcD.ebitda : calcD.resultadoOperacional || 0
+    if (baseFcf > 0) {
+      const wacc = 0.12
+      const g = 0.02
+      const gFcf = 0.05
+      const nAnos = 5
+      let fcfAcum = baseFcf
+      let somaVp = 0
+      for (let t = 1; t <= nAnos; t++) {
+        fcfAcum = fcfAcum * (1 + gFcf)
+        const fator = Math.pow(1 + wacc, t)
+        somaVp += fcfAcum / fator
+      }
+      const terminal = (fcfAcum * (1 + g)) / (wacc - g)
+      const vpTerminal = terminal / Math.pow(1 + wacc, nAnos)
+      valFcd = somaVp + vpTerminal
+    } else if (calcB.patrimonioLiquido > 0) {
+      // Se não houver FCF positivo, usa o PL contábil como referência de valor patrimonial
+      valFcd = calcB.patrimonioLiquido
+    }
+
+    return {
+      ebitdaAtivo: ebitda,
+      valuationAtivo: valFcd,
+    }
+  }, [dresAno, balancosAno, lancamentosAno, contasCad, planoCad, anoAtivo, empresaAtivaId])
 
   const atalhos: HubShortcut[] = useMemo(() => {
     const lista: HubShortcut[] = [
@@ -201,22 +329,22 @@ export default function AnaliseEconomicaFinanceira() {
         iconBg:
           'bg-gradient-to-tr from-amber-500/25 to-orange-600/20 text-amber-300 border-amber-400/40',
         rota: () => '/gerencial/despesas-variaveis',
-        metricasTexto: 'Comissões, fretes de entrega e alíquotas variáveis apuradas',
+        metricasTexto: 'Deduções sobre faturamento, comissões, taxas e fretes',
       },
       {
         id: 'faturamento',
         titulo: 'Análise de Faturamento',
-        subtitulo: 'Evolução de Vendas & Sazonalidade',
+        subtitulo: 'Receita Operacional & Composição Anual',
         descricao:
-          'Histórico plurianual de faturamento mensal, comparativo ano a ano, taxas de crescimento e curvas de vendas.',
+          'Curva mensal de faturamento de Jan a Dez, participação de cada mês no total anual e comparativos.',
         badge: 'Faturamento',
-        badgeVariant: 'emerald',
-        icon: TrendingUp,
-        gradient: 'from-[#0B1F3A] via-[#0B333E] to-[#0E494B]',
-        borderGlow: 'hover:border-teal-400/70 hover:shadow-teal-500/15',
+        badgeVariant: 'blue',
+        icon: BarChart3,
+        gradient: 'from-[#0B1F3A] via-[#102347] to-[#172D5C]',
+        borderGlow: 'hover:border-blue-400/70 hover:shadow-blue-500/15',
         iconBg:
-          'bg-gradient-to-tr from-teal-500/25 to-emerald-600/20 text-teal-300 border-teal-400/40',
-        rota: () => '/gerencial/analise-faturamento',
+          'bg-gradient-to-tr from-blue-500/25 to-cyan-600/20 text-blue-300 border-blue-400/40',
+        rota: () => '/gerencial/faturamento',
         metricasTexto: 'Sazonalidade Jan-Dez, participação percentual e comparativos',
       },
       {
@@ -284,8 +412,84 @@ export default function AnaliseEconomicaFinanceira() {
       },
     ]
 
-    // Comparativo DRE x Balanço é exclusivo para perfis internos (não cliente)
+    // Módulos executivos exclusivos para perfis internos (não cliente)
     if (!isCliente) {
+      // 1. Termômetro de Insolvência (Altman Z-Score)
+      lista.push({
+        id: 'termometro-insolvencia',
+        titulo: 'Termômetro de Insolvência',
+        subtitulo: 'Altman Z-Score & Risco de Falência',
+        descricao:
+          'Diagnóstico preditivo de solvência pelo modelo de Edward Altman (Z-Score privado e clássico). Medidor visual nas zonas de solvência, cinzenta e insolvência com decomposição dos 5 índices X1–X5.',
+        badge: 'Solvência Z-Score',
+        badgeVariant: 'amber',
+        icon: Activity,
+        gradient: 'from-[#0B1F3A] via-[#2A1E35] to-[#3B1F42]',
+        borderGlow: 'hover:border-amber-400/70 hover:shadow-amber-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-amber-500/25 to-rose-600/20 text-amber-300 border-amber-400/40',
+        rota: () => '/gerencial/termometro-insolvencia',
+        metricasTexto: 'Z-Score Altman, Índices X1 a X5, Gauge de Risco e Parecer Executivo',
+      })
+
+      // 2. EBITDA (LAJIDA) com valor do exercício ativo
+      lista.push({
+        id: 'ebitda-lajida',
+        titulo: 'EBITDA (LAJIDA)',
+        subtitulo: 'Geração Operacional de Caixa',
+        descricao:
+          'Lucro antes de Juros, Impostos, Depreciação e Amortização consolidado no exercício ativo. Integração direta com o motor contábil da DRE e com o Dashboard BI.',
+        badge: 'LAJIDA Operacional',
+        badgeVariant: 'emerald',
+        icon: Calculator,
+        gradient: 'from-[#0B1F3A] via-[#0E3534] to-[#124B40]',
+        borderGlow: 'hover:border-emerald-400/70 hover:shadow-emerald-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-emerald-500/25 to-teal-600/20 text-emerald-300 border-emerald-400/40',
+        rota: () => '/gerencial/dashboard-bi',
+        metricasTexto: 'Lucro Líquido + IR/CSLL + Despesas Financeiras Líquidas',
+        valorDestaque: formatCurrency(ebitdaAtivo),
+        rotuloDestaque: `EBITDA ${anoAtivo}`,
+      })
+
+      // 3. Valuation com valor do exercício ativo
+      lista.push({
+        id: 'valuation-mercado',
+        titulo: 'Valuation',
+        subtitulo: 'Avaliação Econômica da Empresa',
+        descricao:
+          'Avaliação de Enterprise Value / Equity Value pelo Fluxo de Caixa Descontado (Gordon) e Múltiplos de Mercado. Estimativa consolidada calculada sobre o exercício ativo.',
+        badge: 'Avaliação Econômica',
+        badgeVariant: 'cyan',
+        icon: Coins,
+        gradient: 'from-[#0B1F3A] via-[#0F2A52] to-[#143B73]',
+        borderGlow: 'hover:border-cyan-400/70 hover:shadow-cyan-500/15',
+        iconBg: 'bg-gradient-to-tr from-cyan-500/25 to-sky-600/20 text-cyan-300 border-cyan-400/40',
+        rota: () => '/indicadores-valuation',
+        metricasTexto: 'FCD Perpetuidade, Múltiplos Setoriais e Superlucro Goodwill',
+        valorDestaque: formatCurrency(valuationAtivo),
+        rotuloDestaque: `Valuation ${anoAtivo}`,
+      })
+
+      // 4. Indicadores Econômicos Avançados
+      lista.push({
+        id: 'indicadores-avancados',
+        titulo: 'Indicadores Econômicos Avançados',
+        subtitulo: 'EVA, DuPont, Ciclo de Caixa & Cobertura',
+        descricao:
+          'Métricas avançadas de criação de valor: EVA (Economic Value Added), Decomposição DuPont (Margem × Giro × Alavancagem = ROE), Ciclo Financeiro (CCC) e Cobertura de Juros.',
+        badge: 'EVA & DuPont',
+        badgeVariant: 'purple',
+        icon: Cpu,
+        gradient: 'from-[#0B1F3A] via-[#1F1D46] to-[#2E2059]',
+        borderGlow: 'hover:border-purple-400/70 hover:shadow-purple-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-purple-500/25 to-violet-600/20 text-purple-300 border-purple-400/40',
+        rota: () => '/gerencial/indicadores-avancados',
+        metricasTexto: 'EVA, Pirâmide DuPont ROE, CCC Prazos Médios e Cobertura de Juros',
+      })
+
+      // Comparativo DRE x Balanço
       lista.push({
         id: 'comparativo-mensal',
         titulo: 'Comparativo DRE × Balanço',
@@ -303,6 +507,7 @@ export default function AnaliseEconomicaFinanceira() {
       })
     }
 
+    // Agente de IA Borlim
     lista.push({
       id: 'agente-ia',
       titulo: 'Agente de IA Borlim',
@@ -321,7 +526,7 @@ export default function AnaliseEconomicaFinanceira() {
     })
 
     return lista
-  }, [isCliente])
+  }, [isCliente, ebitdaAtivo, valuationAtivo, anoAtivo])
 
   return (
     <div className="space-y-6 pb-8 animate-fadeIn">
@@ -353,8 +558,8 @@ export default function AnaliseEconomicaFinanceira() {
             <p className="text-sm text-slate-300/90 leading-relaxed">
               Central estratégica de demonstrações contábeis e gerenciais pela{' '}
               <strong className="text-sky-300">Borlim Consultoria</strong>. Acesse o Balanço
-              Patrimonial, DRE, Rentabilidade, Indicador de Crescimento, custos fixos e variáveis e
-              histórico de faturamento da empresa selecionada.{' '}
+              Patrimonial, DRE, Rentabilidade, Indicador de Crescimento, Dashboard BI, Termômetro de
+              Insolvência, EBITDA, Valuation e Indicadores Econômicos Avançados.
             </p>
           </div>
 
@@ -368,49 +573,35 @@ export default function AnaliseEconomicaFinanceira() {
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">
                   Empresa Ativa
                 </span>
-                {temMultiplosVinculos ? (
+                {temMultiplosVinculos && !isCliente ? (
                   <Select
-                    value={selectedEmpresaId}
-                    onValueChange={(id) => setSelectedEmpresaId(id)}
+                    value={selectedEmpresaId || undefined}
+                    onValueChange={(val) => setSelectedEmpresaId(val)}
                   >
-                    <SelectTrigger className="h-7 border border-white/20 bg-white/10 hover:bg-white/15 text-xs font-bold text-white p-2 mt-0.5 w-full focus:ring-1 focus:ring-sky-400 cursor-pointer">
-                      <SelectValue placeholder="Selecione a empresa" />
+                    <SelectTrigger className="h-7 text-xs font-bold bg-white/10 border-white/20 text-white p-1 px-2 mt-0.5 max-w-[200px] truncate">
+                      <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                      {isCliente ? (
-                        todasEntidades.map((ent) => (
-                          <SelectItem key={ent.id} value={ent.id} className="text-xs">
-                            {ent.is_grupo ? ent.nome : ent.nome_fantasia || ent.nome}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectEmpresaOuGrupoItems
-                          todasEntidades={todasEntidades}
-                          empresas={empresas}
-                        />
-                      )}
+                    <SelectContent>
+                      <SelectEmpresaOuGrupoItems />
                     </SelectContent>
                   </Select>
                 ) : (
-                  <span
-                    className="text-xs font-bold text-white truncate block max-w-[190px]"
-                    title={empresaNome}
-                  >
+                  <span className="text-sm font-bold text-white block truncate" title={empresaNome}>
                     {empresaNome}
                   </span>
                 )}
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 pt-2 sm:pt-0 md:pt-2 border-t sm:border-t-0 md:border-t border-white/10">
+            <div className="flex items-center gap-2.5 pt-2 border-t border-white/10">
               <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-200 shrink-0">
                 <Calendar className="w-4 h-4" />
               </div>
               <div>
                 <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block">
-                  Exercício de Referência
+                  Exercício Ativo
                 </span>
-                <span className="text-xs font-bold text-cyan-200">Ano {selectedAno}</span>
+                <span className="text-sm font-bold text-cyan-300">{anoAtivo}</span>
               </div>
             </div>
           </div>
@@ -421,12 +612,12 @@ export default function AnaliseEconomicaFinanceira() {
       {isCliente && !verificandoDados && !temDadosCliente && (
         <EstadoVazioClienteCard
           empresaNome={empresaNome}
-          ano={selectedAno}
+          ano={anoAtivo}
           mensagem="Nenhum balanço contábil, DRE ou lançamento registrado para esta empresa no exercício selecionado. Entre em contato com seu consultor Borlim para a importação e liberação dos demonstrativos."
         />
       )}
 
-      {/* Grid de 5 Cards Grandes com Efeito Glassmorphism e Navegação Direta */}
+      {/* Grid de Módulos e Demonstrações Disponíveis */}
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -449,7 +640,7 @@ export default function AnaliseEconomicaFinanceira() {
               <Card
                 key={item.id}
                 onClick={() => navigate(destino)}
-                className={`group relative overflow-hidden bg-gradient-to-br ${item.gradient} border border-slate-700/60 rounded-2xl p-6 text-white cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl ${item.borderGlow} flex flex-col justify-between min-h-[265px] backdrop-blur-md`}
+                className={`group relative overflow-hidden bg-gradient-to-br ${item.gradient} border border-slate-700/60 rounded-2xl p-6 text-white cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl ${item.borderGlow} flex flex-col justify-between min-h-[275px] backdrop-blur-md`}
               >
                 {/* Linha de acento no topo do card ao passar o mouse */}
                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-sky-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -467,7 +658,7 @@ export default function AnaliseEconomicaFinanceira() {
 
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-mono text-slate-400 font-bold bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
-                        0{index + 1}
+                        {index + 1 < 10 ? `0${index + 1}` : index + 1}
                       </span>
                       <Badge
                         variant="secondary"
@@ -487,6 +678,18 @@ export default function AnaliseEconomicaFinanceira() {
                       {item.descricao}
                     </p>
                   </div>
+
+                  {/* Destaque de Valor Numérico quando aplicável (EBITDA / Valuation) */}
+                  {item.valorDestaque && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-white/10 border border-white/15 backdrop-blur-xs flex items-center justify-between">
+                      <span className="text-[11px] uppercase tracking-wider text-slate-300 font-bold">
+                        {item.rotuloDestaque || 'Valor Consolidado'}
+                      </span>
+                      <span className="text-sm font-extrabold text-cyan-200 font-mono">
+                        {item.valorDestaque}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Base do Card: Metadados + Botão de Ação */}
@@ -537,11 +740,11 @@ export default function AnaliseEconomicaFinanceira() {
           </span>
           <span className="hidden md:inline text-slate-400">·</span>
           <span className="hidden md:inline">
-            Inteligência Estratégica, Controladoria & Finanças
+            Especialistas em Reestruturação, Gestão Financeira e Controladoria
           </span>
         </div>
-        <span className="text-[11px] text-slate-400">
-          Acesso Exclusivo Cliente · Exercício {selectedAno}
+        <span className="text-slate-400 text-[11px]">
+          Exercício: <strong>{anoAtivo}</strong> | {empresaNome}
         </span>
       </div>
     </div>

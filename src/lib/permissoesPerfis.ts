@@ -31,6 +31,8 @@ export type ModuloSistema =
   | 'gerencial_rentabilidade'
   | 'gerencial_dashboard_bi'
   | 'gerencial_indicadores'
+  | 'gerencial_termometro_insolvencia'
+  | 'gerencial_indicadores_avancados'
   | 'gerencial_conta_detalhe'
   | 'financeiro'
   | 'baixa_recebiveis'
@@ -91,6 +93,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_rentabilidade',
       'gerencial_dashboard_bi',
       'gerencial_indicadores',
+      'gerencial_termometro_insolvencia',
+      'gerencial_indicadores_avancados',
       'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
@@ -138,6 +142,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_rentabilidade',
       'gerencial_dashboard_bi',
       'gerencial_indicadores',
+      'gerencial_termometro_insolvencia',
+      'gerencial_indicadores_avancados',
       'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
@@ -177,6 +183,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_rentabilidade',
       'gerencial_dashboard_bi',
       'gerencial_indicadores',
+      'gerencial_termometro_insolvencia',
+      'gerencial_indicadores_avancados',
       'gerencial_conta_detalhe',
       'financeiro',
       'baixa_recebiveis',
