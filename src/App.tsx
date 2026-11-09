@@ -359,6 +359,14 @@ const App = () => (
                       }
                     />
                     <Route
+                      path="/gerencial/faturamento"
+                      element={
+                        <ModuloRoute modulo="gerencial_analise_faturamento">
+                          <AnaliseFaturamento />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
                       path="/gerencial/despesas-fixas"
                       element={
                         <ModuloRoute modulo="gerencial_despesas_fixas">
@@ -400,6 +408,14 @@ const App = () => (
                     />
                     <Route
                       path="/gerencial/rentabilidade"
+                      element={
+                        <ModuloRoute modulo="gerencial_rentabilidade">
+                          <AnaliseRentabilidade />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/analise-rentabilidade"
                       element={
                         <ModuloRoute modulo="gerencial_rentabilidade">
                           <AnaliseRentabilidade />

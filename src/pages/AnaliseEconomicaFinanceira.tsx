@@ -344,7 +344,7 @@ export default function AnaliseEconomicaFinanceira() {
         borderGlow: 'hover:border-blue-400/70 hover:shadow-blue-500/15',
         iconBg:
           'bg-gradient-to-tr from-blue-500/25 to-cyan-600/20 text-blue-300 border-blue-400/40',
-        rota: () => '/gerencial/faturamento',
+        rota: () => '/gerencial/analise-faturamento',
         metricasTexto: 'Sazonalidade Jan-Dez, participação percentual e comparativos',
       },
       {
