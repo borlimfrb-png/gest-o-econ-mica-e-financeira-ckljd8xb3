@@ -99,7 +99,7 @@ export function calcularIndicadoresAvancados(
 
   // ===================== EVA =====================
   const nopat = ebitAproximado * (1 - 0.34)
-  const capitalInvestido = patrimonioLiquido + calcB.emprestimosLongoPrazo
+  const capitalInvestido = patrimonioLiquido + (balanco?.emprestimos_longo_prazo || 0)
   const custoCapital = capitalInvestido * (custoCapitalPct / 100)
   const eva = nopat - custoCapital
   const evaResultado: EvaResultado = {
