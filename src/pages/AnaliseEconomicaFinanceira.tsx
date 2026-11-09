@@ -28,6 +28,7 @@ import {
   dreService,
   contasService,
   planoContasService,
+  tiposDespesaService,
 } from '@/services/financeService'
 import {
   calcularDre,
@@ -58,6 +59,7 @@ import type {
   LancamentoRecord,
   ContaRecord,
   PlanoContaRecord,
+  TipoDespesaRecord,
 } from '@/types/finance'
 
 interface HubShortcut {
@@ -152,7 +154,7 @@ export default function AnaliseEconomicaFinanceira() {
             .catch(() => [] as LancamentoRecord[]),
           contasService.getAll().catch(() => [] as ContaRecord[]),
           planoContasService.getAll().catch(() => [] as PlanoContaRecord[]),
-          tiposDespesasService.getAll().catch(() => [] as TipoDespesaRecord[]),
+          tiposDespesaService.getAll().catch(() => [] as TipoDespesaRecord[]),
         ]
 
         const [bList, dList, allLancs, cList, pList, tdList] = await Promise.all(promises)
@@ -275,25 +277,70 @@ export default function AnaliseEconomicaFinanceira() {
 
   // Cálculo dos dados oficiais de vendas/faturamento (paridade exata com /gerencial/analise-faturamento)
   const dadosVendasHub = useMemo(() => {
-    const meses = gerarListaMeses(anoAtivo, 1, 12)
     // Usa exatamente a mesma função de motor da tela Análise de Faturamento
     const res = calcularAnaliseFaturamento(
       todosLancamentosEmpresa.length > 0 ? todosLancamentosEmpresa : lancamentosAno,
       contasCad,
-      tiposDespesasCad,
-      meses,
-      anoAtivo,
+      planoCad,
     )
-    const mediaMensal = res.mesesComMovimento > 0 ? res.faturamentoTotal / res.mesesComMovimento : 0
-    return {
-      faturamentoTotal: res.faturamentoTotal,
-      mesesComMovimento: res.mesesComMovimento,
-      mediaMensal,
-      mesPico: res.mesPico,
-      mesMenor: res.mesMenor,
-      temMovimento: res.temMovimento,
+
+    // Localiza a linha do ano ativo selecionado
+    const linhaAno = res.linhasPorAno.find((l) => l.ano === anoAtivo)
+
+    if (!linhaAno || linhaAno.totalAno === 0) {
+      return {
+        faturamentoTotal: 0,
+        mesesComMovimento: 0,
+        mediaMensal: 0,
+        mesPico: null as { mes: number; mesNome: string; valor: number } | null,
+        temMovimento: false,
+      }
     }
-  }, [todosLancamentosEmpresa, lancamentosAno, contasCad, tiposDespesasCad, anoAtivo])
+
+    const nomesMeses = [
+      'Janeiro',
+      'Fevereiro',
+      'Março',
+      'Abril',
+      'Maio',
+      'Junho',
+      'Julho',
+      'Agosto',
+      'Setembro',
+      'Outubro',
+      'Novembro',
+      'Dezembro',
+    ]
+
+    let mesesComMovimento = 0
+    let mesPico: { mes: number; mesNome: string; valor: number } | null = null
+
+    for (let m = 1; m <= 12; m++) {
+      const v = linhaAno.valoresPorMes[m] || 0
+      if (v > 0 || linhaAno.mesesComDados[m]) {
+        mesesComMovimento++
+      }
+      if (v > 0) {
+        if (!mesPico || v > mesPico.valor) {
+          mesPico = {
+            mes: m,
+            mesNome: nomesMeses[m - 1],
+            valor: v,
+          }
+        }
+      }
+    }
+
+    const mediaMensal = mesesComMovimento > 0 ? linhaAno.totalAno / mesesComMovimento : 0
+
+    return {
+      faturamentoTotal: linhaAno.totalAno,
+      mesesComMovimento,
+      mediaMensal,
+      mesPico,
+      temMovimento: linhaAno.totalAno > 0,
+    }
+  }, [todosLancamentosEmpresa, lancamentosAno, contasCad, planoCad, anoAtivo])
 
   const atalhos: HubShortcut[] = useMemo(() => {
     const lista: HubShortcut[] = [
