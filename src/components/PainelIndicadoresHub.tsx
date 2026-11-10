@@ -45,6 +45,7 @@ import {
 } from '@/lib/financeCalculations'
 import { calcularZScoreAltman } from '@/lib/termometroInsolvenciaCalculo'
 import { calcularAnaliseFaturamento } from '@/lib/analiseFaturamentoCalculo'
+import { ComparacaoIndicadoresGraficos } from '@/components/ComparacaoIndicadoresGraficos'
 
 export interface PainelIndicadoresHubProps {
   empresaId: string | null
@@ -1139,6 +1140,20 @@ export function PainelIndicadoresHub({
           </div>
         </CardContent>
       </Card>
+
+      {/* SEÇÃO 3: GRÁFICOS DE COMPARAÇÃO DE INDICADORES ENTRE EXERCÍCIOS (não disponível ao perfil cliente) */}
+      {!isCliente && (
+        <ComparacaoIndicadoresGraficos
+          empresaId={empresaId}
+          anoAtivo={anoAtivo}
+          anosDisponiveis={anosDisponiveis}
+          balancos={balancos}
+          dres={dres}
+          lancamentos={lancamentos}
+          contas={contas}
+          planoContas={planoContas}
+        />
+      )}
     </div>
   )
 }
