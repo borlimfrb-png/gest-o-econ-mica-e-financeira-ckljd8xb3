@@ -545,7 +545,7 @@ export default function AnaliseEconomicaFinanceira() {
         gradient: 'from-[#0B1F3A] via-[#0F2A52] to-[#143B73]',
         borderGlow: 'hover:border-cyan-400/70 hover:shadow-cyan-500/15',
         iconBg: 'bg-gradient-to-tr from-cyan-500/25 to-sky-600/20 text-cyan-300 border-cyan-400/40',
-        rota: () => '/indicadores-valuation',
+        rota: () => '/indicadores/valuation',
         metricasTexto: 'FCD Perpetuidade, Múltiplos Setoriais e Superlucro Goodwill',
         valorDestaque: formatCurrency(valuationAtivo),
         rotuloDestaque: `Valuation ${anoAtivo}`,
@@ -794,7 +794,7 @@ export default function AnaliseEconomicaFinanceira() {
             {/* KPI 3: Valuation Estimado */}
             <div
               onClick={() =>
-                navigate(isCliente ? '/cliente/dashboard-bi' : '/indicadores-valuation')
+                navigate(isCliente ? '/cliente/dashboard-bi' : '/indicadores/valuation')
               }
               className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-sky-400 dark:hover:border-sky-500 transition-all duration-200 relative overflow-hidden"
             >

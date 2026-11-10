@@ -692,6 +692,22 @@ const App = () => (
                       }
                     />
                     <Route
+                      path="/indicadores-valuation"
+                      element={
+                        <ModuloRoute modulo="indicadores_valuation">
+                          <IndicadoresValuation />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
+                      path="/gerencial/valuation"
+                      element={
+                        <ModuloRoute modulo="indicadores_valuation">
+                          <IndicadoresValuation />
+                        </ModuloRoute>
+                      }
+                    />
+                    <Route
                       path="/indicadores/valuation"
                       element={
                         <ModuloRoute modulo="indicadores_valuation">
