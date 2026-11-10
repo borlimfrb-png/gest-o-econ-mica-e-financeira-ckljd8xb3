@@ -45,6 +45,8 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BorlimLogo } from '@/components/BorlimLogo'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { PainelIndicadoresHub } from '@/components/PainelIndicadoresHub'
 import {
   Select,
   SelectContent,
@@ -89,6 +91,7 @@ export default function AnaliseEconomicaFinanceira() {
     selectedEmpresaId,
     setSelectedEmpresaId,
     selectedAno,
+    anosDisponiveis,
     userEmpresasIds,
   } = useFilter()
   const isCliente = user?.role === 'cliente'
@@ -97,10 +100,13 @@ export default function AnaliseEconomicaFinanceira() {
     empresas.length > 1 ||
     todasEntidades.length > 1
 
+  const [abaAtiva, setAbaAtiva] = useState<'visao_geral' | 'painel_indicadores'>('visao_geral')
   const [verificandoDados, setVerificandoDados] = useState<boolean>(false)
   const [temDadosCliente, setTemDadosCliente] = useState<boolean>(true)
 
   // Dados para cálculo de EBITDA e Valuation do exercício ativo (perfis internos)
+  const [todosBalancosEmpresa, setTodosBalancosEmpresa] = useState<BalancoRecord[]>([])
+  const [todasDresEmpresa, setTodasDresEmpresa] = useState<DreRecord[]>([])
   const [balancosAno, setBalancosAno] = useState<BalancoRecord[]>([])
   const [dresAno, setDresAno] = useState<DreRecord[]>([])
   const [lancamentosAno, setLancamentosAno] = useState<LancamentoRecord[]>([])
@@ -124,6 +130,8 @@ export default function AnaliseEconomicaFinanceira() {
       if (!empresaAtivaId) {
         if (!cancelado) {
           setTemDadosCliente(false)
+          setTodosBalancosEmpresa([])
+          setTodasDresEmpresa([])
           setBalancosAno([])
           setDresAno([])
           setLancamentosAno([])
@@ -141,14 +149,8 @@ export default function AnaliseEconomicaFinanceira() {
           Promise<PlanoContaRecord[]>,
           Promise<TipoDespesaRecord[]>,
         ] = [
-          balancosService
-            .getByEmpresa(empresaAtivaId)
-            .then((list) => list.filter((b) => b.ano === anoAtivo))
-            .catch(() => [] as BalancoRecord[]),
-          dreService
-            .getByEmpresa(empresaAtivaId)
-            .then((list) => list.filter((d) => d.ano === anoAtivo))
-            .catch(() => [] as DreRecord[]),
+          balancosService.getByEmpresa(empresaAtivaId).catch(() => [] as BalancoRecord[]),
+          dreService.getByEmpresa(empresaAtivaId).catch(() => [] as DreRecord[]),
           lancamentosService
             .getAll({ empresaId: empresaAtivaId })
             .catch(() => [] as LancamentoRecord[]),
@@ -157,24 +159,28 @@ export default function AnaliseEconomicaFinanceira() {
           tiposDespesaService.getAll().catch(() => [] as TipoDespesaRecord[]),
         ]
 
-        const [bList, dList, allLancs, cList, pList, tdList] = await Promise.all(promises)
+        const [allBalancos, allDres, allLancs, cList, pList, tdList] = await Promise.all(promises)
 
         if (!cancelado) {
+          const bListAno = allBalancos.filter((b) => b.ano === anoAtivo)
+          const dListAno = allDres.filter((d) => d.ano === anoAtivo)
           const lListAno = allLancs.filter((l) => {
             const dataStr = l.data_competencia || l.data_pagamento || l.data_lancamento
             if (!dataStr) return false
             return new Date(dataStr).getFullYear() === anoAtivo
           })
 
-          setBalancosAno(bList)
-          setDresAno(dList)
+          setTodosBalancosEmpresa(allBalancos)
+          setTodasDresEmpresa(allDres)
+          setBalancosAno(bListAno)
+          setDresAno(dListAno)
           setTodosLancamentosEmpresa(allLancs)
           setLancamentosAno(lListAno)
           setContasCad(cList)
           setPlanoCad(pList)
           setTiposDespesasCad(tdList)
 
-          const temAlgumDado = bList.length > 0 || dList.length > 0 || lListAno.length > 0
+          const temAlgumDado = bListAno.length > 0 || dListAno.length > 0 || lListAno.length > 0
           setTemDadosCliente(temAlgumDado)
         }
       } catch (err) {
@@ -700,278 +706,336 @@ export default function AnaliseEconomicaFinanceira() {
         />
       )}
 
-      {/* SEÇÃO 1: PAINEL DE KPIS EXECUTIVOS & DADOS DE VENDAS */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-              Indicadores-Chave (KPIs) & Vendas do Exercício {anoAtivo}
-            </h2>
-          </div>
+      {/* ABAS DO HUB: VISÃO GERAL (CARDS & KPIS) vs PAINEL DE INDICADORES (HODÔMETROS & TENDÊNCIAS) */}
+      <Tabs
+        value={abaAtiva}
+        onValueChange={(val) => setAbaAtiva(val as 'visao_geral' | 'painel_indicadores')}
+        className="w-full space-y-6"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+          <TabsList className="bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl h-auto">
+            <TabsTrigger
+              value="visao_geral"
+              className="gap-2 px-4 py-2 text-xs font-bold rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-[#0B1F3A] dark:data-[state=active]:text-white shadow-2xs cursor-pointer"
+            >
+              <BarChart3 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              Visão Geral & Módulos
+            </TabsTrigger>
+            <TabsTrigger
+              value="painel_indicadores"
+              className="gap-2 px-4 py-2 text-xs font-bold rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:text-[#0B1F3A] dark:data-[state=active]:text-white shadow-2xs cursor-pointer"
+            >
+              <Gauge className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+              Painel de Indicadores & Hodômetros
+              <Badge className="bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border-cyan-400/30 text-[9px] px-1.5 py-0 font-bold ml-1">
+                Novo
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
+
           <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Integração em tempo real · Motor oficial DRE & Vendas
+            Exercício ativo:{' '}
+            <strong className="text-slate-700 dark:text-slate-300">{anoAtivo}</strong>
           </span>
         </div>
 
-        {verificandoDados ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Skeleton className="h-28 rounded-2xl" />
-            <Skeleton className="h-28 rounded-28" />
-            <Skeleton className="h-28 rounded-2xl" />
-            <Skeleton className="h-28 rounded-2xl" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* KPI 1: Vendas / Faturamento Total (Integração Direta com Análise de Faturamento) */}
-            <div
-              onClick={() => navigate('/gerencial/analise-faturamento')}
-              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 opacity-80" />
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Vendas / Faturamento
-                </span>
-                <Badge
-                  variant="outline"
-                  className="bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800 text-[10px] font-semibold"
-                >
-                  {dadosVendasHub.mesesComMovimento} meses
-                </Badge>
+        {/* CONTEÚDO DA ABA 1: VISÃO GERAL COM KPIS E CARDS EXECUTIVOS */}
+        <TabsContent value="visao_geral" className="space-y-8 focus-visible:outline-none">
+          {/* SEÇÃO 1: PAINEL DE KPIS EXECUTIVOS & DADOS DE VENDAS */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  Indicadores-Chave (KPIs) & Vendas do Exercício {anoAtivo}
+                </h2>
               </div>
-              <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
-                {formatCurrency(dadosVendasHub.faturamentoTotal)}
-              </div>
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                <span>Média: {formatCurrency(dadosVendasHub.mediaMensal)}/mês</span>
-                <span className="text-blue-600 dark:text-blue-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                  Ver vendas →
-                </span>
-              </div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                Integração em tempo real · Motor oficial DRE & Vendas
+              </span>
             </div>
 
-            {/* KPI 2: EBITDA (LAJIDA) Operacional */}
-            <div
-              onClick={() =>
-                navigate(isCliente ? '/cliente/dashboard-bi' : '/gerencial/dashboard-bi')
-              }
-              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200 relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  EBITDA (LAJIDA)
-                </span>
-                <Badge
-                  variant="outline"
-                  className={`text-[10px] font-semibold ${
-                    ebitdaAtivo >= 0
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200'
-                      : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300 border-red-200'
-                  }`}
+            {verificandoDados ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-28" />
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-2xl" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* KPI 1: Vendas / Faturamento Total (Integração Direta com Análise de Faturamento) */}
+                <div
+                  onClick={() => navigate('/gerencial/analise-faturamento')}
+                  className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-blue-400 dark:hover:border-blue-500 transition-all duration-200 relative overflow-hidden"
                 >
-                  {ebitdaAtivo >= 0 ? 'Positivo' : 'Negativo'}
-                </Badge>
-              </div>
-              <div
-                className={`text-2xl font-black tabular-nums tracking-tight ${
-                  ebitdaAtivo >= 0
-                    ? 'text-emerald-700 dark:text-emerald-400'
-                    : 'text-red-600 dark:text-red-400'
-                }`}
-              >
-                {formatCurrency(ebitdaAtivo)}
-              </div>
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                <span>Geração Caixa Op.</span>
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                  Dashboard BI →
-                </span>
-              </div>
-            </div>
-
-            {/* KPI 3: Valuation Estimado */}
-            <div
-              onClick={() =>
-                navigate(isCliente ? '/cliente/dashboard-bi' : '/indicadores/valuation')
-              }
-              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-sky-400 dark:hover:border-sky-500 transition-all duration-200 relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 right-0 h-1 bg-sky-500 opacity-80" />
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Valuation Estimado
-                </span>
-                <Badge
-                  variant="outline"
-                  className="bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200 text-[10px] font-semibold"
-                >
-                  Gordon FCD
-                </Badge>
-              </div>
-              <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
-                {formatCurrency(valuationAtivo)}
-              </div>
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                <span>Enterprise Value</span>
-                <span className="text-sky-600 dark:text-sky-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                  Valuation →
-                </span>
-              </div>
-            </div>
-
-            {/* KPI 4: Sazonalidade / Mês de Pico de Vendas */}
-            <div
-              onClick={() => navigate('/gerencial/analise-faturamento')}
-              className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-400 dark:hover:border-amber-500 transition-all duration-200 relative overflow-hidden"
-            >
-              <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                  Pico de Vendas
-                </span>
-                <Badge
-                  variant="outline"
-                  className="bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 text-[10px] font-semibold"
-                >
-                  {dadosVendasHub.mesPico ? dadosVendasHub.mesPico.mesNome : 'S/ dado'}
-                </Badge>
-              </div>
-              <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
-                {dadosVendasHub.mesPico ? formatCurrency(dadosVendasHub.mesPico.valor) : 'R$ 0,00'}
-              </div>
-              <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                <span>
-                  {dadosVendasHub.mesPico && dadosVendasHub.faturamentoTotal > 0
-                    ? `${((dadosVendasHub.mesPico.valor / dadosVendasHub.faturamentoTotal) * 100).toFixed(1)}% do ano`
-                    : 'Curva Jan–Dez'}
-                </span>
-                <span className="text-amber-600 dark:text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                  Detalhes →
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Grid de Módulos e Demonstrações Disponíveis */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <h2 className="text-sm font-bold uppercase tracking-wider text-[#0B1F3A] dark:text-slate-100">
-              Módulos e Demonstrações Disponíveis
-            </h2>
-          </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            {atalhos.length} módulos executivos estruturados
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {atalhos.map((item, index) => {
-            const Icon = item.icon
-            const destino = item.rota(empresaAtivaId)
-
-            return (
-              <Card
-                key={item.id}
-                onClick={() => navigate(destino)}
-                className={`group relative overflow-hidden bg-gradient-to-br ${item.gradient} border border-slate-700/60 rounded-2xl p-6 text-white cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl ${item.borderGlow} flex flex-col justify-between min-h-[275px] backdrop-blur-md`}
-              >
-                {/* Linha de acento no topo do card ao passar o mouse */}
-                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-sky-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                {/* Efeito sutil de vidro reflexivo */}
-                <div className="absolute inset-0 bg-white/[0.04] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
-                {/* Topo do Card: Medalhão do Ícone + Badge */}
-                <div className="space-y-4 relative z-10">
-                  <div className="flex items-center justify-between">
-                    <div
-                      className={`w-13 h-13 rounded-2xl flex items-center justify-center border transition-all duration-300 group-hover:scale-108 shadow-lg shadow-black/20 ${item.iconBg}`}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-blue-500 opacity-80" />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Vendas / Faturamento
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-200 dark:border-blue-800 text-[10px] font-semibold"
                     >
-                      <Icon className="w-6.5 h-6.5" />
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-mono text-slate-400 font-bold bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
-                        {index + 1 < 10 ? `0${index + 1}` : index + 1}
-                      </span>
-                      <Badge
-                        variant="secondary"
-                        className="bg-white/10 text-white border-white/20 text-[10.5px] font-bold backdrop-blur-xs px-2 py-0.5"
-                      >
-                        {item.badge}
-                      </Badge>
-                    </div>
+                      {dadosVendasHub.mesesComMovimento} meses
+                    </Badge>
                   </div>
-
-                  <div>
-                    <h3 className="text-lg font-extrabold text-white group-hover:text-sky-300 transition-colors flex items-center gap-1.5">
-                      {item.titulo}
-                    </h3>
-                    <p className="text-xs font-semibold text-sky-200/90 mt-0.5">{item.subtitulo}</p>
-                    <p className="text-xs text-slate-300/80 mt-2.5 leading-relaxed line-clamp-3">
-                      {item.descricao}
-                    </p>
+                  <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
+                    {formatCurrency(dadosVendasHub.faturamentoTotal)}
                   </div>
-
-                  {/* Destaque de Valor Numérico quando aplicável (EBITDA / Valuation / Vendas) com hierarquia visual aprimorada */}
-                  {item.valorDestaque && (
-                    <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-white/15 to-white/5 border border-white/20 backdrop-blur-sm flex items-center justify-between shadow-inner">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 block">
-                          {item.rotuloDestaque || 'Valor Consolidado'}
-                        </span>
-                        <span className="text-[10px] text-slate-400">Exercício {anoAtivo}</span>
-                      </div>
-                      <span className="text-base font-black text-cyan-200 tabular-nums font-mono drop-shadow-sm">
-                        {item.valorDestaque}
-                      </span>
-                    </div>
-                  )}
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Média: {formatCurrency(dadosVendasHub.mediaMensal)}/mês</span>
+                    <span className="text-blue-600 dark:text-blue-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                      Ver vendas →
+                    </span>
+                  </div>
                 </div>
 
-                {/* Base do Card: Metadados + Botão de Ação */}
-                <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between text-xs relative z-10">
-                  <span className="text-[11px] text-slate-400 truncate max-w-[190px]">
-                    {item.metricasTexto}
-                  </span>
+                {/* KPI 2: EBITDA (LAJIDA) Operacional */}
+                <div
+                  onClick={() =>
+                    navigate(isCliente ? '/cliente/dashboard-bi' : '/gerencial/dashboard-bi')
+                  }
+                  className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 opacity-80" />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      EBITDA (LAJIDA)
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={`text-[10px] font-semibold ${
+                        ebitdaAtivo >= 0
+                          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200'
+                          : 'bg-red-50 text-red-700 dark:bg-red-950/50 dark:text-red-300 border-red-200'
+                      }`}
+                    >
+                      {ebitdaAtivo >= 0 ? 'Positivo' : 'Negativo'}
+                    </Badge>
+                  </div>
+                  <div
+                    className={`text-2xl font-black tabular-nums tracking-tight ${
+                      ebitdaAtivo >= 0
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-red-600 dark:text-red-400'
+                    }`}
+                  >
+                    {formatCurrency(ebitdaAtivo)}
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Geração Caixa Op.</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                      Dashboard BI →
+                    </span>
+                  </div>
+                </div>
 
-                  <div className="flex items-center gap-1.5 font-bold text-sky-300 group-hover:text-sky-200 transition-colors shrink-0 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10 group-hover:border-sky-400/40">
-                    <span>Acessar</span>
-                    <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                {/* KPI 3: Valuation Estimado */}
+                <div
+                  onClick={() =>
+                    navigate(isCliente ? '/cliente/dashboard-bi' : '/indicadores/valuation')
+                  }
+                  className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-sky-400 dark:hover:border-sky-500 transition-all duration-200 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-sky-500 opacity-80" />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Valuation Estimado
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300 border-sky-200 text-[10px] font-semibold"
+                    >
+                      Gordon FCD
+                    </Badge>
+                  </div>
+                  <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
+                    {formatCurrency(valuationAtivo)}
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>Enterprise Value</span>
+                    <span className="text-sky-600 dark:text-sky-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                      Valuation →
+                    </span>
+                  </div>
+                </div>
+
+                {/* KPI 4: Sazonalidade / Mês de Pico de Vendas */}
+                <div
+                  onClick={() => navigate('/gerencial/analise-faturamento')}
+                  className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-amber-400 dark:hover:border-amber-500 transition-all duration-200 relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 opacity-80" />
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Pico de Vendas
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border-amber-200 text-[10px] font-semibold"
+                    >
+                      {dadosVendasHub.mesPico ? dadosVendasHub.mesPico.mesNome : 'S/ dado'}
+                    </Badge>
+                  </div>
+                  <div className="text-2xl font-black text-[#0B1F3A] dark:text-white tabular-nums tracking-tight">
+                    {dadosVendasHub.mesPico
+                      ? formatCurrency(dadosVendasHub.mesPico.valor)
+                      : 'R$ 0,00'}
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span>
+                      {dadosVendasHub.mesPico && dadosVendasHub.faturamentoTotal > 0
+                        ? `${((dadosVendasHub.mesPico.valor / dadosVendasHub.faturamentoTotal) * 100).toFixed(1)}% do ano`
+                        : 'Curva Jan–Dez'}
+                    </span>
+                    <span className="text-amber-600 dark:text-amber-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                      Detalhes →
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Grid de Módulos e Demonstrações Disponíveis */}
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <h2 className="text-sm font-bold uppercase tracking-wider text-[#0B1F3A] dark:text-slate-100">
+                  Módulos e Demonstrações Disponíveis
+                </h2>
+              </div>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                {atalhos.length} módulos executivos estruturados
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {atalhos.map((item, index) => {
+                const Icon = item.icon
+                const destino = item.rota(empresaAtivaId)
+
+                return (
+                  <Card
+                    key={item.id}
+                    onClick={() => navigate(destino)}
+                    className={`group relative overflow-hidden bg-gradient-to-br ${item.gradient} border border-slate-700/60 rounded-2xl p-6 text-white cursor-pointer transition-all duration-300 hover:-translate-y-1.5 hover:shadow-2xl ${item.borderGlow} flex flex-col justify-between min-h-[275px] backdrop-blur-md`}
+                  >
+                    {/* Linha de acento no topo do card ao passar o mouse */}
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-sky-400/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    {/* Efeito sutil de vidro reflexivo */}
+                    <div className="absolute inset-0 bg-white/[0.04] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+                    {/* Topo do Card: Medalhão do Ícone + Badge */}
+                    <div className="space-y-4 relative z-10">
+                      <div className="flex items-center justify-between">
+                        <div
+                          className={`w-13 h-13 rounded-2xl flex items-center justify-center border transition-all duration-300 group-hover:scale-108 shadow-lg shadow-black/20 ${item.iconBg}`}
+                        >
+                          <Icon className="w-6.5 h-6.5" />
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono text-slate-400 font-bold bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
+                            {index + 1 < 10 ? `0${index + 1}` : index + 1}
+                          </span>
+                          <Badge
+                            variant="secondary"
+                            className="bg-white/10 text-white border-white/20 text-[10.5px] font-bold backdrop-blur-xs px-2 py-0.5"
+                          >
+                            {item.badge}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-extrabold text-white group-hover:text-sky-300 transition-colors flex items-center gap-1.5">
+                          {item.titulo}
+                        </h3>
+                        <p className="text-xs font-semibold text-sky-200/90 mt-0.5">
+                          {item.subtitulo}
+                        </p>
+                        <p className="text-xs text-slate-300/80 mt-2.5 leading-relaxed line-clamp-3">
+                          {item.descricao}
+                        </p>
+                      </div>
+
+                      {/* Destaque de Valor Numérico quando aplicável (EBITDA / Valuation / Vendas) com hierarquia visual aprimorada */}
+                      {item.valorDestaque && (
+                        <div className="mt-3 p-3 rounded-xl bg-gradient-to-r from-white/15 to-white/5 border border-white/20 backdrop-blur-sm flex items-center justify-between shadow-inner">
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-300 block">
+                              {item.rotuloDestaque || 'Valor Consolidado'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">Exercício {anoAtivo}</span>
+                          </div>
+                          <span className="text-base font-black text-cyan-200 tabular-nums font-mono drop-shadow-sm">
+                            {item.valorDestaque}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Base do Card: Metadados + Botão de Ação */}
+                    <div className="pt-4 mt-4 border-t border-white/10 flex items-center justify-between text-xs relative z-10">
+                      <span className="text-[11px] text-slate-400 truncate max-w-[190px]">
+                        {item.metricasTexto}
+                      </span>
+
+                      <div className="flex items-center gap-1.5 font-bold text-sky-300 group-hover:text-sky-200 transition-colors shrink-0 bg-white/5 px-2.5 py-1 rounded-lg border border-white/10 group-hover:border-sky-400/40">
+                        <span>Acessar</span>
+                        <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
+
+              {/* Card Resumo / Guia de Apoio para fechar o grid harmoniosamente */}
+              <Card className="bg-[#0B1F3A]/60 border border-dashed border-slate-700/80 rounded-2xl p-6 text-white flex flex-col justify-between backdrop-blur-md">
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-400/30 flex items-center justify-center text-blue-300">
+                    <ShieldCheck className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-base font-bold text-white">Governança & Consultoria</h3>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    As demonstrações contábeis e gerenciais são integradas em tempo real com os
+                    lançamentos e balancetes da empresa. Utilize os filtros globais no cabeçalho
+                    superior para alternar entre diferentes exercícios e anos contábeis.
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
+                  <span className="text-[11px]">Ambiente Seguro & Auditado</span>
+                  <div className="flex items-center gap-1 text-slate-300">
+                    <ChevronRight className="w-3.5 h-3.5" />
                   </div>
                 </div>
               </Card>
-            )
-          })}
-
-          {/* Card Resumo / Guia de Apoio para fechar o grid harmoniosamente */}
-          <Card className="bg-[#0B1F3A]/60 border border-dashed border-slate-700/80 rounded-2xl p-6 text-white flex flex-col justify-between backdrop-blur-md">
-            <div className="space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-600/20 border border-blue-400/30 flex items-center justify-center text-blue-300">
-                <ShieldCheck className="w-6 h-6" />
-              </div>
-              <h3 className="text-base font-bold text-white">Governança & Consultoria</h3>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                As demonstrações contábeis e gerenciais são integradas em tempo real com os
-                lançamentos e balancetes da empresa. Utilize os filtros globais no cabeçalho
-                superior para alternar entre diferentes exercícios e anos contábeis.
-              </p>
             </div>
+          </div>
+        </TabsContent>
 
-            <div className="pt-4 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
-              <span className="text-[11px]">Ambiente Seguro & Auditado</span>
-              <div className="flex items-center gap-1 text-slate-300">
-                <ChevronRight className="w-3.5 h-3.5" />
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
+        {/* CONTEÚDO DA ABA 2: PAINEL DE INDICADORES (HODÔMETROS & TENDÊNCIAS) */}
+        <TabsContent value="painel_indicadores" className="focus-visible:outline-none">
+          <PainelIndicadoresHub
+            empresaId={empresaAtivaId}
+            empresaNome={empresaNome}
+            anoAtivo={anoAtivo}
+            anosDisponiveis={anosDisponiveis}
+            balancos={todosBalancosEmpresa}
+            dres={todasDresEmpresa}
+            lancamentos={todosLancamentosEmpresa}
+            contas={contasCad}
+            planoContas={planoCad}
+            loading={verificandoDados}
+            isCliente={isCliente}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Assinatura Oficial da Borlim Consultoria Empresarial */}
       <div className="pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-slate-400">
