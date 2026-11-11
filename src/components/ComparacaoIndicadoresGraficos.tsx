@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   ResponsiveContainer,
   RadarChart,
@@ -40,6 +40,11 @@ import {
   calcularBalanco,
 } from '@/lib/financeCalculations'
 import { calcularAnaliseFaturamento } from '@/lib/analiseFaturamentoCalculo'
+import {
+  resolverReferenciaMercado,
+  avaliarVersusMercado,
+  type ReferenciaMercado,
+} from '@/components/indicadores/benchmarkHub'
 
 export interface ComparacaoIndicadoresGraficosProps {
   empresaId: string | null
@@ -50,6 +55,8 @@ export interface ComparacaoIndicadoresGraficosProps {
   lancamentos: LancamentoRecord[]
   contas: ContaRecord[]
   planoContas: PlanoContaRecord[]
+  /** Segmento da empresa ativa — usado para resolver o benchmark setorial. */
+  segmento?: string | null
 }
 
 type ChaveIndicador =
@@ -223,6 +230,7 @@ export function ComparacaoIndicadoresGraficos({
   lancamentos,
   contas,
   planoContas,
+  segmento,
 }: ComparacaoIndicadoresGraficosProps) {
   // Anos distintos com qualquer dado da empresa ativa (mesma base dos hodômetros)
   const anosComDados = useMemo(() => {
@@ -296,6 +304,58 @@ export function ComparacaoIndicadoresGraficos({
   )
 
   const hasAnyData = apuracoes.some((a) => a.temDados)
+
+  // ===== Referência de mercado (benchmark setorial) =====
+  const [referencia, setReferencia] = useState<ReferenciaMercado | null>(null)
+  useEffect(() => {
+    let cancelado = false
+    resolverReferenciaMercado(segmento, empresaId).then((ref) => {
+      if (!cancelado) setReferencia(ref)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [segmento, empresaId])
+
+  const dadosRadarMercado = useMemo(() => {
+    if (!referencia) return dadosRadar
+    const mapaBenchmark: Record<ChaveIndicador, number> = {
+      roe: referencia.roe,
+      margem_liquida: referencia.margemLiquida,
+      margem_bruta: referencia.margemBruta,
+      margem_ebitda: referencia.margemEbitda,
+      liquidez_corrente: referencia.liquidezCorrente,
+      endividamento: referencia.endividamentoGeral,
+    }
+    return dadosRadar.map((linha, idx) => ({
+      ...linha,
+      mercado: Math.min(
+        Math.max(
+          mapaBenchmark[INDICADORES_COMPARADOS[idx].chave] /
+            INDICADORES_COMPARADOS[idx].normalizacaoMax,
+          0,
+        ),
+        1,
+      ),
+      mercado_real: mapaBenchmark[INDICADORES_COMPARADOS[idx].chave],
+    }))
+  }, [dadosRadar, referencia])
+
+  const dadosBarrasMercado = useMemo(() => {
+    if (!referencia) return dadosBarras
+    const mapaBenchmark: Record<ChaveIndicador, number> = {
+      roe: referencia.roe,
+      margem_liquida: referencia.margemLiquida,
+      margem_bruta: referencia.margemBruta,
+      margem_ebitda: referencia.margemEbitda,
+      liquidez_corrente: referencia.liquidezCorrente,
+      endividamento: referencia.endividamentoGeral,
+    }
+    return dadosBarras.map((linha, idx) => ({
+      ...linha,
+      mercado: mapaBenchmark[INDICADORES_COMPARADOS[idx].chave],
+    }))
+  }, [dadosBarras, referencia])
 
   // ===== Comparação com ano anterior: delta absoluto e % =====
   const comparacoes = useMemo(() => {
@@ -374,6 +434,15 @@ export function ComparacaoIndicadoresGraficos({
           <CardDescription className="text-xs text-slate-500 dark:text-slate-400">
             Radar e barras comparando ROE, margens, liquidez e endividamento entre exercícios.
           </CardDescription>
+          {referencia && (
+            <div className="pt-1">
+              <Badge className="text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200 dark:border-amber-800">
+                {referencia.usarFallback
+                  ? `Referência padrão ${referencia.rotuloSetor}`
+                  : `Benchmark do setor ${referencia.rotuloSetor}`}
+              </Badge>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="pt-4 text-xs text-slate-500 dark:text-slate-400">
           Nenhum dado disponível para a empresa ativa. Importe balanços, DREs ou lançamentos para
@@ -426,7 +495,10 @@ export function ComparacaoIndicadoresGraficos({
         <CardContent className="pt-4">
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={dadosRadar} margin={{ top: 10, right: 30, bottom: 0, left: 30 }}>
+              <RadarChart
+                data={dadosRadarMercado}
+                margin={{ top: 10, right: 30, bottom: 0, left: 30 }}
+              >
                 <PolarGrid stroke="#E2E8F0" />
                 <PolarAngleAxis dataKey="indicador" tick={{ fontSize: 11, fill: '#64748B' }} />
                 <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 1]} />
@@ -442,6 +514,19 @@ export function ComparacaoIndicadoresGraficos({
                     connectNulls
                   />
                 ))}
+                {referencia && (
+                  <Radar
+                    name={`Mercado (${referencia.rotuloSetor})`}
+                    dataKey="mercado"
+                    stroke="#94A3B8"
+                    fill="#94A3B8"
+                    fillOpacity={0.06}
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    dot={false}
+                    connectNulls
+                  />
+                )}
                 <RechartsTooltip contentStyle={tooltipStyle} />
                 <Legend
                   formatter={(val) => (
@@ -476,7 +561,10 @@ export function ComparacaoIndicadoresGraficos({
         <CardContent className="pt-4">
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dadosBarras} margin={{ top: 15, right: 20, left: 0, bottom: 0 }}>
+              <BarChart
+                data={dadosBarrasMercado}
+                margin={{ top: 15, right: 20, left: 0, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
                 <XAxis
                   dataKey="indicador"
@@ -510,6 +598,16 @@ export function ComparacaoIndicadoresGraficos({
                     maxBarSize={40}
                   />
                 ))}
+                {referencia && (
+                  <Bar
+                    dataKey="mercado"
+                    name={`Mercado (${referencia.rotuloSetor})`}
+                    fill="#94A3B8"
+                    fillOpacity={0.55}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={40}
+                  />
+                )}
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -557,6 +655,34 @@ export function ComparacaoIndicadoresGraficos({
                   </span>
                   {renderDelta(deltaAbs, deltaPct, ind.unidade, ind.inverteCor)}
                 </div>
+                {referencia &&
+                  (() => {
+                    const apAtual = atual !== null ? apuracoes.find((a) => a.ano === atual) : null
+                    const valorEmpresa = apAtual ? apAtual.valores[ind.chave] : null
+                    const mapaBenchmark: Record<ChaveIndicador, number> = {
+                      roe: referencia.roe,
+                      margem_liquida: referencia.margemLiquida,
+                      margem_bruta: referencia.margemBruta,
+                      margem_ebitda: referencia.margemEbitda,
+                      liquidez_corrente: referencia.liquidezCorrente,
+                      endividamento: referencia.endividamentoGeral,
+                    }
+                    const aval = avaliarVersusMercado(
+                      valorEmpresa,
+                      mapaBenchmark[ind.chave],
+                      ind.inverteCor,
+                    )
+                    return (
+                      <div className="pt-1 flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                          Mercado: {formatarValorIndicador(mapaBenchmark[ind.chave], ind.unidade)}
+                        </span>
+                        <Badge className={`text-[10px] font-bold ${aval.classes}`}>
+                          {aval.rotulo}
+                        </Badge>
+                      </div>
+                    )
+                  })()}
               </div>
             ))}
           </div>

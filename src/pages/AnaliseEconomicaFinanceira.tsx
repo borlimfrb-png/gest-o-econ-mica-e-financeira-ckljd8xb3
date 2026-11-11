@@ -1033,6 +1033,7 @@ export default function AnaliseEconomicaFinanceira() {
             planoContas={planoCad}
             loading={verificandoDados}
             isCliente={isCliente}
+            empresaAtiva={selectedEmpresa}
           />
         </TabsContent>
       </Tabs>

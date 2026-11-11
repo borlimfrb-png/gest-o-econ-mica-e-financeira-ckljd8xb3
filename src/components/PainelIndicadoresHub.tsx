@@ -46,6 +46,16 @@ import {
 import { calcularZScoreAltman } from '@/lib/termometroInsolvenciaCalculo'
 import { calcularAnaliseFaturamento } from '@/lib/analiseFaturamentoCalculo'
 import { ComparacaoIndicadoresGraficos } from '@/components/ComparacaoIndicadoresGraficos'
+import { CardReferenciasMercado } from '@/components/indicadores/CardReferenciasMercado'
+import { SecaoMeusKpis } from '@/components/indicadores/SecaoMeusKpis'
+import { CardProjecaoIndicadores } from '@/components/indicadores/CardProjecaoIndicadores'
+import type { EmpresaRecord } from '@/types/finance'
+import { useEffect, useState as useReactState } from 'react'
+import { benchmarksService } from '@/services/benchmarksService'
+import {
+  resolverReferenciaMercado,
+  type ReferenciaMercado,
+} from '@/components/indicadores/benchmarkHub'
 
 export interface PainelIndicadoresHubProps {
   empresaId: string | null
@@ -59,6 +69,8 @@ export interface PainelIndicadoresHubProps {
   planoContas: PlanoContaRecord[]
   loading?: boolean
   isCliente?: boolean
+  /** Empresa ativa completa (para segmento no benchmark setorial) — opcional. */
+  empresaAtiva?: EmpresaRecord | null
 }
 
 export function PainelIndicadoresHub({
@@ -73,8 +85,22 @@ export function PainelIndicadoresHub({
   planoContas,
   loading = false,
   isCliente = false,
+  empresaAtiva = null,
 }: PainelIndicadoresHubProps) {
   const navigate = useNavigate()
+  const [referenciaMercado, setReferenciaMercado] = useReactState<ReferenciaMercado | null>(null)
+
+  // Resolve o benchmark do setor da empresa ativa (fallback: padrão Indústria)
+  useEffect(() => {
+    let cancelado = false
+    if (isCliente) return undefined
+    resolverReferenciaMercado(empresaAtiva?.segmento ?? null, empresaId).then((ref) => {
+      if (!cancelado) setReferenciaMercado(ref)
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [empresaAtiva?.segmento, empresaId, isCliente])
   const [indicadorTendenciaAtivo, setIndicadorTendenciaAtivo] = useState<
     'receita_lucro' | 'roe' | 'margem_liquida' | 'liquidez_corrente' | 'ebitda'
   >('receita_lucro')
@@ -1152,8 +1178,49 @@ export function PainelIndicadoresHub({
           lancamentos={lancamentos}
           contas={contas}
           planoContas={planoContas}
+          segmento={empresaAtiva?.segmento ?? null}
         />
       )}
+
+      {/* SEÇÃO 4: FAIXA DE REFERÊNCIAS DE MERCADO (perfil interno) */}
+      {!isCliente && (
+        <CardReferenciasMercado
+          referencia={referenciaMercado}
+          dadosAnoAtivo={{
+            roe: dadosAnoAtivo.roe,
+            margemBruta: dadosAnoAtivo.margemBruta,
+            margemOperacional: null,
+            margemLiquida: dadosAnoAtivo.margemLiquida,
+            margemEbitda: dadosAnoAtivo.margemEbitda,
+            liquidezCorrente: dadosAnoAtivo.liquidezCorrente,
+            endividamentoGeral: dadosAnoAtivo.endividamentoGeral,
+          }}
+          empresaNome={empresaNome}
+          setor={empresaAtiva?.segmento ?? null}
+        />
+      )}
+
+      {/* SEÇÃO 5: MEUS KPIs PERSONALIZADOS (perfil interno) */}
+      {!isCliente && (
+        <SecaoMeusKpis
+          empresaId={empresaId}
+          anoAtivo={anoAtivo}
+          valoresAnoAtivo={{
+            receitaBruta: dadosAnoAtivo.receitaBruta,
+            lucroLiquido: dadosAnoAtivo.lucroLiquido,
+            ebitda: dadosAnoAtivo.ebitda,
+            roe: dadosAnoAtivo.roe,
+            margemLiquida: dadosAnoAtivo.margemLiquida,
+            margemBruta: dadosAnoAtivo.margemBruta,
+            margemEbitda: dadosAnoAtivo.margemEbitda,
+            liquidezCorrente: dadosAnoAtivo.liquidezCorrente,
+            endividamentoGeral: dadosAnoAtivo.endividamentoGeral,
+          }}
+        />
+      )}
+
+      {/* SEÇÃO 6: PROJEÇÃO DE INDICADORES +1 a +3 ANOS (perfil interno) */}
+      {!isCliente && <CardProjecaoIndicadores serieAnual={serieAnual} anoAtivo={anoAtivo} />}
     </div>
   )
 }
