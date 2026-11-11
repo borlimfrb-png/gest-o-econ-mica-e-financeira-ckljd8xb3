@@ -16,15 +16,15 @@ migrate(
       name: 'kpis_personalizados',
       type: 'base',
       listRule:
-        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa || empresa in @request.auth.empresas)",
+        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
       viewRule:
-        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa || empresa in @request.auth.empresas)",
+        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
       createRule:
-        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa || @request.body.empresa in @request.auth.empresas)",
+        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
       updateRule:
-        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa || empresa in @request.auth.empresas)",
+        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
       deleteRule:
-        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa || empresa in @request.auth.empresas)",
+        "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
       fields: [
         {
           name: 'usuario',
