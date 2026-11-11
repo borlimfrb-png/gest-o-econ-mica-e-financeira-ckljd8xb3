@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-11T11:25:01.007Z",
+  "generatedAt": "2026-11-11T18:26:39.438Z",
   "collections": [
     {
       "name": "users",
@@ -5713,6 +5713,181 @@
         "CREATE INDEX idx_kpis_pessoais_empresa ON kpis_personalizados (empresa)",
         "CREATE INDEX idx_kpis_pessoais_usuario ON kpis_personalizados (usuario)"
       ]
+    },
+    {
+      "name": "formacao_servicos_parametros",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "custos_fixos",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "quantidade_profissionais",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "horas_produtivas_profissional",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "fator_ociosidade",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_impostos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_comissao",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "percentual_margem",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "regime_tributario",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "observacoes",
+          "type": "text",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "formacao_servicos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "nome",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "descricao",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "horas_estimadas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "custo_direto",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "profissionais_envolvidos",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parametros",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "formacao_servicos_parametros"
+        }
+      ],
+      "indexes": []
     }
   ]
 }
