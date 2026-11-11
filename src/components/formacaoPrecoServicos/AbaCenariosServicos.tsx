@@ -45,15 +45,12 @@ import {
 } from '@/services/formacaoServicosCenariosService'
 import {
   CENARIO_BASE,
-  construirParametrosCenario,
-  compararCenarios,
-  formatarFator,
+  compararCenario,
   type ParametrosCenario,
 } from '@/lib/formacaoPrecoServicosCenarios'
-import { calcularPrecoServico } from '@/lib/formacaoPrecoServicosCalculo'
 import {
-  exportarComparativoCenariosExcel,
-  exportarComparativoCenariosCsv,
+  exportarComparativoCenarioExcel,
+  exportarComparativoCenarioCsv,
 } from '@/lib/formacaoPrecoServicosRelatoriosExport'
 
 interface Props {
@@ -68,6 +65,11 @@ const fmtMoeda = (v: number) =>
   Number.isFinite(v)
     ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
     : '—'
+const fmtPctNum = (v: number) =>
+  Number.isFinite(v) ? `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%` : '—'
+/** Fator local (ex.: 1,2) — o lib de cenários não exporta formatador. */
+const formatarFator = (v: number) =>
+  (Number(v) || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })
 
 function BadgeDelta({ valor, sufixo = '%' }: { valor: number | null; sufixo?: string }) {
   if (valor === null || !Number.isFinite(valor)) return <span>—</span>
@@ -135,37 +137,24 @@ export default function AbaCenariosServicos({
     carregar()
   }, [carregar])
 
-  // ---- Comparativo base × cenário (média ponderada pelos custos) ----
-  const linhasComparativo = useMemo(() => {
-    if (servicos.length === 0) return []
-    const linhas = servicos.map((servico) => {
-      const base = calcularPrecoServico(servico, parametros)
-      const cenario = calcularPrecoServico(
-        servico,
-        construirParametrosCenario(parametros, cenarioAtual),
-      )
-      const custoBase = base.custoTotal || 0
-      const markupBase = custoBase > 0 ? base.precoSugerido / custoBase : null
-      const markupCenario = custoBase > 0 ? cenario.precoSugerido / custoBase : null
-      return {
-        idServico: servico.id,
-        nomeServico: servico.nome,
-        custoBase,
-        precoBase: base.precoSugerido,
-        precoCenario: cenario.precoSugerido,
-        markupBase,
-        markupCenario,
-        margemPctBase: base.margemPct,
-        margemPctCenario: cenario.margemPct,
-      }
-    })
-    return linhas
-  }, [servicos, parametros, cenarioAtual])
-
-  const totais = useMemo(() => compararCenarios(servicos, parametros, cenarioAtual), [servicos, parametros, cenarioAtual])
+  // ---- Comparativo base × cenário (linhas por serviço + totais) ----
+  const comparativo = useMemo(
+    () => compararCenario(servicos, parametros, cenarioAtual),
+    [servicos, parametros, cenarioAtual],
+  )
+  const linhasComparativo = comparativo.linhas
+  const totais = comparativo.totais
 
   const abrirNovoCenario = () => {
-    setCenarioAtual(CENARIO_BASE)
+    // Novo cenário parte dos parâmetros vigentes, com fatores neutros (= 1)
+    setCenarioAtual({
+      percentual_margem: parametros.percentual_margem,
+      percentual_impostos: parametros.percentual_impostos,
+      percentual_comissao: parametros.percentual_comissao,
+      fator_custos_fixos: 1,
+      fator_custos_diretos: 1,
+      fator_horas: 1,
+    })
     setCenarioCarregado(null)
     setNomeCenario('')
     setDescricaoCenario('')
@@ -246,10 +235,10 @@ export default function AbaCenariosServicos({
       })
       return
     }
-    exportarComparativoCenariosExcel(
+    exportarComparativoCenarioExcel(
       nomeEmpresa,
-      totais,
       cenarioCarregado?.nome || 'Cenário em edição',
+      comparativo,
       exercicioAno,
     )
   }
@@ -263,10 +252,10 @@ export default function AbaCenariosServicos({
       })
       return
     }
-    exportarComparativoCenariosCsv(
+    exportarComparativoCenarioCsv(
       nomeEmpresa,
-      totais,
       cenarioCarregado?.nome || 'Cenário em edição',
+      comparativo,
       exercicioAno,
     )
   }
@@ -372,7 +361,7 @@ export default function AbaCenariosServicos({
                       <TableHead>Serviço</TableHead>
                       <TableHead className="text-right">Base (preço)</TableHead>
                       <TableHead className="text-right">Cenário (preço)</TableHead>
-                      <TableHead className="text-right">Δ Preço</TableHead>
+                      <TableHead className="text-right">Δ Preço (R$)</TableHead>
                       <TableHead className="text-right">Mark-up base</TableHead>
                       <TableHead className="text-right">Mark-up cenário</TableHead>
                       <TableHead className="text-right">Margem base</TableHead>
@@ -381,42 +370,60 @@ export default function AbaCenariosServicos({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {linhasComparativo.map((l) => (
-                      <TableRow key={l.idServico}>
+                    {linhasComparativo.map((l, idx) => (
+                      <TableRow key={`${l.nomeServico}-${idx}`}>
                         <TableCell className="font-medium">{l.nomeServico}</TableCell>
                         <TableCell className="text-right tabular-nums">{fmtMoeda(l.precoBase)}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {fmtMoeda(l.precoCenario)}
                         </TableCell>
+                        <TableCell
+                          className={`text-right tabular-nums ${
+                            l.deltaPreco > 0
+                              ? 'text-emerald-700'
+                              : l.deltaPreco < 0
+                                ? 'text-red-700'
+                                : ''
+                          }`}
+                        >
+                          {fmtMoeda(l.deltaPreco)}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {l.markupBase > 0 ? `${l.markupBase.toFixed(3)}×` : '—'}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {l.markupCenario > 0 ? `${l.markupCenario.toFixed(3)}×` : '—'}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">{fmtPctNum(l.margemBasePct)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmtPctNum(l.margemCenarioPct)}
+                        </TableCell>
                         <TableCell className="text-right">
-                          <BadgeDelta
-                            valor={l.precoBase > 0 ? ((l.precoCenario - l.precoBase) / l.precoBase) * 100 : null}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {l.markupBase !== null ? `${l.markupBase.toFixed(3)}×` : '—'}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {l.markupCenario !== null ? `${l.markupCenario.toFixed(3)}×` : '—'}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {l.margemPctBase != null ? `${l.margemPctBase.toFixed(2)}%` : '—'}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {l.margemPctCenario != null ? `${l.margemPctCenario.toFixed(2)}%` : '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <BadgeDelta
-                            valor={
-                              l.margemPctBase != null && l.margemPctCenario != null
-                                ? l.margemPctCenario - l.margemPctBase
-                                : null
-                            }
-                            sufixo=" p.p."
-                          />
+                          <BadgeDelta valor={l.deltaMargemPp} sufixo=" p.p." />
                         </TableCell>
                       </TableRow>
                     ))}
+                    <TableRow className="bg-muted/40 font-semibold">
+                      <TableCell>TOTAL</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtMoeda(totais.precoBase)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtMoeda(totais.precoCenario)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtMoeda(totais.deltaPreco)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {totais.markupBase > 0 ? `${totais.markupBase.toFixed(3)}×` : '—'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {totais.markupCenario > 0 ? `${totais.markupCenario.toFixed(3)}×` : '—'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtPctNum(totais.margemBasePct)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtPctNum(totais.margemCenarioPct)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <BadgeDelta valor={totais.deltaMargemPp} sufixo=" p.p." />
+                      </TableCell>
+                    </TableRow>
                   </TableBody>
                 </Table>
               </div>
