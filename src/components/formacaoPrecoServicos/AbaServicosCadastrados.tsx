@@ -4,6 +4,10 @@ import {
   formacaoPrecoServicosService,
   type FormacaoServicoRecord,
 } from '@/services/formacaoPrecoServicosService'
+import {
+  calcularHoraTecnica,
+  type ParametrosFormacaoServicos,
+} from '@/lib/formacaoPrecoServicosCalculo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,10 +24,11 @@ import {
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 
 interface Props {
-  servicos: FormacaoServicosRecord[]
+  servicos: FormacaoServicoRecord[]
   empresaId: string
   recarregar: () => void
   custoHoraTecnica: number
+  parametrosCalculo: ParametrosFormacaoServicos
 }
 
 const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -49,6 +54,7 @@ export default function AbaServicosCadastrados({
   empresaId,
   recarregar,
   custoHoraTecnica,
+  parametrosCalculo,
 }: Props) {
   const { toast } = useToast()
   const [modalOpen, setModalOpen] = useState(false)
@@ -59,7 +65,20 @@ export default function AbaServicosCadastrados({
   const [toDelete, setToDelete] = useState<FormacaoServicoRecord | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const custoHora = useMemo(() => custoHoraTecnica, [custoHoraTecnica])
+  // Mão de obra real do serviço: hora técnica × horas × profissionais envolvidos
+  const calcularMaoDeObra = useMemo(
+    () => (s: FormacaoServicoRecord) => {
+      const horaTecnica =
+        custoHoraTecnica ||
+        (parametrosCalculo ? calcularHoraTecnica(parametrosCalculo).custoHoraTecnica : 0)
+      return (
+        horaTecnica *
+        (Number(s.horas_estimadas) || 0) *
+        Math.max(Number(s.profissionais_envolvidos) || 1, 1)
+      )
+    },
+    [custoHoraTecnica, parametrosCalculo],
+  )
 
   const openNovo = () => {
     setEditing(null)
@@ -72,9 +91,9 @@ export default function AbaServicosCadastrados({
     setForm({
       nome: s.nome || '',
       descricao: s.descricao || '',
-      horasEstimadas: String(s.horasEstimadas ?? ''),
-      custoDireto: String(s.custoDireto ?? ''),
-      profissionaisEnvolvidos: String(s.profissionaisEnvolvidos ?? ''),
+      horasEstimadas: String(s.horas_estimadas ?? ''),
+      custoDireto: String(s.custo_direto ?? ''),
+      profissionaisEnvolvidos: String(s.profissionais_envolvidos ?? ''),
     })
     setModalOpen(true)
   }
@@ -89,9 +108,12 @@ export default function AbaServicosCadastrados({
       const payload = {
         nome: form.nome.trim(),
         descricao: form.descricao.trim(),
-        horasEstimadas: Number(form.horasEstimadas) || 0,
-        custoDireto: Number(form.custoDireto) || 0,
-        profissionaisEnvolvidos: Number(form.profissionaisEnvolvidos) || 1,
+        horas_estimadas: Number(String(form.horasEstimadas).replace(',', '.')) || 0,
+        custo_direto: Number(String(form.custoDireto).replace(',', '.')) || 0,
+        profissionais_envolvidos: Math.max(
+          Math.round(Number(String(form.profissionaisEnvolvidos).replace(',', '.')) || 1),
+          1,
+        ),
       }
       if (editing) {
         await formacaoPrecoServicosService.atualizarServico(editing.id, payload)
@@ -133,7 +155,7 @@ export default function AbaServicosCadastrados({
           <CardTitle className="text-base">Serviços Cadastrados</CardTitle>
           <CardDescription>
             Horas estimadas, custo direto (materiais/terceiros) e profissionais envolvidos.
-            {custoHora > 0 && ` Custo/hora técnica atual: ${fmtBRL(custoHora)}.`}
+            {custoHoraTecnica > 0 && ` Custo/hora técnica atual: ${fmtBRL(custoHoraTecnica)}.`}
           </CardDescription>
         </div>
         <Button size="sm" onClick={openNovo}>
@@ -160,7 +182,7 @@ export default function AbaServicosCadastrados({
               </thead>
               <tbody>
                 {servicos.map((s) => {
-                  const maoDeObra = custoHora * (s.horasEstimadas || 0)
+                  const maoDeObra = calcularMaoDeObra(s)
                   return (
                     <tr key={s.id} className="border-b last:border-0">
                       <td className="py-2 pr-4">
@@ -170,10 +192,14 @@ export default function AbaServicosCadastrados({
                         )}
                       </td>
                       <td className="py-2 pr-4 text-right">
-                        {(s.horasEstimadas || 0).toLocaleString('pt-BR')}
+                        {(Number(s.horas_estimadas) || 0).toLocaleString('pt-BR')}
                       </td>
-                      <td className="py-2 pr-4 text-right">{fmtBRL(s.custoDireto || 0)}</td>
-                      <td className="py-2 pr-4 text-right">{s.profissionaisEnvolvidos || 1}</td>
+                      <td className="py-2 pr-4 text-right">
+                        {fmtBRL(Number(s.custo_direto) || 0)}
+                      </td>
+                      <td className="py-2 pr-4 text-right">
+                        {Number(s.profissionais_envolvidos) || 1}
+                      </td>
                       <td className="py-2 pr-4 text-right">
                         {maoDeObra > 0 ? fmtBRL(maoDeObra) : '—'}
                       </td>
@@ -242,9 +268,8 @@ export default function AbaServicosCadastrados({
                 <Label htmlFor="srv-horas">Horas estimadas</Label>
                 <Input
                   id="srv-horas"
-                  type="number"
-                  step="0.5"
-                  min="0"
+                  inputMode="decimal"
+                  placeholder="0"
                   value={form.horasEstimadas}
                   onChange={(e) => setForm((f) => ({ ...f, horasEstimadas: e.target.value }))}
                 />
@@ -253,9 +278,8 @@ export default function AbaServicosCadastrados({
                 <Label htmlFor="srv-custo">Custo direto (R$)</Label>
                 <Input
                   id="srv-custo"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  inputMode="decimal"
+                  placeholder="0,00"
                   value={form.custoDireto}
                   onChange={(e) => setForm((f) => ({ ...f, custoDireto: e.target.value }))}
                 />
@@ -264,9 +288,8 @@ export default function AbaServicosCadastrados({
                 <Label htmlFor="srv-prof">Profissionais envolvidos</Label>
                 <Input
                   id="srv-prof"
-                  type="number"
-                  step="1"
-                  min="1"
+                  inputMode="numeric"
+                  placeholder="1"
                   value={form.profissionaisEnvolvidos}
                   onChange={(e) =>
                     setForm((f) => ({ ...f, profissionaisEnvolvidos: e.target.value }))

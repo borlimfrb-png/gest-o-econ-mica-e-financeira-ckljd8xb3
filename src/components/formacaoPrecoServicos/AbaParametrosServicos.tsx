@@ -1,14 +1,10 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import {
-  formacaoServicosParametrosService,
-  type FormacaoServicosParametrosRecord,
+  formacaoPrecoServicosService,
+  type FormacaoServicoParametrosRecord,
 } from '@/services/formacaoPrecoServicosService'
-import {
-  calculadoraServicos,
-  type ParametrosFormacaoServicos,
-  type ResultadoParametros,
-} from '@/lib/formacaoPrecoServicosCalculo'
+import type { ParametrosFormacaoServicos } from '@/lib/formacaoPrecoServicosCalculo'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -17,91 +13,80 @@ import { Separator } from '@/components/ui/separator'
 import { Plus, Save, Trash2 } from 'lucide-react'
 
 interface Props {
-  parametros: FormacaoServicosParametrosRecord
+  parametros: FormacaoServicoParametrosRecord
   empresaId: string
-  recalculo: ResultadoParametros
+  recalculo: {
+    custosFixosMensais: number
+    horasProdutivasMes: number
+    custoHoraTecnica: number
+  }
 }
 
 interface CustosFixosState {
   nome: string
-  valor: number | string
-}
-
-interface ProfissionaisState {
-  nome: string
-  horasMes: number | string
-  fatorOciosidadePercentual: number | string
+  valor: string
 }
 
 const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const fmtNum = (v: number, casas = 2) => v.toLocaleString('pt-BR', { maximumFractionDigits: casas })
+const toNumberBR = (v: string): number => {
+  if (!v) return 0
+  const normalized = v
+    .replace(/\s|R\$/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+  const n = Number(normalized)
+  return Number.isFinite(n) ? n : Number(v) || 0
+}
 
 export default function AbaParametrosServicos({ parametros, empresaId, recalculo }: Props) {
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
 
+  // Estado local editável; inicializa com os dados carregados da coleção
   const [custosFixos, setCustosFixos] = useState<CustosFixosState[]>(
-    (parametros.custosFixos || []).map((c) => ({ nome: c.nome, valor: c.valor })),
-  )
-  const [profissionais, setProfissionais] = useState<ProfissionaisState[]>(
-    (parametros.profissionais || []).map((p) => ({
-      nome: p.nome,
-      horasMes: p.horasMes,
-      fatorOciosidadePercentual: p.fatorOciosidadePercentual,
+    (parametros.custos_fixos || []).map((c) => ({
+      nome: c?.nome || '',
+      valor: c?.valor != null ? String(c.valor) : '',
     })),
   )
-  const [impostos, setImpostos] = useState<string>(String(parametros.impostosPercentual ?? 0))
-  const [comissao, setComissao] = useState<string>(useStateSafe(parametros.comissaoPercentual))
-  const [margem, setMargem] = useState<string>(String(parametros.margemAlvoPercentual ?? 0))
-
-  function useStateSafe(v: number | undefined): string {
-    return String(v ?? 0)
-  }
-
-  const totalCustosFixos = useMemo(
-    () => custosFixos.reduce((acc, c) => acc + (Number(c.valor) || 0), 0),
-    [custosFixos],
+  const [quantidadeProfissionais, setQuantidadeProfissionais] = useState<string>(
+    String(parametros.quantidade_profissionais ?? ''),
   )
+  const [horasProdutivasProfissional, setHorasProdutivasProfissional] = useState<string>(
+    String(parametros.horas_produtivas_profissional ?? ''),
+  )
+  const [fatorOciosidade, setFatorOciosidade] = useState<string>(
+    String(parametros.fator_ociosidade ?? ''),
+  )
+  const [impostos, setImpostos] = useState<string>(String(parametros.percentual_impostos ?? ''))
+  const [comissao, setComissao] = useState<string>(String(parametros.percentual_comissao ?? ''))
+  const [margem, setMargem] = useState<string>(String(parametros.percentual_margem ?? ''))
 
-  const totalProfissionais = profissionais.length
+  const totalCustosFixos = custosFixos.reduce((acc, c) => acc + (toNumberBR(c.valor) || 0), 0)
 
-  const horasProdutivas = useMemo(() => {
-    return profissionais.reduce((acc, p) => {
-      const horas = Number(p.horasMes) || 0
-      const fator = 1 - (Number(p.fatorOciosidadePercentual) || 0) / 100
-      return acc + horas * fator
-    }, 0)
-  }, [profissionais])
-
-  const custoHoraTecnica = useMemo(() => {
-    if (horasProdutivas <= 0) return 0
-    return totalCustosFixos / horasProdutivas
-  }, [totalCustosFixos, horasProdutivas])
+  const totalPerc = toNumberBR(impostos) + toNumberBR(comissao) + toNumberBR(margem)
+  const markupDivisor = totalPerc < 100 ? 1 / (1 - totalPerc / 100) : 0
 
   const handleSalvar = async () => {
     try {
       setSaving(true)
       const payload: ParametrosFormacaoServicos = {
-        custosFixos: custosFixos
+        custos_fixos: custosFixos
           .filter((c) => c.nome.trim() !== '')
-          .map((c) => ({ nome: c.nome.trim(), valor: Number(c.valor) || 0 })),
-        profissionais: profissionais
-          .filter((p) => p.nome.trim() !== '' && Number(p.horasMes) > 0)
-          .map((p) => ({
-            nome: p.nome.trim(),
-            horasMes: Number(p.horasMes) || 0,
-            fatorOciosidadePercentual: Number(p.fatorOciosidadePercentual) || 0,
-          })),
-        impostosPercentual: Number(impostos) || 0,
-        comissaoPercentual: Number(comissao) || 0,
-        margemAlvoPercentual: Number(margem) || 0,
+          .map((c) => ({ nome: c.nome.trim(), valor: toNumberBR(c.valor) })),
+        quantidade_profissionais: Math.max(Math.round(toNumberBR(quantidadeProfissionais)), 0),
+        horas_produtivas_profissional: toNumberBR(horasProdutivasProfissional),
+        fator_ociosidade: toNumberBR(fatorOciosidade),
+        percentual_impostos: toNumberBR(impostos),
+        percentual_comissao: toNumberBR(comissao),
+        percentual_margem: toNumberBR(margem),
       }
-      if (parametros.id) {
-        await formacaoServicosParametrosService.update(parametros.id, payload)
-      } else {
-        await formacaoServicosParametrosService.create(empresaId, payload)
-      }
-      toast({ title: 'Parâmetros salvos', description: 'O Custo/Hora Técnica foi recalculado.' })
+      await formacaoPrecoServicosService.salvarParametros(empresaId, payload, parametros.id)
+      toast({
+        title: 'Parâmetros salvos',
+        description: 'O Custo/Hora Técnica e o mark-up foram recalculados.',
+      })
     } catch (err) {
       console.error('Erro ao salvar parâmetros:', err)
       toast({
@@ -118,18 +103,13 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
   const removeCustoFixo = (i: number) =>
     setCustosFixos((prev) => prev.filter((_, idx) => idx !== i))
 
-  const addProfissional = () =>
-    setProfissionais((prev) => [...prev, { nome: '', horasMes: '', fatorOciosidadePercentual: 0 }])
-  const removeProfissional = (i: number) =>
-    setProfissionais((prev) => prev.filter((_, idx) => idx !== i))
-
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <div className="lg:col-span-2 flex flex-col gap-4">
+      <div className="flex flex-col gap-4 lg:col-span-2">
         {/* Custos fixos */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Custos Fixos Mensais da Consultoria</CardTitle>
+            <CardTitle className="text-base">Custos Fixos Mensais</CardTitle>
             <CardDescription>
               Salários, aluguel, softwares, contabilidade e demais despesas fixas do mês.
             </CardDescription>
@@ -153,9 +133,6 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
                   }}
                 />
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
                   placeholder="Valor (R$)"
                   className="max-w-[180px]"
                   value={item.valor}
@@ -185,76 +162,50 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
           </CardContent>
         </Card>
 
-        {/* Profissionais */}
+        {/* Capacidade produtiva */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Horas Produtivas por Profissional</CardTitle>
+            <CardTitle className="text-base">Capacidade Produtiva</CardTitle>
             <CardDescription>
-              Horas disponíveis por mês e o % de ociosidade (reuniões, vendas, deslocamentos).
+              Profissionais, horas produtivas por profissional no mês e % de ociosidade (reuniões,
+              vendas, deslocamentos).
             </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {profissionais.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Nenhum profissional cadastrado. Clique em “Adicionar profissional”.
-              </p>
-            )}
-            {profissionais.map((item, i) => (
-              <div key={i} className="flex flex-wrap gap-2">
-                <Input
-                  placeholder="Nome/função"
-                  value={item.nome}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setProfissionais((prev) =>
-                      prev.map((p, idx) => (idx === i ? { ...p, nome: v } : p)),
-                    )
-                  }}
-                />
-                <Input
-                  type="number"
-                  step="1"
-                  min="0"
-                  placeholder="Horas/mês"
-                  className="max-w-[130px]"
-                  value={item.horasMes}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setProfissionais((prev) =>
-                      prev.map((p, idx) => (idx === i ? { ...p, horasMes: v } : p)),
-                    )
-                  }}
-                />
-                <Input
-                  type="number"
-                  step="1"
-                  min="0"
-                  max="100"
-                  placeholder="Ociosidade %"
-                  className="max-w-[140px]"
-                  value={item.fatorOciosidadePercentual}
-                  onChange={(e) => {
-                    const v = e.target.value
-                    setProfissionais((prev) =>
-                      prev.map((p, idx) =>
-                        idx === i ? { ...p, fatorOciosidadePercentual: v } : p,
-                      ),
-                    )
-                  }}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeProfissional(i)}
-                  aria-label="Remover"
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            ))}
-            <Button variant="outline" size="sm" onClick={addProfissional}>
-              <Plus className="mr-2 h-4 w-4" /> Adicionar profissional
-            </Button>
+          <CardContent className="grid gap-4 md:grid-cols-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="qtd-profissionais">Quantidade de profissionais</Label>
+              <Input
+                id="qtd-profissionais"
+                type="number"
+                step="1"
+                min="0"
+                value={quantidadeProfissionais}
+                onChange={(e) => setQuantidadeProfissionais(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="horas-produtivas">Horas produtivas/profissional (mês)</Label>
+              <Input
+                id="horas-produtivas"
+                type="number"
+                step="0.5"
+                min="0"
+                value={horasProdutivasProfissional}
+                onChange={(e) => setHorasProdutivasProfissional(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="fator-ociosidade">Fator de ociosidade (%)</Label>
+              <Input
+                id="fator-ociosidade"
+                type="number"
+                step="0.5"
+                min="0"
+                max="100"
+                value={fatorOciosidade}
+                onChange={(e) => setFatorOciosidade(e.target.value)}
+              />
+            </div>
           </CardContent>
         </Card>
 
@@ -319,54 +270,51 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Cálculo do Custo/Hora Técnica</CardTitle>
-            <CardDescription>Atualizado em tempo real conforme os campos acima</CardDescription>
+            <CardDescription>
+              Valores vigentes (salvos) — o motor oficial é o mesmo do Simulador e do Resumo.
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total de custos fixos</span>
-              <span className="font-medium">{fmtBRL(totalCustosFixos)}</span>
+              <span className="text-muted-foreground">Total de custos fixos (salvos)</span>
+              <span className="font-medium">{fmtBRL(recalculo.custosFixosMensais)}</span>
             </div>
             <Separator />
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Profissionais</span>
-              <span className="font-medium">{totalProfissionais}</span>
-            </div>
-            <div className="flex justify-between">
               <span className="text-muted-foreground">Horas produtivas/mês</span>
-              <span className="font-medium">{fmtNum(horasProdutivas, 1)} h</span>
+              <span className="font-medium">{fmtNum(recalculo.horasProdutivasMes, 1)} h</span>
             </div>
             <Separator />
             <div className="flex justify-between">
               <span className="text-muted-foreground">Custo/Hora Técnica</span>
               <span className="text-base font-semibold text-primary">
-                {fmtBRL(custoHoraTecnica)}
+                {fmtBRL(recalculo.custoHoraTecnica)}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {fmtBRL(totalCustosFixos)} ÷ {fmtNum(horasProdutivas, 1)} h ={' '}
-              {fmtBRL(custoHoraTecnica)}/h
+              {fmtBRL(recalculo.custosFixosMensais)} ÷ {fmtNum(recalculo.horasProdutivasMes, 1)} h ={' '}
+              {fmtBRL(recalculo.custoHoraTecnica)}/h
             </p>
           </CardContent>
         </Card>
 
-        {recalculo && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Mark-up divisor</CardTitle>
-              <CardDescription>Com a margem alvo atual</CardDescription>
-            </CardHeader>
-            <CardContent className="text-sm">
-              <p className="font-mono text-xs leading-relaxed">
-                1 − ({fmtNum(recalculo.aliquotasTotalPercentual)}% ÷ 100) ={' '}
-                {recalculo.markupDivisorAlvo > 0 ? recalculo.markupDivisorAlvo.toFixed(4) : '—'}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Preço de Venda = Custo Total ÷{' '}
-                {recalculo.markupDivisorAlvo > 0 ? recalculo.markupDivisorAlvo.toFixed(4) : '—'}
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Mark-up divisor</CardTitle>
+            <CardDescription>
+              Prévia com os percentuais digitados acima (ainda não salvos)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm">
+            <p className="font-mono text-xs leading-relaxed">
+              1 ÷ (1 − {fmtNum(totalPerc)}% ÷ 100) ={' '}
+              {markupDivisor > 0 ? markupDivisor.toFixed(4) : '—'}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Preço de Venda = Custo Total ÷ {markupDivisor > 0 ? markupDivisor.toFixed(4) : '—'}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

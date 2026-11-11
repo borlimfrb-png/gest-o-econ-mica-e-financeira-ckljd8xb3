@@ -3,19 +3,20 @@ import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import {
-  calculadoraServicos,
+  calcularPrecoServico,
+  calcularHoraTecnica,
   type ParametrosFormacaoServicos,
-  type ServicoFormacao,
+  type ComposicaoPrecoServico,
 } from '@/lib/formacaoPrecoServicosCalculo'
 import {
-  formacaoServicosParametrosService,
-  formacaoServicosService,
-  type FormacaoServicosParametrosRecord,
-  type FormacaoServicosRecord,
+  formacaoPrecoServicosService,
+  type FormacaoServicoParametrosRecord,
+  type FormacaoServicoRecord,
 } from '@/services/formacaoPrecoServicosService'
 import {
-  exportarFormacaoPrecoServicosExcel,
-  exportarFormacaoPrecoServicosCSV,
+  exportarFormacaoServicosExcel,
+  exportarFormacaoServicosCsv,
+  type DadosExportFormacaoServicos,
 } from '@/lib/formacaoPrecoServicosExport'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -25,30 +26,29 @@ import { Badge } from '@/components/ui/badge'
 import { FileSpreadsheet, FileText, RefreshCw, Wrench } from 'lucide-react'
 import AbaParametrosServicos from '@/components/formacaoPrecoServicos/AbaParametrosServicos'
 import AbaServicosCadastrados from '@/components/formacaoPrecoServicos/AbaServicosCadastrados'
-import { SimuladorServicosPrecos } from '@/components/formacaoPrecoServicos/SimuladorServicosPrecos'
+import SimuladorServicosPrecos from '@/components/formacaoPrecoServicos/SimuladorServicosPrecos'
 import AbaResumoServicos from '@/components/formacaoPrecoServicos/AbaResumoServicos'
 
-const PARAMETROS_PLACEHOLDER: FormacaoServicosParametrosRecord = {
+const PARAMETROS_PLACEHOLDER: FormacaoServicoParametrosRecord = {
   id: '',
   empresa: '',
-  user: '',
-  custosFixos: [],
-  profissionais: [],
-  impostosPercentual: 0,
-  comissaoPercentual: 0,
-  margemAlvoPercentual: 0,
-  created: '',
-  updated: '',
-  collectionId: '',
-  collectionName: 'formacao_servicos_parametros',
+  custos_fixos: [],
+  quantidade_profissionais: 0,
+  horas_produtivas_profissional: 0,
+  fator_ociosidade: 0,
+  percentual_impostos: 0,
+  percentual_comissao: 0,
+  percentual_margem: 0,
+  regime_tributario: '',
+  observacoes: '',
 }
 
 export default function FormacaoPrecoServicos() {
   const { toast } = useToast()
   const { selectedEmpresaId, selectedEmpresa, selectedAno } = useFilter()
 
-  const [parametros, setParametros] = useState<FormacaoServicosParametrosRecord | null>(null)
-  const [servicos, setServicos] = useState<FormacaoServicosRecord[]>([])
+  const [parametros, setParametros] = useState<FormacaoServicoParametrosRecord | null>(null)
+  const [servicos, setServicos] = useState<FormacaoServicoRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   const carregarDados = useCallback(async () => {
@@ -61,8 +61,8 @@ export default function FormacaoPrecoServicos() {
     try {
       setLoading(true)
       const [paramRec, servicosList] = await Promise.all([
-        formacaoServicosParametrosService.getByEmpresa(selectedEmpresaId),
-        formacaoServicosService.getAll(selectedEmpresaId),
+        formacaoPrecoServicosService.getParametros(selectedEmpresaId),
+        formacaoPrecoServicosService.getAllServicos(selectedEmpresaId),
       ])
       setParametros(paramRec)
       setServicos(servicosList)
@@ -82,48 +82,59 @@ export default function FormacaoPrecoServicos() {
     carregarDados()
   }, [carregarDados])
 
-  useRealtime<FormacaoServicosParametrosRecord>('formacao_servicos_parametros', () =>
-    carregarDados(),
-  )
-  useRealtime<FormacaoServicosRecord>('formacao_servicos', () => carregarDados())
+  useRealtime('formacao_servicos_parametros', () => carregarDados())
+  useRealtime('formacao_servicos', () => carregarDados())
 
-  // ---- Cálculos centralizados (hora técnica, mark-up, ponto de equilíbrio) ----
-  const parametrosCalculo: ParametrosFormacaoServicos = useMemo(() => {
-    if (!parametros) {
-      return {
-        custosFixos: [],
-        profissionais: [],
-        impostosPercentual: 0,
-        comissaoPercentual: 0,
-        margemAlvoPercentual: 0,
-      }
-    }
-    return {
-      custosFixos: parametros.custosFixos || [],
-      profissionais: parametros.profissionais || [],
-      impostosPercentual: parametros.impostosPercentual || 0,
-      comissaoPercentual: parametros.comissaoPercentual || 0,
-      margemAlvoPercentual: parametros.margemAlvoPercentual || 0,
-    }
-  }, [parametros])
+  // ---- Parâmetros de cálculo normalizados (motor snake_case) ----
+  const parametrosCalculo: ParametrosFormacaoServicos = useMemo(
+    () => ({
+      custos_fixos: (parametros?.custos_fixos || []).map((c) => ({
+        nome: c?.nome || '',
+        valor: Number(c?.valor) || 0,
+      })),
+      quantidade_profissionais: Number(parametros?.quantidade_profissionais) || 0,
+      horas_produtivas_profissional: Number(parametros?.horas_produtivas_profissional) || 0,
+      fator_ociosidade: Number(parametros?.fator_ociosidade) || 0,
+      percentual_impostos: Number(parametros?.percentual_impostos) || 0,
+      percentual_comissao: Number(parametros?.percentual_comissao) || 0,
+      percentual_margem: Number(parametros?.percentual_margem) || 0,
+      regime_tributario: parametros?.regime_tributario || '',
+    }),
+    [parametros],
+  )
 
   const resultadoParametros = useMemo(
-    () => calculadoraServicos.calcularParametros(parametrosCalculo),
+    () => calcularHoraTecnica(parametrosCalculo),
     [parametrosCalculo],
   )
 
   const servicosCalculados = useMemo(
     () =>
-      servicos.map((s) => ({
-        record: s,
-        resultado: calculadoraServicos.calcularServico(s, resultadoParametros),
+      servicos.map((servico) => ({
+        servico,
+        composicao: calcularPrecoServico(servico, parametrosCalculo) as ComposicaoPrecoServico,
       })),
-    [servicos, resultadoParametros],
+    [servicos, parametrosCalculo],
   )
 
   const dadosResumo = useMemo(
-    () => servicosCalculados.map(({ record, resultado }) => ({ record, resultado })),
+    () => servicosCalculados.map(({ servico, composicao }) => ({ servico, composicao })),
     [servicosCalculados],
+  )
+
+  const montarDadosExport = useCallback(
+    (): DadosExportFormacaoServicos => ({
+      nomeEmpresa: selectedEmpresa?.nome || 'Empresa',
+      exercicioAno: selectedAno,
+      custoHoraTecnica: resultadoParametros.custoHoraTecnica,
+      custosFixosMensais: resultadoParametros.custosFixosMensais,
+      horasProdutivasMes: resultadoParametros.horasProdutivasMes,
+      impostosPct: parametrosCalculo.percentual_impostos,
+      comissaoPct: parametrosCalculo.percentual_comissao,
+      margemPct: parametrosCalculo.percentual_margem,
+      linhas: dadosResumo,
+    }),
+    [selectedEmpresa, selectedAno, resultadoParametros, parametrosCalculo, dadosResumo],
   )
 
   const handleExportExcel = () => {
@@ -135,13 +146,10 @@ export default function FormacaoPrecoServicos() {
       })
       return
     }
-    exportarFormacaoPrecoServicosExcel(dadosResumo, resultadoParametros, {
-      nomeEmpresa: selectedEmpresa?.nome || 'Empresa',
-      exercicio: selectedAno,
-    })
+    exportarFormacaoServicosExcel(montarDadosExport())
     toast({
       title: 'Excel gerado',
-      description: 'O arquivo foi baixado com os dados do simulador e do resumo.',
+      description: 'O arquivo foi baixado com o resumo da formação de preço de serviços.',
     })
   }
 
@@ -154,10 +162,7 @@ export default function FormacaoPrecoServicos() {
       })
       return
     }
-    exportarFormacaoPrecoServicosCSV(dadosResumo, resultadoParametros, {
-      nomeEmpresa: selectedEmpresa?.nome || 'Empresa',
-      exercicio: selectedAno,
-    })
+    exportarFormacaoServicosCsv(montarDadosExport())
     toast({ title: 'CSV gerado', description: 'O arquivo foi baixado com os dados do resumo.' })
   }
 
@@ -225,7 +230,7 @@ export default function FormacaoPrecoServicos() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Custo/Hora Técnica</CardDescription>
-              <CardTitle className="text-2xl">
+              <CardTitle className="text-2xl tabular-nums">
                 {resultadoParametros.custoHoraTecnica > 0
                   ? resultadoParametros.custoHoraTecnica.toLocaleString('pt-BR', {
                       style: 'currency',
@@ -235,49 +240,47 @@ export default function FormacaoPrecoServicos() {
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {resultadoParametros.totalCustosFixos.toLocaleString('pt-BR', {
+              {resultadoParametros.custosFixosMensais.toLocaleString('pt-BR', {
                 style: 'currency',
                 currency: 'BRL',
               })}{' '}
-              de custos fixos ÷ {resultadoParametros.horasProdutivasTotal.toLocaleString('pt-BR')} h
+              de custos fixos ÷ {resultadoParametros.horasProdutivasMes.toLocaleString('pt-BR')} h
               produtivas/mês
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Horas produtivas/mês</CardDescription>
-              <CardTitle className="text-2xl">
-                {resultadoParametros.horasProdutivasTotal.toLocaleString('pt-BR')}
+              <CardTitle className="text-2xl tabular-nums">
+                {resultadoParametros.horasProdutivasMes.toLocaleString('pt-BR')}
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              {parametrosCalculo.profissionais?.length ?? 0} profissional(is) × horas × fator de
-              ocupação
+              {parametrosCalculo.quantidade_profissionais} profissional(is) ×{' '}
+              {parametrosCalculo.horas_produtivas_profissional.toLocaleString('pt-BR')} h ×
+              ociosidade de {parametrosCalculo.fator_ociosidade.toLocaleString('pt-BR')}%
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Impostos + comissão</CardDescription>
-              <CardTitle className="text-2xl">
+              <CardTitle className="text-2xl tabular-nums">
                 {(
-                  (parametrosCalculo.impostosPercentual || 0) +
-                  (parametrosCalculo.comissaoPercentual || 0)
-                ).toLocaleString('pt-BR', {
-                  maximumFractionDigits: 2,
-                })}
+                  parametrosCalculo.percentual_impostos + parametrosCalculo.percentual_comissao
+                ).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
                 %
               </CardTitle>
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
-              Impostos {(parametrosCalculo.impostosPercentual || 0).toLocaleString('pt-BR')}% ·
-              Comissão {(parametrosCalculo.comissaoPercentual || 0).toLocaleString('pt-BR')}%
+              Impostos {parametrosCalculo.percentual_impostos.toLocaleString('pt-BR')}% · Comissão{' '}
+              {parametrosCalculo.percentual_comissao.toLocaleString('pt-BR')}%
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Margem alvo</CardDescription>
-              <CardTitle className="text-2xl">
-                {(parametrosCalculo.margemAlvoPercentual || 0).toLocaleString('pt-BR', {
+              <CardTitle className="text-2xl tabular-nums">
+                {parametrosCalculo.percentual_margem.toLocaleString('pt-BR', {
                   maximumFractionDigits: 2,
                 })}
                 %
@@ -285,8 +288,20 @@ export default function FormacaoPrecoServicos() {
             </CardHeader>
             <CardContent className="text-xs text-muted-foreground">
               Mark-up divisor:{' '}
-              {resultadoParametros.markupDivisorAlvo > 0
-                ? `1 ÷ ${resultadoParametros.markupDivisorAlvo.toFixed(4)}`
+              {resultadoParametros.custoHoraTecnica >= 0 &&
+              100 -
+                (parametrosCalculo.percentual_impostos +
+                  parametrosCalculo.percentual_comissao +
+                  parametrosCalculo.percentual_margem) >
+                0
+                ? `1 ÷ ${(
+                    1 /
+                    (1 -
+                      (parametrosCalculo.percentual_impostos +
+                        parametrosCalculo.percentual_comissao +
+                        parametrosCalculo.percentual_margem) /
+                        100)
+                  ).toFixed(4)}`
                 : '—'}
             </CardContent>
           </Card>
@@ -316,23 +331,22 @@ export default function FormacaoPrecoServicos() {
             empresaId={selectedEmpresaId}
             recarregar={carregarDados}
             custoHoraTecnica={resultadoParametros.custoHoraTecnica}
+            parametrosCalculo={parametrosCalculo}
           />
         </TabsContent>
 
         <TabsContent value="simulador" className="mt-4">
-          <SimuladorServicosPrecos
-            servicos={servicos}
-            servicosCalculados={servicosCalculados}
-            parametrosCalculo={parametrosCalculo}
-            loading={loading}
-          />
+          <SimuladorServicosPrecos servicos={servicos} parametros={parametrosCalculo} />
         </TabsContent>
 
         <TabsContent value="resumo" className="mt-4">
           <AbaResumoServicos
             dadosResumo={dadosResumo}
-            parametrosCalculo={parametrosCalculo}
             resultadoParametros={resultadoParametros}
+            parametrosCalculo={parametrosCalculo}
+            onExportExcel={handleExportExcel}
+            onExportCsv={handleExportCSV}
+            exportDesabilitado={loading || servicos.length === 0}
           />
         </TabsContent>
       </Tabs>
