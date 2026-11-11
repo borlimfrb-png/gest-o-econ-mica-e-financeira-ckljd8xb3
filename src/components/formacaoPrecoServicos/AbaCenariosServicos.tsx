@@ -214,10 +214,8 @@ export default function AbaCenariosServicos({
         title: 'Erro ao salvar cenário',
         description: 'Verifique se o nome já não existe nesta empresa.',
       })
-    } índice finally {
+    } finally {
       setSalvando(false)
-    } catch {
-      // no-op
     }
   }
 
@@ -344,9 +342,8 @@ export default function AbaCenariosServicos({
                       <Trash2 className="h-4 w-4 text-red-600" />
                     </Button>
                   </div>
-                </div
-              >
-              ))
+                </div>
+              ))}
             )}
           </CardContent>
         </Card>
@@ -381,12 +378,12 @@ export default function AbaCenariosServicos({
                       <TableHead className="text-right">Margem base</TableHead>
                       <TableHead className="text-right">Margem cenário</TableHead>
                       <TableHead className="text-right">Δ Margem (p.p.)</TableHead>
-                    </Column>
+                    </TableRow>
                   </TableHeader>
                   <TableBody>
                     {linhasComparativo.map((l) => (
                       <TableRow key={l.idServico}>
-                        <TableCell className="font-medium">{l.nomeServico}</TableHead>
+                        <TableCell className="font-medium">{l.nomeServico}</TableCell>
                         <TableCell className="text-right tabular-nums">{fmtMoeda(l.precoBase)}</TableCell>
                         <TableCell className="text-right tabular-nums">
                           {fmtMoeda(l.precoCenario)}
