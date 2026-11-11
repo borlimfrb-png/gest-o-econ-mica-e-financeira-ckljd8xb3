@@ -16,6 +16,7 @@ import type {
   ParametrosFormacaoServicos,
   ServicoFormacao,
 } from '@/lib/formacaoPrecoServicosCalculo'
+import PainelMarkupServicos from '@/components/formacaoPrecoServicos/PainelMarkupServicos'
 
 export interface LinhaResumo {
   servico: ServicoFormacao
@@ -33,6 +34,8 @@ interface Props {
   onExportExcel: () => void
   onExportCsv: () => void
   exportDesabilitado: boolean
+  nomeEmpresa: string
+  exercicioAno?: number
 }
 
 const fmtBRL = (v: number) =>
@@ -52,6 +55,8 @@ export default function AbaResumoServicos({
   onExportExcel,
   onExportCsv,
   exportDesabilitado,
+  nomeEmpresa,
+  exercicioAno,
 }: Props) {
   const somaPerc =
     parametrosCalculo.percentual_impostos +
@@ -107,6 +112,14 @@ export default function AbaResumoServicos({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Painel visual de mark-up (gauge + decomposição + badge) */}
+      <PainelMarkupServicos
+        dadosResumo={dadosResumo}
+        parametros={parametrosCalculo}
+        nomeEmpresa={nomeEmpresa}
+        exercicioAno={exercicioAno}
+      />
+
       {/* Cards de síntese */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>

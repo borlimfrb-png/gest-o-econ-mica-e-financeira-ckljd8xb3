@@ -28,6 +28,8 @@ import AbaParametrosServicos from '@/components/formacaoPrecoServicos/AbaParamet
 import AbaServicosCadastrados from '@/components/formacaoPrecoServicos/AbaServicosCadastrados'
 import SimuladorServicosPrecos from '@/components/formacaoPrecoServicos/SimuladorServicosPrecos'
 import AbaResumoServicos from '@/components/formacaoPrecoServicos/AbaResumoServicos'
+import AbaRelatoriosServicos from '@/components/formacaoPrecoServicos/AbaRelatoriosServicos'
+import AbaCenariosServicos from '@/components/formacaoPrecoServicos/AbaCenariosServicos'
 
 const PARAMETROS_PLACEHOLDER: FormacaoServicoParametrosRecord = {
   id: '',
@@ -315,6 +317,8 @@ export default function FormacaoPrecoServicos() {
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
           <TabsTrigger value="simulador">Simulador</TabsTrigger>
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
+          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
+          <TabsTrigger value="cenarios">Cenários</TabsTrigger>
         </TabsList>
 
         <TabsContent value="parametros" className="mt-4">
@@ -347,6 +351,27 @@ export default function FormacaoPrecoServicos() {
             onExportExcel={handleExportExcel}
             onExportCsv={handleExportCSV}
             exportDesabilitado={loading || servicos.length === 0}
+            nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
+            exercicioAno={selectedAno}
+          />
+        </TabsContent>
+
+        <TabsContent value="relatorios" className="mt-4">
+          <AbaRelatoriosServicos
+            dadosResumo={dadosResumo}
+            parametros={parametrosCalculo}
+            nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
+            exercicioAno={selectedAno}
+          />
+        </TabsContent>
+
+        <TabsContent value="cenarios" className="mt-4">
+          <AbaCenariosServicos
+            servicos={servicos}
+            parametros={parametrosCalculo}
+            empresaId={selectedEmpresaId}
+            nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
+            exercicioAno={selectedAno}
           />
         </TabsContent>
       </Tabs>

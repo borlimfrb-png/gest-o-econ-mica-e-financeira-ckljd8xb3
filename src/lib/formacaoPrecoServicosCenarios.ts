@@ -61,6 +61,14 @@ export function aplicarCenarioAosParametros(
   }
 }
 
+/** Custo/hora técnico resultante de aplicar o cenário sobre os parâmetros. */
+export function custoHoraCenario(
+  base: ParametrosFormacaoServicos,
+  cenario: ParametrosCenario,
+): number {
+  return calcularHoraTecnica(aplicarCenarioAosParametros(base, cenario)).custoHoraTecnica
+}
+
 /** Serviço com custo direto reescalado pelo fator do cenário. */
 export function aplicarCenarioAoServico(
   servico: ServicoFormacao,

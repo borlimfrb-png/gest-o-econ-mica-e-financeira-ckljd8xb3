@@ -33,11 +33,16 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
-import { FileSpreadsheet, FileText, FlaskConical, Plus, RefreshCw, Trash2, Upload } from 'lucide-react'
-import type {
-  ParametrosFormacaoServicos,
-  ComposicaoPrecoServico,
-} from '@/lib/formacaoPrecoServicosCalculo'
+import {
+  FileSpreadsheet,
+  FileText,
+  FlaskConical,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from 'lucide-react'
+import type { ParametrosFormacaoServicos } from '@/lib/formacaoPrecoServicosCalculo'
 import type { FormacaoServicoRecord } from '@/services/formacaoPrecoServicosService'
 import {
   formacaoServicosCenariosService,
@@ -62,9 +67,7 @@ interface Props {
 }
 
 const fmtMoeda = (v: number) =>
-  Number.isFinite(v)
-    ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
-    : '—'
+  Number.isFinite(v) ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
 const fmtPctNum = (v: number) =>
   Number.isFinite(v) ? `${v.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%` : '—'
 /** Fator local (ex.: 1,2) — o lib de cenários não exporta formatador. */
@@ -109,7 +112,9 @@ export default function AbaCenariosServicos({
   const [nomeCenario, setNomeCenario] = useState('')
   const [descricaoCenario, setDescricaoCenario] = useState('')
   const [cenarioAtual, setCenarioAtual] = useState<ParametrosCenario>(CENARIO_BASE)
-  const [cenarioCarregado, setCenarioCarregado] = useState<FormacaoServicoCenarioRecord | null>(null)
+  const [cenarioCarregado, setCenarioCarregado] = useState<FormacaoServicoCenarioRecord | null>(
+    null,
+  )
   const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(async () => {
@@ -193,7 +198,10 @@ export default function AbaCenariosServicos({
           parametros: cenarioAtual,
         })
       }
-      toast({ title: 'Cenário salvo', description: `“${nomeCenario.trim()}” ficou salvo nesta empresa.` })
+      toast({
+        title: 'Cenário salvo',
+        description: `“${nomeCenario.trim()}” ficou salvo nesta empresa.`,
+      })
       setDialogAberto(false)
       await carregar()
     } catch (err) {
@@ -278,10 +286,20 @@ export default function AbaCenariosServicos({
           <Button variant="outline" size="sm" onClick={carregar} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} /> Atualizar
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExport} disabled={servicos.length === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={servicos.length === 0}
+          >
             <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={handleExportCsv} disabled={servicos.length === 0}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportCsv}
+            disabled={servicos.length === 0}
+          >
             <FileText className="mr-2 h-4 w-4" /> CSV
           </Button>
           <Button size="sm" onClick={abrirNovoCenario}>
@@ -332,7 +350,7 @@ export default function AbaCenariosServicos({
                     </Button>
                   </div>
                 </div>
-              ))}
+              ))
             )}
           </CardContent>
         </Card>
@@ -373,7 +391,9 @@ export default function AbaCenariosServicos({
                     {linhasComparativo.map((l, idx) => (
                       <TableRow key={`${l.nomeServico}-${idx}`}>
                         <TableCell className="font-medium">{l.nomeServico}</TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtMoeda(l.precoBase)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmtMoeda(l.precoBase)}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {fmtMoeda(l.precoCenario)}
                         </TableCell>
@@ -394,7 +414,9 @@ export default function AbaCenariosServicos({
                         <TableCell className="text-right tabular-nums">
                           {l.markupCenario > 0 ? `${l.markupCenario.toFixed(3)}×` : '—'}
                         </TableCell>
-                        <TableCell className="text-right tabular-nums">{fmtPctNum(l.margemBasePct)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {fmtPctNum(l.margemBasePct)}
+                        </TableCell>
                         <TableCell className="text-right tabular-nums">
                           {fmtPctNum(l.margemCenarioPct)}
                         </TableCell>
@@ -405,18 +427,24 @@ export default function AbaCenariosServicos({
                     ))}
                     <TableRow className="bg-muted/40 font-semibold">
                       <TableCell>TOTAL</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtMoeda(totais.precoBase)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtMoeda(totais.precoBase)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {fmtMoeda(totais.precoCenario)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtMoeda(totais.deltaPreco)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtMoeda(totais.deltaPreco)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {totais.markupBase > 0 ? `${totais.markupBase.toFixed(3)}×` : '—'}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {totais.markupCenario > 0 ? `${totais.markupCenario.toFixed(3)}×` : '—'}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtPctNum(totais.margemBasePct)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtPctNum(totais.margemBasePct)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {fmtPctNum(totais.margemCenarioPct)}
                       </TableCell>
@@ -443,9 +471,7 @@ export default function AbaCenariosServicos({
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              {cenarioCarregado ? 'Editar cenário' : 'Novo cenário'}
-            </DialogTitle>
+            <DialogTitle>{cenarioCarregado ? 'Editar cenário' : 'Novo cenário'}</DialogTitle>
             <DialogDescription>
               Ajuste os parâmetros do cenário sobre os valores vigentes
               {cenarioCarregado ? ` (carregado de “${cenarioCarregado.nome}”)` : ''}.

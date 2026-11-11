@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { FileSpreadsheet, FileText, FlasksConical, Layers, Scale, TrendingUp } from 'lucide-react'
+import { FileSpreadsheet, FileText, FlaskConical, Layers, Scale, TrendingUp } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -18,13 +18,16 @@ import type { LinhaResumo } from '@/lib/formacaoPrecoServicosRelatorios'
 import type { ParametrosFormacaoServicos } from '@/lib/formacaoPrecoServicosCalculo'
 import {
   calcularEstruturaPreco,
-  calcularSensibilidade,
+  calcularSensibilidadeComponentes,
   calcularComparativoServicos,
 } from '@/lib/formacaoPrecoServicosRelatorios'
 import {
-  exportarEstruturaPreco,
-  exportarSensibilidade,
-  exportarComparativoServicos,
+  exportarEstruturaPrecoExcel,
+  exportarEstruturaPrecoCsv,
+  exportarSensibilidadeExcel,
+  exportarSensibilidadeCsv,
+  exportarComparativoExcel,
+  exportarComparativoCsv,
 } from '@/lib/formacaoPrecoServicosRelatoriosExport'
 
 interface Props {
@@ -36,14 +39,19 @@ interface Props {
 
 type Relatorio = 'estrutura' | 'sensibilidade' | 'comparativo'
 
-const CORES_ESTRUTURA = ['#6d28d9', '#0ea5e9', '#b45309', '#be123c', '#15803d']
+const CORES_ESTRUTURA: Record<string, string> = {
+  maoDeObra: '#6d28d9',
+  custosDiretos: '#0ea5e9',
+  rateioFixos: '#b45309',
+  impostos: '#be123c',
+  comissao: '#0891b2',
+  lucro: '#15803d',
+}
 
 const fmtMoeda = (v: number) =>
   Number.isFinite(v) ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—'
-const fmtPct = (v: number | null, casas = 2) =>
-  v !== null && Number.isFinite(v)
-    ? `${v.toLocaleString('pt-BR', { maximumFractionDigits: casas })}%`
-    : '—'
+const fmtPct = (v: number, casas = 2) =>
+  Number.isFinite(v) ? `${v.toLocaleString('pt-BR', { maximumFractionDigits: casas })}%` : '—'
 
 function BotoesExport({
   onExcel,
@@ -80,17 +88,14 @@ export default function AbaRelatoriosServicos({
 }: Props) {
   const [selecionado, setSelecionado] = useState<Relatorio>('estrutura')
 
-  const estrutura = useMemo(
-    () => calcularEstruturaPreco(dadosResumo, parametros),
-    [dadosResumo, parametros],
-  )
+  const estrutura = useMemo(() => calcularEstruturaPreco(dadosResumo), [dadosResumo])
   const sensibilidade = useMemo(
-    () => calcularSensibilidade(dadosResumo, parametros),
+    () => dadosResumo.map(({ servico }) => calcularSensibilidadeComponentes(servico, parametros)),
     [dadosResumo, parametros],
   )
   const comparativo = useMemo(
-    () => calcularComparativoServicos(dadosResumo, parametros),
-    [dadosResumo, parametros],
+    () => calcularComparativoServicos(dadosResumo, parametros.percentual_margem),
+    [dadosResumo, parametros.percentual_margem],
   )
 
   const semDados = estrutura.length === 0
@@ -100,11 +105,12 @@ export default function AbaRelatoriosServicos({
     () =>
       estrutura.map((e) => ({
         nome: e.nomeServico,
-        'Custo direto': e.custoDiretoPct,
-        'Fixos rateados': e.despesasFixasPct,
-        Impostos: e.impostosPct,
-        Comissão: e.comissaoPct,
-        Margem: e.margemPct,
+        'Mão de Obra': Number(e.percentuais.maoDeObra.toFixed(2)),
+        'Custos Diretos': Number(e.percentuais.custosDiretos.toFixed(2)),
+        'Fixos Rateados': Number(e.percentuais.rateioFixos.toFixed(2)),
+        Impostos: Number(e.percentuais.impostos.toFixed(2)),
+        Comissão: Number(e.percentuais.comissao.toFixed(2)),
+        Margem: Number(e.percentuais.lucro.toFixed(2)),
       })),
     [estrutura],
   )
@@ -132,10 +138,6 @@ export default function AbaRelatoriosServicos({
     )
   }
 
-  const selecionar = (r: Relatorio) => {
-    setSelecionado(r)
-  }
-
   return (
     <div className="flex flex-col gap-4">
       {/* Seletor de relatório */}
@@ -143,21 +145,21 @@ export default function AbaRelatoriosServicos({
         <Button
           variant={selecionado === 'estrutura' ? 'default' : 'outline'}
           size="sm"
-          onClick={() => selecionar('estrutura')}
+          onClick={() => setSelecionado('estrutura')}
         >
           <Layers className="mr-2 h-4 w-4" /> Estrutura de Preço
         </Button>
         <Button
           variant={selecionado === 'sensibilidade' ? 'default' : 'outline'}
           size="sm"
-          onClick={() => selecionar('sensibilidade')}
+          onClick={() => setSelecionado('sensibilidade')}
         >
-          <FlasksConical className="mr-2 h-4 w-4" /> Sensibilidade
+          <FlaskConical className="mr-2 h-4 w-4" /> Sensibilidade
         </Button>
         <Button
           variant={selecionado === 'comparativo' ? 'default' : 'outline'}
           size="sm"
-          onClick={() => selecionar('comparativo')}
+          onClick={() => setSelecionado('comparativo')}
         >
           <Scale className="mr-2 h-4 w-4" /> Comparativo
         </Button>
@@ -171,12 +173,12 @@ export default function AbaRelatoriosServicos({
               <div>
                 <CardTitle className="text-base">Relatório de Estrutura de Preço</CardTitle>
                 <CardDescription>
-                  Composição percentual do preço de cada serviço: custo direto, fixos rateados,
-                  impostos, comissão e margem.
+                  Composição percentual do preço de cada serviço: mão de obra, custos diretos, fixos
+                  rateados, impostos, comissão e margem.
                 </CardDescription>
               </div>
               <BotoesExport
-                onExcel={() => exportarEstruturaPreco(nomeEmpresa, estrutura, exercicioAno)}
+                onExcel={() => exportarEstruturaPrecoExcel(nomeEmpresa, estrutura, exercicioAno)}
                 onCsv={() => exportarEstruturaPrecoCsv(nomeEmpresa, estrutura, exercicioAno)}
               />
             </CardHeader>
@@ -189,22 +191,30 @@ export default function AbaRelatoriosServicos({
                     <YAxis tick={{ fontSize: 11 }} unit="%" />
                     <Tooltip formatter={(v) => `${Number(v).toFixed(2)}%`} />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
-                    <Bar dataKey="Custo direto" stackId="a" fill={CORES_ESTRUTURA[0]} />
-                    <Bar dataKey="Fixos rateados" stackId="a" fill={CORES_ESTRUTURA[1]} />
-                    <Bar dataKey="Impostos" stackId="a" fill={CORES_ESTRUTURA[2]} />
-                    <Bar dataKey="Comissão" stackId="a" fill={CORES_ESTRUTURA[3]} />
-                    <Bar
-                      dataKey="Margem"
-                      stackId="a"
-                      fill={CORES_ESTRUTURA[4]}
-                      radius={[4, 4, 0, 0]}
-                    />
+                    {(
+                      [
+                        'Mão de Obra',
+                        'Custos Diretos',
+                        'Fixos Rateados',
+                        'Impostos',
+                        'Comissão',
+                        'Margem',
+                      ] as const
+                    ).map((chave, i) => (
+                      <Bar
+                        key={chave}
+                        dataKey={chave}
+                        stackId="a"
+                        fill={Object.values(CORES_ESTRUTURA)[i]}
+                        radius={i === 5 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
+                      />
+                    ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
                 Nota metodológica: percentuais sobre o preço sugerido por serviço; a soma fecha em
-                100% (custo + rateio de fixos + impostos + comissão + margem).
+                100% (mão de obra + custos diretos + fixos rateados + impostos + comissão + margem).
               </p>
             </CardContent>
           </Card>
@@ -217,7 +227,8 @@ export default function AbaRelatoriosServicos({
                     <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="px-3 py-2">Serviço</th>
                       <th className="px-3 py-2 text-right">Preço</th>
-                      <th className="px-3 py-2 text-right">Custo direto %</th>
+                      <th className="px-3 py-2 text-right">Mão de obra %</th>
+                      <th className="px-3 py-2 text-right">Custos diretos %</th>
                       <th className="px-3 py-2 text-right">Fixos %</th>
                       <th className="px-3 py-2 text-right">Impostos %</th>
                       <th className="px-3 py-2 text-right">Comissão %</th>
@@ -226,24 +237,29 @@ export default function AbaRelatoriosServicos({
                   </thead>
                   <tbody>
                     {estrutura.map((e) => (
-                      <tr key={e.idServico} className="border-b last:border-0">
+                      <tr key={e.servicoId} className="border-b last:border-0">
                         <td className="px-3 py-2 font-medium">{e.nomeServico}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {fmtMoeda(e.precoSugerido)}
+                          {fmtMoeda(e.precoVendaSugerido)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {fmtPct(e.custoDiretoPct)}
+                          {fmtPct(e.percentuais.maoDeObra)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {fmtPct(e.despesasFixasPct)}
+                          {fmtPct(e.percentuais.custosDiretos)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {fmtPct(e.impostosPct)}
+                          {fmtPct(e.percentuais.rateioFixos)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {fmtPct(e.comissaoPct)}
+                          {fmtPct(e.percentuais.impostos)}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{fmtPct(e.margemPct)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtPct(e.percentuais.comissao)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtPct(e.percentuais.lucro)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -266,7 +282,7 @@ export default function AbaRelatoriosServicos({
               </CardDescription>
             </div>
             <BotoesExport
-              onExcel={() => exportarSensibilidade(nomeEmpresa, sensibilidade, exercicioAno)}
+              onExcel={() => exportarSensibilidadeExcel(nomeEmpresa, sensibilidade, exercicioAno)}
               onCsv={() => exportarSensibilidadeCsv(nomeEmpresa, sensibilidade, exercicioAno)}
             />
           </CardHeader>
@@ -284,53 +300,15 @@ export default function AbaRelatoriosServicos({
                   </tr>
                 </thead>
                 <tbody>
-                  {sensibilidade.map((linha) => (
-                    <tr
-                      key={`${linha.idServico}-${linha.cenario}`}
-                      className="border-b last:border-0"
-                    >
-                      <td className="px-3 py-2 font-medium">{linha.nomeServico}</td>
-                      <td className="px-3 py-2">
-                        {linha.cenario === 'base' ? (
-                          <Badge variant="outline">Base</Badge>
-                        ) : (
-                          linha.cenario
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtMoeda(linha.preco)}</td>
-                      <td
-                        className={`px-3 py-2 text-right tabular-nums ${
-                          linha.deltaPreco > 0
-                            ? 'text-emerald-600'
-                            : linha.deltaPreco < 0
-                              ? 'text-red-600'
-                              : 'text-muted-foreground'
-                        }`}
-                      >
-                        {linha.deltaPreco === 0 ? '—' : fmtMoeda(linha.deltaPreco)}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {fmtPct(linha.margemPct)}
-                      </td>
-                      <td
-                        className={`px-3 py-2 text-right tabular-nums ${
-                          (linha.deltaMargemPp ?? 0) > 0
-                            ? 'text-emerald-600'
-                            : (linha.deltaMargemPp ?? 0) < 0
-                              ? 'text-red-600'
-                              : 'text-muted-foreground'
-                        }`}
-                      >
-                        {linha.deltaMargemPp === null ? '—' : fmtPct(linha.deltaMargemPp)}
-                      </td>
-                    </tr>
+                  {sensibilidade.flatMap((s) => (
+                    <FragmentSensibilidade key={s.servicoId} sensibilidade={s} />
                   ))}
                 </tbody>
               </table>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              Nota metodológica: cenários variam um componente por vez sobre os parâmetros vigentes.
-              O custo/hora ±10% simula variação de produtividade/custos fixos com horas constantes.
+              Nota metodológica: cada cenário varia um componente por vez sobre os parâmetros
+              vigentes. O custo/hora ±10% simula variação dos custos fixos com horas constantes.
             </p>
           </CardContent>
         </Card>
@@ -344,50 +322,58 @@ export default function AbaRelatoriosServicos({
               <div>
                 <CardTitle className="text-base">Relatório Comparativo de Serviços</CardTitle>
                 <CardDescription>
-                  Ranking por margem percentual e preço sugerido × ponto de equilíbrio (custo/hora
-                  técnica).
+                  Ranking por margem efetiva e preço sugerido × ponto de equilíbrio por hora.
                 </CardDescription>
               </div>
               <BotoesExport
-                onExcel={() => exportarComparativoServicos(nomeEmpresa, comparativo, exercicioAno)}
-                onCsv={() => exportarComparativoServicosCsv(nomeEmpresa, comparativo, exercicioAno)}
+                onExcel={() =>
+                  exportarComparativoExcel(
+                    nomeEmpresa,
+                    comparativo,
+                    parametros.percentual_margem,
+                    exercicioAno,
+                  )
+                }
+                onCsv={() =>
+                  exportarComparativoCsv(
+                    nomeEmpresa,
+                    comparativo,
+                    parametros.percentual_margem,
+                    exercicioAno,
+                  )
+                }
               />
             </CardHeader>
             <CardContent>
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart
-                    data={comparativo
-                      .slice()
-                      .sort((a, b) => b.margemPct - a.margemPct)
-                      .map((c) => ({
-                        nome: c.nomeServico,
-                        'Margem %': Number(c.margemPct.toFixed(2)),
-                      }))}
+                    data={comparativo.map((c) => ({
+                      servicoId: c.servicoId,
+                      nome: c.nomeServico,
+                      'Margem %': Number(c.margemEfetivaPct.toFixed(2)),
+                    }))}
                     margin={{ top: 8, right: 8 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="nome" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} unit="%" />
                     <Tooltip formatter={(v) => `${Number(v).toFixed(2)}%`} />
                     <Bar dataKey="Margem %" radius={[4, 4, 0, 0]}>
-                      {comparativo
-                        .slice()
-                        .sort((a, b) => b.margemPct - a.margemPct)
-                        .map((c) => (
-                          <Cell
-                            key={c.idServico}
-                            fill={c.abaixoMargemAlvo ? '#b45309' : '#15803d'}
-                          />
-                        ))}
+                      {comparativo.map((c) => (
+                        <Cell
+                          key={c.servicoId}
+                          fill={c.abaixoDaMargemAlvo ? '#b45309' : '#15803d'}
+                        />
+                      ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                Nota metodológica: ranking pela margem percentual realizada sobre o preço. Barras em
-                âmbar indicam serviços abaixo da margem alvo ({parametros.percentual_margem}%).
-                Comparação de preço: sugerido × ponto de equilíbrio (custo/hora técnica × horas).
+                Nota metodológica: ranking pela margem efetiva sobre o preço. Barras em âmbar
+                indicam serviços abaixo da margem alvo ({fmtPct(parametros.percentual_margem)}).
+                Folga = preço/hora − ponto de equilíbrio por hora.
               </p>
             </CardContent>
           </Card>
@@ -401,33 +387,39 @@ export default function AbaRelatoriosServicos({
                       <th className="px-3 py-2">#</th>
                       <th className="px-3 py-2">Serviço</th>
                       <th className="px-3 py-2 text-right">Preço sugerido</th>
-                      <th className="px-3 py-2 text-right">Ponto equilíbrio</th>
+                      <th className="px-3 py-2 text-right">Preço/hora</th>
+                      <th className="px-3 py-2 text-right">Equilíbrio (R$/h)</th>
                       <th className="px-3 py-2 text-right">Folga</th>
                       <th className="px-3 py-2 text-right">Margem %</th>
                       <th className="px-3 py-2 text-right">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {comparativo.map((c, i) => (
-                      <tr key={c.idServico} className="border-b last:border-0">
-                        <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                    {comparativo.map((c) => (
+                      <tr key={c.servicoId} className="border-b last:border-0">
+                        <td className="px-3 py-2 text-muted-foreground">{c.ranking}</td>
                         <td className="px-3 py-2 font-medium">{c.nomeServico}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {fmtMoeda(c.precoSugerido)}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {fmtMoeda(c.pontoEquilibrio)}
+                          {fmtMoeda(c.precoHora)}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtMoeda(c.pontoEquilibrioHora)}
                         </td>
                         <td
                           className={`px-3 py-2 text-right tabular-nums ${
-                            (c.folgaSobreEquilibrio ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'
+                            c.folgaSobreEquilibrio >= 0 ? 'text-emerald-600' : 'text-red-600'
                           }`}
                         >
-                          {c.folgaSobreEquilibrio === null ? '—' : fmtMoeda(c.folgaSobreEquilibrio)}
+                          {fmtMoeda(c.folgaSobreEquilibrio)}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">{fmtPct(c.margemPct)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {fmtPct(c.margemEfetivaPct)}
+                        </td>
                         <td className="px-3 py-2 text-right">
-                          {c.abaixoMargemAlvo ? (
+                          {c.abaixoDaMargemAlvo ? (
                             <Badge
                               variant="outline"
                               className="border-amber-200 bg-amber-50 text-amber-700"
@@ -453,5 +445,57 @@ export default function AbaRelatoriosServicos({
         </div>
       )}
     </div>
+  )
+}
+
+/** Bloco de linhas da sensibilidade de um serviço (base + 6 cenários). */
+function FragmentSensibilidade({
+  sensibilidade: s,
+}: {
+  sensibilidade: ReturnType<typeof calcularSensibilidadeComponentes>
+}) {
+  return (
+    <>
+      <tr className="border-b bg-muted/30">
+        <td className="px-3 py-2 font-medium">{s.nomeServico}</td>
+        <td className="px-3 py-2">
+          <Badge variant="outline">Base</Badge>
+        </td>
+        <td className="px-3 py-2 text-right tabular-nums">{fmtMoeda(s.precoBase)}</td>
+        <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+        <td className="px-3 py-2 text-right tabular-nums">{fmtPct(s.margemBasePct)}</td>
+        <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+      </tr>
+      {s.cenarios.map((c) => (
+        <tr key={`${s.servicoId}-${c.cenario}`} className="border-b last:border-0">
+          <td className="px-3 py-2">{s.nomeServico}</td>
+          <td className="px-3 py-2">{c.cenario}</td>
+          <td className="px-3 py-2 text-right tabular-nums">{fmtMoeda(c.precoSugerido)}</td>
+          <td
+            className={`px-3 py-2 text-right tabular-nums ${
+              c.deltaPreco > 0
+                ? 'text-emerald-600'
+                : c.deltaPreco < 0
+                  ? 'text-red-600'
+                  : 'text-muted-foreground'
+            }`}
+          >
+            {c.deltaPreco === 0 ? '—' : fmtMoeda(c.deltaPreco)}
+          </td>
+          <td className="px-3 py-2 text-right tabular-nums">{fmtPct(c.margemEfetivaPct)}</td>
+          <td
+            className={`px-3 py-2 text-right tabular-nums ${
+              c.deltaMargemPp > 0
+                ? 'text-emerald-600'
+                : c.deltaMargemPp < 0
+                  ? 'text-red-600'
+                  : 'text-muted-foreground'
+            }`}
+          >
+            {c.deltaMargemPp === 0 ? '—' : fmtPct(c.deltaMargemPp)}
+          </td>
+        </tr>
+      ))}
+    </>
   )
 }
