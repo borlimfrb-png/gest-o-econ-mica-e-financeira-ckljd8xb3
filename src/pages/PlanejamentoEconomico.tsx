@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
+import type { SegmentoEmpresa } from '@/types/finance'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMinhaEmpresa } from '@/contexts/MinhaEmpresaContext'
 import { useToast } from '@/hooks/use-toast'
@@ -145,8 +146,17 @@ export default function PlanejamentoEconomico() {
     setRegenerado(null)
     try {
       const ea = empresasAnos.find((e) => e.empresa === empresaId)
-      const ref = await resolverReferenciaMercado({ empresaId })
-      const rotulo = ref?.benchmarkRotulo || ref?.nome || 'Benchmark setorial'
+      let segmentoEmpresa: SegmentoEmpresa | null = null
+      try {
+        const rec = await pb
+          .collection('empresas')
+          .getOne<{ segmento?: SegmentoEmpresa }>(empresaId)
+        segmentoEmpresa = rec?.segmento ?? null
+      } catch {
+        segmentoEmpresa = null
+      }
+      const ref = await resolverReferenciaMercado(segmentoEmpresa, empresaId)
+      const rotulo = ref?.rotuloSetor || 'Benchmark setorial'
       const benchmark = {
         margem_bruta: ref?.margemBruta ?? null,
         margem_operacional: ref?.margemOperacional ?? null,

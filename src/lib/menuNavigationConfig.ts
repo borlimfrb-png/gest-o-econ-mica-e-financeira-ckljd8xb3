@@ -37,6 +37,7 @@ import {
   Settings,
   Bell,
   Sparkles,
+  BrainCircuit,
 } from 'lucide-react'
 import type { UserRole } from '@/types/finance'
 import { perfilTemAcesso, type ModuloSistema } from '@/lib/permissoesPerfis'
@@ -976,7 +977,7 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
           'Agente de IA que analisa o DRE Gerencial (3 anos + atual) conta por conta, cruza com benchmarks do setor e projeta cada conta para o próximo ano',
         modulo: 'planejamento',
         badge: 'IA',
-        badgeVariant: 'violet',
+        badgeVariant: 'purple',
         palavrasChave: [
           'planejamento econômico',
           'projeção',

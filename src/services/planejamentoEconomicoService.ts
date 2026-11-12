@@ -1,4 +1,4 @@
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 
 /**
@@ -144,13 +144,18 @@ export async function montarPayloadPlanejamento(params: {
       filter: `empresa = '${empresaId}'`,
       expand: 'plano_conta.conta',
     }),
-    pb
-      .collection('plano_contas')
-      .getFullList<PlanoContaRecord>({
-        filter: `empresa = '${empresaId}'`,
-        expand: 'conta,centro',
-      }),
+    pb.collection('plano_contas').getFullList<PlanoContaRecord>({
+      filter: `empresa = '${empresaId}'`,
+      expand: 'conta,centro',
+    }),
   ])
+
+  type PlanoContaExpand = PlanoContaRecord & {
+    expand?: {
+      conta?: ContaRecord
+      centro?: { nome?: string; id?: string }
+    }
+  }
 
   // plano_conta id -> conta (expand ou fallback)
   const planoParaConta = new Map<string, string>()
@@ -187,14 +192,16 @@ export async function montarPayloadPlanejamento(params: {
     const temHistorico = anosHistoricos.some((a) => (porAno.get(a) || 0) !== 0)
     const atual = porAno.get(anoBase) || 0
     if (!conta || (!temHistorico && atual === 0)) continue
+    const planoDaConta = (planoContas as PlanoContaExpand[]).find(
+      (p) => (p.expand?.conta?.id || p.conta) === contaId,
+    )
     contasHistorico.push({
       conta_id: contaId,
       codigo: conta.codigo,
       nome: conta.nome,
       grupo: conta.grupo,
       classificacao: conta.classificacao_dre || 'NaoClassificado',
-      centro_nome: planoContas.find((p) => (p.expand?.conta?.id || p.conta) === contaId)?.expand
-        ?.centro?.nome,
+      centro_nome: planoDaConta?.expand?.centro?.nome,
       anos: anosHistoricos.map((a) => porAno.get(a) || 0),
       atual,
       meses_com_dados: mesesComDados.get(contaId)?.size || 0,
