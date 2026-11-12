@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-12T10:16:22.939Z",
+  "generatedAt": "2026-11-12T15:45:58.015Z",
   "collections": [
     {
       "name": "users",
@@ -5951,6 +5951,93 @@
         "CREATE INDEX idx_fsp_cenarios_empresa ON formacao_servicos_cenarios (empresa)",
         "CREATE INDEX idx_fsp_cenarios_usuario ON formacao_servicos_cenarios (usuario)",
         "CREATE UNIQUE INDEX idx_fsp_cenarios_empresa_nome ON formacao_servicos_cenarios (empresa, nome)"
+      ]
+    },
+    {
+      "name": "planejamento_economico",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || empresa = @request.auth.empresa)",
+        "view": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.auth.role = 'financeiro' || empresa = @request.auth.empresa)",
+        "create": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || @request.body.empresa = @request.auth.empresa)",
+        "update": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)",
+        "delete": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || empresa = @request.auth.empresa)"
+      },
+      "fields": [
+        {
+          "name": "usuario",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano_base",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ano_projecao",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "benchmark_rotulo",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "benchmark_mencionado",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "parecer_geral",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "receita_projetada",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "contas",
+          "type": "json",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_plan_econ_empresa ON planejamento_economico (empresa)",
+        "CREATE INDEX idx_plan_econ_empresa_ano ON planejamento_economico (empresa, ano_base)"
       ]
     }
   ]

@@ -967,6 +967,28 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         modulo: 'planejamento',
         palavrasChave: ['setores', 'cadastro setores', 'mercado', 'setor', 'múltiplos'],
       },
+      {
+        id: 'plan-economico',
+        name: 'PLANEJAMENTO ECONÔMICO',
+        path: '/planejamento/economico',
+        icon: BrainCircuit,
+        descricao:
+          'Agente de IA que analisa o DRE Gerencial (3 anos + atual) conta por conta, cruza com benchmarks do setor e projeta cada conta para o próximo ano',
+        modulo: 'planejamento',
+        badge: 'IA',
+        badgeVariant: 'violet',
+        palavrasChave: [
+          'planejamento econômico',
+          'projeção',
+          'orçamento',
+          'agente de ia',
+          'borlim',
+          'dre gerencial',
+          'benchmark',
+          'próximo ano',
+          'projeta contas',
+        ],
+      },
     ],
   },
 
