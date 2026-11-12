@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -47,6 +48,7 @@ const PARAMETROS_PLACEHOLDER: FormacaoServicoParametrosRecord = {
 
 export default function FormacaoPrecoServicos() {
   const { toast } = useToast()
+  const { isAdmin } = useAuth()
   const { selectedEmpresaId, selectedEmpresa, selectedAno } = useFilter()
 
   const [parametros, setParametros] = useState<FormacaoServicoParametrosRecord | null>(null)
@@ -317,8 +319,8 @@ export default function FormacaoPrecoServicos() {
           <TabsTrigger value="servicos">Serviços</TabsTrigger>
           <TabsTrigger value="simulador">Simulador</TabsTrigger>
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
-          <TabsTrigger value="relatorios">Relatórios</TabsTrigger>
-          <TabsTrigger value="cenarios">Cenários</TabsTrigger>
+          {isAdmin && <TabsTrigger value="relatorios">Relatórios</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="cenarios">Cenários</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="parametros" className="mt-4">
@@ -356,24 +358,28 @@ export default function FormacaoPrecoServicos() {
           />
         </TabsContent>
 
-        <TabsContent value="relatorios" className="mt-4">
-          <AbaRelatoriosServicos
-            dadosResumo={dadosResumo}
-            parametros={parametrosCalculo}
-            nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
-            exercicioAno={selectedAno}
-          />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="relatorios" className="mt-4">
+            <AbaRelatoriosServicos
+              dadosResumo={dadosResumo}
+              parametros={parametrosCalculo}
+              nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
+              exercicioAno={selectedAno}
+            />
+          </TabsContent>
+        )}
 
-        <TabsContent value="cenarios" className="mt-4">
-          <AbaCenariosServicos
-            servicos={servicos}
-            parametros={parametrosCalculo}
-            empresaId={selectedEmpresaId}
-            nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
-            exercicioAno={selectedAno}
-          />
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="cenarios" className="mt-4">
+            <AbaCenariosServicos
+              servicos={servicos}
+              parametros={parametrosCalculo}
+              empresaId={selectedEmpresaId}
+              nomeEmpresa={selectedEmpresa?.nome || 'Empresa'}
+              exercicioAno={selectedAno}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {servicos.length === 0 && !loading && (

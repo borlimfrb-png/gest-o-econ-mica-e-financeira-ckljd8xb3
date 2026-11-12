@@ -6,7 +6,6 @@
  */
 
 import {
-  calcularHoraTecnica,
   calcularPrecoServico,
   type ComposicaoPrecoServico,
   type ParametrosFormacaoServicos,
