@@ -19,6 +19,7 @@ import {
   Calculator,
   Coins,
   Cpu,
+  LineChart,
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -573,6 +574,23 @@ export default function AnaliseEconomicaFinanceira() {
           'bg-gradient-to-tr from-purple-500/25 to-violet-600/20 text-purple-300 border-purple-400/40',
         rota: () => '/gerencial/indicadores-avancados',
         metricasTexto: 'EVA, Pirâmide DuPont ROE, CCC Prazos Médios e Cobertura de Juros',
+      })
+
+      // 5. Tela total de Indicadores (apresentação completa)
+      lista.push({
+        id: 'indicadores-apresentacao',
+        titulo: 'Indicadores — Tela Total',
+        subtitulo: 'Apresentação Completa de Indicadores',
+        descricao:
+          'Acesso direto à tela completa de Indicadores: apresentação geral, painel completo com Liquidez, Capital de Giro, Endividamento, Rentabilidade, Estrutura de Capital, EBITDA, Eficiência Operacional e mais.',
+        badge: 'Visão Total',
+        badgeVariant: 'cyan',
+        icon: LineChart,
+        gradient: 'from-[#0B1F3A] via-[#0E2C50] to-[#12406B]',
+        borderGlow: 'hover:border-sky-400/70 hover:shadow-sky-500/15',
+        iconBg: 'bg-gradient-to-tr from-sky-500/25 to-blue-600/20 text-sky-300 border-sky-400/40',
+        rota: () => '/indicadores/apresentacao',
+        metricasTexto: 'Apresentação geral e painel completo dos indicadores financeiros',
       })
 
       // Comparativo DRE x Balanço
