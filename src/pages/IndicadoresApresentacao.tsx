@@ -14,6 +14,14 @@ import { ModalPdfApresentacaoIndicadores } from '@/components/ModalPdfApresentac
 import { GraficoRadarCategorias } from '@/components/GraficoRadarCategorias'
 import { calcularDiagnosticoRadar } from '@/lib/diagnosticoRadarApresentacao'
 import type { BalancoRecord, DreRecord, BscKpiRecord, EmpresaRecord } from '@/types/finance'
+import { SecaoMetricasAvancadas } from '@/components/indicadores/SecaoMetricasAvancadas'
+import { calcularZScoreAltman } from '@/lib/termometroInsolvenciaCalculo'
+import { calcularIndicadoresAvancados } from '@/lib/indicadoresAvancadosCalculo'
+import {
+  resolverReferenciaMercado,
+  type ReferenciaMercado,
+} from '@/components/indicadores/benchmarkHub'
+import { linhasMetricas, type MetricasAvancadasCompletas } from '@/lib/metricasAvancadasExport'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -49,6 +57,9 @@ import {
   BookOpen,
 } from 'lucide-react'
 
+// WACC padrão do EVA (% a.a.) — mesma premissa da tela /gerencial/indicadores-avancados
+const WACC_PADRAO_PCT = 12
+
 // Mapa de ícones para as categorias
 const ICONE_CATEGORIA: Record<CategoriaIndicador, React.ElementType> = {
   liquidez: Activity,
@@ -78,6 +89,29 @@ export function IndicadoresApresentacao() {
   const [slideIndex, setSlideIndex] = useState<number>(0)
   const [telaCheia, setTelaCheia] = useState<boolean>(false)
   const [modalPdfOpen, setModalPdfOpen] = useState<boolean>(false)
+
+  // ===== Métricas Avançadas (mesmos motores e benchmark do HUB) =====
+  const [referenciaMercado, setReferenciaMercado] = useState<ReferenciaMercado | null>(null)
+  const segmentoEmpresa = empresaAtiva?.segmento ?? null
+
+  // Benchmark SEMPRE via resolverReferenciaMercado (nunca benchmarksService direto)
+  useEffect(() => {
+    let vivo = true
+    if (!selectedEmpresaId) {
+      setReferenciaMercado(null)
+      return
+    }
+    resolverReferenciaMercado(segmentoEmpresa, selectedEmpresaId)
+      .then((r) => {
+        if (vivo) setReferenciaMercado(r)
+      })
+      .catch(() => {
+        if (vivo) setReferenciaMercado(null)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [segmentoEmpresa, selectedEmpresaId])
 
   // Carregar dados da empresa e demonstrações
   const carregarDados = useCallback(async () => {
@@ -141,6 +175,24 @@ export function IndicadoresApresentacao() {
   const dreAnterior = useMemo(
     () => dres.find((d) => d.ano === selectedAno - 1) || null,
     [dres, selectedAno],
+  )
+
+  // Motores oficiais (mesmos da seção visual) — alimentam também a exportação CSV
+  const zScoreResultado = useMemo(
+    () => calcularZScoreAltman(balancoAtual, dreAtual),
+    [balancoAtual, dreAtual],
+  )
+  const indicadoresAvancados = useMemo(
+    () => calcularIndicadoresAvancados(balancoAtual, dreAtual, WACC_PADRAO_PCT),
+    [balancoAtual, dreAtual],
+  )
+  const metricasAvancadasCompletas: MetricasAvancadasCompletas = useMemo(
+    () => ({
+      z: zScoreResultado,
+      avancados: indicadoresAvancados,
+      referencia: referenciaMercado,
+    }),
+    [zScoreResultado, indicadoresAvancados, referenciaMercado],
   )
 
   // Contexto de cálculo passado para cada indicador
@@ -280,6 +332,19 @@ export function IndicadoresApresentacao() {
       cabecalho.join(';'),
       ...linhas,
     ]
+
+    // 3. Seção: Métricas Avançadas (21 indicadores + referência de mercado)
+    secoes.push(
+      '',
+      '"Métricas Avançadas (Termômetro de Insolvência, EVA, DuPont, Ciclo e Cobertura)"',
+    )
+    for (const l of linhasMetricas(metricasAvancadasCompletas)) {
+      secoes.push(
+        [l.Indicador, l.Valor, l.Referência]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
+          .join(';'),
+      )
+    }
 
     const conteudoCsv = '\uFEFF' + secoes.join('\r\n')
     const blob = new Blob([conteudoCsv], { type: 'text/csv;charset=utf-8;' })
@@ -472,6 +537,16 @@ export function IndicadoresApresentacao() {
           <div className="text-[11px] text-slate-500 mt-0.5">Aguardando lançamentos</div>
         </Card>
       </div>
+
+      {/* SEÇÃO: MÉTRICAS AVANÇADAS (Z-Score, EVA, DuPont, CCC, Cobertura, Endividamento) */}
+      <SecaoMetricasAvancadas
+        balancoAtual={balancoAtual}
+        dreAtual={dreAtual}
+        empresaId={selectedEmpresaId}
+        segmento={empresaAtiva?.segmento ?? null}
+        ano={selectedAno}
+        empresaNome={empresaAtiva?.razao_social || undefined}
+      />
 
       {/* SEÇÃO DESTACADA: GRÁFICO DE RADAR POR CATEGORIA */}
       {modoVisualizacao !== 'slides' && (

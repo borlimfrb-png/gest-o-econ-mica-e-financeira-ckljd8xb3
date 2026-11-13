@@ -29,7 +29,7 @@ const fmtBrl = (v: number | null | undefined): string =>
 const fmtPct = (v: number | null | undefined): string =>
   v === null || v === undefined || !Number.isFinite(v) ? '—' : `${fmtNum(v, 2)}%`
 
-function linhasMetricas(
+export function linhasMetricas(
   m: MetricasAvancadasCompletas,
 ): { Indicador: string; Valor: string; Referência: string }[] {
   const ref = m.referencia
