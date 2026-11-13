@@ -9,6 +9,22 @@
 
 cronAdd('lembretes_vencimento_diario', '0 8 * * *', () => {
   try {
+    // O JSVM dos hooks do PocketBase NÃO tem o objeto Intl — formatação manual pt-BR.
+    function formatarBRL(v) {
+      const n = Number(v) || 0
+      const negativo = n < 0
+      const partes = Math.abs(n).toFixed(2).split('.')
+      const milhares = partes[0]
+        .split('')
+        .reverse()
+        .join('')
+        .replace(/(\d{3})(?=\d)/g, '$1.')
+        .split('')
+        .reverse()
+        .join('')
+      return 'R$ ' + (negativo ? '-' : '') + milhares + ',' + partes[1]
+    }
+
     const hoje = new Date()
     // Data alvo: exatamente 3 dias à frente
     const dataAlvo = new Date(hoje.getTime() + 3 * 24 * 60 * 60 * 1000)
@@ -127,10 +143,8 @@ cronAdd('lembretes_vencimento_diario', '0 8 * * *', () => {
         } catch (_) {}
 
         const valor = Number(r.get('valor')) || 0
-        const valorFormatado = new Intl.NumberFormat('pt-BR', {
-          style: 'currency',
-          currency: 'BRL',
-        }).format(valor)
+        // O JSVM dos hooks do PocketBase NÃO tem o objeto Intl — formatação manual.
+        const valorFormatado = formatarBRL(valor)
         const parcela = r.get('parcela') || 1
         const partesData = targetDateStr.split('-')
         const dataFormatada =

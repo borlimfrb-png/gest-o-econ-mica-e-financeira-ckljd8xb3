@@ -1,5 +1,23 @@
 // Cron job diário às 8h da manhã (0 8 * * *) e endpoint para verificação de metas em risco e envio de e-mails
+// O JSVM dos hooks do PocketBase NÃO tem o objeto Intl e não compartilha
+// declarações de topo entre callbacks — o helper vive dentro de cada callback.
+
 cronAdd('verificar_metas_em_risco_diario', '0 8 * * *', () => {
+  function formatarNumeroBR(v) {
+    const n = Number(v) || 0
+    const negativo = n < 0
+    const partes = Math.abs(n).toFixed(2).split('.')
+    const milhares = partes[0]
+      .split('')
+      .reverse()
+      .join('')
+      .replace(/(\d{3})(?=\d)/g, '$1.')
+      .split('')
+      .reverse()
+      .join('')
+    return (negativo ? '-' : '') + milhares + ',' + partes[1]
+  }
+
   const agora = new Date()
   const anoAtual = agora.getFullYear()
   const mesAtual = agora.getMonth() + 1 // 1-12
@@ -286,13 +304,9 @@ cronAdd('verificar_metas_em_risco_diario', '0 8 * * *', () => {
 
       const nomeMetaCompleto = 'Meta de ' + metaTipo + (centroNome ? ' (' + centroNome + ')' : '')
 
-      // Formatar valores para o e-mail
-      const valorMetaFormatado =
-        'R$ ' +
-        metaValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      const realizadoFormatado =
-        'R$ ' +
-        realizado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      // Formatar valores para o e-mail (JSVM não tem Intl/toLocaleString com options)
+      const valorMetaFormatado = 'R$ ' + formatarNumeroBR(metaValor)
+      const realizadoFormatado = 'R$ ' + formatarNumeroBR(realizado)
       const pctFormatado = atingimentoPct.toFixed(1) + '%'
 
       let motivoTexto = ''
@@ -438,7 +452,23 @@ cronAdd('verificar_metas_em_risco_diario', '0 8 * * *', () => {
 })
 
 // Endpoint manual opcional para acionar a verificação sob demanda autenticado ou para testes
-routerAdd('POST', '/api/metas/verificar-alertas', (e) => {
+routerAdd('POST', '/backend/v1/metas/verificar-alertas', (e) => {
+  // O JSVM não compartilha declarações de topo entre callbacks — redefine o helper aqui.
+  function formatarNumeroBR(v) {
+    const n = Number(v) || 0
+    const negativo = n < 0
+    const partes = Math.abs(n).toFixed(2).split('.')
+    const milhares = partes[0]
+      .split('')
+      .reverse()
+      .join('')
+      .replace(/(\d{3})(?=\d)/g, '$1.')
+      .split('')
+      .reverse()
+      .join('')
+    return (negativo ? '-' : '') + milhares + ',' + partes[1]
+  }
+
   const agora = new Date()
   const anoAtual = agora.getFullYear()
   const mesAtual = agora.getMonth() + 1 // 1-12
@@ -665,12 +695,8 @@ routerAdd('POST', '/api/metas/verificar-alertas', (e) => {
       }
 
       const nomeMetaCompleto = 'Meta de ' + metaTipo + (centroNome ? ' (' + centroNome + ')' : '')
-      const valorMetaFormatado =
-        'R$ ' +
-        metaValor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      const realizadoFormatado =
-        'R$ ' +
-        realizado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const valorMetaFormatado = 'R$ ' + formatarNumeroBR(metaValor)
+      const realizadoFormatado = 'R$ ' + formatarNumeroBR(realizado)
       const pctFormatado = atingimentoPct.toFixed(1) + '%'
 
       let motivoTexto = ''

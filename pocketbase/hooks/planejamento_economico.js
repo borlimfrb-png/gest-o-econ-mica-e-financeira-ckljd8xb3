@@ -56,12 +56,21 @@ routerAdd(
       return false
     }
 
+    // O JSVM dos hooks do PocketBase NÃO tem o objeto Intl — formatação
+    // manual (pt-BR: R$ + milhares com ponto, sem decimais neste contexto).
     function formatarBRL(v) {
-      return new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-        maximumFractionDigits: 0,
-      }).format(Number(v) || 0)
+      const n = Math.round(Number(v) || 0)
+      const sinal = n < 0 ? '-' : ''
+      const milhares = Math.abs(n)
+        .toString()
+        .split('')
+        .reverse()
+        .join('')
+        .replace(/(\d{3})(?=\d)/g, '$1.')
+        .split('')
+        .reverse()
+        .join('')
+      return 'R$ ' + sinal + milhares
     }
 
     function shapePlanejamento(rec, contasNormalizadas) {

@@ -7,6 +7,22 @@ routerAdd(
   'POST',
   '/backend/v1/nfse/enviar-email',
   (e) => {
+    // O JSVM dos hooks do PocketBase NÃO tem o objeto Intl — formatação manual pt-BR.
+    function formatarBRL(v) {
+      const n = Number(v) || 0
+      const negativo = n < 0
+      const partes = Math.abs(n).toFixed(2).split('.')
+      const milhares = partes[0]
+        .split('')
+        .reverse()
+        .join('')
+        .replace(/(\d{3})(?=\d)/g, '$1.')
+        .split('')
+        .reverse()
+        .join('')
+      return 'R$ ' + (negativo ? '-' : '') + milhares + ',' + partes[1]
+    }
+
     let pdfFile = null
     let xmlFile = null
     let pdfReader = null
@@ -90,10 +106,7 @@ routerAdd(
       const valorTotal = Number(notaRec.get('valor_servicos') || 0)
       const valorLiquido = Number(notaRec.get('valor_liquido') || valorTotal)
 
-      const valorFormatado = new Intl.NumberFormat('pt-BR', {
-        style: 'currency',
-        currency: 'BRL',
-      }).format(valorLiquido)
+      const valorFormatado = formatarBRL(valorLiquido)
 
       const dataEmissaoRaw = notaRec.get('data_emissao') || ''
       const dataEmissaoFormatada = dataEmissaoRaw
