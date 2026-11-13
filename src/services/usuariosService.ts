@@ -221,25 +221,32 @@ export const usuariosService = {
   },
 
   async resetPassword(id: string, newPassword: string): Promise<UserRecord> {
-    let anterior: UserRecord | null = null
-    try {
-      anterior = await pb.collection('users').getOne<UserRecord>(id)
-    } catch {
-      /* intentionally ignored */
+    // PATCH direto em /api/collections/users/records/:id falha para admin regular
+    // (o PocketBase exige oldPassword quando um NÃO-superuser troca a senha de
+    // outro registro auth). A redefinição passa pelo hook de superuser abaixo.
+    const res = await pb.send<{ sucesso: boolean; erro?: string; usuario?: UserRecord }>(
+      '/backend/v1/admin/users/reset-password',
+      {
+        method: 'POST',
+        body: { usuario_id: id, nova_senha: newPassword },
+      },
+    )
+
+    if (!res || !res.sucesso) {
+      throw new Error(res?.erro || 'Não foi possível alterar a senha deste usuário.')
     }
 
-    const record = await pb.collection('users').update<UserRecord>(
-      id,
-      {
-        password: newPassword,
-        passwordConfirm: newPassword,
-      },
-      { expand: 'empresa' },
-    )
+    // Recarrega o registro para devolver o usuário atualizado (com expand)
+    let record: UserRecord
+    try {
+      record = await pb.collection('users').getOne<UserRecord>(id, { expand: 'empresa' })
+    } catch {
+      record = res.usuario as UserRecord
+    }
 
     auditoriaCadastrosService
       .registrar({
-        empresa: record.empresa || anterior?.empresa || undefined,
+        empresa: record.empresa || undefined,
         entidade: 'users',
         registro_id: record.id,
         registro_descricao: `${record.name || 'Usuário'} (${record.email}) - Senha resetada manualmente`,

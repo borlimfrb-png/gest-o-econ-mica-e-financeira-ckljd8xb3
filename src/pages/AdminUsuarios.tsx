@@ -51,6 +51,19 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 
+function lerMensagemErro(err: any): string {
+  // Erros do PocketBase trazem a mensagem principal em response.message e os
+  // detalhes de validação campo a campo em response.data ({campo: {message}})
+  const data = err?.response?.data
+  if (data && typeof data === 'object') {
+    const detalhes = Object.values(data as Record<string, any>)
+      .map((d: any) => d?.message)
+      .filter(Boolean)
+    if (detalhes.length > 0) return detalhes.join(' ')
+  }
+  return err?.response?.message || err?.message || ''
+}
+
 export default function AdminUsuarios() {
   const { user: currentUser, isAdmin, isLoading: authLoading } = useAuth()
   const { toast } = useToast()
@@ -529,10 +542,11 @@ export default function AdminUsuarios() {
       setModalPasswordOpen(false)
     } catch (err: any) {
       console.error('Erro ao redefinir senha:', err)
+      const descricaoErro = lerMensagemErro(err)
       toast({
         variant: 'destructive',
         title: 'Erro ao redefinir senha',
-        description: err?.message || 'Não foi possível alterar a senha deste usuário.',
+        description: descricaoErro || 'Não foi possível alterar a senha deste usuário.',
       })
     } finally {
       setResettingPassword(false)
