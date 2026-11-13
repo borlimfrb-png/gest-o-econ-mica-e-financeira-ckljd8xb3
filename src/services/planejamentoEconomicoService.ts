@@ -235,10 +235,26 @@ export async function montarPayloadPlanejamento(params: {
 }
 
 /**
- * Aciona o agente nativo 'planejamento-economico' (hook /backend/v1/planejamento-economico/analyze).
+ * Aciona o agente nativo 'planejamento-economico' via hook
+ * /backend/v1/planejamento-economico/analyze.
  * Se já existir projeção salva para empresa/ano base, o hook devolve a salva
  * (regenerado=false) — fechar e reabrir NÃO regera.
  */
+/** Timeout client-side: a análise conta por conta pode levar ~1 min no agente. */
+const TIMEOUT_ANALISE_MS = 180_000
+
+function mensagemErroHttp(status: number): string {
+  if (status === 401 || status === 403)
+    return 'Sessão expirada ou sem permissão para analisar esta empresa — faça login novamente.'
+  if (status === 404)
+    return 'Serviço de Planejamento Econômico indisponível no servidor (endpoint não encontrado). Atualize a página ou contate o suporte.'
+  if (status === 503)
+    return 'Agente de IA temporariamente indisponível no servidor. Tente novamente em alguns minutos.'
+  if (status >= 500)
+    return `O agente de IA falhou ao processar a análise (erro ${status}). Tente novamente — se persistir, verifique o serviço de IA.`
+  return `Falha na análise (erro ${status}).`
+}
+
 export async function analisarPlanejamentoEconomico(
   payload: PlanejamentoEconomicoPayload,
   opcoes?: { forcarRegenerar?: boolean },
@@ -247,15 +263,37 @@ export async function analisarPlanejamentoEconomico(
   const token = pb.authStore.token
   if (!token) throw new Error('Usuário não autenticado no sistema.')
 
-  const response = await fetch(`${backendUrl}/backend/v1/planejamento-economico/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: token },
-    body: JSON.stringify({ ...payload, forcar_regenerar: opcoes?.forcarRegenerar ?? false }),
-  })
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_ANALISE_MS)
+  let response: Response
+  try {
+    response = await fetch(`${backendUrl}/backend/v1/planejamento-economico/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: token },
+      body: JSON.stringify({ ...payload, forcar_regenerar: opcoes?.forcarRegenerar ?? false }),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(
+        'A análise excedeu o tempo limite (3 min) — o DRE pode ter muitas contas para o agente processar. Tente novamente ou reduza o período.',
+      )
+    }
+    throw new Error(
+      'Falha de rede ao contatar o servidor do agente de IA. Verifique sua conexão e tente novamente.',
+    )
+  } finally {
+    clearTimeout(timer)
+  }
 
-  const data = (await response.json().catch(() => ({}))) as AnaliseResponse
+  const data = (await response.json().catch(() => ({}))) as AnaliseResponse & { message?: string }
   if (!response.ok || !data.sucesso) {
-    throw new Error(data.error || 'Falha ao analisar e projetar o planejamento econômico.')
+    throw new Error(
+      data.error ||
+        (response.status >= 400 && response.status < 500 && data.message
+          ? data.message
+          : mensagemErroHttp(response.status)),
+    )
   }
   return { planejamento: data.planejamento, regenerado: data.regenerado }
 }
