@@ -286,7 +286,25 @@ export async function analisarPlanejamentoEconomico(
     clearTimeout(timer)
   }
 
-  const data = (await response.json().catch(() => ({}))) as AnaliseResponse & { message?: string }
+  // O corpo pode vir vazio ou truncado (ex.: hook derrubado no meio). Nesse
+  // caso damos mensagem ESPECÍFICA em vez de explodir no JSON.parse
+  // ("Unexpected end of JSON input (EOF)").
+  const texto = await response.text().catch(() => '')
+  let data: (AnaliseResponse & { message?: string }) | null = null
+  if (texto.trim()) {
+    try {
+      data = JSON.parse(texto) as AnaliseResponse & { message?: string }
+    } catch {
+      data = null
+    }
+  }
+  if (!data) {
+    throw new Error(
+      response.ok
+        ? 'O agente não respondeu (resposta vazia ou interrompida pelo servidor). Clique em "Analisar e Projetar" para tentar regenerar.'
+        : `O agente não respondeu (erro ${response.status}, resposta vazia ou interrompida). Clique em "Analisar e Projetar" para tentar regenerar.`,
+    )
+  }
   if (!response.ok || !data.sucesso) {
     throw new Error(
       data.error ||

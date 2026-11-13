@@ -15,7 +15,8 @@
  * - Sem forcar_regenerar: se já existe projeção salva (empresa/ano_base),
  *   devolve a salva com regenerado=false (reabrir NÃO regera).
  * - Response: { sucesso: true, planejamento: {...}, regenerado: boolean }
- *   ou { sucesso: false, error: "<motivo específico>" }.
+ *   ou { sucesso: false, error: "<motivo específico>" } — SEMPRE corpo JSON,
+ *   em QUALQUER caminho (inclusive crash inesperado).
  */
 routerAdd(
   'POST',
@@ -85,6 +86,124 @@ routerAdd(
         receita_projetada: rec.getFloat('receita_projetada') || 0,
         contas: contasNormalizadas,
         created: rec.getString('created'),
+      }
+    }
+
+    // Extrai JSON tolerante: remove cercas de código e recorta do 1º '{' ao
+    // último '}'. Se o texto veio truncado (fim cortado pelo provedor), repara
+    // fechando strings/arrays/objetos abertos antes de parsear.
+    function extrairJson(texto) {
+      let conteudo = String(texto || '').trim()
+      conteudo = conteudo
+        .replace(/^```(?:json)?/i, '')
+        .replace(/```$/, '')
+        .trim()
+      let inicio = conteudo.indexOf('{')
+      let fim = conteudo.lastIndexOf('}')
+      if (inicio < 0 || fim < inicio) return null
+      let candidato = conteudo.slice(inicio, fim + 1)
+      let parsed = null
+      try {
+        parsed = JSON.parse(candidato)
+      } catch (_) {
+        parsed = null
+      }
+      if (parsed === null || typeof parsed !== 'object') {
+        // Reparo de truncamento: fecha o que ficou aberto
+        const pilha = []
+        let dentroString = false
+        let escapado = false
+        for (let i = 0; i < candidato.length; i++) {
+          const ch = candidato[i]
+          if (dentroString) {
+            if (escapado) escapado = false
+            else if (ch === '\\') escapado = true
+            else if (ch === '"') dentroString = false
+            continue
+          }
+          if (ch === '"') dentroString = true
+          else if (ch === '{' || ch === '[') pilha.push(ch)
+          else if (ch === '}' || ch === ']') pilha.pop()
+        }
+        let reparado = candidato
+        if (dentroString) reparado += '"'
+        // Remove vírgula solta no fim (após fechar string truncada)
+        reparado = reparado.replace(/,\s*$/, '')
+        for (let i = pilha.length - 1; i >= 0; i--) {
+          reparado += pilha[i] === '{' ? '}' : ']'
+        }
+        parsed = JSON.parse(reparado) // pode lançar — quem chama trata
+      }
+      return parsed
+    }
+
+    // Converte o JSON (possivelmente incompleto) do agente em contas
+    // normalizadas. Contas já emitidas antes do corte entram; a falta do
+    // fechamento não impede o aproveitamento parcial.
+    function contasDoAgente(parsed) {
+      if (!parsed || typeof parsed !== 'object') return []
+      const brutas = Array.isArray(parsed.contas) ? parsed.contas : []
+      const saida = []
+      for (const c of brutas) {
+        if (!c || typeof c !== 'object') continue
+        const nome = String(c.nome || '').trim()
+        if (!nome) continue
+        saida.push({
+          codigo: String(c.codigo || '').trim(),
+          nome: nome,
+          valor_projetado: Number(c.valor_projetado),
+          variacao_pct: Number(c.variacao_pct),
+          confianca: String(c.confianca || ''),
+          comentario: String(c.comentario || ''),
+        })
+      }
+      return saida
+    }
+
+    // Uma tentativa de análise: chama o agente e interpreta a resposta.
+    // Retorna { ok, contas, parecer, benchmark, motivo }.
+    function executarAnaliseAgente(userId, prompt) {
+      const resultado = $ai
+        .agent('planejamento-economico')
+        .chat({ user_id: userId, message: prompt })
+
+      const bruto = String((resultado && resultado.content) || '')
+      console.log(
+        '[Planejamento Economico] resposta do agente recebida: ' +
+          bruto.length +
+          ' chars; fim: ' +
+          JSON.stringify(bruto.slice(-120)),
+      )
+
+      let parsed = null
+      try {
+        parsed = extrairJson(bruto)
+      } catch (errParse) {
+        return {
+          ok: false,
+          motivo:
+            'A resposta do agente veio truncada/ilegível (' + (errParse.message || 'EOF') + ').',
+        }
+      }
+      if (!parsed) {
+        return {
+          ok: false,
+          motivo: 'O agente não devolveu JSON válido (resposta sem estrutura esperada).',
+        }
+      }
+
+      const contas = contasDoAgente(parsed)
+      if (!contas.length) {
+        return {
+          ok: false,
+          motivo: 'O agente respondeu, mas sem contas projetadas no JSON.',
+        }
+      }
+      return {
+        ok: true,
+        contas: contas,
+        parecer: String(parsed.parecer_geral || ''),
+        benchmark: String(parsed.benchmark_mencionado || ''),
       }
     }
 
@@ -171,7 +290,16 @@ routerAdd(
         if (Number.isFinite(n)) benchLinhas.push(`- ${rotulo}: ${n}%`)
       }
 
-      const prompt = [
+      const detalheErro = [
+        'Devolva no campo "contas" TODAS as ' +
+          contasEntrada.length +
+          ' contas listadas, na MESMA ordem em que aparecem no histórico. Para cada conta: codigo, nome, valor_projetado (número em reais do exercício ' +
+          anoProjecao +
+          '), variacao_pct (número, % vs exercício base), confianca ("alta"|"media"|"baixa") e comentario curto (1 frase).',
+        'Devolva APENAS o JSON minificado (sem formatação, sem texto fora do JSON, sem markdown).',
+      ].join('\n')
+
+      const basePrompt = [
         `Empresa ativa: "${empresaNome}" (ID: ${empresaId}).`,
         `Exercício base (ano atual): ${anoBase}. Projeção solicitada para: ${anoProjecao}.`,
         `Histórico DRE CONTA POR CONTA (anos: ${anosHistorico.join(', ')} + atual ${anoBase}):`,
@@ -182,40 +310,41 @@ routerAdd(
           ? benchLinhas
           : ['- indisponível — use o padrão do setor de sua memória e cite isso']),
         '',
-        `Projete CADA conta para ${anoProjecao} e devolva APENAS o JSON no formato exigido.`,
+        `Projete CADA conta para ${anoProjecao}. ${detalheErro}`,
       ].join('\n')
 
-      const resultado = $ai
-        .agent('planejamento-economico')
-        .chat({ user_id: userId, message: prompt })
-
-      // Parse tolerante do JSON do agente
-      let conteudo = (resultado.content || '').trim()
-      conteudo = conteudo
-        .replace(/^```(?:json)?/i, '')
-        .replace(/```$/, '')
-        .trim()
-      const inicio = conteudo.indexOf('{')
-      const fim = conteudo.lastIndexOf('}')
-      if (inicio < 0 || fim <= inicio) {
-        throw new Error('Resposta do agente sem JSON válido.')
+      // Tentativa 1
+      let analise = executarAnaliseAgente(userId, basePrompt)
+      // Tentativa 2: mesmo JSON, mas pede compacto (reduz risco de corte)
+      if (!analise.ok) {
+        console.log('[Planejamento Economico] tentativa 1 falhou: ' + analise.motivo)
+        analise = executarAnaliseAgente(
+          userId,
+          basePrompt +
+            '\n\nIMPORTANTE: responda na forma MAIS COMPACTA possível (JSON minificado, comentários com no máximo 12 palavras) para não faltar espaço na resposta.',
+        )
       }
-      const parsed = JSON.parse(conteudo.slice(inicio, fim + 1))
-
-      const contasAgente = Array.isArray(parsed.contas) ? parsed.contas : []
-      if (!contasAgente.length) {
-        throw new Error('Agente não retornou contas projetadas.')
+      if (!analise.ok) {
+        console.log('[Planejamento Economico] tentativa 2 falhou: ' + analise.motivo)
+        return e.json(502, {
+          sucesso: false,
+          error:
+            'O agente de IA não retornou a análise completa (' +
+            analise.motivo +
+            ') Tente regenerar — se persistir, reduza o número de contas do DRE.',
+        })
       }
+
+      const contasAgente = analise.contas
+      const parecerGeral = analise.parecer
+      const benchmarkMencionado = analise.benchmark
 
       // Índices do retorno do agente: por código e por nome
       const porCodigo = new Map()
       const porNome = new Map()
       for (const c of contasAgente) {
-        const cod = String(c.codigo || '').trim()
-        const nom = String(c.nome || '')
-          .trim()
-          .toLowerCase()
-        if (cod && !porCodigo.has(cod)) porCodigo.set(cod, c)
+        if (c.codigo && !porCodigo.has(c.codigo)) porCodigo.set(c.codigo, c)
+        const nom = c.nome.toLowerCase()
         if (nom && !porNome.has(nom)) porNome.set(nom, c)
       }
 
@@ -262,9 +391,6 @@ routerAdd(
         if (c.classificacao === 'Receita') receitaProjetada += c.valor_projetado
       }
 
-      const parecerGeral = String(parsed.parecer_geral || '')
-      const benchmarkMencionado = String(parsed.benchmark_mencionado || '')
-
       // Persistência: um planejamento por empresa/ano base (reabre sem regerar)
       let rec = null
       try {
@@ -295,6 +421,9 @@ routerAdd(
         planejamento: shapePlanejamento(rec, contasNormalizadas),
       })
     } catch (err) {
+      console.log(
+        '[Planejamento Economico] erro inesperado: ' + (err && err.message ? err.message : err),
+      )
       if (err instanceof SkipAiConfigError) {
         return e.json(503, {
           sucesso: false,
