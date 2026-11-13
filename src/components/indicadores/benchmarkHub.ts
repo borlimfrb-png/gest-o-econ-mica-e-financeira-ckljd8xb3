@@ -19,6 +19,14 @@ export interface ReferenciaMercado {
   margemEbitda: number
   liquidezCorrente: number
   endividamentoGeral: number
+  // Métricas avançadas (tela /indicadores/apresentacao):
+  coberturaJuros: number // x
+  pme: number // dias
+  pmr: number // dias
+  pmp: number // dias
+  cicloFinanceiro: number // dias (CCC)
+  giroAtivo: number // x (DuPont)
+  wacc: number // % (custo de capital do EVA)
 }
 
 function normalizar(v: unknown, fallback: number): number {
@@ -42,6 +50,14 @@ function paraReferencia(
     margemEbitda: normalizar(valores.margemEbitda, padrao.margemEbitda),
     liquidezCorrente: normalizar(valores.liquidezCorrente, padrao.liquidezCorrente),
     endividamentoGeral: normalizar(valores.endividamentoGeral, padrao.endividamentoGeral),
+    // Métricas avançadas: mesmos fallbacks Indústria
+    coberturaJuros: normalizar(valores.coberturaJuros, padrao.coberturaJuros),
+    pme: normalizar(valores.pme, padrao.pme),
+    pmr: normalizar(valores.pmr, padrao.pmr),
+    pmp: normalizar(valores.pmp, padrao.pmp),
+    cicloFinanceiro: normalizar(valores.cicloFinanceiro, padrao.cicloFinanceiro),
+    giroAtivo: normalizar(valores.giroAtivo, padrao.giroAtivo),
+    wacc: normalizar(valores.wacc, padrao.wacc),
   }
 }
 
