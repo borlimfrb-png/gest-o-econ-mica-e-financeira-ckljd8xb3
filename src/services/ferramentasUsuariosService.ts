@@ -1,10 +1,12 @@
 import pb from '@/lib/pocketbase/client'
+import { fetchAllRecords } from '@/lib/pocketbase/fetchAll'
 
 /** Registro da coleção ferramentas_usuarios (migração 0109). */
 export interface FerramentasUsuarioRecord {
   id: string
   user: string
   ferramentas_desabilitadas: string[] | null
+  atualizado_por?: string
   collectionId?: string
   collectionName?: string
   created?: string
@@ -44,15 +46,31 @@ export const TODAS_FERRAMENTAS_IDS = [
   'agente_ia',
 ] as const
 
+/** Normaliza o campo JSON da coleção: pode vir string, array ou null. */
+function normalizarLista(valor: unknown): string[] {
+  if (Array.isArray(valor)) {
+    return valor.filter((v): v is string => typeof v === 'string')
+  }
+  if (typeof valor === 'string' && valor.trim() !== '') {
+    try {
+      const parsed = JSON.parse(valor)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((v): v is string => typeof v === 'string')
+      }
+    } catch {
+      // JSON inválido: trata como vazio (falha aberta — nada desabilitado)
+    }
+  }
+  return []
+}
+
 export const ferramentasService = {
   async getAll(): Promise<FerramentasUsuarioRecord[]> {
     try {
-      const list = await pb
-        .collection('ferramentas_usuarios')
-        .getList<FerramentasUsuarioRecord>(1, 500, {
-          sort: '-updated',
-        })
-      return list.items
+      const list = await fetchAllRecords<FerramentasUsuarioRecord>('ferramentas_usuarios', {
+        sort: '-updated',
+      })
+      return list
     } catch (err) {
       console.warn('[ferramentasService] Falha ao listar habilitações:', err)
       return []
@@ -63,12 +81,13 @@ export const ferramentasService = {
     try {
       const list = await pb
         .collection('ferramentas_usuarios')
-        .getList<FerramentasUsuarioRecord>(1, 1, {
+        .getFullList<FerramentasUsuarioRecord>({
           filter: `user = "${userId}"`,
+          sort: '-updated',
         })
 
-      if (list.items.length > 0) {
-        return list.items[0].ferramentas_desabilitadas || []
+      if (list.length > 0) {
+        return normalizarLista(list[0].ferramentas_desabilitadas)
       }
       // Sem registro = nenhuma ferramenta desabilitada (tudo habilitado, compatibilidade)
       return []
@@ -93,25 +112,43 @@ export const ferramentasService = {
     }
   },
 
+  /**
+   * Upsert da lista de ferramentas DESABILITADAS do usuário.
+   * Cria o registro quando não existe; atualiza o existente caso contrário.
+   * Preenche `atualizado_por` com o admin logado (auditoria).
+   */
   async salvar(userId: string, ferramentas: string[]): Promise<FerramentasUsuarioRecord | null> {
     try {
+      const adminId = pb.authStore.record?.id || ''
+      const payload: Record<string, unknown> = {
+        ferramentas_desabilitadas: ferramentas,
+      }
+      if (adminId && adminId !== userId) {
+        payload.atualizado_por = adminId
+      }
+
       const existente = await pb
         .collection('ferramentas_usuarios')
-        .getList<FerramentasUsuarioRecord>(1, 1, {
-          filter: `user = "${userId}"`,
-        })
-      if (existente.items.length > 0) {
+        .getFirstListItem<FerramentasUsuarioRecord>(`user = "${userId}"`)
+
+      return await pb
+        .collection('ferramentas_usuarios')
+        .update<FerramentasUsuarioRecord>(existente.id, payload)
+    } catch (err: any) {
+      // 404 do getFirstListItem = ainda não existe registro para o usuário → cria
+      if (err?.status === 404) {
+        const adminId = pb.authStore.record?.id || ''
+        const createPayload: Record<string, unknown> = {
+          user: userId,
+          ferramentas_desabilitadas: ferramentas,
+        }
+        if (adminId && adminId !== userId) {
+          createPayload.atualizado_por = adminId
+        }
         return await pb
           .collection('ferramentas_usuarios')
-          .update<FerramentasUsuarioRecord>(existente.items[0].id, {
-            ferramentas_desabilitadas: ferramentas,
-          })
+          .create<FerramentasUsuarioRecord>(createPayload)
       }
-      return await pb.collection('ferramentas_usuarios').create<FerramentasUsuarioRecord>({
-        user: userId,
-        ferramentas_desabilitadas: ferramentas,
-      })
-    } catch (err) {
       console.error('[ferramentasService] Erro ao salvar habilitações:', err)
       throw err
     }
@@ -119,11 +156,9 @@ export const ferramentasService = {
 
   /** Apenas para superadmins via hook backend (se necessário no futuro). */
   async excluir(userId: string): Promise<void> {
-    const existente = await pb.collection('ferramentas_usuarios').getList(1, 1, {
-      filter: `user = "${userId}"`,
-    })
-    if (existente.items.length > 0) {
-      await pb.collection('ferramentas_usuarios').delete(existente.items[0].id)
-    }
+    const existente = await pb
+      .collection('ferramentas_usuarios')
+      .getFirstListItem<FerramentasUsuarioRecord>(`user = "${userId}"`)
+    await pb.collection('ferramentas_usuarios').delete(existente.id)
   },
 }

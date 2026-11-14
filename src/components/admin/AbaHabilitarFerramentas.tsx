@@ -42,7 +42,8 @@ const AbaHabilitarFerramentas: React.FC = () => {
       setUsuarios(uList)
       const mapa: Record<string, Set<string>> = {}
       for (const r of registrosList) {
-        mapa[r.user] = new Set(r.ferramentas_desabilitadas || [])
+        const lista = Array.isArray(r.ferramentas_desabilitadas) ? r.ferramentas_desabilitadas : []
+        mapa[r.user] = new Set(lista)
       }
       setRegistros(mapa)
     } catch (err: any) {
@@ -256,9 +257,11 @@ const AbaHabilitarFerramentas: React.FC = () => {
 
                   {expandido && (
                     <div className="border-t border-slate-100 bg-slate-50/60 p-4">
-                      {isUserAdmin ? (
+                      {isUserAdmin || u.role === 'cliente' ? (
                         <p className="text-[11px] text-slate-500 italic">
-                          Administrador tem acesso irrestrito — a habilitação não se aplica.
+                          {isUserAdmin
+                            ? 'Administrador tem acesso irrestrito — a habilitação não se aplica.'
+                            : 'Perfil Cliente: o hub do cliente é gerido pelo perfil — a habilitação de ferramentas não se aplica.'}
                         </p>
                       ) : (
                         <>
