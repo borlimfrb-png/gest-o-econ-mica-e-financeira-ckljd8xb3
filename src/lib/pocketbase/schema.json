@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-13T14:53:04.573Z",
+  "generatedAt": "2026-11-14T21:00:08.112Z",
   "collections": [
     {
       "name": "users",
@@ -6039,6 +6039,40 @@
         "CREATE INDEX idx_plan_econ_empresa ON planejamento_economico (empresa)",
         "CREATE INDEX idx_plan_econ_empresa_ano ON planejamento_economico (empresa, ano_base)"
       ]
+    },
+    {
+      "name": "ferramentas_usuarios",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || user = @request.auth.id)",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || user = @request.auth.id)",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "ferramentas_desabilitadas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "atualizado_por",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        }
+      ],
+      "indexes": []
     }
   ]
 }
