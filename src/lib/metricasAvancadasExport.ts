@@ -10,11 +10,14 @@ import type { ZScoreResultado } from './termometroInsolvenciaCalculo'
 import { ROTULO_ZONA } from './termometroInsolvenciaCalculo'
 import type { IndicadoresAvancadosResultado } from './indicadoresAvancadosCalculo'
 import { ROTULO_CLASSIFICACAO_COBERTURA } from './indicadoresAvancadosCalculo'
+import type { MetricasEstruturaisResultado } from './metricasEstruturaisCalculo'
+import { linhasEstruturais } from './metricasEstruturaisExport'
 import type { ReferenciaMercado } from '@/components/indicadores/benchmarkHub'
 
 export interface MetricasAvancadasCompletas {
   z: ZScoreResultado
   avancados: IndicadoresAvancadosResultado
+  estruturais?: MetricasEstruturaisResultado
   referencia: ReferenciaMercado | null
 }
 
@@ -115,6 +118,8 @@ export function linhasMetricas(
       Valor: ref?.rotuloSetor ?? '—',
       Referência: ref?.usarFallback ? 'Padrão do setor (fallback)' : 'Benchmark cadastrado',
     },
+    // Métricas Estruturais (ROA, Giro, Liquidezes, PMR/PMP, CGL, NCG, ST)
+    ...(m.estruturais ? linhasEstruturais(m.estruturais, ref) : []),
   ]
 }
 

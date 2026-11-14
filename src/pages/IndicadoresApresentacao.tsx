@@ -17,6 +17,7 @@ import type { BalancoRecord, DreRecord, BscKpiRecord, EmpresaRecord } from '@/ty
 import { SecaoMetricasAvancadas } from '@/components/indicadores/SecaoMetricasAvancadas'
 import { calcularZScoreAltman } from '@/lib/termometroInsolvenciaCalculo'
 import { calcularIndicadoresAvancados } from '@/lib/indicadoresAvancadosCalculo'
+import { calcularMetricasEstruturais } from '@/lib/metricasEstruturaisCalculo'
 import {
   resolverReferenciaMercado,
   type ReferenciaMercado,
@@ -186,13 +187,18 @@ export function IndicadoresApresentacao() {
     () => calcularIndicadoresAvancados(balancoAtual, dreAtual, WACC_PADRAO_PCT),
     [balancoAtual, dreAtual],
   )
+  const estruturais = useMemo(
+    () => calcularMetricasEstruturais(balancoAtual, dreAtual),
+    [balancoAtual, dreAtual],
+  )
   const metricasAvancadasCompletas: MetricasAvancadasCompletas = useMemo(
     () => ({
       z: zScoreResultado,
       avancados: indicadoresAvancados,
+      estruturais: estruturais,
       referencia: referenciaMercado,
     }),
-    [zScoreResultado, indicadoresAvancados, referenciaMercado],
+    [zScoreResultado, indicadoresAvancados, estruturais, referenciaMercado],
   )
 
   // Contexto de cálculo passado para cada indicador
@@ -333,10 +339,10 @@ export function IndicadoresApresentacao() {
       ...linhas,
     ]
 
-    // 3. Seção: Métricas Avançadas (21 indicadores + referência de mercado)
+    // 3. Seção: Métricas Avançadas (indicadores antigos + estruturais + referência de mercado)
     secoes.push(
       '',
-      '"Métricas Avançadas (Termômetro de Insolvência, EVA, DuPont, Ciclo e Cobertura)"',
+      '"Métricas Avançadas (Termômetro de Insolvência, EVA, DuPont, Ciclo, Cobertura, Liquidezes, Prazos e Capital de Giro)"',
     )
     for (const l of linhasMetricas(metricasAvancadasCompletas)) {
       secoes.push(

@@ -27,6 +27,14 @@ export interface ReferenciaMercado {
   cicloFinanceiro: number // dias (CCC)
   giroAtivo: number // x (DuPont)
   wacc: number // % (custo de capital do EVA)
+  // Métricas estruturais (opcionais: sem referência = badge não aparece)
+  roa?: number // %
+  liquidezSeca?: number // x
+  liquidezImediata?: number // x
+  liquidezGeral?: number // x
+  cglReferencia?: number // R$
+  ncgReferencia?: number // R$
+  saldoTesourariaReferencia?: number // R$
 }
 
 function normalizar(v: unknown, fallback: number): number {
@@ -34,8 +42,20 @@ function normalizar(v: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback
 }
 
+function numeroOpcional(v: unknown): number | undefined {
+  if (v === null || v === undefined) return undefined
+  const n = Number(v)
+  return Number.isFinite(n) ? n : undefined
+}
+
 function paraReferencia(
-  valores: Partial<BenchmarkSetorValores>,
+  valores: Partial<BenchmarkSetorValores> &
+    Partial<
+      Pick<
+        BenchmarkSetorialRecord,
+        'cgl_referencia' | 'ncg_referencia' | 'saldoTesouraria_referencia'
+      >
+    >,
   rotuloSetor: string,
   usarFallback: boolean,
 ): ReferenciaMercado {
@@ -58,6 +78,14 @@ function paraReferencia(
     cicloFinanceiro: normalizar(valores.cicloFinanceiro, padrao.cicloFinanceiro),
     giroAtivo: normalizar(valores.giroAtivo, padrao.giroAtivo),
     wacc: normalizar(valores.wacc, padrao.wacc),
+    // Métricas estruturais: só entram quando o benchmark traz o valor
+    roa: numeroOpcional(valores.roa),
+    liquidezSeca: numeroOpcional(valores.liquidezSeca),
+    liquidezImediata: numeroOpcional(valores.liquidezImediata),
+    liquidezGeral: numeroOpcional(valores.liquidezGeral),
+    cglReferencia: numeroOpcional(valores.cgl_referencia),
+    ncgReferencia: numeroOpcional(valores.ncg_referencia),
+    saldoTesourariaReferencia: numeroOpcional(valores.saldoTesouraria_referencia),
   }
 }
 
