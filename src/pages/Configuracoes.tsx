@@ -102,7 +102,7 @@ export default function Configuracoes() {
 
     try {
       setTestandoSmtp(true)
-      const res = await pb.send('/api/test-smtp-connection', {
+      const res = await pb.send('/backend/v1/config/test-smtp-connection', {
         method: 'POST',
         body: { email: emailDestino },
       })

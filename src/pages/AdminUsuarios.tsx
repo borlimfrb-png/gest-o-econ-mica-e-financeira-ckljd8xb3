@@ -29,6 +29,9 @@ import {
   Layers,
 } from 'lucide-react'
 import { ModalAuditoriaCadastros } from '@/components/ModalAuditoriaCadastros'
+import AbaHabilitarFerramentas from '@/components/admin/AbaHabilitarFerramentas'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -84,6 +87,7 @@ export default function AdminUsuarios() {
   const [modalPasswordOpen, setModalPasswordOpen] = useState(false)
   const [modalDeleteOpen, setModalDeleteOpen] = useState(false)
   const [modalAuditoriaOpen, setModalAuditoriaOpen] = useState(false)
+  const [abaAtiva, setAbaAtiva] = useState('usuarios')
 
   // Usuário selecionado para ação
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null)
@@ -827,207 +831,237 @@ export default function AdminUsuarios() {
           </CardContent>
         </Card>
       </div>
-      {/* Filtros e Busca */}
-      <Card className="bg-white border-slate-200 shadow-2xs">
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-            <div className="sm:col-span-2 relative">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-              <Input
-                placeholder="Buscar por nome ou e-mail..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 text-xs"
-              />
-            </div>
+      {/* Abas: Usuários / Habilitar Ferramentas */}
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="space-y-4">
+        <TabsList className="bg-slate-100 border border-slate-200 h-9">
+          <TabsTrigger
+            value="usuarios"
+            className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] gap-1.5"
+          >
+            <Users className="w-3.5 h-3.5" />
+            Usuários e Permissões
+          </TabsTrigger>
+          <TabsTrigger
+            value="ferramentas"
+            className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] gap-1.5"
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            Habilitar Ferramentas
+          </TabsTrigger>
+        </TabsList>
 
-            <div>
-              <Select value={filterRole} onValueChange={(val: any) => setFilterRole(val)}>
-                <SelectTrigger className="text-xs">
-                  <SelectValue placeholder="Perfil" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os Perfis</SelectItem>
-                  <SelectItem value="admin">Administrador</SelectItem>
-                  <SelectItem value="financeiro">Financeiro</SelectItem>
-                  <SelectItem value="comercial">Comercial</SelectItem>
-                  <SelectItem value="empresa">Usuário Empresa</SelectItem>
-                  <SelectItem value="cliente">Cliente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Select value={filterEmpresa} onValueChange={(val) => setFilterEmpresa(val)}>
-                <SelectTrigger className="text-xs">
-                  <SelectValue placeholder="Empresa vinculada" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas as Empresas</SelectItem>
-                  {empresas.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                      {emp.nome_fantasia || emp.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        {/* ABA 1: Usuários e Permissões */}
+        <TabsContent value="usuarios" className="space-y-4 mt-0">
+          {/* Filtros e Busca */}
+          <Card className="bg-white border-slate-200 shadow-2xs">
+            <CardContent className="p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-2 relative">
+                  <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                  <Input
+                    placeholder="Buscar por nome ou e-mail..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-9 text-xs"
+                  />
+                </div>
 
-      {/* Tabela de Usuários */}
-      <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
-        <CardHeader className="py-3.5 px-5 border-b border-slate-100 flex flex-row items-center justify-between">
-          <div>
-            <CardTitle className="text-sm font-bold text-[#0B1F3A]">
-              Usuários Cadastrados ({filteredUsers.length})
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Gerencie permissões, empresas vinculadas, senhas e status de ativação.
-            </CardDescription>
-          </div>
-        </CardHeader>
+                <div>
+                  <Select value={filterRole} onValueChange={(val: any) => setFilterRole(val)}>
+                    <SelectTrigger className="text-xs">
+                      <SelectValue placeholder="Perfil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os Perfis</SelectItem>
+                      <SelectItem value="admin">Administrador</SelectItem>
+                      <SelectItem value="financeiro">Financeiro</SelectItem>
+                      <SelectItem value="comercial">Comercial</SelectItem>
+                      <SelectItem value="empresa">Usuário Empresa</SelectItem>
+                      <SelectItem value="cliente">Cliente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Select value={filterEmpresa} onValueChange={(val) => setFilterEmpresa(val)}>
+                    <SelectTrigger className="text-xs">
+                      <SelectValue placeholder="Empresa vinculada" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todas">Todas as Empresas</SelectItem>
+                      {empresas.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id} className="text-xs">
+                          {emp.nome_fantasia || emp.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-4">Usuário</th>
-                <th className="py-3 px-4">Perfil</th>
-                <th className="py-3 px-4">Empresa Vinculada</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    <div className="flex flex-col items-center justify-center gap-2">
-                      <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                      <span>Carregando usuários...</span>
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500">
-                    Nenhum usuário encontrado com os filtros aplicados.
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map((u) => {
-                  const isUserAdmin = u.role === 'admin'
-                  const isSelf = u.id === currentUser?.id
-                  const isAtivo = u.ativo !== false
+          {/* Tabela de Usuários */}
+          <Card className="bg-white border-slate-200 shadow-2xs overflow-hidden">
+            <CardHeader className="py-3.5 px-5 border-b border-slate-100 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-sm font-bold text-[#0B1F3A]">
+                  Usuários Cadastrados ({filteredUsers.length})
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Gerencie permissões, empresas vinculadas, senhas e status de ativação.
+                </CardDescription>
+              </div>
+            </CardHeader>
 
-                  return (
-                    <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
-                            {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold text-slate-800 truncate flex items-center gap-1.5">
-                              {u.name || 'Sem nome'}
-                              {isSelf && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] py-0 px-1 bg-blue-50 text-blue-700 border-blue-200"
-                                >
-                                  Você
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
-                              <Mail className="w-3 h-3" />
-                              {u.email}
-                            </p>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {(() => {
-                          const conf = getPerfilConfig(u.role)
-                          return (
-                            <Badge
-                              className={`${conf.badgeCor} hover:${conf.badgeCor} border text-xs font-semibold gap-1`}
-                            >
-                              {u.role === 'admin' ? (
-                                <Shield className="w-3 h-3" />
-                              ) : u.role === 'comercial' ? (
-                                <FileCheck2 className="w-3 h-3" />
-                              ) : u.role === 'cliente' ? (
-                                <Eye className="w-3 h-3" />
-                              ) : (
-                                <Building2 className="w-3 h-3" />
-                              )}
-                              {conf.nome}
-                            </Badge>
-                          )
-                        })()}
-                      </td>
-
-                      <td className="py-3 px-4">{renderEmpresasBadges(u)}</td>
-
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Switch
-                            checked={isAtivo}
-                            disabled={isSelf}
-                            onCheckedChange={(checked) => handleToggleAtivo(u, checked)}
-                            className="data-[state=checked]:bg-emerald-600"
-                          />
-                          <span
-                            className={`text-[11px] font-semibold ${isAtivo ? 'text-emerald-700' : 'text-slate-400'}`}
-                          >
-                            {isAtivo ? 'Ativo' : 'Inativo'}
-                          </span>
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenResetPassword(u)}
-                            className="h-8 w-8 p-0 text-slate-500 hover:text-amber-600 hover:bg-amber-50"
-                            title="Redefinir senha"
-                          >
-                            <KeyRound className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleOpenEdit(u)}
-                            className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                            title="Editar usuário"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={isSelf}
-                            onClick={() => handleOpenDelete(u)}
-                            className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
-                            title={isSelf ? 'Não é possível excluir a si mesmo' : 'Excluir usuário'}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3 px-4">Usuário</th>
+                    <th className="py-3 px-4">Perfil</th>
+                    <th className="py-3 px-4">Empresa Vinculada</th>
+                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          <span>Carregando usuários...</span>
                         </div>
                       </td>
                     </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                  ) : filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-slate-500">
+                        Nenhum usuário encontrado com os filtros aplicados.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredUsers.map((u) => {
+                      const isUserAdmin = u.role === 'admin'
+                      const isSelf = u.id === currentUser?.id
+                      const isAtivo = u.ativo !== false
+
+                      return (
+                        <tr key={u.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
+                                {u.name ? u.name.charAt(0).toUpperCase() : 'U'}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold text-slate-800 truncate flex items-center gap-1.5">
+                                  {u.name || 'Sem nome'}
+                                  {isSelf && (
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[10px] py-0 px-1 bg-blue-50 text-blue-700 border-blue-200"
+                                    >
+                                      Você
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-slate-500 truncate flex items-center gap-1">
+                                  <Mail className="w-3 h-3" />
+                                  {u.email}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {(() => {
+                              const conf = getPerfilConfig(u.role)
+                              return (
+                                <Badge
+                                  className={`${conf.badgeCor} hover:${conf.badgeCor} border text-xs font-semibold gap-1`}
+                                >
+                                  {u.role === 'admin' ? (
+                                    <Shield className="w-3 h-3" />
+                                  ) : u.role === 'comercial' ? (
+                                    <FileCheck2 className="w-3 h-3" />
+                                  ) : u.role === 'cliente' ? (
+                                    <Eye className="w-3 h-3" />
+                                  ) : (
+                                    <Building2 className="w-3 h-3" />
+                                  )}
+                                  {conf.nome}
+                                </Badge>
+                              )
+                            })()}
+                          </td>
+
+                          <td className="py-3 px-4">{renderEmpresasBadges(u)}</td>
+
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <Switch
+                                checked={isAtivo}
+                                disabled={isSelf}
+                                onCheckedChange={(checked) => handleToggleAtivo(u, checked)}
+                                className="data-[state=checked]:bg-emerald-600"
+                              />
+                              <span
+                                className={`text-[11px] font-semibold ${isAtivo ? 'text-emerald-700' : 'text-slate-400'}`}
+                              >
+                                {isAtivo ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenResetPassword(u)}
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-amber-600 hover:bg-amber-50"
+                                title="Redefinir senha"
+                              >
+                                <KeyRound className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEdit(u)}
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                title="Editar usuário"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                disabled={isSelf}
+                                onClick={() => handleOpenDelete(u)}
+                                className="h-8 w-8 p-0 text-slate-500 hover:text-red-600 hover:bg-red-50 disabled:opacity-30"
+                                title={
+                                  isSelf ? 'Não é possível excluir a si mesmo' : 'Excluir usuário'
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </TabsContent>
+
+        {/* ABA 2: Habilitar Ferramentas */}
+        <TabsContent value="ferramentas" className="mt-0">
+          <AbaHabilitarFerramentas />
+        </TabsContent>
+      </Tabs>
 
       {/* DIALOG: NOVO USUÁRIO */}
       <Dialog open={modalCreateOpen} onOpenChange={setModalCreateOpen}>
