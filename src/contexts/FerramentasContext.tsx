@@ -1,14 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import pb from '@/lib/pocketbase/client'
 import { useAuth } from './AuthContext'
-
-export interface FerramentaUsuarioRecord {
-  id: string
-  user: string
-  ferramentas_habilitadas: string[] | null
-}
+import { ferramentasService } from '@/services/ferramentasUsuariosService'
 
 interface FerramentasContextType {
+  /** IDs de ferramentas (módulos) desabilitadas para o usuário autenticado. */
   desabilitadas: Set<string>
   isCarregando: boolean
   /** Recarrega a habilitação de um usuário específico (admin, na tela de gestão). */
@@ -17,11 +12,9 @@ interface FerramentasContextType {
 
 const FerramentasContext = createContext<FerramentasContextType | undefined>(undefined)
 
-const FALLBACK_TODAS: string[] = []
-
 export const FerramentasProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isAuthenticated, isAdmin } = useAuth()
-  const [desabilitadas, setDesabilitadas] = useState<Set<string>>(new Set(FALLBACK_TODAS))
+  const [desabilitadas, setDesabilitadas] = useState<Set<string>>(new Set())
   const [isCarregando, setIsCarregando] = useState(true)
 
   const carregar = useCallback(async () => {
@@ -30,32 +23,27 @@ export const FerramentasProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setIsCarregando(false)
       return
     }
+    if (isAdmin) {
+      // Admin não é afetado pela própria habilitação (acesso irrestrito de gestão)
+      setDesabilitadas(new Set())
+      setIsCarregando(false)
+      return
+    }
     try {
-      const rec = await pb
-        .collection('ferramentas_usuarios')
-        .getFirstListItem<FerramentaUsuarioRecord>(`user="${user.id}"`)
-      const lista = Array.isArray(rec?.ferramentas_habilitadas) ? rec.ferramentas_habilitadas : []
+      const lista = await ferramentasService.getByUser(user.id)
       // Falha aberta: só bloqueia o que consta explicitamente na lista de desabilitadas
       setDesabilitadas(new Set(lista))
     } catch {
-      // Sem registro = tudo habilitado (comportamento padrão)
+      // Sem registro = tudo habilitado (comportamento padrão de compatibilidade)
       setDesabilitadas(new Set())
     } finally {
       setIsCarregando(false)
     }
-  }, [isAuthenticated, user?.id])
+  }, [isAuthenticated, isAdmin, user?.id])
 
   useEffect(() => {
     carregar()
   }, [carregar])
-
-  // Admin não é afetado pela própria habilitação (acesso irrestrito de gestão)
-  useEffect(() => {
-    if (isAdmin) {
-      setDesabilitadas(new Set())
-      setIsCarregando(false)
-    }
-  }, [isAdmin])
 
   const recarregarDe = useCallback(
     async (userId: string) => {

@@ -39,7 +39,7 @@ routerAdd(
                 lembretes de vencimento e relatórios executivos aos clientes.
               </p>
               <p style="color: #64748b; font-size: 12px; margin-top: 20px;">
-                Data/Hora do Teste: ${new Date().toLocaleString('pt-BR')}<br/>
+                Data/Hora do Teste: ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC<br/>
                 Disparado por: ${authRecord.getString('email')}
               </p>
             </div>

@@ -1,10 +1,10 @@
 import pb from '@/lib/pocketbase/client'
-import type { ferramentasUsuarios } from '@/lib/pocketbase/schema'
 
+/** Registro da coleção ferramentas_usuarios (migração 0109). */
 export interface FerramentasUsuarioRecord {
   id: string
   user: string
-  ferramentas: string[]
+  ferramentas_desabilitadas: string[] | null
   collectionId?: string
   collectionName?: string
   created?: string
@@ -66,14 +66,30 @@ export const ferramentasService = {
         .getList<FerramentasUsuarioRecord>(1, 1, {
           filter: `user = "${userId}"`,
         })
+
       if (list.items.length > 0) {
-        return list.items[0].ferramentas || []
+        return list.items[0].ferramentas_desabilitadas || []
       }
-      // Sem registro = todas habilitadas (comportamento padrão de compatibilidade)
-      return TODAS_FERRAMENTAS_IDS.slice() as unknown as string[]
+      // Sem registro = nenhuma ferramenta desabilitada (tudo habilitado, compatibilidade)
+      return []
     } catch (err) {
       console.warn('[ferramentasService] Falha ao buscar habilitações do usuário:', err)
-      return TODAS_FERRAMENTAS_IDS.slice() as unknown as string[]
+      // Em caso de falha, não bloqueia o usuário: nada desabilitado
+      return []
+    }
+  },
+
+  /** Lista de ferramentas habilitadas = catálogo menos as desabilitadas. */
+  async listarHabilitadas(userId: string): Promise<string[]> {
+    const desabilitadas = await this.getByUser(userId)
+    const set = new Set(desabilitadas)
+    return TODAS_FERRAMENTAS_IDS.filter((f) => !set.has(f)) as unknown as string[]
+  },
+
+  /** Salva em lote: um registro por usuário. */
+  async salvarLote(itens: Array<{ userId: string; ferramentas: string[] }>): Promise<void> {
+    for (const it of itens) {
+      await this.salvar(it.userId, it.ferramentas)
     }
   },
 
@@ -87,11 +103,13 @@ export const ferramentasService = {
       if (existente.items.length > 0) {
         return await pb
           .collection('ferramentas_usuarios')
-          .update<FerramentasUsuarioRecord>(existente.items[0].id, { ferramentas })
+          .update<FerramentasUsuarioRecord>(existente.items[0].id, {
+            ferramentas_desabilitadas: ferramentas,
+          })
       }
       return await pb.collection('ferramentas_usuarios').create<FerramentasUsuarioRecord>({
         user: userId,
-        ferramentas,
+        ferramentas_desabilitadas: ferramentas,
       })
     } catch (err) {
       console.error('[ferramentasService] Erro ao salvar habilitações:', err)

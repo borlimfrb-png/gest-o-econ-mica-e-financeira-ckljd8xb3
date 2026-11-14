@@ -170,7 +170,11 @@ export default function Layout() {
 
   // Menu filtrado por permissão do perfil ativo
   const menuGruposFiltrados = useMemo(() => {
-    return filtrarMenuPorPerfil(MENU_GRUPOS, user?.role, isAdmin, balancoDreUrl)
+    const base = filtrarMenuPorPerfil(MENU_GRUPOS, user?.role, isAdmin, balancoDreUrl)
+    // Filtro adicional por habilitação de ferramentas (toggles do admin).
+    // Cliente e admin NUNCA são filtrados: o hub do cliente é gerido por perfil.
+    if (isAdmin || user?.role === 'cliente') return base
+    return filtrarMenuPorFerramentas(base, desabilitadas)
   }, [user?.role, isAdmin, balancoDreUrl])
 
   // Lista plana de itens navegáveis para o CommandPalette (Ctrl+K)
