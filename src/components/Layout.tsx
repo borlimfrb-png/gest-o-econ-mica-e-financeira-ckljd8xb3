@@ -48,6 +48,8 @@ import {
   type NavGroupConfig,
 } from '@/lib/menuNavigationConfig'
 import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
+import { filtrarMenuPorFerramentas } from '@/lib/ferramentasCatalogo'
+import { useFerramentas } from '@/contexts/FerramentasContext'
 import {
   MoreHorizontal,
   ChevronRight,
@@ -72,6 +74,7 @@ export default function Layout() {
     userGruposIds,
   } = useFilter()
   const { minhaEmpresa, logoUrl, corPrimaria, corSecundaria } = useMinhaEmpresa()
+  const { desabilitadas } = useFerramentas()
 
   const navigate = useNavigate()
   const location = useLocation()
@@ -175,7 +178,7 @@ export default function Layout() {
     // Cliente e admin NUNCA são filtrados: o hub do cliente é gerido por perfil.
     if (isAdmin || user?.role === 'cliente') return base
     return filtrarMenuPorFerramentas(base, desabilitadas)
-  }, [user?.role, isAdmin, balancoDreUrl])
+  }, [user?.role, isAdmin, balancoDreUrl, desabilitadas])
 
   // Lista plana de itens navegáveis para o CommandPalette (Ctrl+K)
   const itensNavegaveis = useMemo(() => {
@@ -480,18 +483,10 @@ export default function Layout() {
                           <SelectValue placeholder="Selecione a empresa" />
                         </SelectTrigger>
                         <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white">
-                          {user?.role === 'cliente' ? (
-                            empresas.map((emp) => (
-                              <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                                {emp.nome_fantasia || emp.nome}
-                              </SelectItem>
-                            ))
-                          ) : (
-                            <SelectEmpresaOuGrupoItems
-                              todasEntidades={todasEntidades}
-                              empresas={empresas}
-                            />
-                          )}
+                          <SelectEmpresaOuGrupoItems
+                            todasEntidades={todasEntidades}
+                            empresas={empresas}
+                          />
                         </SelectContent>
                       </Select>
                     ) : (
@@ -943,18 +938,10 @@ export default function Layout() {
                         <SelectValue placeholder="Selecione a empresa" />
                       </SelectTrigger>
                       <SelectContent className="bg-[#0B1F3A] border-slate-700 text-white z-[60]">
-                        {user?.role === 'cliente' ? (
-                          empresas.map((emp) => (
-                            <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                              {emp.nome_fantasia || emp.nome}
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <SelectEmpresaOuGrupoItems
-                            todasEntidades={todasEntidades}
-                            empresas={empresas}
-                          />
-                        )}
+                        <SelectEmpresaOuGrupoItems
+                          todasEntidades={todasEntidades}
+                          empresas={empresas}
+                        />
                       </SelectContent>
                     </Select>
                   ) : (
@@ -1345,18 +1332,10 @@ export default function Layout() {
                       <SelectValue placeholder="Selecione a empresa" />
                     </SelectTrigger>
                     <SelectContent>
-                      {user?.role === 'cliente' ? (
-                        empresas.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                            {emp.nome_fantasia || emp.nome}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectEmpresaOuGrupoItems
-                          todasEntidades={todasEntidades}
-                          empresas={empresas}
-                        />
-                      )}
+                      <SelectEmpresaOuGrupoItems
+                        todasEntidades={todasEntidades}
+                        empresas={empresas}
+                      />
                     </SelectContent>
                   </Select>
                 ) : (

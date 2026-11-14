@@ -324,18 +324,10 @@ export function VerticalSidebar({
                       <SelectValue placeholder="Selecione a empresa" />
                     </SelectTrigger>
                     <SelectContent>
-                      {user?.role === 'cliente' ? (
-                        empresas.map((emp) => (
-                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                            {emp.nome_fantasia || emp.nome}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectEmpresaOuGrupoItems
-                          todasEntidades={todasEntidades}
-                          empresas={empresas}
-                        />
-                      )}
+                      <SelectEmpresaOuGrupoItems
+                        todasEntidades={todasEntidades}
+                        empresas={empresas}
+                      />
                     </SelectContent>
                   </Select>
                 ) : (
