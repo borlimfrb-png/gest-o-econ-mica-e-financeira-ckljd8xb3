@@ -882,109 +882,111 @@ export default function DespesasVariaveisAnalise() {
 
                         {/* Linha / Cabeçalho de Grupo do Tipo de Despesa (aparece UMA única vez por tipo dentro do centro) */}
                         {centroAberto && (
-                        <>
-                        {mudouTipo && (
-                          <tr
-                            className="bg-indigo-50/70 border-b border-indigo-200 font-semibold text-indigo-950 text-[11px] select-none cursor-pointer hover:bg-indigo-100/70 transition-colors"
-                            onClick={() => toggleTipo(tipoKey)}
-                          >
-                            <td className="py-1.5 px-3 pl-6 sticky left-0 bg-indigo-50/90 z-10 border-r border-indigo-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-indigo-600 text-white shadow-xs">
-                                  <Tag className="w-2.5 h-2.5" />
-                                </span>
-                                {tipoAberto ? (
-                                  <ChevronDown className="w-3 h-3 text-blue-400 shrink-0" />
-                                ) : (
-                                  <ChevronRight className="w-3 h-3 text-blue-400 shrink-0" />
-                                )}
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-[9.5px] uppercase tracking-wider text-indigo-800 font-extrabold">
-                                    Tipo de Despesa:
-                                  </span>
-                                  <span className="font-bold text-indigo-950 text-[11.5px]">
-                                    {tipoNomeExibicao}
-                                  </span>
-                                  <span className="text-[9px] font-medium text-indigo-700 bg-white/80 px-1.5 py-0.2 rounded border border-indigo-200">
-                                    {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-
-                            <td
-                              colSpan={meses.length * 2 + 2}
-                              className="py-1.5 px-3 text-[9.5px] text-indigo-700/80 font-medium bg-indigo-50/50"
-                            >
-                              <span>Classificação de gasto deste tipo de despesa</span>
-                            </td>
-                          </tr>
-                        )}
-
-                        {/* Linha da Conta Individual (limpa, sem badge repetido de centro nem de tipo) */}
-                        {tipoAberto && (
-                        <tr className="hover:bg-indigo-50/40 text-slate-700 transition-colors text-[11px]">
-                          {/* Coluna Fixa à Esquerda com recuo hierárquico elegante (Centro -> Tipo -> Conta) */}
-                          <td className="py-2 px-3 pl-9 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                            <div className="flex items-center gap-2 truncate">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                              {conta.codigo && (
-                                <Link
-                                  to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
-                                  className="font-mono text-[10.5px] text-indigo-700 hover:underline font-semibold shrink-0 cursor-pointer"
-                                  title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {conta.codigo}
-                                </Link>
-                              )}
-                              <span
-                                className="truncate font-medium text-slate-900"
-                                title={conta.nome}
+                          <>
+                            {mudouTipo && (
+                              <tr
+                                className="bg-indigo-50/70 border-b border-indigo-200 font-semibold text-indigo-950 text-[11px] select-none cursor-pointer hover:bg-indigo-100/70 transition-colors"
+                                onClick={() => toggleTipo(tipoKey)}
                               >
-                                {conta.nome}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Colunas dos Meses */}
-                          {meses.map((m) => {
-                            const val = conta.valoresPorMes[m.chave] || 0
-                            const pct = conta.percentuaisPorMes[m.chave]
-                            const classesSemaforo = getClassesSemaforoPercentual(pct)
-
-                            return (
-                              <React.Fragment key={`val-${conta.id}-${m.chave}`}>
-                                {/* Valor R$ */}
-                                <td className="py-2 px-1.5 text-right border-r border-slate-100 text-slate-700 whitespace-nowrap font-mono">
-                                  {val !== 0 ? (
-                                    formatBrl(val)
-                                  ) : (
-                                    <span className="text-slate-300">—</span>
-                                  )}
+                                <td className="py-1.5 px-3 pl-6 sticky left-0 bg-indigo-50/90 z-10 border-r border-indigo-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-indigo-600 text-white shadow-xs">
+                                      <Tag className="w-2.5 h-2.5" />
+                                    </span>
+                                    {tipoAberto ? (
+                                      <ChevronDown className="w-3 h-3 text-blue-400 shrink-0" />
+                                    ) : (
+                                      <ChevronRight className="w-3 h-3 text-blue-400 shrink-0" />
+                                    )}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[9.5px] uppercase tracking-wider text-indigo-800 font-extrabold">
+                                        Tipo de Despesa:
+                                      </span>
+                                      <span className="font-bold text-indigo-950 text-[11.5px]">
+                                        {tipoNomeExibicao}
+                                      </span>
+                                      <span className="text-[9px] font-medium text-indigo-700 bg-white/80 px-1.5 py-0.2 rounded border border-indigo-200">
+                                        {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </td>
-                                {/* % Fat. */}
+
                                 <td
-                                  className={`py-2 px-1.5 text-right border-r border-slate-200 whitespace-nowrap text-[10.5px] bg-slate-50/40 ${classesSemaforo}`}
+                                  colSpan={meses.length * 2 + 2}
+                                  className="py-1.5 px-3 text-[9.5px] text-indigo-700/80 font-medium bg-indigo-50/50"
                                 >
-                                  {formatarPercentualExport(pct)}
+                                  <span>Classificação de gasto deste tipo de despesa</span>
                                 </td>
-                              </React.Fragment>
-                            )
-                          })}
+                              </tr>
+                            )}
 
-                          {/* Total do Período para a conta */}
-                          <td className="py-2 px-2 text-right font-semibold bg-slate-100/60 text-slate-900 border-r border-slate-200 whitespace-nowrap font-mono">
-                            {formatBrl(conta.totalPeriodo)}
-                          </td>
-                          <td
-                            className={`py-2 px-2 text-right font-semibold bg-slate-100/90 whitespace-nowrap text-[10.5px] ${getClassesSemaforoPercentual(
-                              conta.percentualPeriodo,
-                            )}`}
-                          >
-                            {formatarPercentualExport(conta.percentualPeriodo)}
-                          </td>
-                        </tr>
+                            {/* Linha da Conta Individual (limpa, sem badge repetido de centro nem de tipo) */}
+                            {tipoAberto && (
+                              <tr className="hover:bg-indigo-50/40 text-slate-700 transition-colors text-[11px]">
+                                {/* Coluna Fixa à Esquerda com recuo hierárquico elegante (Centro -> Tipo -> Conta) */}
+                                <td className="py-2 px-3 pl-9 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                    {conta.codigo && (
+                                      <Link
+                                        to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                        className="font-mono text-[10.5px] text-indigo-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                        title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {conta.codigo}
+                                      </Link>
+                                    )}
+                                    <span
+                                      className="truncate font-medium text-slate-900"
+                                      title={conta.nome}
+                                    >
+                                      {conta.nome}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                {/* Colunas dos Meses */}
+                                {meses.map((m) => {
+                                  const val = conta.valoresPorMes[m.chave] || 0
+                                  const pct = conta.percentuaisPorMes[m.chave]
+                                  const classesSemaforo = getClassesSemaforoPercentual(pct)
+
+                                  return (
+                                    <React.Fragment key={`val-${conta.id}-${m.chave}`}>
+                                      {/* Valor R$ */}
+                                      <td className="py-2 px-1.5 text-right border-r border-slate-100 text-slate-700 whitespace-nowrap font-mono">
+                                        {val !== 0 ? (
+                                          formatBrl(val)
+                                        ) : (
+                                          <span className="text-slate-300">—</span>
+                                        )}
+                                      </td>
+                                      {/* % Fat. */}
+                                      <td
+                                        className={`py-2 px-1.5 text-right border-r border-slate-200 whitespace-nowrap text-[10.5px] bg-slate-50/40 ${classesSemaforo}`}
+                                      >
+                                        {formatarPercentualExport(pct)}
+                                      </td>
+                                    </React.Fragment>
+                                  )
+                                })}
+
+                                {/* Total do Período para a conta */}
+                                <td className="py-2 px-2 text-right font-semibold bg-slate-100/60 text-slate-900 border-r border-slate-200 whitespace-nowrap font-mono">
+                                  {formatBrl(conta.totalPeriodo)}
+                                </td>
+                                <td
+                                  className={`py-2 px-2 text-right font-semibold bg-slate-100/90 whitespace-nowrap text-[10.5px] ${getClassesSemaforoPercentual(
+                                    conta.percentualPeriodo,
+                                  )}`}
+                                >
+                                  {formatarPercentualExport(conta.percentualPeriodo)}
+                                </td>
+                              </tr>
+                            )}
+                          </>
                         )}
                       </React.Fragment>
                     )
