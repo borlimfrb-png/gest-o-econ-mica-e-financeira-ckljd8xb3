@@ -65,6 +65,8 @@ import {
   DollarSign,
   ArrowRight,
   Sparkles,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 
 const MESES_OPCOES = [
@@ -128,6 +130,14 @@ export default function DespesasVariaveisAnalise() {
   const [mesInicial, setMesInicial] = useState<number>(1)
   const [qtdMeses, setQtdMeses] = useState<number>(12)
   const [avisoLimiteMeses, setAvisoLimiteMeses] = useState(false)
+
+  // Expansão hierárquica (Centro de Custo → Tipo de Despesa): registro ausente = grupo expandido
+  const [centrosExpandidos, setCentrosExpandidos] = useState<Record<string, boolean>>({})
+  const [tiposExpandidos, setTiposExpandidos] = useState<Record<string, boolean>>({})
+  const toggleCentro = (key: string) =>
+    setCentrosExpandidos((prev) => ({ ...prev, [key]: prev[key] === false }))
+  const toggleTipo = (key: string) =>
+    setTiposExpandidos((prev) => ({ ...prev, [key]: prev[key] === false }))
 
   // Carregar dados respeitando filtro de empresa / grupo
   const carregarDados = async () => {
@@ -818,17 +828,29 @@ export default function DespesasVariaveisAnalise() {
                         tipoKey,
                     ).length
 
+                    // Estado de expansão dos grupos hierárquicos desta linha
+                    const centroAberto = centrosExpandidos[centroKey] !== false
+                    const tipoAberto = tiposExpandidos[tipoKey] !== false
+
                     return (
                       <React.Fragment key={conta.id}>
                         {/* Linha / Cabeçalho de Grupo do Centro de Custo (aparece UMA única vez por centro) */}
                         {mudouCentro && (
-                          <tr className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none">
+                          <tr
+                            className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none cursor-pointer hover:bg-slate-200/80 transition-colors"
+                            onClick={() => toggleCentro(centroKey)}
+                          >
                             {/* Coluna fixa à esquerda */}
                             <td className="py-2 px-3 sticky left-0 bg-slate-100 z-10 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]">
                               <div className="flex items-center gap-2">
                                 <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-indigo-700 text-white shadow-xs">
                                   <Building className="w-3 h-3" />
                                 </span>
+                                {centroAberto ? (
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                )}
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-[10px] uppercase tracking-wider text-indigo-900 font-black">
                                     Centro de Custo:
@@ -859,13 +881,23 @@ export default function DespesasVariaveisAnalise() {
                         )}
 
                         {/* Linha / Cabeçalho de Grupo do Tipo de Despesa (aparece UMA única vez por tipo dentro do centro) */}
+                        {centroAberto && (
+                        <>
                         {mudouTipo && (
-                          <tr className="bg-indigo-50/70 border-b border-indigo-200 font-semibold text-indigo-950 text-[11px] select-none">
+                          <tr
+                            className="bg-indigo-50/70 border-b border-indigo-200 font-semibold text-indigo-950 text-[11px] select-none cursor-pointer hover:bg-indigo-100/70 transition-colors"
+                            onClick={() => toggleTipo(tipoKey)}
+                          >
                             <td className="py-1.5 px-3 pl-6 sticky left-0 bg-indigo-50/90 z-10 border-r border-indigo-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
                               <div className="flex items-center gap-2">
                                 <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-indigo-600 text-white shadow-xs">
                                   <Tag className="w-2.5 h-2.5" />
                                 </span>
+                                {tipoAberto ? (
+                                  <ChevronDown className="w-3 h-3 text-blue-400 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3 text-blue-400 shrink-0" />
+                                )}
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-[9.5px] uppercase tracking-wider text-indigo-800 font-extrabold">
                                     Tipo de Despesa:
@@ -890,6 +922,7 @@ export default function DespesasVariaveisAnalise() {
                         )}
 
                         {/* Linha da Conta Individual (limpa, sem badge repetido de centro nem de tipo) */}
+                        {tipoAberto && (
                         <tr className="hover:bg-indigo-50/40 text-slate-700 transition-colors text-[11px]">
                           {/* Coluna Fixa à Esquerda com recuo hierárquico elegante (Centro -> Tipo -> Conta) */}
                           <td className="py-2 px-3 pl-9 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
@@ -952,6 +985,7 @@ export default function DespesasVariaveisAnalise() {
                             {formatarPercentualExport(conta.percentualPeriodo)}
                           </td>
                         </tr>
+                        )}
                       </React.Fragment>
                     )
                   })}

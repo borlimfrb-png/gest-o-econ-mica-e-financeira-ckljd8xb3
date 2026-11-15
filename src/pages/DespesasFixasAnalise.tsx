@@ -57,6 +57,8 @@ import {
   DollarSign,
   ArrowRight,
   Sparkles,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 
 const MESES_OPCOES = [
@@ -113,6 +115,14 @@ export default function DespesasFixasAnalise() {
   const [mesInicial, setMesInicial] = useState<number>(1)
   const [qtdMeses, setQtdMeses] = useState<number>(12)
   const [avisoLimiteMeses, setAvisoLimiteMeses] = useState(false)
+
+  // Expansão hierárquica (Centro de Custo → Tipo de Despesa): registro ausente = grupo expandido
+  const [centrosExpandidos, setCentrosExpandidos] = useState<Record<string, boolean>>({})
+  const [tiposExpandidos, setTiposExpandidos] = useState<Record<string, boolean>>({})
+  const toggleCentro = (key: string) =>
+    setCentrosExpandidos((prev) => ({ ...prev, [key]: prev[key] === false }))
+  const toggleTipo = (key: string) =>
+    setTiposExpandidos((prev) => ({ ...prev, [key]: prev[key] === false }))
 
   // Carregar dados respeitando filtro de empresa / grupo
   const carregarDados = async () => {
@@ -733,17 +743,29 @@ export default function DespesasFixasAnalise() {
                         tipoKey,
                     ).length
 
+                    // Estado de expansão dos grupos hierárquicos desta linha
+                    const centroAberto = centrosExpandidos[centroKey] !== false
+                    const tipoAberto = tiposExpandidos[tipoKey] !== false
+
                     return (
                       <React.Fragment key={conta.id}>
                         {/* Linha / Cabeçalho de Grupo do Centro de Custo (aparece UMA única vez por centro) */}
                         {mudouCentro && (
-                          <tr className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none">
+                          <tr
+                            className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none cursor-pointer hover:bg-slate-200/80 transition-colors"
+                            onClick={() => toggleCentro(centroKey)}
+                          >
                             {/* Coluna fixa à esquerda */}
                             <td className="py-2 px-3 sticky left-0 bg-slate-100 z-10 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)]">
                               <div className="flex items-center gap-2">
                                 <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-blue-700 text-white shadow-xs">
                                   <Building className="w-3 h-3" />
                                 </span>
+                                {centroAberto ? (
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                )}
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-[10px] uppercase tracking-wider text-blue-900 font-black">
                                     Centro de Custo:
@@ -774,99 +796,113 @@ export default function DespesasFixasAnalise() {
                         )}
 
                         {/* Linha / Cabeçalho de Grupo do Tipo de Despesa (aparece UMA única vez por tipo dentro do centro) */}
-                        {mudouTipo && (
-                          <tr className="bg-blue-50/70 border-b border-blue-200 font-semibold text-blue-950 text-[11px] select-none">
-                            <td className="py-1.5 px-3 pl-6 sticky left-0 bg-blue-50/90 z-10 border-r border-blue-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-blue-600 text-white shadow-xs">
-                                  <Tag className="w-2.5 h-2.5" />
-                                </span>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-[9.5px] uppercase tracking-wider text-blue-800 font-extrabold">
-                                    Tipo de Despesa:
-                                  </span>
-                                  <span className="font-bold text-blue-950 text-[11.5px]">
-                                    {tipoNomeExibicao}
-                                  </span>
-                                  <span className="text-[9px] font-medium text-blue-700 bg-white/80 px-1.5 py-0.2 rounded border border-blue-200">
-                                    {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                              </div>
-                            </td>
-
-                            <td
-                              colSpan={meses.length * 2 + 2}
-                              className="py-1.5 px-3 text-[9.5px] text-blue-700/80 font-medium bg-blue-50/50"
-                            >
-                              <span>Classificação de gasto deste tipo de despesa</span>
-                            </td>
-                          </tr>
-                        )}
-
-                        {/* Linha da Conta Individual (limpa, sem badge repetido de centro nem de tipo) */}
-                        <tr className="hover:bg-blue-50/40 text-slate-700 transition-colors text-[11px]">
-                          {/* Coluna Fixa à Esquerda com recuo hierárquico elegante (Centro -> Tipo -> Conta) */}
-                          <td className="py-2 px-3 pl-9 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                            <div className="flex items-center gap-2 truncate">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-                              {conta.codigo && (
-                                <Link
-                                  to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
-                                  className="font-mono text-[10.5px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
-                                  title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {conta.codigo}
-                                </Link>
-                              )}
-                              <span
-                                className="truncate font-medium text-slate-900"
-                                title={conta.nome}
+                        {centroAberto && (
+                          <>
+                            {mudouTipo && (
+                              <tr
+                                className="bg-blue-50/70 border-b border-blue-200 font-semibold text-blue-950 text-[11px] select-none cursor-pointer hover:bg-blue-100/70 transition-colors"
+                                onClick={() => toggleTipo(tipoKey)}
                               >
-                                {conta.nome}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Colunas dos Meses */}
-                          {meses.map((m) => {
-                            const val = conta.valoresPorMes[m.chave] || 0
-                            const pct = conta.percentuaisPorMes[m.chave]
-                            const classesSemaforo = getClassesSemaforoPercentual(pct)
-
-                            return (
-                              <React.Fragment key={`val-${conta.id}-${m.chave}`}>
-                                {/* Valor R$ */}
-                                <td className="py-2 px-1.5 text-right border-r border-slate-100 text-slate-700 whitespace-nowrap font-mono">
-                                  {val !== 0 ? (
-                                    formatBrl(val)
-                                  ) : (
-                                    <span className="text-slate-300">—</span>
-                                  )}
+                                <td className="py-1.5 px-3 pl-6 sticky left-0 bg-blue-50/90 z-10 border-r border-blue-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-blue-600 text-white shadow-xs">
+                                      <Tag className="w-2.5 h-2.5" />
+                                    </span>
+                                    {tipoAberto ? (
+                                      <ChevronDown className="w-3 h-3 text-blue-400 shrink-0" />
+                                    ) : (
+                                      <ChevronRight className="w-3 h-3 text-blue-400 shrink-0" />
+                                    )}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[9.5px] uppercase tracking-wider text-blue-800 font-extrabold">
+                                        Tipo de Despesa:
+                                      </span>
+                                      <span className="font-bold text-blue-950 text-[11.5px]">
+                                        {tipoNomeExibicao}
+                                      </span>
+                                      <span className="text-[9px] font-medium text-blue-700 bg-white/80 px-1.5 py-0.2 rounded border border-blue-200">
+                                        {qtdContasNoTipo} conta{qtdContasNoTipo > 1 ? 's' : ''}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </td>
-                                {/* % Fat. */}
+
                                 <td
-                                  className={`py-2 px-1.5 text-right border-r border-slate-200 whitespace-nowrap text-[10.5px] bg-slate-50/40 ${classesSemaforo}`}
+                                  colSpan={meses.length * 2 + 2}
+                                  className="py-1.5 px-3 text-[9.5px] text-blue-700/80 font-medium bg-blue-50/50"
                                 >
-                                  {formatarPercentualExport(pct)}
+                                  <span>Classificação de gasto deste tipo de despesa</span>
                                 </td>
-                              </React.Fragment>
-                            )
-                          })}
+                              </tr>
+                            )}
 
-                          {/* Total do Período para a conta */}
-                          <td className="py-2 px-2 text-right font-semibold bg-slate-100/60 text-slate-900 border-r border-slate-200 whitespace-nowrap font-mono">
-                            {formatBrl(conta.totalPeriodo)}
-                          </td>
-                          <td
-                            className={`py-2 px-2 text-right font-semibold bg-slate-100/90 whitespace-nowrap text-[10.5px] ${getClassesSemaforoPercentual(
-                              conta.percentualPeriodo,
-                            )}`}
-                          >
-                            {formatarPercentualExport(conta.percentualPeriodo)}
-                          </td>
-                        </tr>
+                            {/* Linha da Conta Individual (limpa, sem badge repetido de centro nem de tipo) */}
+                            {tipoAberto && (
+                              <tr className="hover:bg-blue-50/40 text-slate-700 transition-colors text-[11px]">
+                                {/* Coluna Fixa à Esquerda com recuo hierárquico elegante (Centro -> Tipo -> Conta) */}
+                                <td className="py-2 px-3 pl-9 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                  <div className="flex items-center gap-2 truncate">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+                                    {conta.codigo && (
+                                      <Link
+                                        to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                        className="font-mono text-[10.5px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                        title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        {conta.codigo}
+                                      </Link>
+                                    )}
+                                    <span
+                                      className="truncate font-medium text-slate-900"
+                                      title={conta.nome}
+                                    >
+                                      {conta.nome}
+                                    </span>
+                                  </div>
+                                </td>
+
+                                {/* Colunas dos Meses */}
+                                {meses.map((m) => {
+                                  const val = conta.valoresPorMes[m.chave] || 0
+                                  const pct = conta.percentuaisPorMes[m.chave]
+                                  const classesSemaforo = getClassesSemaforoPercentual(pct)
+
+                                  return (
+                                    <React.Fragment key={`val-${conta.id}-${m.chave}`}>
+                                      {/* Valor R$ */}
+                                      <td className="py-2 px-1.5 text-right border-r border-slate-100 text-slate-700 whitespace-nowrap font-mono">
+                                        {val !== 0 ? (
+                                          formatBrl(val)
+                                        ) : (
+                                          <span className="text-slate-300">—</span>
+                                        )}
+                                      </td>
+                                      {/* % Fat. */}
+                                      <td
+                                        className={`py-2 px-1.5 text-right border-r border-slate-200 whitespace-nowrap text-[10.5px] bg-slate-50/40 ${classesSemaforo}`}
+                                      >
+                                        {formatarPercentualExport(pct)}
+                                      </td>
+                                    </React.Fragment>
+                                  )
+                                })}
+
+                                {/* Total do Período para a conta */}
+                                <td className="py-2 px-2 text-right font-semibold bg-slate-100/60 text-slate-900 border-r border-slate-200 whitespace-nowrap font-mono">
+                                  {formatBrl(conta.totalPeriodo)}
+                                </td>
+                                <td
+                                  className={`py-2 px-2 text-right font-semibold bg-slate-100/90 whitespace-nowrap text-[10.5px] ${getClassesSemaforoPercentual(
+                                    conta.percentualPeriodo,
+                                  )}`}
+                                >
+                                  {formatarPercentualExport(conta.percentualPeriodo)}
+                                </td>
+                              </tr>
+                            )}
+                          </>
+                        )}
                       </React.Fragment>
                     )
                   })}
