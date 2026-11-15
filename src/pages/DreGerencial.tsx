@@ -1157,12 +1157,18 @@ export default function DreGerencial() {
 
                     return (
                       <React.Fragment key={grupo.classificacao}>
-                        {/* Linha do Grupo Master */}
-                        <tr className={`${corFundo} hover:bg-slate-100/80 transition-colors`}>
+                        {/* Linha do Grupo Master (linha inteira clicável para expandir/recolher) */}
+                        <tr
+                          className={`${corFundo} hover:bg-slate-100/80 transition-colors cursor-pointer select-none`}
+                          onClick={() => toggleGrupo(grupo.classificacao)}
+                        >
                           <td className="py-2.5 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-200">
                             <button
                               type="button"
-                              onClick={() => toggleGrupo(grupo.classificacao)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleGrupo(grupo.classificacao)
+                              }}
                               className="flex items-center gap-2 text-left w-full font-bold focus:outline-none"
                             >
                               {isExpandido ? (
@@ -1478,11 +1484,17 @@ export default function DreGerencial() {
                   {/* ================= NÃO CLASSIFICADOS (SE HOUVER) ================= */}
                   {matriz.naoClassificados.contas.length > 0 && (
                     <React.Fragment>
-                      <tr className="bg-amber-50/70 text-amber-950 font-bold border-t-2 border-amber-300">
+                      <tr
+                        className="bg-amber-50/70 text-amber-950 font-bold border-t-2 border-amber-300 cursor-pointer select-none hover:bg-amber-100/70 transition-colors"
+                        onClick={() => toggleGrupo('naoClassificados')}
+                      >
                         <td className="py-3 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-200">
                           <button
                             type="button"
-                            onClick={() => toggleGrupo('naoClassificados')}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleGrupo('naoClassificados')
+                            }}
                             className="flex items-center gap-2 text-left w-full font-bold focus:outline-none"
                           >
                             {gruposExpandidos.naoClassificados ? (
@@ -1734,12 +1746,18 @@ export default function DreGerencial() {
 
                     return (
                       <React.Fragment key={grupo.classificacao}>
-                        {/* Linha Grupo Master */}
-                        <tr className={`${corFundo} hover:bg-slate-100/80 transition-colors`}>
+                        {/* Linha Grupo Master (linha inteira clicável para expandir/recolher) */}
+                        <tr
+                          className={`${corFundo} hover:bg-slate-100/80 transition-colors cursor-pointer select-none`}
+                          onClick={() => toggleGrupo(grupo.classificacao)}
+                        >
                           <td className="py-2.5 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-200">
                             <button
                               type="button"
-                              onClick={() => toggleGrupo(grupo.classificacao)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleGrupo(grupo.classificacao)
+                              }}
                               className="flex items-center gap-2 text-left w-full font-bold focus:outline-none"
                             >
                               {isExpandido ? (
@@ -2024,11 +2042,17 @@ export default function DreGerencial() {
                   {/* Não Classificados se houver */}
                   {comparativo.naoClassificados.contas.length > 0 && (
                     <React.Fragment>
-                      <tr className="bg-amber-50/70 text-amber-950 font-bold border-t-2 border-amber-300">
+                      <tr
+                        className="bg-amber-50/70 text-amber-950 font-bold border-t-2 border-amber-300 cursor-pointer select-none hover:bg-amber-100/70 transition-colors"
+                        onClick={() => toggleGrupo('naoClassificados')}
+                      >
                         <td className="py-3 px-4 sticky left-0 bg-inherit z-10 border-r border-slate-200">
                           <button
                             type="button"
-                            onClick={() => toggleGrupo('naoClassificados')}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              toggleGrupo('naoClassificados')
+                            }}
                             className="flex items-center gap-2 text-left w-full font-bold focus:outline-none"
                           >
                             {gruposExpandidos.naoClassificados ? (
