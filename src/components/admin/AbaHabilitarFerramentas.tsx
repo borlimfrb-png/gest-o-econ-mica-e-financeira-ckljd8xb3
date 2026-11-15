@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
-import { ferramentasService, TODAS_FERRAMENTAS_IDS } from '@/services/ferramentasUsuariosService'
+import { ferramentasService } from '@/services/ferramentasUsuariosService'
 import { CATALOGO_FERRAMENTAS, getFerramentaCatalogo } from '@/lib/ferramentasCatalogo'
+
+/** Todos os ids do catálogo — deriva de CATALOGO_FERRAMENTAS para nunca divergir. */
+const IDS_CATALOGO = CATALOGO_FERRAMENTAS.map((f) => f.id as string)
 import { extractUserGruposIds } from '@/lib/vinculosEmpresas'
 import type { UserRecord } from '@/types/finance'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -87,7 +90,11 @@ const AbaHabilitarFerramentas: React.FC = () => {
       atual.add(ferramentaId)
     }
 
-    const novaLista = TODAS_FERRAMENTAS_IDS.filter((f) => atual.has(f))
+    // Persiste TODOS os ids atualmente desligados (inclui ids legados que já
+    // estavam no registro, mesmo fora do catálogo atual). Filtrar por
+    // TODAS_FERRAMENTAS_IDS aqui apagava silenciosamente ids ausentes dessa
+    // lista (ex.: cliente_balanco), revertendo o toggle sem avisar.
+    const novaLista = Array.from(atual)
     setRegistros((prev) => ({ ...prev, [user.id]: atual }))
     setSalvandoUserId(user.id)
     try {

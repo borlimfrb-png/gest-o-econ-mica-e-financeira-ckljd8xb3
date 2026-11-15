@@ -17,6 +17,7 @@ export interface FerramentasUsuarioRecord {
 export const TODAS_FERRAMENTAS_IDS = [
   'dashboard',
   'dashboard_bi',
+  'cliente_balanco',
   'gerencial_dre',
   'gerencial_projecao_dre',
   'gerencial_comparativo_mensal',
@@ -67,9 +68,10 @@ function normalizarLista(valor: unknown): string[] {
 export const ferramentasService = {
   async getAll(): Promise<FerramentasUsuarioRecord[]> {
     try {
-      const list = await fetchAllRecords<FerramentasUsuarioRecord>('ferramentas_usuarios', {
-        sort: '-updated',
-      })
+      // Sem sort: registros criados antes da migração 0110 nasceram sem autodates
+      // e sort=-updated devolvia 400 no servidor (silenciosamente virava "tudo
+      // habilitado" no catch abaixo). A coleção tem um registro por usuário.
+      const list = await fetchAllRecords<FerramentasUsuarioRecord>('ferramentas_usuarios')
       return list
     } catch (err) {
       console.warn('[ferramentasService] Falha ao listar habilitações:', err)
@@ -83,7 +85,6 @@ export const ferramentasService = {
         .collection('ferramentas_usuarios')
         .getFullList<FerramentasUsuarioRecord>({
           filter: `user = "${userId}"`,
-          sort: '-updated',
         })
 
       if (list.length > 0) {
