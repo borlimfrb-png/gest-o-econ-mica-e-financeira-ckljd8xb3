@@ -257,14 +257,19 @@ const AbaHabilitarFerramentas: React.FC = () => {
 
                   {expandido && (
                     <div className="border-t border-slate-100 bg-slate-50/60 p-4">
-                      {isUserAdmin || u.role === 'cliente' ? (
+                      {isUserAdmin ? (
                         <p className="text-[11px] text-slate-500 italic">
-                          {isUserAdmin
-                            ? 'Administrador tem acesso irrestrito — a habilitação não se aplica.'
-                            : 'Perfil Cliente: o hub do cliente é gerido pelo perfil — a habilitação de ferramentas não se aplica.'}
+                          Administrador tem acesso irrestrito — a habilitação não se aplica.
                         </p>
                       ) : (
                         <>
+                          {u.role === 'cliente' && (
+                            <p className="text-[11px] text-slate-500 mb-2">
+                              Perfil Cliente: os toggles controlam o hub do cliente (Análise
+                              Econômica e Financeira) e o menu dele. Sem nenhuma ferramenta
+                              desabilitada, o cliente vê tudo como hoje.
+                            </p>
+                          )}
                           <div className="flex items-center justify-between mb-2">
                             <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                               Ferramentas do catálogo ({CATALOGO_FERRAMENTAS.length})

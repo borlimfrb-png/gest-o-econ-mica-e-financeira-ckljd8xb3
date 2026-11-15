@@ -23,6 +23,8 @@ import {
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { useFerramentas } from '@/contexts/FerramentasContext'
+import { cardHubVisivel } from '@/lib/ferramentasHubCliente'
 import {
   lancamentosService,
   balancosService,
@@ -85,6 +87,7 @@ interface HubShortcut {
 export default function AnaliseEconomicaFinanceira() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { desabilitadas } = useFerramentas()
   const {
     empresas,
     todasEntidades,
@@ -632,6 +635,13 @@ export default function AnaliseEconomicaFinanceira() {
     return lista
   }, [isCliente, ebitdaAtivo, valuationAtivo, anoAtivo])
 
+  // Card do hub some quando a ferramenta correspondente foi desabilitada
+  // para o usuário (coleção ferramentas_usuarios; cliente sem registro vê tudo).
+  const atalhosVisiveis = useMemo(
+    () => atalhos.filter((a) => cardHubVisivel(a.id, desabilitadas)),
+    [atalhos, desabilitadas],
+  )
+
   return (
     <div className="space-y-6 pb-8 animate-fadeIn">
       {/* Banner Principal com Tema Azul-Marinho Profundo e Gradiente Moderno */}
@@ -927,12 +937,12 @@ export default function AnaliseEconomicaFinanceira() {
                 </h2>
               </div>
               <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                {atalhos.length} módulos executivos estruturados
+                {atalhosVisiveis.length} módulos executivos estruturados
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {atalhos.map((item, index) => {
+              {atalhosVisiveis.map((item, index) => {
                 const Icon = item.icon
                 const destino = item.rota(empresaAtivaId)
 

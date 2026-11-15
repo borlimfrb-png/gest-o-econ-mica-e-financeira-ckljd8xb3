@@ -193,6 +193,31 @@ export const CATALOGO_FERRAMENTAS: FerramentaCatalogo[] = [
 ]
 
 const idsCatalogo = new Set(CATALOGO_FERRAMENTAS.map((f) => f.id))
+
+/**
+ * Equivalência para o perfil CLIENTE: o toggle do catálogo grava o id da
+ * ferramenta interna (gerencial_*, agente_ia...), mas o menu, as rotas e o hub do
+ * cliente usam os módulos cliente_*. Ao ler a lista desabilitada de um cliente,
+ * cada id do catálogo é expandido para o módulo equivalente do cliente.
+ */
+const EQUIVALENCIA_CLIENTE: Record<string, ModuloSistema> = {
+  gerencial_rentabilidade: 'cliente_rentabilidade',
+  gerencial_indicador_crescimento: 'cliente_crescimento',
+  gerencial_dashboard_bi: 'cliente_dashboard_bi',
+  gerencial_indicadores: 'cliente_indicadores',
+  agente_ia: 'cliente_agente_ia',
+}
+
+/** Expande a lista desabilitada com os módulos cliente_* equivalentes. */
+export function expandirDesabilitadasCliente(desabilitadas: Set<string>): Set<string> {
+  if (desabilitadas.size === 0) return desabilitadas
+  const expandido = new Set(desabilitadas)
+  for (const id of desabilitadas) {
+    const equivalente = EQUIVALENCIA_CLIENTE[id]
+    if (equivalente) expandido.add(equivalente)
+  }
+  return expandido
+}
 export function ehFerramentaCatalogo(m: ModuloSistema): boolean {
   return idsCatalogo.has(m)
 }

@@ -142,9 +142,10 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
   }
 
   // Bloqueio por habilitação de ferramenta (toggles do admin em /admin/usuarios).
-  // Perfil cliente NUNCA é bloqueado: o hub dele é gerido pelas regras de perfil.
-  // Administrador também não é bloqueado (acesso irrestrito de gestão).
-  if (!isAdmin && user?.role !== 'cliente' && desabilitadas.has(modulo as string)) {
+  // Perfil cliente AGORA também é bloqueado quando a ferramenta foi desabilitada para ele
+  // (inclui os módulos cliente_* do hub dele). Administrador NUNCA é bloqueado
+  // (acesso irrestrito de gestão).
+  if (!isAdmin && desabilitadas.has(modulo as string)) {
     return <FerramentaBloqueada />
   }
 

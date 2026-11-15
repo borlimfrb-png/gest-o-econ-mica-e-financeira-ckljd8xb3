@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { useAuth } from './AuthContext'
 import { ferramentasService } from '@/services/ferramentasUsuariosService'
+import { expandirDesabilitadasCliente } from '@/lib/ferramentasCatalogo'
 
 interface FerramentasContextType {
   /** IDs de ferramentas (módulos) desabilitadas para o usuário autenticado. */
@@ -31,15 +32,18 @@ export const FerramentasProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
     try {
       const lista = await ferramentasService.getByUser(user.id)
-      // Falha aberta: só bloqueia o que consta explicitamente na lista de desabilitadas
-      setDesabilitadas(new Set(lista))
+      // Falha aberta: só bloqueia o que consta explicitamente na lista de desabilitadas.
+      // Cliente: ids do catálogo (gerencial_* etc.) são expandidos para os módulos
+      // cliente_* equivalentes que o menu e as rotas dele usam.
+      const base = new Set(lista)
+      setDesabilitadas(user.role === 'cliente' ? expandirDesabilitadasCliente(base) : base)
     } catch {
       // Sem registro = tudo habilitado (comportamento padrão de compatibilidade)
       setDesabilitadas(new Set())
     } finally {
       setIsCarregando(false)
     }
-  }, [isAuthenticated, isAdmin, user?.id])
+  }, [isAuthenticated, isAdmin, user?.id, user?.role])
 
   useEffect(() => {
     carregar()

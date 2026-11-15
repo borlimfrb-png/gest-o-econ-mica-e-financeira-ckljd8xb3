@@ -175,8 +175,9 @@ export default function Layout() {
   const menuGruposFiltrados = useMemo(() => {
     const base = filtrarMenuPorPerfil(MENU_GRUPOS, user?.role, isAdmin, balancoDreUrl)
     // Filtro adicional por habilitação de ferramentas (toggles do admin).
-    // Cliente e admin NUNCA são filtrados: o hub do cliente é gerido por perfil.
-    if (isAdmin || user?.role === 'cliente') return base
+    // Cliente AGORA também é filtrado (respeita a lista desabilitada dele);
+    // admin NUNCA é filtrado (acesso irrestrito de gestão).
+    if (isAdmin) return base
     return filtrarMenuPorFerramentas(base, desabilitadas)
   }, [user?.role, isAdmin, balancoDreUrl, desabilitadas])
 
