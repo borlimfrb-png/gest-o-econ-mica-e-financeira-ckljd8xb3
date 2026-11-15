@@ -2,6 +2,7 @@ import type { UserRole } from '@/types/finance'
 
 export type ModuloSistema =
   | 'analise_economica_financeira'
+  | 'cliente_balanco'
   | 'cliente_rentabilidade'
   | 'cliente_crescimento'
   | 'cliente_dashboard_bi'
@@ -79,6 +80,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'plano_contas',
       'minha_empresa',
       'analise_economica_financeira',
+      'cliente_balanco',
       'admin_usuarios',
       'lancamentos',
       'gerencial_dre',
@@ -125,6 +127,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'grupos_empresariais',
       'centros',
       'analise_economica_financeira',
+      'cliente_balanco',
       'tipos_despesas',
       'contas',
       'plano_contas',
@@ -221,6 +224,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     badgeCor: 'bg-cyan-100 text-cyan-800 border-cyan-200',
     modulosPermitidos: [
       'analise_economica_financeira',
+      'cliente_balanco',
       'cliente_rentabilidade',
       'cliente_crescimento',
       'cliente_dashboard_bi',

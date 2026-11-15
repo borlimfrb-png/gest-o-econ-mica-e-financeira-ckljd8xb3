@@ -1120,11 +1120,8 @@ export function filtrarMenuPorPerfil(
   const isComercial = role === 'comercial'
   const isCliente = role === 'cliente'
 
-  // Perfil Cliente: Acesso estritamente restrito à tela-hub e aos 5 destinos
+  // Perfil Cliente: Acesso estritamente restrito à tela-hub e aos destinos liberados
   if (isCliente) {
-    const balancoPath =
-      balancoDreUrl && balancoDreUrl !== '__DYNAMIC_BALANCO_DRE__' ? balancoDreUrl : '/empresas'
-
     return [
       {
         id: 'analise-economica-financeira',
@@ -1146,10 +1143,10 @@ export function filtrarMenuPorPerfil(
           {
             id: 'cliente-balanco',
             name: 'Balanço Patrimonial',
-            path: balancoPath,
+            path: '/cliente/balanco',
             icon: Scale,
             descricao: 'Estrutura de Ativo, Passivo e Patrimônio Líquido',
-            modulo: 'empresas',
+            modulo: 'cliente_balanco',
             badge: 'Balanço',
             badgeVariant: 'cyan',
           },

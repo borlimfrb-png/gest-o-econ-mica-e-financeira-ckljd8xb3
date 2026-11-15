@@ -10,7 +10,7 @@ import type { ModuloSistema } from '@/lib/permissoesPerfis'
  * aparecem para cliente, então não precisam de mapeamento aqui.
  */
 export const FERRAMENTAS_HUB_CLIENTE: Record<string, ModuloSistema> = {
-  balanco: 'empresas',
+  balanco: 'cliente_balanco',
   dre: 'gerencial_dre',
   'despesas-fixas': 'gerencial_despesas_fixas',
   'despesas-variaveis': 'gerencial_despesas_variaveis',

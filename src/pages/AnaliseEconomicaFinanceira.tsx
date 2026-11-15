@@ -366,7 +366,7 @@ export default function AnaliseEconomicaFinanceira() {
         gradient: 'from-[#0B1F3A] via-[#0D294E] to-[#123668]',
         borderGlow: 'hover:border-sky-400/70 hover:shadow-sky-500/15',
         iconBg: 'bg-gradient-to-tr from-sky-500/25 to-blue-600/20 text-sky-300 border-sky-400/40',
-        rota: (empId) => (empId ? `/empresas/${empId}?aba=balanco` : '/empresas'),
+        rota: () => '/cliente/balanco',
         metricasTexto: 'Ativo Circulante, Realizável L.P., Passivos e PL',
       },
       {

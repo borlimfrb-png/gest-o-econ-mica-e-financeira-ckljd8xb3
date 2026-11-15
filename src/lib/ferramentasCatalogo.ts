@@ -29,6 +29,12 @@ export const CATALOGO_FERRAMENTAS: FerramentaCatalogo[] = [
     rota: '/dashboard-bi',
   },
   {
+    id: 'cliente_balanco',
+    nome: 'Balanço Patrimonial (Cliente)',
+    descricao: 'Balanço patrimonial em leitura para o hub do cliente',
+    rota: '/cliente/balanco',
+  },
+  {
     id: 'gerencial_dre',
     nome: 'DRE Gerencial',
     descricao: 'Demonstração do Resultado matricial por período',
