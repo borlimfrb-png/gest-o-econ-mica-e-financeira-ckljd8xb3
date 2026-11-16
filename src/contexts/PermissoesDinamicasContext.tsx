@@ -7,7 +7,8 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
-import type { ModuloSistema, UserRole } from '@/lib/permissoesPerfis'
+import type { ModuloSistema } from '@/lib/permissoesPerfis'
+import type { UserRole } from '@/types/finance'
 import { PERFIS_ACESSO } from '@/lib/permissoesPerfis'
 import {
   permissoesPerfisService,

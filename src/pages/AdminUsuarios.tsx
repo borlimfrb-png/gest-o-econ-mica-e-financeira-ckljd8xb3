@@ -6,6 +6,7 @@ import { usuariosService } from '@/services/usuariosService'
 import type { UserRecord, EmpresaRecord, GrupoEmpresarialRecord, UserRole } from '@/types/finance'
 import { extractUserGruposIds } from '@/lib/vinculosEmpresas'
 import { PERFIS_ACESSO, LISTA_PERFIS, getPerfilConfig } from '@/lib/permissoesPerfis'
+import { auditoriaUsuariosService } from '@/services/auditoriaUsuariosService'
 import { useToast } from '@/hooks/use-toast'
 import {
   Users,
@@ -33,7 +34,6 @@ import AbaHabilitarFerramentas from '@/components/admin/AbaHabilitarFerramentas'
 import { AbaAuditoriaUsuarios } from '@/components/admin/AbaAuditoriaUsuarios'
 import { AbaPermissoesPerfil } from '@/components/admin/AbaPermissoesPerfil'
 import { History } from 'lucide-react'
-import { KeyRound } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -389,7 +389,12 @@ export default function AdminUsuarios() {
         description: `${createForm.name} agora pode acessar o sistema.`,
       })
       setModalCreateOpen(false)
-      loadData()
+      auditoriaUsuariosService
+        .registrar({
+          acao: 'cadastro_usuario',
+          detalhes: `Usuário cadastrado: ${createForm.name || createForm.email} (${createForm.email}) — perfil ${createForm.role}.`,
+        })
+        .finally(() => loadData())
     } catch (err: any) {
       console.error('Erro ao criar usuário:', err)
       toast({
@@ -471,7 +476,12 @@ export default function AdminUsuarios() {
         description: 'As alterações foram salvas.',
       })
       setModalEditOpen(false)
-      loadData()
+      auditoriaUsuariosService
+        .registrar({
+          acao: 'edicao_usuario',
+          detalhes: `Usuário editado: ${selectedUser.name || selectedUser.email} (${selectedUser.email}) — perfil ${editForm.role}, ${editForm.ativo ? 'ativo' : 'inativo'}.`,
+        })
+        .finally(() => loadData())
     } catch (err: any) {
       console.error('Erro ao editar usuário:', err)
       toast({
@@ -497,6 +507,10 @@ export default function AdminUsuarios() {
     try {
       await usuariosService.toggleAtivo(user.id, novoStatus)
       setUsuarios((prev) => prev.map((u) => (u.id === user.id ? { ...u, ativo: novoStatus } : u)))
+      auditoriaUsuariosService.registrar({
+        acao: 'ativar_desativar_usuario',
+        detalhes: `Usuário ${novoStatus ? 'ativado' : 'desativado'}: ${user.name || user.email} (${user.email}).`,
+      })
       toast({
         title: novoStatus ? 'Usuário ativado' : 'Usuário desativado',
         description: `${user.name || user.email} agora está ${novoStatus ? 'ativo' : 'inativo'}.`,
@@ -584,7 +598,12 @@ export default function AdminUsuarios() {
         description: `O cadastro de ${selectedUser.name || selectedUser.email} foi removido.`,
       })
       setModalDeleteOpen(false)
-      loadData()
+      auditoriaUsuariosService
+        .registrar({
+          acao: 'exclusao_usuario',
+          detalhes: `Usuário excluído: ${selectedUser.name || selectedUser.email} (${selectedUser.email}).`,
+        })
+        .finally(() => loadData())
     } catch (err: any) {
       console.error('Erro ao excluir usuário:', err)
       toast({

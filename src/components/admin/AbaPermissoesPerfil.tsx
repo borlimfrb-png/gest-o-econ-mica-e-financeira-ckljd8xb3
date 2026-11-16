@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { useToast } from '@/hooks/use-toast'
-import type { ModuloSistema, PerfisAcessoConfig, UserRole } from '@/lib/permissoesPerfis'
+import type { ModuloSistema, PerfilConfig } from '@/lib/permissoesPerfis'
+import type { UserRole } from '@/types/finance'
 import { PERFIS_ACESSO } from '@/lib/permissoesPerfis'
 import { permissoesPerfisService } from '@/services/permissoesPerfisService'
 import { auditoriaUsuariosService } from '@/services/auditoriaUsuariosService'
@@ -38,13 +39,12 @@ const LABELS_MODULO: Partial<Record<ModuloSistema, string>> = {
   lancamentos: 'Lançamentos',
   empresas: 'Empresas',
   grupos_empresariais: 'Grupos Empresariais',
-  centros_custo: 'Centros de Custo',
+  centros: 'Centros de Custo',
   tipos_despesas: 'Tipos de Despesas',
   contas: 'Contas',
   plano_contas: 'Plano de Contas',
   financeiro: 'Financeiro',
-  minhas_empresas: 'Minhas Empresas',
-  analise_empresa: 'Análise da Empresa',
+  minha_empresa: 'Minha Empresa',
   gerencial_dre: 'DRE Gerencial',
   gerencial_despesas_fixas: 'Despesas Fixas',
   gerencial_despesas_variaveis: 'Despesas Variáveis',
@@ -55,12 +55,13 @@ const LABELS_MODULO: Partial<Record<ModuloSistema, string>> = {
   cliente_dashboard_bi: 'Dashboard BI (Cliente)',
   cliente_indicadores: 'Indicadores (Cliente)',
   cliente_agente_ia: 'Agente de IA Borlim',
+  gerencial_agente_ia: 'Agente de IA Borlim (Gerencial)',
   analise_economica_financeira: 'Hub Análise Econômica e Financeira',
-  planejamento_economico: 'Planejamento Econômico',
+  planejamento: 'Planejamento Econômico',
   planejamento_setores: 'Planejamento de Setores',
-  setores_mercado: 'Setores (Mercado)',
-  cadastro_setores: 'Cadastro de Setores',
-  cadastro_usuarios: 'Usuários e Permissões',
+  admin_usuarios: 'Usuários e Permissões',
+  indicadores: 'Indicadores',
+  indicadores_valuation: 'Valuation',
   configuracoes: 'Configurações',
 }
 
@@ -79,7 +80,7 @@ export function AbaPermissoesPerfil({ perfilInicial = 'financeiro' }: Props) {
   const [modulosAtivos, setModulosAtivos] = useState<Set<ModuloSistema>>(new Set())
   const [isSalvando, setIsSalvando] = useState(false)
 
-  const configPerfil: PerfisAcessoConfig = PERFIS_ACESSO[perfilSelecionado]
+  const configPerfil: PerfilConfig = PERFIS_ACESSO[perfilSelecionado]
   const overrideAtivo = Boolean(overrides[perfilSelecionado])
 
   // Sincroniza o switchboard com o estado efetivo (override → padrão).

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import { ferramentasService } from '@/services/ferramentasUsuariosService'
+import { auditoriaUsuariosService } from '@/services/auditoriaUsuariosService'
 import { CATALOGO_FERRAMENTAS, getFerramentaCatalogo } from '@/lib/ferramentasCatalogo'
 
 /** Todos os ids do catálogo — deriva de CATALOGO_FERRAMENTAS para nunca divergir. */
@@ -99,6 +100,10 @@ const AbaHabilitarFerramentas: React.FC = () => {
     setSalvandoUserId(user.id)
     try {
       await ferramentasService.salvar(user.id, novaLista)
+      auditoriaUsuariosService.registrar({
+        acao: 'ferramentas_habilitadas',
+        detalhes: `${ligar ? 'Ferramenta habilitada' : 'Ferramenta desabilitada'} para ${user.name || user.email}: ${getFerramentaCatalogo(ferramentaId)?.nome || ferramentaId}.`,
+      })
       toast({
         title: ligar ? 'Ferramenta habilitada' : 'Ferramenta desabilitada',
         description: `${getFerramentaCatalogo(ferramentaId)?.nome || ferramentaId} — ${user.name || user.email}.`,
@@ -122,6 +127,10 @@ const AbaHabilitarFerramentas: React.FC = () => {
     setSalvandoUserId(user.id)
     try {
       await ferramentasService.salvar(user.id, [])
+      auditoriaUsuariosService.registrar({
+        acao: 'ferramentas_habilitadas',
+        detalhes: `Todas as ferramentas habilitadas para ${user.name || user.email}.`,
+      })
       toast({
         title: 'Todas as ferramentas habilitadas',
         description: `${user.name || user.email} tem acesso a todo o catálogo.`,

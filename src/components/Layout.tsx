@@ -176,12 +176,8 @@ export default function Layout() {
   const { perfilTemAcessoDinamico } = usePermissoesDinamicas()
 
   const menuGruposFiltrados = useMemo(() => {
-    const base = filtrarMenuPorPerfil(
-      MENU_GRUPOS,
-      user?.role,
-      isAdmin,
-      balancoDreUrl,
-      perfilTemAcessoDinamico,
+    const base = filtrarMenuPorPerfil(MENU_GRUPOS, user?.role, isAdmin, balancoDreUrl, (modulo) =>
+      perfilTemAcessoDinamico(user?.role, modulo),
     )
     // Filtro adicional por habilitação de ferramentas (toggles do admin).
     // Cliente AGORA também é filtrado (respeita a lista desabilitada dele);

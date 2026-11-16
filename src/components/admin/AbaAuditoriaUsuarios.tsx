@@ -27,6 +27,7 @@ import {
   type FiltroUsuarioOption,
 } from '@/services/auditoriaUsuariosService'
 import { useAuth } from '@/contexts/AuthContext'
+import { usuariosService } from '@/services/usuariosService'
 
 const LABELS_ACAO: Record<AcaoAuditoriaUsuario, string> = {
   login: 'Login',
@@ -73,7 +74,7 @@ function formatarDataHora(iso: string): string {
   return `${data} ${hora}`
 }
 
-export default function AbaAuditoriaUsuarios() {
+export function AbaAuditoriaUsuarios() {
   const { user } = useAuth()
   const [itens, setItens] = useState<AuditoriaUsuarioItem[]>([])
   const [total, setTotal] = useState(0)
@@ -111,19 +112,46 @@ export default function AbaAuditoriaUsuarios() {
     carregar()
   }, [carregar])
 
-  // Usuários para o filtro: lista do log + usuários do sistema (busca local)
+  // Usuários para o filtro: TODOS os usuários do sistema (mesma coleção users,
+  // com paginação completa — padrão das outras abas da tela) unidos aos autores
+  // que aparecem no log (cobre usuários excluídos que ainda têm eventos).
   useEffect(() => {
-    auditoriaUsuariosService
-      .listarUsuariosFiltro()
-      .then(setUsuariosFiltro)
-      .catch(() => setUsuariosFiltro([]))
+    let cancelado = false
+    ;(async () => {
+      let doLog: FiltroUsuarioOption[] = []
+      try {
+        doLog = await auditoriaUsuariosService.listarUsuariosFiltro()
+      } catch {
+        doLog = []
+      }
+      try {
+        const lista = await usuariosService.getAll()
+        const mapa = new Map<string, FiltroUsuarioOption>()
+        for (const u of lista) {
+          mapa.set(u.id, { id: u.id, nome: u.name || u.email || u.id })
+        }
+        for (const op of doLog) {
+          if (!mapa.has(op.id)) mapa.set(op.id, op)
+        }
+        if (cancelado) return
+        setUsuariosFiltro(
+          Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+        )
+      } catch {
+        if (cancelado) return
+        setUsuariosFiltro(doLog)
+      }
+    })()
+    return () => {
+      cancelado = true
+    }
   }, [])
 
   const opcoesUsuario = useMemo(() => {
     const termo = buscaUsuarios.trim().toLowerCase()
     const base = usuariosFiltro.map((u) => ({
       id: u.id,
-      nome: u.nome || u.email || u.id,
+      nome: u.nome || u.id,
     }))
     if (!termo) return base
     return base.filter((u) => u.nome.toLowerCase().includes(termo))
