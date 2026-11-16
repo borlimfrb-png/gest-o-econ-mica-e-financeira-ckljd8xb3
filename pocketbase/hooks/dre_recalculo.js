@@ -23,227 +23,227 @@
  *   - Idempotente: só regrava quando o valor calculado difere do registrado.
  *   - NUNCA usar Intl/toLocaleString aqui (JSVM goja sem Intl) — formatação é só no
  *     frontend; o backend devolve números crus.
+ *
+ * ⚠ JSVM (goja): callbacks executam num POOL SEPARADO de VMs — nenhuma função ou
+ * variável top-level pode ser referenciada dentro de routerAdd/cronAdd. TODA a
+ * lógica vive inline no corpo de cada callback (padrão do projeto).
  */
-
-// Mês/ano a partir da data (YYYY-MM-DD) — sem Intl
-function dreRecalcExtrairAnoMes(dataStr) {
-  const s = String(dataStr || '')
-  if (s.length < 7) return null
-  const ano = parseInt(s.slice(0, 4), 10)
-  const mes = parseInt(s.slice(5, 7), 10)
-  if (!ano || ano < 2000 || ano > 2100 || !mes || mes < 1 || mes > 12) return null
-  return { ano: ano, mes: mes }
-}
-
-function dreRecalcArredondar(v) {
-  return Math.round((Number(v) || 0) * 100) / 100
-}
-
-/**
- * Recalcula a DRE de UM par empresa/ano a partir dos lançamentos.
- * Retorna o resultado para uso tanto da rota HTTP quanto do cron.
- */
-function dreRecalcularEmpresaAno(empresaId, ano, soMesesZerados) {
-  const CAMPOS = [
-    'receita_bruta',
-    'deducoes_receita',
-    'custo_mercadorias',
-    'despesas_operacionais',
-    'despesas_financeiras',
-    'outras_receitas_despesas',
-    'imposto_renda',
-  ]
-
-  // 1) Mapa plano_conta -> classificação DRE (via contas do plano de contas da empresa)
-  const contasRows = $app
-    .db()
-    .newQuery(
-      'SELECT plano_contas.id AS pid, contas.classificacao_dre AS cls, contas.nao_exibir_dre AS ocultar ' +
-        'FROM plano_contas INNER JOIN contas ON contas.id = plano_contas.conta ' +
-        'WHERE plano_contas.empresa = {:emp}',
-    )
-    .bind({ emp: empresaId })
-    .all()
-  const mapaContas = {}
-  for (let c = 0; c < contasRows.length; c++) {
-    mapaContas[contasRows[c].pid] = contasRows[c]
-  }
-
-  // 2) Agregar lançamentos não estornados do ano por mês x classificação
-  const lancRows = $app
-    .db()
-    .newQuery(
-      'SELECT data, valor, plano_conta FROM lancamentos ' +
-        'WHERE empresa = {:emp} AND data >= {:ini} AND data < {:fim} AND (estornado IS NULL OR estornado = false)',
-    )
-    .bind({
-      emp: empresaId,
-      ini: ano + '-01-01 00:00:00.000Z',
-      fim: ano + 1 + '-01-01 00:00:00.000Z',
-    })
-    .all()
-
-  const meses = {}
-  for (let m = 1; m <= 12; m++) {
-    meses[m] = {
-      receita_bruta: 0,
-      deducoes_receita: 0,
-      custo_mercadorias: 0,
-      despesas_operacionais: 0,
-      despesas_financeiras: 0,
-      outras_receitas_despesas: 0,
-      imposto_renda: 0,
-    }
-  }
-
-  let considerados = 0
-  let semClassificacao = 0
-
-  for (let i = 0; i < lancRows.length; i++) {
-    const l = lancRows[i]
-    const am = dreRecalcExtrairAnoMes(l.get('data'))
-    if (!am) continue
-    const valor = Number(l.get('valor')) || 0
-    if (valor === 0) continue
-    const pc = mapaContas[String(l.get('plano_conta'))]
-    if (!pc || pc.ocultar) continue
-    considerados++
-
-    // Mapeia classificacao_dre -> campo da DRE (despesas/custos entram como valores positivos)
-    const cls = String(pc.cls || '')
-    const m = am.mes
-    if (cls === 'Receita') {
-      meses[m].receita_bruta += valor
-    } else if (cls === 'Despesa Variável') {
-      meses[m].custo_mercadorias += Math.abs(valor)
-    } else if (cls === 'Despesa Fixa') {
-      meses[m].despesas_operacionais += Math.abs(valor)
-    } else if (cls === 'Despesa Financeira') {
-      meses[m].despesas_financeiras += Math.abs(valor)
-    } else if (cls === 'Receita Financeira') {
-      meses[m].outras_receitas_despesas += valor
-    } else {
-      // Sem classificação: despesa tipo=Despesa vai p/ operacionais; receita p/ receita bruta
-      semClassificacao++
-      const tipoConta = String(pc.tipo || '')
-      if (tipoConta === 'Despesa') {
-        meses[m].despesas_operacionais += Math.abs(valor)
-      } else if (tipoConta === 'Receita') {
-        meses[m].receita_bruta += valor
-      } else {
-        continue
-      }
-    }
-  }
-
-  // 3) Estado atual da DRE do ano
-  const dreRows = $app
-    .db()
-    .newQuery(
-      'SELECT id, mes, receita_bruta, deducoes_receita, custo_mercadorias, despesas_operacionais, despesas_financeiras, outras_receitas_despesas, imposto_renda, fechado FROM dre WHERE empresa = {:emp} AND ano = {:ano} ORDER BY CAST(mes AS INTEGER)',
-    )
-    .bind({ emp: empresaId, ano: ano })
-    .all()
-  const drePorMes = {}
-  for (let d = 0; d < dreRows.length; d++) {
-    drePorMes[dreRows[d].get('mes')] = dreRows[d]
-  }
-
-  const colecaoDre = $app.findCollectionByNameOrId('dre')
-  let criados = 0
-  let atualizados = 0
-  let corretos = 0
-  const detalhes = []
-
-  for (let m = 1; m <= 12; m++) {
-    const calc = meses[m]
-    const existente = drePorMes[m]
-
-    let temValor = false
-    for (let i = 0; i < CAMPOS.length; i++) {
-      if (Math.abs(calc[CAMPOS[i]]) > 0.005) {
-        temValor = true
-        break
-      }
-    }
-
-    // Meses sem lançamento e sem registro: nada a fazer
-    if (!temValor && !existente) continue
-
-    // Modo "só meses zerados" (cron): só corrige meses cuja DRE registrada está toda
-    // zerada E que tenham lançamentos com valores. Meses com valores já registrados e
-    // meses sem lançamento ficam intactos — nunca sobrescreve fechamento manual.
-    if (soMesesZerados) {
-      let registroZerado = true
-      if (existente) {
-        for (let i = 0; i < CAMPOS.length; i++) {
-          if (Math.abs(Number(existente.get(CAMPOS[i])) || 0) > 0.005) {
-            registroZerado = false
-            break
-          }
-        }
-      }
-      if (!temValor || !registroZerado) continue
-    }
-
-    if (!existente) {
-      const rec = new Record(colecaoDre)
-      rec.set('empresa', empresaId)
-      rec.set('ano', ano)
-      rec.set('mes', m)
-      for (let i = 0; i < CAMPOS.length; i++)
-        rec.set(CAMPOS[i], dreRecalcArredondar(calc[CAMPOS[i]]))
-      rec.set('fechado', false)
-      rec.set('fechamento_obs', 'Recalculada automaticamente a partir dos lançamentos')
-      $app.save(rec)
-      criados++
-      detalhes.push({ mes: m, acao: 'criado' })
-      continue
-    }
-
-    // Compara com o existente (tolerância de centavos)
-    let difere = false
-    for (let i = 0; i < CAMPOS.length; i++) {
-      const campo = CAMPOS[i]
-      const atual = Number(existente.get(campo)) || 0
-      const novo = dreRecalcArredondar(calc[campo])
-      if (Math.abs(atual - novo) > 0.005) {
-        difere = true
-        break
-      }
-    }
-    if (!difere) {
-      corretos++
-      continue
-    }
-    const registro = $app.findRecordById('dre', existente.get('id'))
-    for (let i = 0; i < CAMPOS.length; i++) {
-      registro.set(CAMPOS[i], dreRecalcArredondar(calc[CAMPOS[i]]))
-    }
-    registro.set('fechado', false)
-    registro.set('fechamento_obs', 'Recalculada automaticamente a partir dos lançamentos')
-    $app.save(registro)
-    atualizados++
-    detalhes.push({ mes: m, acao: 'atualizado' })
-  }
-
-  return {
-    empresa: empresaId,
-    ano: ano,
-    lancamentos_considerados: considerados,
-    lancamentos_sem_classificacao: semClassificacao,
-    registros_criados: criados,
-    registros_atualizados: atualizados,
-    registros_ja_corretos: corretos,
-    detalhes: detalhes,
-  }
-}
 
 // ================= rota HTTP =================
 routerAdd('POST', '/backend/v1/dre/recalcular', (e) => {
   const auth = e.auth
   if (!auth || auth.getString('id') === '') {
     return e.json(401, { sucesso: false, erro: 'Autenticação necessária.' })
+  }
+
+  // Helpers locais ao callback — goja permite declarações aninhadas no corpo.
+  function dreRecalcExtrairAnoMes(dataStr) {
+    const s = String(dataStr || '')
+    if (s.length < 7) return null
+    const ano = parseInt(s.slice(0, 4), 10)
+    const mes = parseInt(s.slice(5, 7), 10)
+    if (!ano || ano < 2000 || ano > 2100 || !mes || mes < 1 || mes > 12) return null
+    return { ano: ano, mes: mes }
+  }
+
+  function dreRecalcArredondar(v) {
+    return Math.round((Number(v) || 0) * 100) / 100
+  }
+
+  function dreRecalcularEmpresaAno(empresaId, ano, soMesesZerados) {
+    const CAMPOS = [
+      'receita_bruta',
+      'deducoes_receita',
+      'custo_mercadorias',
+      'despesas_operacionais',
+      'despesas_financeiras',
+      'outras_receitas_despesas',
+      'imposto_renda',
+    ]
+
+    // 1) Mapa plano_conta -> classificação DRE (via contas do plano de contas da empresa)
+    const contasRows = $app
+      .db()
+      .newQuery(
+        'SELECT plano_contas.id AS pid, contas.classificacao_dre AS cls, contas.nao_exibir_dre AS ocultar ' +
+          'FROM plano_contas INNER JOIN contas ON contas.id = plano_contas.conta ' +
+          'WHERE plano_contas.empresa = {:emp}',
+      )
+      .bind({ emp: empresaId })
+      .all()
+    const mapaContas = {}
+    for (let c = 0; c < contasRows.length; c++) {
+      mapaContas[contasRows[c].pid] = contasRows[c]
+    }
+
+    // 2) Agregar lançamentos não estornados do ano por mês x classificação
+    const lancRows = $app
+      .db()
+      .newQuery(
+        'SELECT data, valor, plano_conta FROM lancamentos ' +
+          'WHERE empresa = {:emp} AND data >= {:ini} AND data < {:fim} AND (estornado IS NULL OR estornado = false)',
+      )
+      .bind({
+        emp: empresaId,
+        ini: ano + '-01-01 00:00:00.000Z',
+        fim: ano + 1 + '-01-01 00:00:00.000Z',
+      })
+      .all()
+
+    const meses = {}
+    for (let m = 1; m <= 12; m++) {
+      meses[m] = {
+        receita_bruta: 0,
+        deducoes_receita: 0,
+        custo_mercadorias: 0,
+        despesas_operacionais: 0,
+        despesas_financeiras: 0,
+        outras_receitas_despesas: 0,
+        imposto_renda: 0,
+      }
+    }
+
+    let considerados = 0
+    let semClassificacao = 0
+
+    for (let i = 0; i < lancRows.length; i++) {
+      const l = lancRows[i]
+      const am = dreRecalcExtrairAnoMes(l.get('data'))
+      if (!am) continue
+      const valor = Number(l.get('valor')) || 0
+      if (valor === 0) continue
+      const pc = mapaContas[String(l.get('plano_conta'))]
+      if (!pc || pc.ocultar) continue
+      considerados++
+
+      // Mapeia classificacao_dre -> campo da DRE (despesas/custos entram como valores positivos)
+      const cls = String(pc.cls || '')
+      const m = am.mes
+      if (cls === 'Receita') {
+        meses[m].receita_bruta += valor
+      } else if (cls === 'Despesa Variável') {
+        meses[m].custo_mercadorias += Math.abs(valor)
+      } else if (cls === 'Despesa Fixa') {
+        meses[m].despesas_operacionais += Math.abs(valor)
+      } else if (cls === 'Despesa Financeira') {
+        meses[m].despesas_financeiras += Math.abs(valor)
+      } else if (cls === 'Receita Financeira') {
+        meses[m].outras_receitas_despesas += valor
+      } else {
+        // Sem classificação: despesa tipo=Despesa vai p/ operacionais; receita p/ receita bruta
+        semClassificacao++
+        const tipoConta = String(pc.tipo || '')
+        if (tipoConta === 'Despesa') {
+          meses[m].despesas_operacionais += Math.abs(valor)
+        } else if (tipoConta === 'Receita') {
+          meses[m].receita_bruta += valor
+        } else {
+          continue
+        }
+      }
+    }
+
+    // 3) Estado atual da DRE do ano
+    const dreRows = $app
+      .db()
+      .newQuery(
+        'SELECT id, mes, receita_bruta, deducoes_receita, custo_mercadorias, despesas_operacionais, despesas_financeiras, outras_receitas_despesas, imposto_renda, fechado FROM dre WHERE empresa = {:emp} AND ano = {:ano} ORDER BY CAST(mes AS INTEGER)',
+      )
+      .bind({ emp: empresaId, ano: ano })
+      .all()
+    const drePorMes = {}
+    for (let d = 0; d < dreRows.length; d++) {
+      drePorMes[dreRows[d].get('mes')] = dreRows[d]
+    }
+
+    const colecaoDre = $app.findCollectionByNameOrId('dre')
+    let criados = 0
+    let atualizados = 0
+    let corretos = 0
+    const detalhes = []
+
+    for (let m = 1; m <= 12; m++) {
+      const calc = meses[m]
+      const existente = drePorMes[m]
+
+      let temValor = false
+      for (let i = 0; i < CAMPOS.length; i++) {
+        if (Math.abs(calc[CAMPOS[i]]) > 0.005) {
+          temValor = true
+          break
+        }
+      }
+
+      // Meses sem lançamento e sem registro: nada a fazer
+      if (!temValor && !existente) continue
+
+      // Modo "só meses zerados" (cron): só corrige meses cuja DRE registrada está toda
+      // zerada E que tenham lançamentos com valores. Meses com valores já registrados e
+      // meses sem lançamento ficam intactos — nunca sobrescreve fechamento manual.
+      if (soMesesZerados) {
+        let registroZerado = true
+        if (existente) {
+          for (let i = 0; i < CAMPOS.length; i++) {
+            if (Math.abs(Number(existente.get(CAMPOS[i])) || 0) > 0.005) {
+              registroZerado = false
+              break
+            }
+          }
+        }
+        if (!temValor || !registroZerado) continue
+      }
+
+      if (!existente) {
+        const rec = new Record(colecaoDre)
+        rec.set('empresa', empresaId)
+        rec.set('ano', ano)
+        rec.set('mes', m)
+        for (let i = 0; i < CAMPOS.length; i++)
+          rec.set(CAMPOS[i], dreRecalcArredondar(calc[CAMPOS[i]]))
+        rec.set('fechado', false)
+        rec.set('fechamento_obs', 'Recalculada automaticamente a partir dos lançamentos')
+        $app.save(rec)
+        criados++
+        detalhes.push({ mes: m, acao: 'criado' })
+        continue
+      }
+
+      // Compara com o existente (tolerância de centavos)
+      let difere = false
+      for (let i = 0; i < CAMPOS.length; i++) {
+        const campo = CAMPOS[i]
+        const atual = Number(existente.get(campo)) || 0
+        const novo = dreRecalcArredondar(calc[campo])
+        if (Math.abs(atual - novo) > 0.005) {
+          difere = true
+          break
+        }
+      }
+      if (!difere) {
+        corretos++
+        continue
+      }
+      const registro = $app.findRecordById('dre', existente.get('id'))
+      for (let i = 0; i < CAMPOS.length; i++) {
+        registro.set(CAMPOS[i], dreRecalcArredondar(calc[CAMPOS[i]]))
+      }
+      registro.set('fechado', false)
+      registro.set('fechamento_obs', 'Recalculada automaticamente a partir dos lançamentos')
+      $app.save(registro)
+      atualizados++
+      detalhes.push({ mes: m, acao: 'atualizado' })
+    }
+
+    return {
+      empresa: empresaId,
+      ano: ano,
+      lancamentos_considerados: considerados,
+      lancamentos_sem_classificacao: semClassificacao,
+      registros_criados: criados,
+      registros_atualizados: atualizados,
+      registros_ja_corretos: corretos,
+      detalhes: detalhes,
+    }
   }
 
   let dados = {}
@@ -296,6 +296,206 @@ routerAdd('POST', '/backend/v1/dre/recalcular', (e) => {
 // ================= cron diário (varredura automática) =================
 // 03:15 UTC — antes do horário comercial; varre todas as empresas com lançamentos.
 cronAdd('dre_recalculo_diario', '15 3 * * *', () => {
+  // Mesma lógica, duplicada inline (pool de VMs separado do JSVM).
+  function dreRecalcExtrairAnoMes(dataStr) {
+    const s = String(dataStr || '')
+    if (s.length < 7) return null
+    const ano = parseInt(s.slice(0, 4), 10)
+    const mes = parseInt(s.slice(5, 7), 10)
+    if (!ano || ano < 2000 || ano > 2100 || !mes || mes < 1 || mes > 12) return null
+    return { ano: ano, mes: mes }
+  }
+
+  function dreRecalcArredondar(v) {
+    return Math.round((Number(v) || 0) * 100) / 100
+  }
+
+  function dreRecalcularEmpresaAno(empresaId, ano, soMesesZerados) {
+    const CAMPOS = [
+      'receita_bruta',
+      'deducoes_receita',
+      'custo_mercadorias',
+      'despesas_operacionais',
+      'despesas_financeiras',
+      'outras_receitas_despesas',
+      'imposto_renda',
+    ]
+
+    const contasRows = $app
+      .db()
+      .newQuery(
+        'SELECT plano_contas.id AS pid, contas.classificacao_dre AS cls, contas.nao_exibir_dre AS ocultar ' +
+          'FROM plano_contas INNER JOIN contas ON contas.id = plano_contas.conta ' +
+          'WHERE plano_contas.empresa = {:emp}',
+      )
+      .bind({ emp: empresaId })
+      .all()
+    const mapaContas = {}
+    for (let c = 0; c < contasRows.length; c++) {
+      mapaContas[contasRows[c].pid] = contasRows[c]
+    }
+
+    const lancRows = $app
+      .db()
+      .newQuery(
+        'SELECT data, valor, plano_conta FROM lancamentos ' +
+          'WHERE empresa = {:emp} AND data >= {:ini} AND data < {:fim} AND (estornado IS NULL OR estornado = false)',
+      )
+      .bind({
+        emp: empresaId,
+        ini: ano + '-01-01 00:00:00.000Z',
+        fim: ano + 1 + '-01-01 00:00:00.000Z',
+      })
+      .all()
+
+    const meses = {}
+    for (let m = 1; m <= 12; m++) {
+      meses[m] = {
+        receita_bruta: 0,
+        deducoes_receita: 0,
+        custo_mercadorias: 0,
+        despesas_operacionais: 0,
+        despesas_financeiras: 0,
+        outras_receitas_despesas: 0,
+        imposto_renda: 0,
+      }
+    }
+
+    let considerados = 0
+    let semClassificacao = 0
+
+    for (let i = 0; i < lancRows.length; i++) {
+      const l = lancRows[i]
+      const am = dreRecalcExtrairAnoMes(l.get('data'))
+      if (!am) continue
+      const valor = Number(l.get('valor')) || 0
+      if (valor === 0) continue
+      const pc = mapaContas[String(l.get('plano_conta'))]
+      if (!pc || pc.ocultar) continue
+      considerados++
+
+      const cls = String(pc.cls || '')
+      const m = am.mes
+      if (cls === 'Receita') {
+        meses[m].receita_bruta += valor
+      } else if (cls === 'Despesa Variável') {
+        meses[m].custo_mercadorias += Math.abs(valor)
+      } else if (cls === 'Despesa Fixa') {
+        meses[m].despesas_operacionais += Math.abs(valor)
+      } else if (cls === 'Despesa Financeira') {
+        meses[m].despesas_financeiras += Math.abs(valor)
+      } else if (cls === 'Receita Financeira') {
+        meses[m].outras_receitas_despesas += valor
+      } else {
+        semClassificacao++
+        const tipoConta = String(pc.tipo || '')
+        if (tipoConta === 'Despesa') {
+          meses[m].despesas_operacionais += Math.abs(valor)
+        } else if (tipoConta === 'Receita') {
+          meses[m].receita_bruta += valor
+        } else {
+          continue
+        }
+      }
+    }
+
+    const dreRows = $app
+      .db()
+      .newQuery(
+        'SELECT id, mes, receita_bruta, deducoes_receita, custo_mercadorias, despesas_operacionais, despesas_financeiras, outras_receitas_despesas, imposto_renda, fechado FROM dre WHERE empresa = {:emp} AND ano = {:ano} ORDER BY CAST(mes AS INTEGER)',
+      )
+      .bind({ emp: empresaId, ano: ano })
+      .all()
+    const drePorMes = {}
+    for (let d = 0; d < dreRows.length; d++) {
+      drePorMes[dreRows[d].get('mes')] = dreRows[d]
+    }
+
+    const colecaoDre = $app.findCollectionByNameOrId('dre')
+    let criados = 0
+    let atualizados = 0
+    let corretos = 0
+    const detalhes = []
+
+    for (let m = 1; m <= 12; m++) {
+      const calc = meses[m]
+      const existente = drePorMes[m]
+
+      let temValor = false
+      for (let i = 0; i < CAMPOS.length; i++) {
+        if (Math.abs(calc[CAMPOS[i]]) > 0.005) {
+          temValor = true
+          break
+        }
+      }
+
+      if (!temValor && !existente) continue
+
+      if (soMesesZerados) {
+        let registroZerado = true
+        if (existente) {
+          for (let i = 0; i < CAMPOS.length; i++) {
+            if (Math.abs(Number(existente.get(CAMPOS[i])) || 0) > 0.005) {
+              registroZerado = false
+              break
+            }
+          }
+        }
+        if (!temValor || !registroZerado) continue
+      }
+
+      if (!existente) {
+        const rec = new Record(colecaoDre)
+        rec.set('empresa', empresaId)
+        rec.set('ano', ano)
+        rec.set('mes', m)
+        for (let i = 0; i < CAMPOS.length; i++)
+          rec.set(CAMPOS[i], dreRecalcArredondar(calc[CAMPOS[i]]))
+        rec.set('fechado', false)
+        rec.set('fechamento_obs', 'Recalculada automaticamente a partir dos lançamentos')
+        $app.save(rec)
+        criados++
+        detalhes.push({ mes: m, acao: 'criado' })
+        continue
+      }
+
+      let difere = false
+      for (let i = 0; i < CAMPOS.length; i++) {
+        const campo = CAMPOS[i]
+        const atual = Number(existente.get(campo)) || 0
+        const novo = dreRecalcArredondar(calc[campo])
+        if (Math.abs(atual - novo) > 0.005) {
+          difere = true
+          break
+        }
+      }
+      if (!difere) {
+        corretos++
+        continue
+      }
+      const registro = $app.findRecordById('dre', existente.get('id'))
+      for (let i = 0; i < CAMPOS.length; i++) {
+        registro.set(CAMPOS[i], dreRecalcArredondar(calc[CAMPOS[i]]))
+      }
+      registro.set('fechado', false)
+      registro.set('fechamento_obs', 'Recalculada automaticamente a partir dos lançamentos')
+      $app.save(registro)
+      atualizados++
+      detalhes.push({ mes: m, acao: 'atualizado' })
+    }
+
+    return {
+      empresa: empresaId,
+      ano: ano,
+      lancamentos_considerados: considerados,
+      lancamentos_sem_classificacao: semClassificacao,
+      registros_criados: criados,
+      registros_atualizados: atualizados,
+      registros_ja_corretos: corretos,
+      detalhes: detalhes,
+    }
+  }
+
   try {
     // Empresas distintas com lançamentos não estornados (SQL DISTINCT por empresa)
     const empresasDistinct = $app
