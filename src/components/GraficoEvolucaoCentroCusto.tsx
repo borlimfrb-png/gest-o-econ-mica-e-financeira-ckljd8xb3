@@ -326,7 +326,9 @@ export function GraficoEvolucaoCentroCusto({
           Evolução mês a mês de cada centro de custo. Uma linha por centro; receitas somam e
           despesas subtraem (contribuição ao resultado). Respeita o filtro de centro e o período
           ativo
-          {modoComparativo ? ' (Período Atual vs Período Comparado)' : ` (${descricaoPeriodo1})`} .
+          {modoComparativo
+            ? ' (Período Atual vs Período Comparado)'
+            : ` (${descricaoPeriodo1})`} .
         </CardDescription>
       </CardHeader>
 
