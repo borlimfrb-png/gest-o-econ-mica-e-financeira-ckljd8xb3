@@ -146,6 +146,68 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('comercial', 'gerencial_comparativo_mensal')).toBe(false)
   })
 
+  it('garante que Lancamentos, Setores de Mercado e Cadastro de Setores são EXCLUSIVOS do perfil admin', () => {
+    const modulosExclusivosAdmin: ModuloSistema[] = ['lancamentos', 'planejamento_setores']
+
+    modulosExclusivosAdmin.forEach((modulo) => {
+      expect(perfilTemAcesso('admin', modulo), `Admin deveria acessar ${modulo}`).toBe(true)
+      expect(perfilTemAcesso('empresa', modulo), `empresa NÃO deveria acessar ${modulo}`).toBe(
+        false,
+      )
+      expect(
+        perfilTemAcesso('financeiro', modulo),
+        `financeiro NÃO deveria acessar ${modulo}`,
+      ).toBe(false)
+      expect(perfilTemAcesso('comercial', modulo), `comercial NÃO deveria acessar ${modulo}`).toBe(
+        false,
+      )
+      expect(perfilTemAcesso('cliente', modulo), `cliente NÃO deveria acessar ${modulo}`).toBe(
+        false,
+      )
+    })
+  })
+
+  it('garante que o menu não mostra Lançamentos nem Setores para perfis internos sem acesso', () => {
+    const perquisarItens = (grupos: ReturnType<typeof filtrarMenuPorPerfil>) =>
+      grupos.flatMap((g) => ('itens' in g && g.itens ? g.itens : [])).map((i) => i.id)
+
+    expect(
+      perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'empresa', false, '/empresas')),
+    ).not.toContain('lanc-rapidos')
+    expect(
+      perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'financeiro', false, '/empresas')),
+    ).not.toContain('lanc-rapidos')
+    expect(
+      perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'comercial', false, '/empresas')),
+    ).not.toContain('lanc-rapidos')
+    expect(
+      perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'empresa', false, '/empresas')),
+    ).not.toContain('plan-setores')
+    expect(
+      perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'empresa', false, '/empresas')),
+    ).not.toContain('plan-cadastro-setores')
+    expect(perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'admin', true, '/empresas'))).toContain(
+      'lanc-rapidos',
+    )
+    expect(perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'admin', true, '/empresas'))).toContain(
+      'plan-setores',
+    )
+    expect(perquisarItens(filtrarMenuPorPerfil(MENU_GRUPOS, 'admin', true, '/empresas'))).toContain(
+      'plan-cadastro-setores',
+    )
+  })
+
+  it('garante que o Admin mantém acesso a TODOS os módulos de todos os perfis (nada sai do array do admin)', () => {
+    Object.values(PERFIS_ACESSO).forEach((perfil) => {
+      perfil.modulosPermitidos.forEach((modulo) => {
+        expect(
+          perfilTemAcesso('admin', modulo),
+          `Admin deveria manter acesso ao módulo ${modulo} (do perfil ${perfil.id})`,
+        ).toBe(true)
+      })
+    })
+  })
+
   it('garante que gerencial_projecao_dre é liberado para perfis internos e bloqueado para cliente', () => {
     expect(perfilTemAcesso('admin', 'gerencial_projecao_dre')).toBe(true)
     expect(perfilTemAcesso('empresa', 'gerencial_projecao_dre')).toBe(true)

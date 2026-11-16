@@ -63,6 +63,8 @@ import {
   formatCnpj,
 } from '@/lib/financeCalculations'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useAuth } from '@/contexts/AuthContext'
+import { perfilTemAcesso } from '@/lib/permissoesPerfis'
 import type {
   EmpresaRecord,
   BalancoRecord,
@@ -77,6 +79,7 @@ import type {
 export default function DashboardEmpresa() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const [empresa, setEmpresa] = useState<EmpresaRecord | null>(null)
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
@@ -1290,16 +1293,18 @@ export default function DashboardEmpresa() {
             </CardDescription>
           </div>
 
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium gap-1 shrink-0"
-          >
-            <Link to="/lancamentos">
-              Ver Lançamentos <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </Button>
+          {perfilTemAcesso(user?.role, 'lancamentos') && (
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium gap-1 shrink-0"
+            >
+              <Link to="/lancamentos">
+                Ver Lançamentos <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+          )}
         </CardHeader>
 
         <CardContent className="pt-4 space-y-4">
