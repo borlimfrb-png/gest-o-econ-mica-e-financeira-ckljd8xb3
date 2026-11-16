@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T11:32:36.525Z",
+  "generatedAt": "2026-11-16T13:08:40.441Z",
   "collections": [
     {
       "name": "users",
@@ -319,8 +319,8 @@
       "name": "balancos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || @request.auth.role = \"cliente\" || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.empresa = empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa || empresa = \"\")",
-        "view": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || @request.auth.role = \"cliente\" || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.empresa = empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa || empresa = \"\")",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'cliente') && (empresa = @request.auth.empresa || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'cliente') && (empresa = @request.auth.empresa || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa)))",
         "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && @request.body.empresa = @request.auth.empresa))",
         "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && empresa = @request.auth.empresa))",
         "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' && empresa = @request.auth.empresa))"
@@ -878,8 +878,8 @@
       "name": "contas",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || @request.auth.role = \"cliente\" || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.empresa = empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa || empresa = \"\")",
-        "view": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || @request.auth.role = \"cliente\" || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.empresa = empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa || empresa = \"\")",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro' || @request.auth.role = 'cliente') && (empresa = @request.auth.empresa || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro' || @request.auth.role = 'cliente') && (empresa = @request.auth.empresa || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa)))",
         "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && @request.body.empresa = @request.auth.empresa))",
         "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))",
         "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))"
@@ -1075,8 +1075,8 @@
       "name": "lancamentos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || @request.auth.role = \"cliente\" || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.empresa = empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa || empresa = \"\")",
-        "view": "@request.auth.id != \"\" && (@request.auth.role = \"admin\" || @request.auth.role = \"cliente\" || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.empresa = empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa || empresa = \"\")",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro' || @request.auth.role = 'cliente') && (empresa = @request.auth.empresa || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa)))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro' || @request.auth.role = 'cliente') && (empresa = @request.auth.empresa || @request.auth.empresas.id ?= empresa || @request.auth.empresas ?= empresa || @request.auth.grupos_empresariais.empresas.id ?= empresa || @request.auth.grupos_empresariais.empresas ?= empresa)))",
         "create": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && @request.body.empresa = @request.auth.empresa))",
         "update": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))",
         "delete": "@request.auth.id != '' && (@request.auth.role = 'admin' || ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && empresa = @request.auth.empresa))"
