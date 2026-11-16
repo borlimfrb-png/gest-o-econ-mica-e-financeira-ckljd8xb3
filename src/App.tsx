@@ -799,7 +799,7 @@ const App = () => (
                       <Route
                         path="/planejamento/setores"
                         element={
-                          <ModuloRoute modulo="planejamento">
+                          <ModuloRoute modulo="planejamento_setores">
                             <SetoresMercado />
                           </ModuloRoute>
                         }
@@ -807,7 +807,7 @@ const App = () => (
                       <Route
                         path="/planejamento/setores/cadastro"
                         element={
-                          <ModuloRoute modulo="planejamento">
+                          <ModuloRoute modulo="planejamento_setores">
                             <CadastroSetores />
                           </ModuloRoute>
                         }

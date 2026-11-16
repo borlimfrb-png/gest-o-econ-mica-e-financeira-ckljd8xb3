@@ -174,7 +174,7 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
             path: '/planejamento/setores/cadastro',
             icon: Layers,
             descricao: 'Cadastro de setores, múltiplos de avaliação e benchmarks de mercado',
-            modulo: 'planejamento',
+            modulo: 'planejamento_setores',
             badge: 'Setores',
             badgeVariant: 'blue',
             palavrasChave: [
@@ -965,7 +965,7 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         path: '/planejamento/setores',
         icon: Layers,
         descricao: 'Visão setorial, múltiplos de valuation e comparativo das empresas vs mercado',
-        modulo: 'planejamento',
+        modulo: 'planejamento_setores',
         badge: 'Novo',
         badgeVariant: 'blue',
         palavrasChave: [
@@ -984,7 +984,7 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         path: '/planejamento/setores/cadastro',
         icon: Layers,
         descricao: 'Gerenciar catálogo de setores, múltiplos de mercado e faixas financeiras',
-        modulo: 'planejamento',
+        modulo: 'planejamento_setores',
         palavrasChave: ['setores', 'cadastro setores', 'mercado', 'setor', 'múltiplos'],
       },
       {

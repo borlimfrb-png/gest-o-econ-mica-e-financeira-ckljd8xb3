@@ -14,6 +14,7 @@ import type {
   NfseTomadorRecord,
 } from '@/types/finance'
 import { formatCnpj, cleanCnpj } from '@/lib/financeCalculations'
+import { perfilTemAcesso } from '@/lib/permissoesPerfis'
 import {
   gerarXmlNfse,
   downloadArquivo,
@@ -127,6 +128,9 @@ export default function NotasFiscais() {
   const [searchParams, setSearchParams] = useSearchParams()
 
   const podeEmitir = isAdmin || user?.role === 'empresa' || user?.role === 'admin' || !user?.role
+
+  // Acesso à tela de Lançamentos (agora restrito ao perfil Admin).
+  const podeAcessarLancamentos = perfilTemAcesso(user?.role, 'lancamentos')
 
   const [notas, setNotas] = useState<NotaFiscalRecord[]>([])
   const [empresas, setEmpresas] = useState<EmpresaRecord[]>([])
@@ -1395,7 +1399,7 @@ export default function NotasFiscais() {
                               <span className="text-[11px] text-slate-400">—</span>
                             )}
                             {/* Badge/Link Lançamento Gerado no histórico financeiro */}
-                            {nota.lancamento_ref && (
+                            {nota.lancamento_ref && podeAcessarLancamentos && (
                               <Link
                                 to="/lancamentos"
                                 className="inline-flex items-center gap-1 text-[9px] font-medium text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.2 rounded transition-colors"

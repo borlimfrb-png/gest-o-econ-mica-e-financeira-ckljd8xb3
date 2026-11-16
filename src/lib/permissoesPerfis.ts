@@ -43,6 +43,7 @@ export type ModuloSistema =
   | 'indicadores'
   | 'indicadores_valuation'
   | 'planejamento'
+  | 'planejamento_setores'
   | 'analise_tributaria'
   | 'importacao'
   | 'relatorios'
@@ -106,6 +107,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'indicadores',
       'indicadores_valuation',
       'planejamento',
+      'planejamento_setores',
       'analise_tributaria',
       'importacao',
       'relatorios',
@@ -132,7 +134,6 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'contas',
       'plano_contas',
       'minha_empresa',
-      'lancamentos',
       'gerencial_dre',
       'gerencial_projecao_dre',
       'gerencial_comparativo_mensal',
@@ -169,11 +170,10 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
     id: 'financeiro',
     nome: 'Financeiro',
     descricao:
-      'Perfil focado: visualiza Lançamentos Rápidos, Recebíveis, Contratos, Notas Fiscais e Financeiro da sua empresa. Sem acesso a Valuation ou áreas administrativas.',
+      'Perfil focado: visualiza Recebíveis, Contratos, Notas Fiscais e Financeiro da sua empresa. Sem acesso a Lançamentos, Valuation ou áreas administrativas.',
     badgeCor: 'bg-blue-100 text-blue-800 border-blue-200',
     modulosPermitidos: [
       'dashboard',
-      'lancamentos',
       'gerencial_dre',
       'gerencial_projecao_dre',
       'gerencial_comparativo_mensal',

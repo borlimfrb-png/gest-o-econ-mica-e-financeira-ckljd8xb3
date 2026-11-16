@@ -137,6 +137,11 @@ export default function Dashboard() {
     return perfilTemAcesso(user?.role, 'planejamento')
   }, [user?.role])
 
+  // Acesso à tela de Lançamentos (agora restrito ao perfil Admin)
+  const podeAcessarLancamentos = useMemo(() => {
+    return perfilTemAcesso(user?.role, 'lancamentos')
+  }, [user?.role])
+
   const [balancos, setBalancos] = useState<BalancoRecord[]>([])
   const [dres, setDres] = useState<DreRecord[]>([])
   const [allBalancos, setAllBalancos] = useState<BalancoRecord[]>([])
@@ -4221,16 +4226,18 @@ export default function Dashboard() {
             </CardDescription>
           </div>
 
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium gap-1 shrink-0"
-          >
-            <Link to="/lancamentos">
-              Ir para Lançamentos <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </Button>
+          {podeAcessarLancamentos && (
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 self-start sm:self-auto font-medium gap-1 shrink-0"
+            >
+              <Link to="/lancamentos">
+                Ir para Lançamentos <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </Button>
+          )}
         </CardHeader>
 
         <CardContent className="pt-4 space-y-4">
