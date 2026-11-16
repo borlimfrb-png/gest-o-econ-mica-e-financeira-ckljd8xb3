@@ -46,11 +46,11 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
     totalColecoes++
     try {
       const col = $app.findCollectionByNameOrId(colName)
-      const listRule = col.listRule || ''
-      const viewRule = col.viewRule || ''
-      const createRule = col.createRule || ''
-      const updateRule = col.updateRule || ''
-      const deleteRule = col.deleteRule || ''
+      const listRule = String(col.listRule || '')
+      const viewRule = String(col.viewRule || '')
+      const createRule = String(col.createRule || '')
+      const updateRule = String(col.updateRule || '')
+      const deleteRule = String(col.deleteRule || '')
 
       const listOk =
         listRule.indexOf("@request.auth.role = 'admin'") !== -1 &&
@@ -112,11 +112,11 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
     totalColecoes++
     try {
       const col = $app.findCollectionByNameOrId(colName)
-      const listRule = col.listRule || ''
-      const viewRule = col.viewRule || ''
-      const createRule = col.createRule || ''
-      const updateRule = col.updateRule || ''
-      const deleteRule = col.deleteRule || ''
+      const listRule = String(col.listRule || '')
+      const viewRule = String(col.viewRule || '')
+      const createRule = String(col.createRule || '')
+      const updateRule = String(col.updateRule || '')
+      const deleteRule = String(col.deleteRule || '')
 
       const listOk =
         listRule.indexOf("@request.auth.role = 'admin'") !== -1 &&
@@ -164,9 +164,9 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
   totalColecoes++
   try {
     const auditCol = $app.findCollectionByNameOrId('auditoria_lancamentos')
-    const listRule = auditCol.listRule || ''
-    const updateRule = auditCol.updateRule || ''
-    const deleteRule = auditCol.deleteRule || ''
+    const listRule = String(auditCol.listRule || '')
+    const updateRule = String(auditCol.updateRule || '')
+    const deleteRule = String(auditCol.deleteRule || '')
 
     const conforme =
       listRule.indexOf('financeiro') !== -1 &&
@@ -187,8 +187,8 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
       conforme: conforme,
       regrasAtuais: {
         list: listRule,
-        view: auditCol.viewRule || '',
-        create: auditCol.createRule || '',
+        view: String(auditCol.viewRule || ''),
+        create: String(auditCol.createRule || ''),
         update: updateRule,
         delete: deleteRule,
       },
@@ -209,8 +209,8 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
     totalColecoes++
     try {
       const col = $app.findCollectionByNameOrId(colName)
-      const listRule = col.listRule || ''
-      const createRule = col.createRule || ''
+      const listRule = String(col.listRule || '')
+      const createRule = String(col.createRule || '')
 
       const conforme =
         listRule.indexOf('comercial') !== -1 &&
@@ -230,10 +230,10 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
         conforme: conforme,
         regrasAtuais: {
           list: listRule,
-          view: col.viewRule || '',
+          view: String(col.viewRule || ''),
           create: createRule,
-          update: col.updateRule || '',
-          delete: col.deleteRule || '',
+          update: String(col.updateRule || ''),
+          delete: String(col.deleteRule || ''),
         },
       })
     } catch (err) {
@@ -251,8 +251,8 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
   totalColecoes++
   try {
     const contratosCol = $app.findCollectionByNameOrId('contratos')
-    const listRule = contratosCol.listRule || ''
-    const createRule = contratosCol.createRule || ''
+    const listRule = String(contratosCol.listRule || '')
+    const createRule = String(contratosCol.createRule || '')
 
     const conforme =
       listRule.indexOf('contratante = @request.auth.empresa') !== -1 &&
@@ -271,10 +271,10 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
       conforme: conforme,
       regrasAtuais: {
         list: listRule,
-        view: contratosCol.viewRule || '',
+        view: String(contratosCol.viewRule || ''),
         create: createRule,
-        update: contratosCol.updateRule || '',
-        delete: contratosCol.deleteRule || '',
+        update: String(contratosCol.updateRule || ''),
+        delete: String(contratosCol.deleteRule || ''),
       },
     })
   } catch (err) {
@@ -291,8 +291,8 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
   totalColecoes++
   try {
     const histCol = $app.findCollectionByNameOrId('historico_precos_produtos')
-    const listRule = histCol.listRule || ''
-    const createRule = histCol.createRule || ''
+    const listRule = String(histCol.listRule || '')
+    const createRule = String(histCol.createRule || '')
 
     const conforme =
       listRule.indexOf('produto.empresa = @request.auth.empresa') !== -1 &&
@@ -310,10 +310,10 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
       conforme: conforme,
       regrasAtuais: {
         list: listRule,
-        view: histCol.viewRule || '',
-        create: createRule,
-        update: histCol.updateRule || '',
-        delete: histCol.deleteRule || '',
+        view: String(histCol.viewRule || ''),
+        create: String(histCol.createRule || ''),
+        update: String(histCol.updateRule || ''),
+        delete: String(histCol.deleteRule || ''),
       },
     })
   } catch (err) {
@@ -330,8 +330,8 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
   totalColecoes++
   try {
     const benchCol = $app.findCollectionByNameOrId('benchmarks_setoriais')
-    const listRule = benchCol.listRule || ''
-    const createRule = benchCol.createRule || ''
+    const listRule = String(benchCol.listRule || '')
+    const createRule = String(benchCol.createRule || '')
 
     const conforme =
       listRule.indexOf('empresa = @request.auth.empresa') !== -1 &&
@@ -349,10 +349,10 @@ cronAdd('auditoria_seguranca_mensal', '0 6 1 * *', () => {
       conforme: conforme,
       regrasAtuais: {
         list: listRule,
-        view: benchCol.viewRule || '',
-        create: createRule,
-        update: benchCol.updateRule || '',
-        delete: benchCol.deleteRule || '',
+        view: String(benchCol.viewRule || ''),
+        create: String(benchCol.createRule || ''),
+        update: String(benchCol.updateRule || ''),
+        delete: String(benchCol.deleteRule || ''),
       },
     })
   } catch (err) {
@@ -606,11 +606,11 @@ routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
     totalColecoes++
     try {
       const col = $app.findCollectionByNameOrId(colName)
-      const listRule = col.listRule || ''
-      const viewRule = col.viewRule || ''
-      const createRule = col.createRule || ''
-      const updateRule = col.updateRule || ''
-      const deleteRule = col.deleteRule || ''
+      const listRule = String(col.listRule || '')
+      const viewRule = String(col.viewRule || '')
+      const createRule = String(col.createRule || '')
+      const updateRule = String(col.updateRule || '')
+      const deleteRule = String(col.deleteRule || '')
 
       const listOk =
         listRule.indexOf("@request.auth.role = 'admin'") !== -1 &&
@@ -672,11 +672,11 @@ routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
     totalColecoes++
     try {
       const col = $app.findCollectionByNameOrId(colName)
-      const listRule = col.listRule || ''
-      const viewRule = col.viewRule || ''
-      const createRule = col.createRule || ''
-      const updateRule = col.updateRule || ''
-      const deleteRule = col.deleteRule || ''
+      const listRule = String(col.listRule || '')
+      const viewRule = String(col.viewRule || '')
+      const createRule = String(col.createRule || '')
+      const updateRule = String(col.updateRule || '')
+      const deleteRule = String(col.deleteRule || '')
 
       const listOk =
         listRule.indexOf("@request.auth.role = 'admin'") !== -1 &&
@@ -724,9 +724,9 @@ routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
   totalColecoes++
   try {
     const auditCol = $app.findCollectionByNameOrId('auditoria_lancamentos')
-    const listRule = auditCol.listRule || ''
-    const updateRule = auditCol.updateRule || ''
-    const deleteRule = auditCol.deleteRule || ''
+    const listRule = String(auditCol.listRule || '')
+    const updateRule = String(auditCol.updateRule || '')
+    const deleteRule = String(auditCol.deleteRule || '')
 
     const conforme =
       listRule.indexOf('financeiro') !== -1 &&
@@ -747,8 +747,8 @@ routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
       conforme: conforme,
       regrasAtuais: {
         list: listRule,
-        view: auditCol.viewRule || '',
-        create: auditCol.createRule || '',
+        view: String(auditCol.viewRule || ''),
+        create: String(auditCol.createRule || ''),
         update: updateRule,
         delete: deleteRule,
       },
@@ -769,8 +769,8 @@ routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
     totalColecoes++
     try {
       const col = $app.findCollectionByNameOrId(colName)
-      const listRule = col.listRule || ''
-      const createRule = col.createRule || ''
+      const listRule = String(col.listRule || '')
+      const createRule = String(col.createRule || '')
 
       const conforme =
         listRule.indexOf('comercial') !== -1 &&
@@ -790,10 +790,10 @@ routerAdd('POST', '/backend/v1/admin/auditoria-seguranca/verificar', (e) => {
         conforme: conforme,
         regrasAtuais: {
           list: listRule,
-          view: col.viewRule || '',
+          view: String(col.viewRule || ''),
           create: createRule,
-          update: col.updateRule || '',
-          delete: col.deleteRule || '',
+          update: String(col.updateRule || ''),
+          delete: String(col.deleteRule || ''),
         },
       })
     } catch (err) {
