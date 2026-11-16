@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import {
@@ -6,6 +6,7 @@ import {
   type Diagnostico,
   type ResultadoOtimizacao,
 } from '@/services/dbOtimizacaoService'
+import { ultimaOtimizacao, type OtimizacaoLogRecord } from '@/services/dbOtimizacaoLogService'
 import {
   Database,
   Gauge,
@@ -19,6 +20,9 @@ import {
   Loader2,
   Lightbulb,
   Search as Search_Icon,
+  CalendarClock,
+  RefreshCw,
+  Clock,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -104,6 +108,97 @@ function Carregando() {
       </div>
       <Skeleton className="h-72" />
     </div>
+  )
+}
+
+const fmtDataHora = new Intl.DateTimeFormat('pt-BR', {
+  dateStyle: 'short',
+  timeStyle: 'short',
+})
+
+function useAutomacaoStatus() {
+  const [data, setData] = useState<OtimizacaoLogRecord | null>(null)
+  const [isCarregando, setIsCarregando] = useState(true)
+  const [versao, setVersao] = useState(0)
+  useEffect(() => {
+    let cancelado = false
+    ultimaOtimizacao('automatico').then((r) => {
+      if (!cancelado) {
+        setData(r)
+        setIsCarregando(false)
+      }
+    })
+    return () => {
+      cancelado = true
+    }
+  }, [versao])
+  return {
+    data,
+    isCarregando,
+    recarregar: () => setVersao((v) => v + 1),
+  }
+}
+
+function CardAutomacao() {
+  const { data, isCarregando, recarregar } = useAutomacaoStatus()
+  if (isCarregando) {
+    return (
+      <Card className="border-slate-200">
+        <CardContent className="flex items-center gap-3 py-4">
+          <Skeleton className="h-4 w-4 rounded-full" />
+          <Skeleton className="h-4 w-48" />
+        </CardContent>
+      </Card>
+    )
+  }
+  const ultima = data
+  return (
+    <Card className="border-slate-200">
+      <CardContent className="flex flex-col gap-2 py-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center shrink-0">
+            <CalendarClock className="w-5 h-5 text-violet-600" />
+          </div>
+          <div className="text-sm">
+            <p className="font-semibold text-[#0B1F3A]">
+              Otimização automática semanal
+              <Badge
+                variant="outline"
+                className="ml-2 bg-violet-50 text-violet-700 border-violet-200"
+              >
+                ativa
+              </Badge>
+            </p>
+            {ultima ? (
+              <p className="text-xs text-slate-600 mt-0.5">
+                Última otimização automática:{' '}
+                <strong>{fmtDataHora.format(new Date(ultima.created))}</strong> —{' '}
+                {ultima.aplicados.length} índice(s) aplicado(s), {ultima.falhas.length} falha(s).
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 mt-0.5 italic">
+                Ainda não executou — o cron roda todo domingo às 03:00.
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          {ultima && (
+            <span className="text-xs text-slate-400 hidden md:inline-flex items-center gap-1">
+              <Clock className="w-3.5 h-3.5" /> {ultima.executado_por || 'Cron Semanal'}
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={recarregar}
+            className="cursor-pointer text-slate-500 hover:text-slate-700"
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Atualizar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -225,6 +320,8 @@ export default function AdminOtimizacao() {
           </Button>
         </div>
       </div>
+
+      <CardAutomacao />
 
       {/* Explicação em linguagem de produto */}
       <Card className="border-blue-100 bg-blue-50/50">

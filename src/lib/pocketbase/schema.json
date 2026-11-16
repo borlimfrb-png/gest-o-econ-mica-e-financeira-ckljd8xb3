@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-16T10:17:50.584Z",
+  "generatedAt": "2026-11-16T11:32:36.525Z",
   "collections": [
     {
       "name": "users",
@@ -6087,6 +6087,97 @@
         }
       ],
       "indexes": []
+    },
+    {
+      "name": "db_otimizacoes_log",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "view": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "disparo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["automatico", "manual"]
+        },
+        {
+          "name": "sucesso",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "colecoes_analisadas",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "registros_totais",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "indices_recomendados",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "aplicados",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "falhas",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pendentes_antes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pendentes_depois",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "executado_por",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_db_otimizacoes_log_created ON db_otimizacoes_log (created DESC)"
+      ]
     }
   ]
 }
