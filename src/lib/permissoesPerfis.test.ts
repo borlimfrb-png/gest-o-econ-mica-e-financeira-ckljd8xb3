@@ -20,6 +20,9 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'gerencial_despesas_fixas',
     'gerencial_despesas_variaveis',
     'gerencial_analise_faturamento',
+    // Drill-down somente-leitura: destino dos links de código de conta nas telas
+    // DRE Gerencial, Despesas Fixas e Despesas Variáveis.
+    'gerencial_conta_detalhe',
     'empresas',
     'configuracoes',
   ]
@@ -43,7 +46,6 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'gerencial_rentabilidade',
     'gerencial_dashboard_bi',
     'gerencial_indicadores',
-    'gerencial_conta_detalhe',
     'financeiro',
     'baixa_recebiveis',
     'contratos',
@@ -125,6 +127,15 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('cliente', 'gerencial_indicadores')).toBe(false)
     expect(perfilTemAcesso('admin', 'gerencial_dashboard_bi')).toBe(true)
     expect(perfilTemAcesso('admin', 'gerencial_indicadores')).toBe(true)
+  })
+
+  it('garante que o cliente acessa gerencial_conta_detalhe (destino dos links de código de conta)', () => {
+    expect(perfilTemAcesso('cliente', 'gerencial_conta_detalhe')).toBe(true)
+    expect(perfilTemAcesso('admin', 'gerencial_conta_detalhe')).toBe(true)
+    expect(perfilTemAcesso('empresa', 'gerencial_conta_detalhe')).toBe(true)
+    expect(perfilTemAcesso('financeiro', 'gerencial_conta_detalhe')).toBe(true)
+    // Comercial continua sem os módulos gerenciais de análise.
+    expect(perfilTemAcesso('comercial', 'gerencial_conta_detalhe')).toBe(false)
   })
 
   it('garante que gerencial_comparativo_mensal é liberado para perfis internos e bloqueado para cliente', () => {

@@ -50,68 +50,58 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Versão com debounce COMPARTILHADO entre todos os listeners ativos:
- * um evento em qualquer coleção dispara os callbacks registrados, mas rajadas
- * (importações em lote, várias coleções de uma vez) são coalescidas num único
- * disparo por callback para não estourar o rate limit do backend (429).
+ * Variante com debounce do useRealtime: quando vários registros chegam em
+ * rajada (importação, recálculo em lote), o callback só roda uma vez, após
+ * `delayMs` sem novos eventos. Evita recarregar a tela inteira a cada insert.
  */
-const DEBOUNCE_MS = 800
-
-type Callback = () => void
-
-const callbacksPendentes = new Set<Callback>()
-let timerDebounce: ReturnType<typeof setTimeout> | null = null
-
-function agendarDisparo(callback: Callback) {
-  callbacksPendentes.add(callback)
-  if (timerDebounce !== null) return
-  timerDebounce = setTimeout(() => {
-    timerDebounce = null
-    const pendentes = Array.from(callbacksPendentes)
-    callbacksPendentes.clear()
-    for (const cb of pendentes) {
-      try {
-        cb()
-      } catch (err) {
-        console.error('useRealtimeDebounced: erro em callback', err)
-      }
-    }
-  }, DEBOUNCE_MS)
-}
-
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
-  callback: Callback,
+  callback: (data: RecordSubscription<TRecord> | null) => void,
   enabled: boolean = true,
+  delayMs: number = 500,
 ) {
   const callbackRef = useRef(callback)
   callbackRef.current = callback
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (!enabled) return
 
-    const fn = () => agendarDisparo(() => callbackRef.current())
     let unsubscribeFn: (() => Promise<void>) | undefined
     let cancelled = false
 
+    const agendar = () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        if (!cancelled) callbackRef.current(null)
+      }, delayMs)
+    }
+
     pb.collection<TRecord>(collectionName)
-      .subscribe('*', fn)
-      .then((unsub) => {
+      .subscribe('*', () => {
+        agendar()
+      })
+      .then((fn) => {
         if (cancelled) {
-          unsub().catch(() => {})
+          fn().catch(() => {})
         } else {
-          unsubscribeFn = unsub
+          unsubscribeFn = fn
         }
       })
       .catch(() => {})
 
     return () => {
       cancelled = true
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
       if (unsubscribeFn) {
         unsubscribeFn().catch(() => {})
       }
     }
-  }, [collectionName, enabled])
+  }, [collectionName, enabled, delayMs])
 }
 
 export default useRealtime

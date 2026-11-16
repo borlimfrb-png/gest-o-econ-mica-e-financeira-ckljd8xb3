@@ -51,7 +51,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { lancamentosService, contasService, planoContasService } from '@/services/financeService'
 import { LancamentoRecord, ContaRecord, PlanoContaRecord } from '@/types/finance'
@@ -157,7 +156,7 @@ export default function ContaDetalheGerencial() {
   const navigate = useNavigate()
   const location = useLocation()
   const { toast } = useToast()
-  const { user } = useAuth()
+
   const { selectedEmpresa, selectedEmpresaId, empresasIdsAtivas, empresas } = useFilter()
 
   // Extrai parâmetros da URL
@@ -184,22 +183,10 @@ export default function ContaDetalheGerencial() {
   const [filtroCentro, setFiltroCentro] = useState<string>('todos')
   const [filtroTipoDespesa, setFiltroTipoDespesa] = useState<string>('todos')
 
-  // Se o usuário for cliente, bloqueia
-  const isCliente = user?.role === 'cliente'
-
   // Carrega conta contábil, plano de contas e lançamentos históricos
+  // (acessível também ao perfil cliente: é o destino dos links de código de conta
+  // do DRE Gerencial e das telas de Despesas Fixas/Variáveis do hub)
   useEffect(() => {
-    if (isCliente) {
-      toast({
-        variant: 'destructive',
-        title: 'Acesso Restrito',
-        description:
-          'O perfil Cliente não possui permissão para visualizar o detalhamento da conta.',
-      })
-      navigate('/analise-economica-financeira', { replace: true })
-      return
-    }
-
     let isMounted = true
 
     async function carregarTudo() {
@@ -320,16 +307,7 @@ export default function ContaDetalheGerencial() {
     return () => {
       isMounted = false
     }
-  }, [
-    paramContaId,
-    paramCodigo,
-    paramEmpresaId,
-    empresasIdsAtivas,
-    selectedEmpresaId,
-    isCliente,
-    navigate,
-    toast,
-  ])
+  }, [paramContaId, paramCodigo, paramEmpresaId, empresasIdsAtivas, selectedEmpresaId])
 
   // Normalização e formatação dos lançamentos
   const lancamentosFormatados: LancamentoFormatado[] = useMemo(() => {
