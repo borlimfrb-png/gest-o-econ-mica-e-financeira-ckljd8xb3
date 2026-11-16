@@ -5,8 +5,14 @@ import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { EstadoVazioClienteCard } from '@/components/EstadoVazioClienteCard'
-import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
-import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import {
+  contasService,
+  centrosService,
+  lancamentosService,
+  planoContasService,
+} from '@/services/financeService'
+import { DreSelecionarCentro } from '@/components/DreSelecionarCentro'
+import type { CentroRecord, ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { gerarListaMeses, type ClassificacaoDre } from '@/lib/dreGerencialTypes'
 import { calcularDreGerencialMatriz, calcularComparativoDre } from '@/lib/dreGerencialCalculo'
 import {
@@ -159,6 +165,11 @@ export default function DreGerencial() {
   // Modal para Limpar Período de Lançamentos
   const [modalLimparPeriodoOpen, setModalLimparPeriodoOpen] = useState(false)
 
+  // Centro de custo: cadastro completo (para filtro e classificação inline)
+  const [centros, setCentros] = useState<CentroRecord[]>([])
+  const [filtroCentro, setFiltroCentro] = useState<string>('todos')
+  const [salvandoCentroId, setSalvandoCentroId] = useState<string | null>(null)
+
   const abrirClassificacaoLote = (preIds?: string[]) => {
     setModalPreFilteredIds(preIds && preIds.length > 0 ? preIds : undefined)
     setModalClassificacaoOpen(true)
@@ -249,6 +260,23 @@ export default function DreGerencial() {
       setContas(Array.from(new Map(contasList.map((i) => [i.id, i])).values()))
       setLancamentos(lancamentosList)
       setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
+
+      // Centros de custo (cadastro completo da(s) empresa(s) ativa(s))
+      try {
+        const centrosList = await centrosService.getAll(
+          isGrupoAtivo && grupoAtivo?.empresas?.length
+            ? { empresasIds: grupoAtivo.empresas }
+            : selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')
+              ? { empresaId: selectedEmpresaId }
+              : empresasIdsAtivas.length > 0
+                ? { empresasIds: empresasIdsAtivas }
+                : undefined,
+        )
+        setCentros(centrosList)
+      } catch {
+        // Sem centros cadastrados: filtro e classificação simplesmente não aparecem
+        setCentros([])
+      }
     } catch (err: any) {
       console.error('Erro ao carregar dados da DRE:', err)
       toast({
@@ -369,6 +397,136 @@ export default function DreGerencial() {
     }))
   }
 
+  // Matriz com filtro de centro de custo aplicado (remove contas de outros centros;
+  // totais do grupo e do período seguem refletindo o filtro).
+  const matrizFiltrada = useMemo(() => {
+    if (filtroCentro === 'todos') return matriz
+    const contaDentro = (conta: { centroId?: string; centroNome?: string }) =>
+      filtroCentro === '__sem_centro__'
+        ? !conta.centroId && !conta.centroNome
+        : conta.centroId === filtroCentro
+    const grupos = matriz.grupos.map((g) => {
+      const contas = g.contas.filter(contaDentro)
+      const valoresPorMes: Record<string, number> = {}
+      for (const m of meses) valoresPorMes[m.chave] = 0
+      let totalPeriodo = 0
+      for (const c of contas) {
+        for (const m of meses) valoresPorMes[m.chave] += c.valoresPorMes[m.chave] || 0
+        totalPeriodo += c.totalPeriodo
+      }
+      return { ...g, contas, valoresPorMes, totalPeriodo }
+    })
+    const grupoPorClf = new Map(grupos.map((g) => [g.classificacao, g]))
+    const val = (clf: ClassificacaoDre, chave: string) =>
+      grupoPorClf.get(clf)?.valoresPorMes[chave] || 0
+
+    const valoresLucroPorMes: Record<string, number> = {}
+    const margemLiquidaPorMes: Record<string, number | null> = {}
+    let totalLucro = 0
+    for (const m of meses) {
+      const resultado =
+        val('Receita', m.chave) -
+        val('Despesa Variável', m.chave) -
+        val('Despesa Fixa', m.chave) -
+        val('Despesa Financeira', m.chave) +
+        val('Receita Financeira', m.chave)
+      valoresLucroPorMes[m.chave] = resultado
+      totalLucro += resultado
+      const rec = val('Receita', m.chave)
+      margemLiquidaPorMes[m.chave] = rec > 0 ? (resultado / rec) * 100 : null
+    }
+    const totalReceitasPeriodo = grupoPorClf.get('Receita')?.totalPeriodo || 0
+    const margemLiquidaTotal =
+      totalReceitasPeriodo > 0 ? (totalLucro / totalReceitasPeriodo) * 100 : null
+
+    const contasNaoClass = matriz.naoClassificados.contas.filter(contaDentro)
+    const naoValoresPorMes: Record<string, number> = {}
+    for (const m of meses) naoValoresPorMes[m.chave] = 0
+    let naoTotal = 0
+    for (const c of contasNaoClass) {
+      for (const m of meses) naoValoresPorMes[m.chave] += c.valoresPorMes[m.chave] || 0
+      naoTotal += c.totalPeriodo
+    }
+
+    return {
+      ...matriz,
+      grupos,
+      naoClassificados: {
+        ...matriz.naoClassificados,
+        contas: contasNaoClass,
+        valoresPorMes: naoValoresPorMes,
+        totalPeriodo: naoTotal,
+      },
+      lucroPrejuizo: {
+        ...matriz.lucroPrejuizo,
+        valoresPorMes: valoresLucroPorMes,
+        totalPeriodo: totalLucro,
+      },
+      margemLiquidaPorMes,
+      margemLiquidaTotal,
+      totalReceitasPeriodo,
+    }
+  }, [matriz, filtroCentro, meses])
+
+  // Matriz do período 2 com o mesmo filtro de centro (para o modo comparativo)
+  const matrizPeriodo2Filtrada = useMemo(() => {
+    if (filtroCentro === 'todos') return matrizPeriodo2
+    const contaDentro = (conta: { centroId?: string; centroNome?: string }) =>
+      filtroCentro === '__sem_centro__'
+        ? !conta.centroId && !conta.centroNome
+        : conta.centroId === filtroCentro
+    const grupos = matrizPeriodo2.grupos.map((g) => {
+      const contas = g.contas.filter(contaDentro)
+      const valoresPorMes: Record<string, number> = {}
+      for (const m of mesesPeriodo2) valoresPorMes[m.chave] = 0
+      let totalPeriodo = 0
+      for (const c of contas) {
+        for (const m of mesesPeriodo2) valoresPorMes[m.chave] += c.valoresPorMes[m.chave] || 0
+        totalPeriodo += c.totalPeriodo
+      }
+      return { ...g, contas, valoresPorMes, totalPeriodo }
+    })
+    return { ...matrizPeriodo2, grupos }
+  }, [matrizPeriodo2, filtroCentro, mesesPeriodo2])
+
+  // Comparativo recalculado com o filtro de centro aplicado nas duas matrizes
+  const comparativoFiltrado = useMemo(() => {
+    if (filtroCentro === 'todos') return comparativo
+    return calcularComparativoDre(matrizPeriodo2Filtrada, matrizFiltrada, p2Descricao, p1Descricao)
+  }, [comparativo, filtroCentro, matrizPeriodo2Filtrada, matrizFiltrada, p2Descricao, p1Descricao])
+
+  // Classifica/altera o centro de custo de uma conta direto no DRE
+  // (mesmo mecanismo da tela Plano de Contas: contasService.update do campo centro,
+  // complementado pelo vínculo em plano_contas da empresa ativa, se existir).
+  const handleAlterarCentroConta = async (contaId: string, centroNovo: string | null) => {
+    if (isCliente) return
+    try {
+      setSalvandoCentroId(contaId)
+      await contasService.update(contaId, { centro: centroNovo })
+
+      const registroPlano = planoContas.find((p) => (p.conta || p.expand?.conta?.id) === contaId)
+      if (registroPlano) {
+        await planoContasService.update(registroPlano.id, { centro: centroNovo || '' })
+      }
+
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizado'))
+      window.dispatchEvent(new CustomEvent('dre-contas-atualizadas'))
+      toast({
+        title: 'Centro de custo atualizado',
+        description: 'A conta foi reclassificada e a DRE será recalculada.',
+      })
+    } catch (err: any) {
+      console.error('Erro ao classificar centro de custo da conta:', err)
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao classificar centro',
+        description: err?.message || 'Falha ao salvar o centro de custo da conta.',
+      })
+    } finally {
+      setSalvandoCentroId(null)
+    }
+  }
+
   const expandirTodos = () => {
     setGruposExpandidos({
       Receita: true,
@@ -417,13 +575,13 @@ export default function DreGerencial() {
   const handleExportarExcel = () => {
     try {
       if (modoVisualizacao === 'comparativo') {
-        exportarDreComparativoExcel(comparativo, opcoesExportacao)
+        exportarDreComparativoExcel(comparativoFiltrado, opcoesExportacao)
         toast({
           title: 'DRE Comparativa Exportada',
           description: 'Planilha Excel gerada com a comparação dos 2 períodos e variações.',
         })
       } else {
-        exportarDreGerencialExcel(matriz, opcoesExportacao)
+        exportarDreGerencialExcel(matrizFiltrada, opcoesExportacao)
         toast({
           title: 'DRE Exportada com sucesso',
           description: 'Planilha Excel gerada com a matriz da DRE Gerencial.',
@@ -441,13 +599,13 @@ export default function DreGerencial() {
   const handleExportarCsv = () => {
     try {
       if (modoVisualizacao === 'comparativo') {
-        exportarDreComparativoCsv(comparativo, opcoesExportacao)
+        exportarDreComparativoCsv(comparativoFiltrado, opcoesExportacao)
         toast({
           title: 'DRE Comparativa Exportada',
           description: 'Arquivo CSV com dados comparativos e variações gerado.',
         })
       } else {
-        exportarDreGerencialCsv(matriz, opcoesExportacao)
+        exportarDreGerencialCsv(matrizFiltrada, opcoesExportacao)
         toast({
           title: 'DRE Exportada com sucesso',
           description: 'Arquivo CSV gerado com separador padrão brasileiro (;).',
@@ -462,18 +620,18 @@ export default function DreGerencial() {
     }
   }
 
-  // Estatísticas do cabeçalho
-  const lucroTotal = matriz.lucroPrejuizo.totalPeriodo
+  // Estatísticas do cabeçalho (respeitam o filtro de centro de custo)
+  const lucroTotal = matrizFiltrada.lucroPrejuizo.totalPeriodo
   const isLucro = lucroTotal >= 0
-  const totalReceitas = matriz.totalReceitasPeriodo
+  const totalReceitas = matrizFiltrada.totalReceitasPeriodo
   const totalDespesasVar =
-    matriz.grupos.find((g) => g.classificacao === 'Despesa Variável')?.totalPeriodo || 0
+    matrizFiltrada.grupos.find((g) => g.classificacao === 'Despesa Variável')?.totalPeriodo || 0
   const totalDespesasFix =
-    matriz.grupos.find((g) => g.classificacao === 'Despesa Fixa')?.totalPeriodo || 0
+    matrizFiltrada.grupos.find((g) => g.classificacao === 'Despesa Fixa')?.totalPeriodo || 0
   const totalDespesasFin =
-    matriz.grupos.find((g) => g.classificacao === 'Despesa Financeira')?.totalPeriodo || 0
+    matrizFiltrada.grupos.find((g) => g.classificacao === 'Despesa Financeira')?.totalPeriodo || 0
   const totalReceitasFin =
-    matriz.grupos.find((g) => g.classificacao === 'Receita Financeira')?.totalPeriodo || 0
+    matrizFiltrada.grupos.find((g) => g.classificacao === 'Receita Financeira')?.totalPeriodo || 0
 
   return (
     <div className="space-y-4 animate-fadeIn pb-6 print:p-0 print:m-0 w-full min-w-0 max-w-full overflow-hidden">
@@ -645,8 +803,8 @@ export default function DreGerencial() {
       <Card className="bg-white border-slate-200/90 shadow-xs print:hidden">
         <CardContent className="py-3 px-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            {/* Empresa Ativa */}
-            <div className="flex items-center gap-2">
+            {/* Empresa Ativa + Filtro de Centro de Custo */}
+            <div className="flex items-center gap-2 flex-wrap">
               <Building className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <div className="text-xs">
                 <span className="text-slate-500">Empresa: </span>
@@ -657,6 +815,44 @@ export default function DreGerencial() {
                   <Badge variant="outline" className="ml-2 text-[10px]">
                     {selectedEmpresa.segmento}
                   </Badge>
+                )}
+              </div>
+
+              {/* Filtro por Centro de Custo */}
+              <div className="flex items-center gap-1.5 ml-2">
+                <Building className="w-3 h-3 text-blue-600" />
+                <span className="text-[11px] font-bold text-slate-700 uppercase">Centro:</span>
+                <Select value={filtroCentro} onValueChange={setFiltroCentro}>
+                  <SelectTrigger
+                    className="h-7 text-xs bg-white w-44"
+                    title="Filtrar contas do DRE por Centro de Custo"
+                  >
+                    <SelectValue placeholder="Todos os centros" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos" className="text-xs">
+                      Todos os centros
+                    </SelectItem>
+                    {centros.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.codigo ? `${c.codigo} — ${c.nome}` : c.nome}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__sem_centro__" className="text-xs text-slate-500">
+                      Sem centro de custo
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {filtroCentro !== 'todos' && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setFiltroCentro('todos')}
+                    className="h-6 px-2 text-[10px] text-slate-500 hover:text-slate-800"
+                  >
+                    Limpar
+                  </Button>
                 )}
               </div>
             </div>
@@ -1145,8 +1341,8 @@ export default function DreGerencial() {
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
-                  {/* Grupos 1 a 5 da DRE */}
-                  {matriz.grupos.map((grupo) => {
+                  {/* Grupos 1 a 5 da DRE (respeita o filtro de Centro de Custo) */}
+                  {matrizFiltrada.grupos.map((grupo) => {
                     const isExpandido = !!gruposExpandidos[grupo.classificacao]
                     const corFundo =
                       grupo.classificacao === 'Receita'
@@ -1337,6 +1533,16 @@ export default function DreGerencial() {
                                       >
                                         {conta.nome}
                                       </span>
+                                      {!isCliente && (
+                                        <DreSelecionarCentro
+                                          centros={centros}
+                                          valor={conta.centroId || null}
+                                          onChange={(centroNovo) =>
+                                            handleAlterarCentroConta(conta.id, centroNovo)
+                                          }
+                                          disabled={salvandoCentroId === conta.id}
+                                        />
+                                      )}
                                     </div>
                                   </td>
 
@@ -1482,7 +1688,7 @@ export default function DreGerencial() {
                   </tr>
 
                   {/* ================= NÃO CLASSIFICADOS (SE HOUVER) ================= */}
-                  {matriz.naoClassificados.contas.length > 0 && (
+                  {matrizFiltrada.naoClassificados.contas.length > 0 && (
                     <React.Fragment>
                       <tr
                         className="bg-amber-50/70 text-amber-950 font-bold border-t-2 border-amber-300 cursor-pointer select-none hover:bg-amber-100/70 transition-colors"
@@ -1503,9 +1709,9 @@ export default function DreGerencial() {
                               <ChevronRight className="w-4 h-4 text-amber-600 shrink-0" />
                             )}
                             <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>{matriz.naoClassificados.titulo}</span>
+                            <span>{matrizFiltrada.naoClassificados.titulo}</span>
                             <Badge className="ml-auto text-[10px] bg-amber-200 text-amber-900 border-amber-400">
-                              {matriz.naoClassificados.contas.length} conta(s) pendente(s)
+                              {matrizFiltrada.naoClassificados.contas.length} conta(s) pendente(s)
                             </Badge>
                             <Button
                               type="button"
@@ -1513,18 +1719,18 @@ export default function DreGerencial() {
                               onClick={(e) => {
                                 e.stopPropagation()
                                 abrirClassificacaoLote(
-                                  matriz.naoClassificados.contas.map((c) => c.id),
+                                  matrizFiltrada.naoClassificados.contas.map((c) => c.id),
                                 )
                               }}
                               className="h-6 text-[10px] bg-amber-600 hover:bg-amber-700 text-white font-semibold px-2 py-0.5 ml-2 gap-1 shadow-2xs"
                             >
-                              Classificar Todas ({matriz.naoClassificados.contas.length})
+                              Classificar Todas ({matrizFiltrada.naoClassificados.contas.length})
                             </Button>
                           </button>
                         </td>
 
                         {meses.map((m) => {
-                          const val = matriz.naoClassificados.valoresPorMes[m.chave] || 0
+                          const val = matrizFiltrada.naoClassificados.valoresPorMes[m.chave] || 0
                           return (
                             <td
                               key={m.chave}
@@ -1540,12 +1746,12 @@ export default function DreGerencial() {
                         })}
 
                         <td className="py-3 px-4 text-right font-bold bg-amber-100 text-amber-950">
-                          {formatBrl(matriz.naoClassificados.totalPeriodo)}
+                          {formatBrl(matrizFiltrada.naoClassificados.totalPeriodo)}
                         </td>
                       </tr>
 
                       {gruposExpandidos.naoClassificados &&
-                        matriz.naoClassificados.contas.map((conta, idx, arr) => {
+                        matrizFiltrada.naoClassificados.contas.map((conta, idx, arr) => {
                           const centroKey = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
                           const centroAnteriorKey =
                             idx > 0
@@ -1666,6 +1872,16 @@ export default function DreGerencial() {
                                       >
                                         {conta.nome}
                                       </span>
+                                      {!isCliente && (
+                                        <DreSelecionarCentro
+                                          centros={centros}
+                                          valor={conta.centroId || null}
+                                          onChange={(centroNovo) =>
+                                            handleAlterarCentroConta(conta.id, centroNovo)
+                                          }
+                                          disabled={salvandoCentroId === conta.id}
+                                        />
+                                      )}
                                     </div>
                                     <Button
                                       type="button"
@@ -1825,84 +2041,132 @@ export default function DreGerencial() {
                           </td>
                         </tr>
 
-                        {/* Contas do Grupo no comparativo */}
+                        {/* Contas do Grupo no comparativo (agrupadas por Centro de Custo) */}
                         {isExpandido &&
-                          grupo.contas.map((conta) => (
-                            <tr
-                              key={conta.id}
-                              className="hover:bg-blue-50/30 text-slate-700 transition-colors text-[11px]"
-                            >
-                              <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
-                                <div className="flex items-center gap-1.5 truncate flex-wrap">
-                                  {conta.centroNome && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-slate-100 text-slate-700 rounded border border-slate-200 shrink-0">
-                                      {conta.centroNome}
-                                    </span>
-                                  )}
-                                  {conta.tipoDespesaNome && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-amber-50 text-amber-800 rounded border border-amber-200 shrink-0">
-                                      {conta.tipoDespesaNome}
-                                    </span>
-                                  )}
-                                  {conta.codigo && (
-                                    <Link
-                                      to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
-                                      className="font-mono text-[10px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
-                                      title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
-                                      onClick={(e) => e.stopPropagation()}
+                          (() => {
+                            const linhasComCentro = grupo.contas.map((conta, ci, arr) => {
+                              const ck = conta.centroId || conta.centroNome || '__SEM_CENTRO__'
+                              const ak =
+                                ci > 0
+                                  ? arr[ci - 1].centroId ||
+                                    arr[ci - 1].centroNome ||
+                                    '__SEM_CENTRO__'
+                                  : null
+                              return {
+                                conta,
+                                mudouCentro: ck !== ak,
+                                centroNome:
+                                  ck === '__SEM_CENTRO__'
+                                    ? 'Sem Centro de Custo'
+                                    : conta.centroNome || ck,
+                              }
+                            })
+                            return linhasComCentro.map(({ conta, mudouCentro, centroNome }) => (
+                              <React.Fragment key={conta.id}>
+                                {mudouCentro && (
+                                  <tr className="bg-slate-100/95 border-t-2 border-b border-slate-300 font-bold text-slate-800 text-[11px] select-none">
+                                    <td className="py-2 px-3 sticky left-0 bg-slate-100 z-10 border-r border-slate-200">
+                                      <div className="flex items-center gap-2">
+                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-blue-700 text-white shadow-xs">
+                                          <Building className="w-3 h-3" />
+                                        </span>
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="text-[10px] uppercase tracking-wider text-blue-900 font-black">
+                                            Centro de Custo:
+                                          </span>
+                                          <span className="font-bold text-slate-900 text-xs">
+                                            {centroNome}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td
+                                      colSpan={5}
+                                      className="py-2 px-3 text-[10px] text-slate-500 font-medium tracking-wide bg-slate-100"
                                     >
-                                      {conta.codigo}
-                                    </Link>
-                                  )}
-                                  <span className="truncate font-medium">{conta.nome}</span>
-                                </div>
-                              </td>
-
-                              <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap">
-                                {formatBrl(conta.valorPeriodo1)}
-                              </td>
-
-                              <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap">
-                                {formatBrl(conta.valorPeriodo2)}
-                              </td>
-
-                              <td
-                                className={`py-2 px-3 text-right border-r border-slate-100 font-medium whitespace-nowrap ${
-                                  conta.favoravel ? 'text-emerald-700' : 'text-rose-700'
-                                }`}
-                              >
-                                {conta.diferenca >= 0 ? '+' : ''}
-                                {formatBrl(conta.diferenca)}
-                              </td>
-
-                              <td
-                                className={`py-2 px-3 text-right border-r border-slate-100 font-medium whitespace-nowrap ${
-                                  conta.favoravel ? 'text-emerald-700' : 'text-rose-700'
-                                }`}
-                              >
-                                {conta.percentual !== null ? (
-                                  <span>
-                                    {conta.percentual >= 0 ? '+' : ''}
-                                    {conta.percentual.toFixed(1)}%
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 font-normal">—</span>
+                                      Contas vinculadas a este Centro de Custo
+                                    </td>
+                                  </tr>
                                 )}
-                              </td>
+                                <tr className="hover:bg-blue-50/30 text-slate-700 transition-colors text-[11px]">
+                                  <td className="py-2 pl-9 pr-4 sticky left-0 bg-white z-10 border-r border-slate-100">
+                                    <div className="flex items-center gap-1.5 truncate flex-wrap">
+                                      {conta.tipoDespesaNome && (
+                                        <span className="inline-flex items-center px-1.5 py-0.2 text-[9px] font-semibold bg-amber-50 text-amber-800 rounded border border-amber-200 shrink-0">
+                                          {conta.tipoDespesaNome}
+                                        </span>
+                                      )}
+                                      {conta.codigo && (
+                                        <Link
+                                          to={`/gerencial/conta-detalhe?contaId=${encodeURIComponent(conta.id)}&codigo=${encodeURIComponent(conta.codigo)}&ano=${encodeURIComponent(String(anoInicial))}`}
+                                          className="font-mono text-[10px] text-blue-700 hover:underline font-semibold shrink-0 cursor-pointer"
+                                          title={`Ver histórico completo e tendência da conta ${conta.codigo}`}
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          {conta.codigo}
+                                        </Link>
+                                      )}
+                                      <span className="truncate font-medium">{conta.nome}</span>
+                                      {!isCliente && (
+                                        <DreSelecionarCentro
+                                          centros={centros}
+                                          valor={conta.centroId || null}
+                                          onChange={(centroNovo) =>
+                                            handleAlterarCentroConta(conta.id, centroNovo)
+                                          }
+                                          disabled={salvandoCentroId === conta.id}
+                                        />
+                                      )}
+                                    </div>
+                                  </td>
 
-                              <td className="py-2 px-3 text-center whitespace-nowrap text-[10px]">
-                                <span
-                                  className={`inline-block px-1.5 py-0.5 rounded ${
-                                    conta.favoravel
-                                      ? 'text-emerald-700 bg-emerald-50'
-                                      : 'text-rose-700 bg-rose-50'
-                                  }`}
-                                >
-                                  {conta.favoravel ? '✓ Fav' : '✗ Desfav'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
+                                  <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap">
+                                    {formatBrl(conta.valorPeriodo1)}
+                                  </td>
+
+                                  <td className="py-2 px-3 text-right border-r border-slate-100 text-slate-600 whitespace-nowrap">
+                                    {formatBrl(conta.valorPeriodo2)}
+                                  </td>
+
+                                  <td
+                                    className={`py-2 px-3 text-right border-r border-slate-100 font-medium whitespace-nowrap ${
+                                      conta.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                                    }`}
+                                  >
+                                    {conta.diferenca >= 0 ? '+' : ''}
+                                    {formatBrl(conta.diferenca)}
+                                  </td>
+
+                                  <td
+                                    className={`py-2 px-3 text-right border-r border-slate-100 font-medium whitespace-nowrap ${
+                                      conta.favoravel ? 'text-emerald-700' : 'text-rose-700'
+                                    }`}
+                                  >
+                                    {conta.percentual !== null ? (
+                                      <span>
+                                        {conta.percentual >= 0 ? '+' : ''}
+                                        {conta.percentual.toFixed(1)}%
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400 font-normal">—</span>
+                                    )}
+                                  </td>
+
+                                  <td className="py-2 px-3 text-center whitespace-nowrap text-[10px]">
+                                    <span
+                                      className={`inline-block px-1.5 py-0.5 rounded ${
+                                        conta.favoravel
+                                          ? 'text-emerald-700 bg-emerald-50'
+                                          : 'text-rose-700 bg-rose-50'
+                                      }`}
+                                    >
+                                      {conta.favoravel ? '✓ Fav' : '✗ Desfav'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              </React.Fragment>
+                            ))
+                          })()}
 
                         {isExpandido && grupo.contas.length === 0 && (
                           <tr className="bg-white text-[11px] text-slate-400 italic">
@@ -2133,6 +2397,16 @@ export default function DreGerencial() {
                                     </Link>
                                   )}
                                   <span className="truncate font-medium">{conta.nome}</span>
+                                  {!isCliente && (
+                                    <DreSelecionarCentro
+                                      centros={centros}
+                                      valor={conta.centroId || null}
+                                      onChange={(centroNovo) =>
+                                        handleAlterarCentroConta(conta.id, centroNovo)
+                                      }
+                                      disabled={salvandoCentroId === conta.id}
+                                    />
+                                  )}
                                 </div>
                                 <Button
                                   type="button"
