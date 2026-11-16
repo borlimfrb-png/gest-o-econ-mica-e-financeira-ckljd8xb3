@@ -12,6 +12,7 @@ import {
   planoContasService,
 } from '@/services/financeService'
 import { DreSelecionarCentro } from '@/components/DreSelecionarCentro'
+import { GraficoEvolucaoCentroCusto } from '@/components/GraficoEvolucaoCentroCusto'
 import type { CentroRecord, ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { gerarListaMeses, type ClassificacaoDre } from '@/lib/dreGerencialTypes'
 import { calcularDreGerencialMatriz, calcularComparativoDre } from '@/lib/dreGerencialCalculo'
@@ -2444,6 +2445,17 @@ export default function DreGerencial() {
           )}
         </CardContent>
       </Card>
+
+      {/* ================= GRÁFICO DE EVOLUÇÃO MENSAL POR CENTRO DE CUSTO ================= */}
+      <GraficoEvolucaoCentroCusto
+        matrizPeriodo1={matrizFiltrada}
+        mesesPeriodo1={meses}
+        descricaoPeriodo1={p1Descricao}
+        modoComparativo={modoVisualizacao === 'comparativo'}
+        matrizPeriodo2={matrizPeriodo2Filtrada}
+        mesesPeriodo2={mesesPeriodo2}
+        descricaoPeriodo2={p2Descricao}
+      />
 
       {/* Nota de rodapé explicativa */}
       <div className="text-xs text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-1 print:border-none print:bg-white print:p-0">
