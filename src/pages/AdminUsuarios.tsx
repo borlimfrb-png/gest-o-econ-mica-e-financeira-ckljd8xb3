@@ -30,6 +30,10 @@ import {
 } from 'lucide-react'
 import { ModalAuditoriaCadastros } from '@/components/ModalAuditoriaCadastros'
 import AbaHabilitarFerramentas from '@/components/admin/AbaHabilitarFerramentas'
+import { AbaAuditoriaUsuarios } from '@/components/admin/AbaAuditoriaUsuarios'
+import { AbaPermissoesPerfil } from '@/components/admin/AbaPermissoesPerfil'
+import { History } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -848,6 +852,20 @@ export default function AdminUsuarios() {
             <Wrench className="w-3.5 h-3.5" />
             Habilitar Ferramentas
           </TabsTrigger>
+          <TabsTrigger
+            value="permissoes-perfil"
+            className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] gap-1.5"
+          >
+            <KeyRound className="w-3.5 h-3.5" />
+            Permissões por Perfil
+          </TabsTrigger>
+          <TabsTrigger
+            value="auditoria"
+            className="text-xs data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] gap-1.5"
+          >
+            <History className="w-3.5 h-3.5" />
+            Auditoria
+          </TabsTrigger>
         </TabsList>
 
         {/* ABA 1: Usuários e Permissões */}
@@ -1060,6 +1078,16 @@ export default function AdminUsuarios() {
         {/* ABA 2: Habilitar Ferramentas */}
         <TabsContent value="ferramentas" className="mt-0">
           <AbaHabilitarFerramentas />
+        </TabsContent>
+
+        {/* ABA 3: Permissões por Perfil */}
+        <TabsContent value="permissoes-perfil" className="mt-0">
+          <AbaPermissoesPerfil />
+        </TabsContent>
+
+        {/* ABA 4: Auditoria */}
+        <TabsContent value="auditoria" className="mt-0">
+          <AbaAuditoriaUsuarios />
         </TabsContent>
       </Tabs>
 

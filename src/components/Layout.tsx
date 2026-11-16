@@ -48,6 +48,7 @@ import {
   type NavGroupConfig,
 } from '@/lib/menuNavigationConfig'
 import { getRotaInicialPorPerfil } from '@/lib/permissoesPerfis'
+import { usePermissoesDinamicas } from '@/contexts/PermissoesDinamicasContext'
 import { filtrarMenuPorFerramentas } from '@/lib/ferramentasCatalogo'
 import { useFerramentas } from '@/contexts/FerramentasContext'
 import {
@@ -172,14 +173,22 @@ export default function Layout() {
     : '/empresas'
 
   // Menu filtrado por permissão do perfil ativo
+  const { perfilTemAcessoDinamico } = usePermissoesDinamicas()
+
   const menuGruposFiltrados = useMemo(() => {
-    const base = filtrarMenuPorPerfil(MENU_GRUPOS, user?.role, isAdmin, balancoDreUrl)
+    const base = filtrarMenuPorPerfil(
+      MENU_GRUPOS,
+      user?.role,
+      isAdmin,
+      balancoDreUrl,
+      perfilTemAcessoDinamico,
+    )
     // Filtro adicional por habilitação de ferramentas (toggles do admin).
     // Cliente AGORA também é filtrado (respeita a lista desabilitada dele);
     // admin NUNCA é filtrado (acesso irrestrito de gestão).
     if (isAdmin) return base
     return filtrarMenuPorFerramentas(base, desabilitadas)
-  }, [user?.role, isAdmin, balancoDreUrl, desabilitadas])
+  }, [user?.role, isAdmin, balancoDreUrl, desabilitadas, perfilTemAcessoDinamico])
 
   // Lista plana de itens navegáveis para o CommandPalette (Ctrl+K)
   const itensNavegaveis = useMemo(() => {

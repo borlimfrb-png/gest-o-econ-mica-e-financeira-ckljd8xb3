@@ -65,6 +65,25 @@ routerAdd('POST', '/backend/v1/admin/users/reset-password', (e) => {
   }
 
   // Auditoria best-effort (não falha a operação se o log der erro)
+  // 1) Log de auditoria de usuários (nova coleção 0114) — tela Auditoria
+  try {
+    const audCol = $app.findCollectionByNameOrId('auditoria_usuarios')
+    const audRecord = new Record(audCol, {
+      autor: authRecord.id,
+      autor_email: authRecord.getString('email') || '',
+      autor_nome: authRecord.getString('name') || '',
+      acao: 'redefinicao_senha',
+      detalhes:
+        'Senha redefinida pelo painel para ' +
+        (alvo.getString('name') || alvo.getString('email') || alvo.id),
+      ip: '',
+    })
+    $app.save(audRecord)
+  } catch (auditErr) {
+    console.log('[router:admin_reset_password] Aviso ao gravar log de auditoria:', String(auditErr))
+  }
+
+  // 2) Auditoria de cadastros (mantida)
   try {
     const auditCol = $app.findCollectionByNameOrId('auditoria_cadastros')
     const auditRecord = new Record(auditCol, {

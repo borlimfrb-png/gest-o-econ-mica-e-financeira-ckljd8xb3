@@ -246,9 +246,17 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
 
 /**
  * Verifica se um perfil específico tem permissão para acessar determinado módulo.
+ *
+ * FUNÇÃO FALLBACK: usa apenas as listas estáticas deste arquivo. O app em execução
+ * usa perfilTemAcessoDinamico (src/contexts/PermissoesDinamicasContext.tsx), que
+ * consulta a personalização da coleção `permissoes_perfis` quando existir e cai
+ * nesta função quando não há override. O admin é imune em ambos os caminhos.
  */
 export function perfilTemAcesso(role: UserRole | undefined, modulo: ModuloSistema): boolean {
   const userRole = role || 'empresa'
+  if (userRole === 'admin') {
+    return PERFIS_ACESSO.admin.modulosPermitidos.includes(modulo)
+  }
   const config = PERFIS_ACESSO[userRole] || PERFIS_ACESSO.empresa
   return config.modulosPermitidos.includes(modulo)
 }

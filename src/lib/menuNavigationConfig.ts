@@ -1134,7 +1134,12 @@ export function filtrarMenuPorPerfil(
   role: UserRole | undefined,
   isAdmin: boolean,
   balancoDreUrl: string,
+  temAcesso?: (modulo: ModuloSistema) => boolean,
 ): NavGroupConfig[] {
+  // Função de acesso injetável: o app passa perfilTemAcessoDinamico (permite a
+  // personalização por perfil da coleção permissoes_perfis); sem injeção usa o
+  // fallback estático de permissoesPerfis.ts.
+  const podeAcessar = temAcesso || ((m: ModuloSistema) => perfilTemAcesso(role, m))
   const isFinanceiro = role === 'financeiro'
   const isComercial = role === 'comercial'
   const isCliente = role === 'cliente'
@@ -1263,7 +1268,7 @@ export function filtrarMenuPorPerfil(
     if (item.adminOnly && !isAdmin) return null
     if (isFinanceiro && item.hideFinanceiro) return null
     if (isComercial && item.hideComercial) return null
-    if (item.modulo && !perfilTemAcesso(role, item.modulo)) return null
+    if (item.modulo && !podeAcessar(item.modulo)) return null
 
     return {
       ...item,
@@ -1276,7 +1281,7 @@ export function filtrarMenuPorPerfil(
       if (grupo.adminOnly && !isAdmin) return null
       if (isFinanceiro && grupo.hideFinanceiro) return null
       if (isComercial && grupo.hideComercial) return null
-      if (grupo.modulo && !perfilTemAcesso(role, grupo.modulo)) return null
+      if (grupo.modulo && !podeAcessar(grupo.modulo)) return null
 
       // Se for link direto
       if (grupo.tipo === 'link') {
