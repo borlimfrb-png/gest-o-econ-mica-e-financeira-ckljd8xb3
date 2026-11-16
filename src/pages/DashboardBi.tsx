@@ -51,7 +51,7 @@ import {
 
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRealtime } from '@/hooks/use-realtime'
+import { useRealtimeDebounced } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 
 import {
@@ -258,18 +258,21 @@ export default function DashboardBi() {
     }
   }, [])
 
-  useRealtime('empresas', reloadData)
-  useRealtime('balancos', reloadData)
-  useRealtime('dre', reloadData)
-  useRealtime('produtos', reloadData)
-  useRealtime('recebiveis', reloadData)
-  useRealtime('notas_fiscais', reloadData)
-  useRealtime('bsc_kpis', reloadData)
-  useRealtime('bsc_iniciativas', reloadData)
-  useRealtime('bi_apresentacoes', reloadApresentacoes)
-  useRealtime('lancamentos', reloadData)
-  useRealtime('plano_contas', reloadData)
-  useRealtime('contas', reloadData)
+  // Realtime com debounce: rajadas de eventos (importações em lote, várias
+  // coleções de uma vez) são coalescidas para não estourar o rate limit do
+  // backend (429) e deixar a tela sem dados no modo de execução.
+  useRealtimeDebounced('empresas', reloadData)
+  useRealtimeDebounced('balancos', reloadData)
+  useRealtimeDebounced('dre', reloadData)
+  useRealtimeDebounced('produtos', reloadData)
+  useRealtimeDebounced('recebiveis', reloadData)
+  useRealtimeDebounced('notas_fiscais', reloadData)
+  useRealtimeDebounced('bsc_kpis', reloadData)
+  useRealtimeDebounced('bsc_iniciativas', reloadData)
+  useRealtimeDebounced('bi_apresentacoes', reloadApresentacoes)
+  useRealtimeDebounced('lancamentos', reloadData)
+  useRealtimeDebounced('plano_contas', reloadData)
+  useRealtimeDebounced('contas', reloadData)
 
   // Carga inicial e sob filtros
   useEffect(() => {
@@ -347,7 +350,7 @@ export default function DashboardBi() {
     return () => {
       cancelado = true
     }
-  }, [refreshTrigger, toast])
+  }, [refreshTrigger, toast, selectedEmpresaId])
 
   // Empresas ativas sob o escopo selecionado (individual ou grupo)
   const empresasNoEscopo = useMemo<EmpresaRecord[]>(() => {

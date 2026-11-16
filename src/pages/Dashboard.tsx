@@ -56,7 +56,7 @@ import {
 } from '@/lib/financeCalculations'
 import { analisarAlertasProativos } from '@/lib/alertasProativos'
 import { cn } from '@/lib/utils'
-import { useRealtime } from '@/hooks/use-realtime'
+import { useRealtimeDebounced } from '@/hooks/use-realtime'
 import { AnimatedCounter } from '@/components/AnimatedCounter'
 import {
   PieChart,
@@ -340,49 +340,52 @@ export default function Dashboard() {
     loadData()
   }, [selectedEmpresaId, empresasIdsAtivas])
 
-  useRealtime<BalancoRecord>('balancos', () => {
+  // Realtime com debounce: um evento em qualquer coleção recarrega tudo, mas
+  // rajadas (importações em lote, várias coleções de uma vez) são coalescidas
+  // para não estourar o rate limit do backend (429) e deixar a tela vazia.
+  useRealtimeDebounced<BalancoRecord>('balancos', () => {
     loadData()
   })
-  useRealtime<DreRecord>('dre', () => {
+  useRealtimeDebounced<DreRecord>('dre', () => {
     loadData()
   })
-  useRealtime<LancamentoCentroRecord>('lancamentos_centro', () => {
+  useRealtimeDebounced<LancamentoCentroRecord>('lancamentos_centro', () => {
     loadData()
   })
-  useRealtime<LancamentoRecord>('lancamentos', () => {
+  useRealtimeDebounced<LancamentoRecord>('lancamentos', () => {
     loadData()
   })
-  useRealtime<TipoDespesaRecord>('tipos_despesa', () => {
+  useRealtimeDebounced<TipoDespesaRecord>('tipos_despesa', () => {
     loadData()
   })
-  useRealtime<CentroRecord>('centros', () => {
+  useRealtimeDebounced<CentroRecord>('centros', () => {
     loadData()
   })
-  useRealtime<ContaRecord>('contas', () => {
+  useRealtimeDebounced<ContaRecord>('contas', () => {
     loadData()
   })
-  useRealtime<PlanoContaRecord>('plano_contas', () => {
+  useRealtimeDebounced<PlanoContaRecord>('plano_contas', () => {
     loadData()
   })
-  useRealtime<MetaLancamentoRecord>('metas_lancamentos', () => {
+  useRealtimeDebounced<MetaLancamentoRecord>('metas_lancamentos', () => {
     loadData()
   })
-  useRealtime<ContratoRecord>('contratos', () => {
+  useRealtimeDebounced<ContratoRecord>('contratos', () => {
     loadData()
   })
-  useRealtime<RecebivelRecord>('recebiveis', () => {
+  useRealtimeDebounced<RecebivelRecord>('recebiveis', () => {
     loadData()
   })
-  useRealtime<RecebivelRecord>('financeiro', () => {
+  useRealtimeDebounced<RecebivelRecord>('financeiro', () => {
     loadData()
   })
-  useRealtime<NotaFiscalRecord>('notas_fiscais', () => {
+  useRealtimeDebounced<NotaFiscalRecord>('notas_fiscais', () => {
     loadData()
   })
-  useRealtime<BscIniciativaRecord>('bsc_iniciativas', () => {
+  useRealtimeDebounced<BscIniciativaRecord>('bsc_iniciativas', () => {
     loadData()
   })
-  useRealtime<BscKpiRecord>('bsc_kpis', () => {
+  useRealtimeDebounced<BscKpiRecord>('bsc_kpis', () => {
     loadData()
   })
 
