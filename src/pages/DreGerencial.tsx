@@ -116,8 +116,10 @@ export default function DreGerencial() {
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
 
-  // Modo de visualização: 'unico' ou 'comparativo'
-  const [modoVisualizacao, setModoVisualizacao] = useState<'unico' | 'comparativo'>('unico')
+  // Modo de visualização: 'unico', 'comparativo' ou 'anual' (ano completo, 12 meses)
+  const [modoVisualizacao, setModoVisualizacao] = useState<'unico' | 'comparativo' | 'anual'>(
+    'unico',
+  )
 
   // Filtros de período 1 (base) - máximo 12 meses
   const currentYear = selectedAno || new Date().getFullYear()
@@ -354,9 +356,11 @@ export default function DreGerencial() {
   }
 
   // Lista de colunas de meses geradas para período 1
+  // No modo "anual" são sempre os 12 meses do exercício (jan a dez), independente dos seletores
   const meses = useMemo(() => {
+    if (modoVisualizacao === 'anual') return gerarListaMeses(anoInicial, 1, 12)
     return gerarListaMeses(anoInicial, mesInicial, qtdMeses)
-  }, [anoInicial, mesInicial, qtdMeses])
+  }, [modoVisualizacao, anoInicial, mesInicial, qtdMeses])
 
   // Lista de colunas de meses geradas para período 2 (comparativo)
   const mesesPeriodo2 = useMemo(() => {
@@ -559,7 +563,11 @@ export default function DreGerencial() {
       empresa: selectedEmpresa,
       exercicioAno: anoInicial,
       periodoDescricao:
-        modoVisualizacao === 'comparativo' ? `${p1Descricao} vs ${p2Descricao}` : p1Descricao,
+        modoVisualizacao === 'anual'
+          ? `Ano completo ${anoInicial} (jan a dez)`
+          : modoVisualizacao === 'comparativo'
+            ? `${p1Descricao} vs ${p2Descricao}`
+            : p1Descricao,
       isGrupo: Boolean(isGrupoAtivo),
       nomeGrupo: grupoAtivo?.nome || undefined,
     }
@@ -685,6 +693,19 @@ export default function DreGerencial() {
               >
                 2 Períodos
               </Badge>
+            </button>
+            <button
+              type="button"
+              onClick={() => setModoVisualizacao('anual')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
+                modoVisualizacao === 'anual'
+                  ? 'bg-white text-blue-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+              title="Ano completo: 12 colunas mensais (jan a dez) + Total do ano"
+            >
+              <Calendar className="w-3 h-3" />
+              <span>Ano Completo (12 Meses)</span>
             </button>
           </div>
 
@@ -865,24 +886,30 @@ export default function DreGerencial() {
                 <div className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 text-blue-600" />
                   <span className="text-[11px] font-bold text-slate-700 uppercase">
-                    {modoVisualizacao === 'comparativo' ? 'Período Atual:' : 'Início:'}
+                    {modoVisualizacao === 'comparativo'
+                      ? 'Período Atual:'
+                      : modoVisualizacao === 'anual'
+                        ? 'Ano:'
+                        : 'Início:'}
                   </span>
                 </div>
-                <Select
-                  value={String(mesInicial)}
-                  onValueChange={(val) => setMesInicial(Number(val))}
-                >
-                  <SelectTrigger className="h-7 text-xs bg-white w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MESES_OPCOES.map((m) => (
-                      <SelectItem key={m.valor} value={String(m.valor)} className="text-xs">
-                        {m.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {modoVisualizacao !== 'anual' && (
+                  <Select
+                    value={String(mesInicial)}
+                    onValueChange={(val) => setMesInicial(Number(val))}
+                  >
+                    <SelectTrigger className="h-7 text-xs bg-white w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MESES_OPCOES.map((m) => (
+                        <SelectItem key={m.valor} value={String(m.valor)} className="text-xs">
+                          {m.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
 
                 <Input
                   type="number"
@@ -893,16 +920,20 @@ export default function DreGerencial() {
                   max={2100}
                 />
 
-                <span className="text-[11px] text-slate-500 font-medium">Meses:</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={qtdMeses}
-                  onChange={(e) => handleQtdMesesChange(Number(e.target.value))}
-                  className="h-7 w-12 text-xs text-center font-bold"
-                  title="Quantidade de meses (máx 12)"
-                />
+                {modoVisualizacao !== 'anual' && (
+                  <>
+                    <span className="text-[11px] text-slate-500 font-medium">Meses:</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={qtdMeses}
+                      onChange={(e) => handleQtdMesesChange(Number(e.target.value))}
+                      className="h-7 w-12 text-xs text-center font-bold"
+                      title="Quantidade de meses (máx 12)"
+                    />
+                  </>
+                )}
               </div>
 
               {/* Bloco Período 2 (Aparece apenas quando comparativo ativo) */}
@@ -988,7 +1019,7 @@ export default function DreGerencial() {
       </Card>
 
       {/* Cards de Resumo Gerencial */}
-      {modoVisualizacao === 'unico' ? (
+      {modoVisualizacao !== 'comparativo' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 print:grid-cols-3">
           <Card className="bg-white border-slate-200 shadow-xs hover:border-slate-300 transition-colors">
             <CardContent className="py-2.5 px-3.5">
@@ -1073,8 +1104,8 @@ export default function DreGerencial() {
               </p>
               <p className="text-[9.5px] font-semibold opacity-85 mt-0.5">
                 Margem Líquida:{' '}
-                {matriz.margemLiquidaTotal !== null
-                  ? `${matriz.margemLiquidaTotal.toFixed(1)}%`
+                {matrizFiltrada.margemLiquidaTotal !== null
+                  ? `${matrizFiltrada.margemLiquidaTotal.toFixed(1)}%`
                   : '—'}
               </p>
             </CardContent>
@@ -1264,7 +1295,9 @@ export default function DreGerencial() {
           Empresa: {selectedEmpresa ? selectedEmpresa.nome : 'Consolidado'} ·{' '}
           {modoVisualizacao === 'comparativo'
             ? `Comparativo: ${p1Descricao} (Atual) vs ${p2Descricao} (Comparado)`
-            : `Período: ${meses[0]?.rotuloCurto} a ${meses[meses.length - 1]?.rotuloCurto} (${meses.length} meses)`}
+            : modoVisualizacao === 'anual'
+              ? `Ano completo ${anoInicial} (jan a dez — 12 meses)`
+              : `Período: ${meses[0]?.rotuloCurto} a ${meses[meses.length - 1]?.rotuloCurto} (${meses.length} meses)`}
         </p>
       </div>
 
@@ -1276,12 +1309,16 @@ export default function DreGerencial() {
               <BarChart3 className="w-4 h-4 text-blue-600" />
               {modoVisualizacao === 'comparativo'
                 ? 'DRE Comparativa entre Períodos (Lado a Lado)'
-                : `Matriz Gerencial de Resultados (${meses.length} meses)`}
+                : modoVisualizacao === 'anual'
+                  ? `Ano Completo ${anoInicial} (12 Meses)`
+                  : `Matriz Gerencial de Resultados (${meses.length} meses)`}
             </CardTitle>
             <CardDescription className="text-xs">
               {modoVisualizacao === 'comparativo'
                 ? `Análise lado a lado de ${p1Descricao} (Atual) vs ${p2Descricao} (Comparado) com variação absoluta (R$) e percentual (%).`
-                : 'Estrutura: Receitas (1) – Despesas Variáveis (2) – Despesas Fixas (3) – Despesas Financeiras (4) + Receitas Financeiras (5) = Lucro/Prejuízo (6).'}
+                : modoVisualizacao === 'anual'
+                  ? 'Visão anual: 12 colunas mensais (jan a dez) + Total do ano. Estrutura: Receitas (1) – Despesas Variáveis (2) – Despesas Fixas (3) – Despesas Financeiras (4) + Receitas Financeiras (5) = Lucro/Prejuízo (6).'
+                  : 'Estrutura: Receitas (1) – Despesas Variáveis (2) – Despesas Fixas (3) – Despesas Financeiras (4) + Receitas Financeiras (5) = Lucro/Prejuízo (6).'}
             </CardDescription>
           </div>
           <div className="text-xs text-slate-500 font-medium">
@@ -1289,6 +1326,10 @@ export default function DreGerencial() {
               <span>
                 Comparando: <strong className="text-blue-700">{p1Descricao}</strong> vs{' '}
                 <strong className="text-purple-700">{p2Descricao}</strong>
+              </span>
+            ) : modoVisualizacao === 'anual' ? (
+              <span>
+                Ano: <strong className="text-blue-700">{anoInicial}</strong> (jan a dez)
               </span>
             ) : (
               <span>
@@ -1315,8 +1356,8 @@ export default function DreGerencial() {
                 mensagem="Nenhum lançamento contábil ou DRE importado para esta empresa no período selecionado. Entre em contato com seu consultor Borlim para o envio dos demonstrativos."
               />
             </div>
-          ) : modoVisualizacao === 'unico' ? (
-            /* TABELA PERÍODO ÚNICO (Matriz mês a mês) */
+          ) : modoVisualizacao !== 'comparativo' ? (
+            /* TABELA MATRIZ MÊS A MÊS (Período único e Ano Completo 12 meses) */
             <DoubleHorizontalScroll scrollClassName="scrollbar-thin scrollbar-thumb-slate-300">
               <table
                 className="text-xs border-collapse w-full"
@@ -1617,7 +1658,7 @@ export default function DreGerencial() {
                     </td>
 
                     {meses.map((m) => {
-                      const resMes = matriz.lucroPrejuizo.valoresPorMes[m.chave] || 0
+                      const resMes = matrizFiltrada.lucroPrejuizo.valoresPorMes[m.chave] || 0
                       const isMesPositivo = resMes >= 0
                       return (
                         <td
@@ -1636,7 +1677,7 @@ export default function DreGerencial() {
                         isLucro ? 'text-emerald-900' : 'text-rose-900'
                       }`}
                     >
-                      {formatBrl(matriz.lucroPrejuizo.totalPeriodo)}
+                      {formatBrl(matrizFiltrada.lucroPrejuizo.totalPeriodo)}
                     </td>
                   </tr>
 
@@ -1649,7 +1690,7 @@ export default function DreGerencial() {
                     </td>
 
                     {meses.map((m) => {
-                      const mg = matriz.margemLiquidaPorMes[m.chave]
+                      const mg = matrizFiltrada.margemLiquidaPorMes[m.chave]
                       return (
                         <td
                           key={m.chave}
@@ -1671,16 +1712,16 @@ export default function DreGerencial() {
                     })}
 
                     <td className="py-2.5 px-4 text-right font-bold text-slate-900 bg-slate-200/50">
-                      {matriz.margemLiquidaTotal !== null &&
-                      matriz.margemLiquidaTotal !== undefined ? (
+                      {matrizFiltrada.margemLiquidaTotal !== null &&
+                      matrizFiltrada.margemLiquidaTotal !== undefined ? (
                         <span
                           className={
-                            matriz.margemLiquidaTotal >= 0
+                            matrizFiltrada.margemLiquidaTotal >= 0
                               ? 'text-emerald-800 font-extrabold'
                               : 'text-rose-800 font-extrabold'
                           }
                         >
-                          {matriz.margemLiquidaTotal.toFixed(1)}%
+                          {matrizFiltrada.margemLiquidaTotal.toFixed(1)}%
                         </span>
                       ) : (
                         '—'
