@@ -70,6 +70,8 @@ function montarEstruturasSinteticas(): {
 } {
   const contas: ContaRecord[] = CONTAS_SINTETICAS.map((c) => ({
     id: `__dre_${c.sufixo}__`,
+    collectionId: 'sintetico',
+    collectionName: 'contas',
     nome: c.nome,
     tipo: c.tipo,
     classificacao_dre: c.classificacao,
@@ -77,6 +79,8 @@ function montarEstruturasSinteticas(): {
   }))
   const planoContas: PlanoContaRecord[] = contas.map((c) => ({
     id: `__pc_${c.id}__`,
+    collectionId: 'sintetico',
+    collectionName: 'plano_contas',
     conta: c.id,
     centro: '',
     user: 'sistema',

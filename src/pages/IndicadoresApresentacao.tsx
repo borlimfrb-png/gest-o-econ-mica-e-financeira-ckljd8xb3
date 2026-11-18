@@ -575,7 +575,6 @@ export function IndicadoresApresentacao() {
       />
 
       {/* SEÇÃO DESTACADA: GRÁFICO DE RADAR POR CATEGORIA */}
->>>>>>>
       {modoVisualizacao !== 'slides' && (
         <section aria-label="Visão Geral por Categoria (Radar)">
           <GraficoRadarCategorias
