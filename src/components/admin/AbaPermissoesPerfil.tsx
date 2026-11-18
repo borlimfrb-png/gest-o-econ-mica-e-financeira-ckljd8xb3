@@ -94,6 +94,16 @@ export function AbaPermissoesPerfil({ perfilInicial = 'financeiro' }: Props) {
   const configPerfil: PerfilConfig = PERFIS_ACESSO[perfilSelecionado]
   const overrideAtivo = Boolean(overrides[perfilSelecionado])
 
+  // União do padrão estático com o override salvo: módulos presentes só no
+  // override aparecem no painel (caso do gerencial_fluxo_caixa removido do
+  // padrão, porém habilitado via override).
+  const modulosListados = useMemo(() => {
+    const uniao = new Set<ModuloSistema>(configPerfil.modulosPermitidos)
+    const override = overrides[perfilSelecionado]
+    if (override) override.forEach((m) => uniao.add(m))
+    return Array.from(uniao)
+  }, [configPerfil, overrides, perfilSelecionado])
+
   // Sincroniza o switchboard com o estado efetivo (override → padrão).
   useEffect(() => {
     const lista = overrides[perfilSelecionado] || configPerfil.modulosPermitidos
@@ -224,12 +234,12 @@ export function AbaPermissoesPerfil({ perfilInicial = 'financeiro' }: Props) {
 
         {/* Lista de módulos com toggles */}
         <div className="rounded-lg border divide-y">
-          {configPerfil.modulosPermitidos.length === 0 ? (
+          {modulosListados.length === 0 ? (
             <p className="p-4 text-sm text-slate-500">
               Este perfil não possui módulos no catálogo padrão.
             </p>
           ) : (
-            configPerfil.modulosPermitidos.map((modulo) => (
+            modulosListados.map((modulo) => (
               <div key={modulo} className="flex items-center justify-between gap-4 px-4 py-2.5">
                 <div>
                   <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
