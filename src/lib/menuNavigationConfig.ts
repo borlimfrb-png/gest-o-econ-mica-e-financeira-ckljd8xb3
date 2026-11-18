@@ -221,17 +221,6 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
             badgeVariant: 'blue',
             palavrasChave: ['plano de contas', 'estrutura', 'vínculos', 'contabilidade'],
           },
-          {
-            id: 'cad-dre-gerencial',
-            name: 'DRE Gerencial',
-            path: '/gerencial/dre',
-            icon: BarChart3,
-            descricao: 'Demonstração do Resultado matricial por período até 12 meses',
-            modulo: 'gerencial_dre',
-            badge: 'Gerencial',
-            badgeVariant: 'emerald',
-            palavrasChave: ['dre', 'gerencial', 'lucro', 'prejuizo', 'receitas', 'despesas'],
-          },
         ],
       },
       {
