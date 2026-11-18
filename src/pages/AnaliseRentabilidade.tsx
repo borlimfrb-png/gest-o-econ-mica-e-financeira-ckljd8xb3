@@ -29,6 +29,9 @@ import { ModalAjusteDespesaVariavel } from '@/components/ModalAjusteDespesaVaria
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
+import { SecaoRadar360 } from '@/components/analises/SecaoRadar360'
+import { SecaoAnaliseAnual } from '@/components/analises/SecaoAnaliseAnual'
+import { calcularAnaliseAnual360 } from '@/lib/analiseAnual360'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -300,6 +303,19 @@ export default function AnaliseRentabilidade() {
   const analise = useMemo<AnaliseRentabilidadeResultado>(() => {
     return calcularAnaliseRentabilidade(lancamentos, contas, meses, planoContas)
   }, [lancamentos, contas, meses, planoContas])
+
+  // Radar 360 + Análise Anual (reutiliza os mesmos dados, sem consulta nova)
+  const resultado360 = useMemo(() => {
+    return calcularAnaliseAnual360({
+      tipo: 'rentabilidade',
+      lancamentos,
+      contas,
+      planoContas,
+      anoAtual: anoInicial,
+      mesInicial,
+      qtdMeses,
+    })
+  }, [lancamentos, contas, planoContas, anoInicial, mesInicial, qtdMeses])
 
   // Lançamentos individuais de Despesas Variáveis para detalhamento por Centro de Custo
   const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
@@ -1011,6 +1027,12 @@ export default function AnaliseRentabilidade() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* ================= RADAR 360 E ANÁLISE ANUAL ================= */}
+      <div className="space-y-6 mb-6">
+        <SecaoRadar360 tipo="rentabilidade" resultado={resultado360} />
+        <SecaoAnaliseAnual tipo="rentabilidade" resultado={resultado360} />
       </div>
 
       {/* Gráfico Principal de Evolução no Período */}
