@@ -49,36 +49,4 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-/**
- * Variante com debounce: em rajadas de eventos (importações em lote, várias
- * coleções de uma vez) coalesca os recarregamentos para não estourar o rate
- * limit do backend (429) nem piscar a tela vazia.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-  delayMs: number = 400,
-) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        callback(data)
-      }, delayMs)
-    },
-    enabled,
-  )
-}
-
 export default useRealtime
