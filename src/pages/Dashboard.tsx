@@ -111,6 +111,7 @@ import {
   Flame,
   Clock,
   ListTodo,
+  Presentation,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -2191,6 +2192,18 @@ export default function Dashboard() {
               <Link to="/analise-economica-financeira">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
                 Análise Econômica e Financeira
+              </Link>
+            </Button>
+
+            <Button
+              asChild
+              size="sm"
+              variant="outline"
+              className="text-xs border-blue-200 hover:bg-blue-50 text-blue-700 font-medium h-8"
+            >
+              <Link to="/indicadores/apresentacao">
+                <Presentation className="w-3.5 h-3.5" />
+                Apresentação
               </Link>
             </Button>
 
