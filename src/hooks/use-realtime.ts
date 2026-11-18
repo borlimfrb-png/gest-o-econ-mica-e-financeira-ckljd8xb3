@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -47,45 +47,6 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
       }
     }
   }, [collectionName, enabled])
-}
-
-/**
- * Realtime subscription with a debounced callback.
- * Multiple rapid events (e.g. bulk imports) coalesce into a single
- * callback execution after `delayMs` of quiet — avoids re-render storms.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-  delayMs: number = 1500,
-) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const pendingRef = useRef<RecordSubscription<TRecord> | undefined>(undefined)
-
-  const flush = useCallback(() => {
-    timeoutRef.current = undefined
-    const pending = pendingRef.current
-    pendingRef.current = undefined
-    if (pending) callback(pending)
-  }, [])
-
-  const debouncedCallback = useCallback(
-    (data: RecordSubscription<TRecord>) => {
-      pendingRef.current = data
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(flush, delayMs)
-    },
-    [delayMs, flush],
-  )
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    }
-  }, [])
-
-  useRealtime<TRecord>(collectionName, debouncedCallback, enabled)
 }
 
 export default useRealtime
