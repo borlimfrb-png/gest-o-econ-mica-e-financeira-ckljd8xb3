@@ -4,8 +4,18 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
-import { contasService, lancamentosService, planoContasService } from '@/services/financeService'
-import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import {
+  balancosService,
+  contasService,
+  lancamentosService,
+  planoContasService,
+} from '@/services/financeService'
+import type {
+  BalancoRecord,
+  ContaRecord,
+  LancamentoRecord,
+  PlanoContaRecord,
+} from '@/types/finance'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import {
   calcularAnaliseRentabilidade,
@@ -31,7 +41,10 @@ import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
 import { SecaoRadar360 } from '@/components/analises/SecaoRadar360'
 import { SecaoAnaliseAnual } from '@/components/analises/SecaoAnaliseAnual'
+import { SecaoRelatorioRentabilidadeDetalhado } from '@/components/analises/SecaoRelatorioRentabilidadeDetalhado'
+import { SecaoComparativoIndicadoresAnuais } from '@/components/analises/SecaoComparativoIndicadoresAnuais'
 import { calcularAnaliseAnual360 } from '@/lib/analiseAnual360'
+import { calcularComparativoIndicadoresAnuais } from '@/lib/comparativoIndicadoresAnuais'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -147,6 +160,7 @@ export default function AnaliseRentabilidade() {
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [balancos, setBalancos] = useState<BalancoRecord[]>([])
 
   // Modal para classificação em lote do plano de contas
   const [modalClassificacaoOpen, setModalClassificacaoOpen] = useState(false)
@@ -189,6 +203,7 @@ export default function AnaliseRentabilidade() {
       let lancsPromise: Promise<LancamentoRecord[]>
       let contasPromise: Promise<ContaRecord[]>
       let planosPromise: Promise<PlanoContaRecord[]>
+      let balancosPromise: Promise<BalancoRecord[]>
 
       if (isGrupoAtivo && grupoAtivo && grupoAtivo.empresas && grupoAtivo.empresas.length > 0) {
         const empIds = new Set(grupoAtivo.empresas)
@@ -198,6 +213,9 @@ export default function AnaliseRentabilidade() {
           .then((list) => list.filter((l) => empIds.has(l.empresa)))
         contasPromise = contasService.getAll(opts)
         planosPromise = planoContasService.getAll(opts)
+        balancosPromise = balancosService
+          .getAll()
+          .then((list) => list.filter((b) => empIds.has(b.empresa)))
       } else if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
         lancsPromise = lancamentosService.getAll({
           empresaId: selectedEmpresaId,
@@ -205,24 +223,28 @@ export default function AnaliseRentabilidade() {
         })
         contasPromise = contasService.getAll({ empresaId: selectedEmpresaId })
         planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
+        balancosPromise = balancosService.getByEmpresa(selectedEmpresaId)
       } else {
         const empOpts =
           empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
         lancsPromise = lancamentosService.getAll({ expandRelations: true })
         contasPromise = contasService.getAll(empOpts)
         planosPromise = planoContasService.getAll(empOpts)
+        balancosPromise = balancosService.getAll()
       }
 
-      const [contasList, lancamentosList, planosList] = await Promise.all([
+      const [contasList, lancamentosList, planosList, balancosList] = await Promise.all([
         contasPromise,
         lancsPromise,
         planosPromise,
+        balancosPromise,
       ])
 
       // Deduplicação por id por segurança
       setContas(Array.from(new Map(contasList.map((i) => [i.id, i])).values()))
       setLancamentos(lancamentosList)
       setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
+      setBalancos(Array.from(new Map(balancosList.map((i) => [i.id, i])).values()))
 
       // Identifica anos disponíveis nos lançamentos carregados para o escopo
       const anosSet = new Set<number>()
@@ -263,6 +285,7 @@ export default function AnaliseRentabilidade() {
   useRealtime<LancamentoRecord>('lancamentos', () => carregarDados())
   useRealtime<ContaRecord>('contas', () => carregarDados())
   useRealtime<PlanoContaRecord>('plano_contas', () => carregarDados())
+  useRealtime<BalancoRecord>('balancos', () => carregarDados())
 
   // Listener para evento customizado de atualização de contas
   useEffect(() => {
@@ -316,6 +339,20 @@ export default function AnaliseRentabilidade() {
       qtdMeses,
     })
   }, [lancamentos, contas, planoContas, anoInicial, mesInicial, qtdMeses])
+
+  // Comparativo de Indicadores Anuais (motor oficial por ano — sem consulta nova,
+  // reutiliza os arrays já carregados pela tela; anos sem dado viram "—")
+  const comparativoIndicadores = useMemo(() => {
+    return calcularComparativoIndicadoresAnuais({
+      lancamentos,
+      contas,
+      planoContas,
+      balancos,
+      anoAtual: anoInicial,
+      mesInicial,
+      qtdMeses,
+    })
+  }, [lancamentos, contas, planoContas, balancos, anoInicial, mesInicial, qtdMeses])
 
   // Lançamentos individuais de Despesas Variáveis para detalhamento por Centro de Custo
   const lancamentosVariaveis = useMemo<LancamentoVariavelItem[]>(() => {
@@ -1028,6 +1065,19 @@ export default function AnaliseRentabilidade() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ================= RELATÓRIO DETALHADO + COMPARATIVO DE INDICADORES ANUAIS ================= */}
+      <SecaoRelatorioRentabilidadeDetalhado
+        resultado={analise}
+        comparativo={comparativoAnos}
+        nomeContexto={nomeContexto}
+        exercicioAno={anoInicial}
+      />
+
+      <SecaoComparativoIndicadoresAnuais
+        resultado={comparativoIndicadores}
+        empresaNome={nomeContexto}
+      />
 
       {/* ================= RADAR 360 E ANÁLISE ANUAL ================= */}
       <div className="space-y-6 mb-6">

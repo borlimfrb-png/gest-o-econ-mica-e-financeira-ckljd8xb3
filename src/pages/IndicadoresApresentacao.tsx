@@ -15,6 +15,8 @@ import { GraficoRadarCategorias } from '@/components/GraficoRadarCategorias'
 import { calcularDiagnosticoRadar } from '@/lib/diagnosticoRadarApresentacao'
 import type { BalancoRecord, DreRecord, BscKpiRecord, EmpresaRecord } from '@/types/finance'
 import { SecaoMetricasAvancadas } from '@/components/indicadores/SecaoMetricasAvancadas'
+import { SecaoComparativoIndicadoresAnuais } from '@/components/analises/SecaoComparativoIndicadoresAnuais'
+import { calcularComparativoIndicadoresDeRegistros } from '@/lib/comparativoIndicadoresDeRegistros'
 import { calcularZScoreAltman } from '@/lib/termometroInsolvenciaCalculo'
 import { calcularIndicadoresAvancados } from '@/lib/indicadoresAvancadosCalculo'
 import { calcularMetricasEstruturais } from '@/lib/metricasEstruturaisCalculo'
@@ -176,6 +178,18 @@ export function IndicadoresApresentacao() {
   const dreAnterior = useMemo(
     () => dres.find((d) => d.ano === selectedAno - 1) || null,
     [dres, selectedAno],
+  )
+
+  // Comparativo de Indicadores Anuais — recalcula ao trocar empresa/exercício
+  // (mesmos arrays balancos/dres já carregados; nenhuma consulta nova ao banco)
+  const comparativoAnuais = useMemo(
+    () =>
+      calcularComparativoIndicadoresDeRegistros({
+        balancos,
+        dres,
+        anoAtual: selectedAno,
+      }),
+    [balancos, dres, selectedAno],
   )
 
   // Motores oficiais (mesmos da seção visual) — alimentam também a exportação CSV
@@ -554,7 +568,14 @@ export function IndicadoresApresentacao() {
         empresaNome={empresaAtiva?.razao_social || undefined}
       />
 
+      {/* SEÇÃO: COMPARATIVO DE INDICADORES ANUAIS (LC, LS, Endividamento, ROE, ROA, Margens) */}
+      <SecaoComparativoIndicadoresAnuais
+        resultado={comparativoAnuais}
+        empresaNome={empresaAtiva?.razao_social || 'Empresa Ativa'}
+      />
+
       {/* SEÇÃO DESTACADA: GRÁFICO DE RADAR POR CATEGORIA */}
+>>>>>>>
       {modoVisualizacao !== 'slides' && (
         <section aria-label="Visão Geral por Categoria (Radar)">
           <GraficoRadarCategorias
