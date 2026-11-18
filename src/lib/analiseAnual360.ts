@@ -87,7 +87,25 @@ interface ContaComCentro {
  *   série anual = total de despesas do mês + total por ano.
  * - Rentabilidade: radar = componentes de margem (%); série anual = margem
  *   mensal (%) + barras receita vs resultado por mês.
+ *
+ * O comparativo de anos cobre TODOS os exercícios que possuem lançamentos com
+ * data (até um limite de MAX_ANOS_COMPARADOS, do mais recente ao mais antigo),
+ * garantindo que o ano atual sempre participe da janela.
  */
+const MAX_ANOS_COMPARADOS = 6
+
+/** Anos distintos presentes nas datas dos lançamentos (mais recente primeiro). */
+export function extrairAnosDosLancamentos(lancamentos: { data?: string }[]): number[] {
+  const anos = new Set<number>()
+  for (const l of lancamentos) {
+    if (l.data) {
+      const a = parseInt(l.data.slice(0, 4), 10)
+      if (!isNaN(a) && a > 2000 && a < 2100) anos.add(a)
+    }
+  }
+  return Array.from(anos).sort((a, b) => b - a)
+}
+
 export function calcularAnaliseAnual360(params: {
   tipo: TipoTelaAnalise
   lancamentos: LancamentoRecord[]
@@ -191,29 +209,42 @@ export function calcularAnaliseAnual360(params: {
     resumo = montarResumo(atual, meses, anterior)
   }
 
-  // ---------- Comparativo entre anos (últimos 3 exercícios) ----------
-  const anosComparados: AnoAnualComparado[] = [anoAtual, anoAtual - 1, anoAtual - 2].map((ano) => {
-    const mesesAno = gerarListaMeses(ano, mesInicial, qtdMeses)
-    let totalAno = 0
-    if (tipo === 'fixas') {
-      totalAno = calcularAnaliseDespesasFixas(
-        lancamentos,
-        contas,
-        mesesAno,
-        planoContas,
-      ).totalDespesasFixasPeriodo
-    } else if (tipo === 'variaveis') {
-      totalAno = calcularAnaliseDespesasVariaveis(
-        lancamentos,
-        contas,
-        mesesAno,
-        planoContas,
-      ).totalDespesasVariaveisPeriodo
-    } else {
-      totalAno = calcularAnaliseRentabilidade(lancamentos, contas, mesesAno, planoContas).lucroTotal
-    }
-    return { ano, total: totalAno, temDados: totalAno !== 0 }
-  })
+  // ---------- Comparativo entre anos ----------
+  // Janela ampliada: TODOS os anos com lançamentos (mais recente → mais antigo),
+  // garantindo o ano atual na janela, limitado a MAX_ANOS_COMPARADOS por
+  // performance (cada ano roda o motor oficial da DRE sobre os mesmos arrays).
+  const anosJanela = new Set<number>(extrairAnosDosLancamentos(lancamentos))
+  anosJanela.add(anoAtual)
+  const anosComparados: AnoAnualComparado[] = Array.from(anosJanela)
+    .sort((a, b) => b - a)
+    .slice(0, MAX_ANOS_COMPARADOS)
+    .map((ano) => {
+      const mesesAno = gerarListaMeses(ano, mesInicial, qtdMeses)
+      let totalAno = 0
+      if (tipo === 'fixas') {
+        totalAno = calcularAnaliseDespesasFixas(
+          lancamentos,
+          contas,
+          mesesAno,
+          planoContas,
+        ).totalDespesasFixasPeriodo
+      } else if (tipo === 'variaveis') {
+        totalAno = calcularAnaliseDespesasVariaveis(
+          lancamentos,
+          contas,
+          mesesAno,
+          planoContas,
+        ).totalDespesasVariaveisPeriodo
+      } else {
+        totalAno = calcularAnaliseRentabilidade(
+          lancamentos,
+          contas,
+          mesesAno,
+          planoContas,
+        ).lucroTotal
+      }
+      return { ano, total: totalAno, temDados: totalAno !== 0 }
+    })
 
   return {
     tipo,
