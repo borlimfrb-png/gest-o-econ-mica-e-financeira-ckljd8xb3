@@ -48,7 +48,7 @@ export const TODAS_FERRAMENTAS_IDS = [
 ] as const
 
 /** Normaliza o campo JSON da coleção: pode vir string, array ou null. */
-function normalizarLista(valor: unknown): string[] {
+export function normalizarLista(valor: unknown): string[] {
   if (Array.isArray(valor)) {
     return valor.filter((v): v is string => typeof v === 'string')
   }

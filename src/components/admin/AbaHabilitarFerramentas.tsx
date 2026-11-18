@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
-import { ferramentasService } from '@/services/ferramentasUsuariosService'
+import { ferramentasService, normalizarLista } from '@/services/ferramentasUsuariosService'
 import { auditoriaUsuariosService } from '@/services/auditoriaUsuariosService'
 import { CATALOGO_FERRAMENTAS, getFerramentaCatalogo } from '@/lib/ferramentasCatalogo'
 
@@ -46,8 +46,10 @@ const AbaHabilitarFerramentas: React.FC = () => {
       setUsuarios(uList)
       const mapa: Record<string, Set<string>> = {}
       for (const r of registrosList) {
-        const lista = Array.isArray(r.ferramentas_desabilitadas) ? r.ferramentas_desabilitadas : []
-        mapa[r.user] = new Set(lista)
+        // normalizarLista: o campo é JSON e pode chegar como string (registros
+        // legados pré-0110) — sem isso o estado dos toggles saía errado e um
+        // novo salvar regravava a lista errada.
+        mapa[r.user] = new Set(normalizarLista(r.ferramentas_desabilitadas))
       }
       setRegistros(mapa)
     } catch (err: any) {

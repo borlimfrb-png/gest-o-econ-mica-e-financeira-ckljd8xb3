@@ -50,50 +50,40 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Same as useRealtime, but debounces bursts of realtime events (~1.5s)
- * so a batch of writes triggers a single callback invocation.
- * NEVER remove this export: Dashboard.tsx and DashboardBi.tsx depend on it.
+ * Versão com debounce do evento: guarda o último RecordSubscription recebido em
+ * ref e o dispara uma única vez, `delayMs` após o último evento (trailing).
+ * Chama useRealtime no topo do hook (rules-of-hooks).
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
-  delayMs: number = 1500,
+  delayMs = 1500,
 ) {
-  // rules-of-hooks: always call the base hook at the top level
-  const latestEventRef = useRef<RecordSubscription<TRecord> | null>(null)
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   const callbackRef = useRef(callback)
   callbackRef.current = callback
+
+  const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null)
+  const ultimoEventoRef = useRef<RecordSubscription<TRecord> | null>(null)
 
   useRealtime<TRecord>(
     collectionName,
     (data) => {
-      latestEventRef.current = data
-
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-
-      timeoutRef.current = setTimeout(() => {
-        timeoutRef.current = null
-        const event = latestEventRef.current
-        latestEventRef.current = null
-        if (event) {
-          callbackRef.current(event)
-        }
+      ultimoEventoRef.current = data
+      if (timerRef.current) window.clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null
+        if (ultimoEventoRef.current) callbackRef.current(ultimoEventoRef.current)
       }, delayMs)
     },
     enabled,
   )
 
+  // Limpa o timer pendente no unmount (o cleanup do useRealtime cobre só a
+  // subscription; o debounce é próprio deste hook).
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
+      if (timerRef.current) window.clearTimeout(timerRef.current)
     }
   }, [])
 }
