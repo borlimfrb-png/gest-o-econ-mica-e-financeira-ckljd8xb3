@@ -1,172 +1,234 @@
 import { describe, it, expect } from 'vitest'
-import {
-  calcularMargemContribuicao,
-  compararAnos,
-  calcularVariacaoPercentual,
-} from './margemContribuicaoCalculo'
-import type { LancamentoDre, ContaDre, MesItem } from './dreGerencialTypes'
+import { calcularMargemContribuicao, classificarVariacaoMargem } from './margemContribuicaoCalculo'
 import { gerarListaMeses } from './dreGerencialTypes'
+import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 
-function criarMeses(ano: number): MesItem[] {
-  return gerarListaMeses(ano, 12)
+const MES_JAN = '2026-01'
+const MES_FEV = '2026-02'
+
+const contasMock: ContaRecord[] = [
+  {
+    id: 'c-rec',
+    collectionId: 'contas',
+    collectionName: 'contas',
+    user: 'u-1',
+    nome: 'Receita de Vendas',
+    tipo: 'Receita',
+    classificacao_dre: 'Receita',
+    created: '',
+  },
+  {
+    id: 'c-var',
+    collectionId: 'contas',
+    collectionName: 'contas',
+    user: 'u-1',
+    nome: 'Impostos sobre venda',
+    tipo: 'Despesa',
+    classificacao_dre: 'Despesa Variável',
+    created: '',
+  },
+  {
+    id: 'c-mat',
+    collectionId: 'contas',
+    collectionName: 'contas',
+    user: 'u-1',
+    nome: 'Matéria-prima',
+    tipo: 'Despesa',
+    classificacao_dre: 'Despesa Variável',
+    created: '',
+  },
+  {
+    id: 'c-fix',
+    collectionId: 'contas',
+    collectionName: 'contas',
+    user: 'u-1',
+    nome: 'Aluguel (não entra na MC)',
+    tipo: 'Despesa',
+    classificacao_dre: 'Despesa Fixa',
+    created: '',
+  },
+]
+
+const planosMock: PlanoContaRecord[] = contasMock.map((c, i) => ({
+  id: `p-${c.id}`,
+  collectionId: 'plano_contas',
+  collectionName: 'plano_contas',
+  user: 'u-1',
+  conta: c.id,
+  centro: `cc-${i}`,
+  created: '',
+}))
+
+function lanc(
+  ano: number,
+  mes: number,
+  dia: number,
+  conta: string,
+  valor: number,
+): LancamentoRecord {
+  return {
+    id: `l-${conta}-${ano}-${mes}-${dia}`,
+    collectionId: 'lancamentos',
+    collectionName: 'lancamentos',
+    empresa: 'emp-1',
+    plano_conta: `p-${conta}`,
+    data: `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`,
+    valor,
+    user: 'u-1',
+    created: '',
+  }
 }
 
 describe('calcularMargemContribuicao', () => {
-  it('calcula margem mês a mês com receita, despesas variáveis, R$ e %', () => {
-    const meses = criarMeses(2026)
-    const contas: ContaDre[] = [
-      { id: '1', nome: 'Vendas', categoria: 'Receita', classificacao: 'Receita' },
-      {
-        id: '2',
-        nome: 'Impostos sobre venda',
-        categoria: 'Despesa Variável',
-        classificacao: 'Despesa Variável',
-      },
-      {
-        id: '3',
-        nome: 'Matéria-prima',
-        categoria: 'Despesa Variável',
-        classificacao: 'Despesa Variável',
-      },
-    ]
-    const lancamentos: LancamentoDre[] = [
-      { id: 'a', conta_id: '1', data: '2026-01-10', valor: 100000, centro_id: null },
-      { id: 'b', conta_id: '2', data: '2026-01-15', valor: 17000, centro_id: null },
-      { id: 'c', conta_id: '3', data: '2026-01-20', valor: 33000, centro_id: null },
-      { id: 'd', conta_id: '1', data: '2026-02-10', valor: 120000, centro_id: null },
-      { id: 'e', conta_id: '2', data: '2026-02-15', valor: 20400, centro_id: null },
+  it('calcula margem mês a mês (R$ e %) e ignora despesa fixa', () => {
+    const lancamentos: LancamentoRecord[] = [
+      // Jan: receita 100.000, variáveis 17.000 + 33.000 = 50.000 → MC 50.000 (50%)
+      lanc(2026, 1, 10, 'c-rec', 100000),
+      lanc(2026, 1, 15, 'c-var', 17000),
+      lanc(2026, 1, 20, 'c-mat', 33000),
+      // Despesa fixa não entra no cálculo da margem de contribuição
+      lanc(2026, 1, 25, 'c-fix', 99999),
+      // Fev: receita 120.000, variáveis 20.400 → MC 99.600 (83%)
+      lanc(2026, 2, 10, 'c-rec', 120000),
+      lanc(2026, 2, 15, 'c-var', 20400),
     ]
 
-    const resultado = calcularMargemContribuicao(meses, lancamentos, contas)
+    const res = calcularMargemContribuicao({
+      lancamentos,
+      contas: contasMock,
+      planoContas: planosMock,
+      anoAtual: 2026,
+    })
 
-    expect(resultado.meses).toHaveLength(12)
-    const jan = resultado.meses[0]
+    expect(res.mesesAnoAtivo).toHaveLength(12)
+    expect(res.anoAtivo).not.toBeNull()
+    const meses = res.anoAtivo!.meses
+    expect(meses).toHaveLength(12)
+
+    const jan = meses[0]
+    expect(jan.chave).toBe(MES_JAN)
     expect(jan.receita).toBe(100000)
     expect(jan.despesasVariaveis).toBe(50000)
     expect(jan.margemValor).toBe(50000)
     expect(jan.margemPercentual).toBeCloseTo(50, 5)
+    expect(jan.temMovimento).toBe(true)
 
-    const fev = resultado.meses[1]
+    const fev = meses[1]
     expect(fev.receita).toBe(120000)
+    expect(fev.despesasVariaveis).toBe(20400)
     expect(fev.margemValor).toBe(99600)
     expect(fev.margemPercentual).toBeCloseTo(83, 5)
 
-    // Mês sem movimento: estado vazio honesto (null)
-    const mar = resultado.meses[2]
-    expect(mar.receita).toBeNull()
-    expect(mar.despesasVariaveis).toBeNull()
-    expect(mar.margemValor).toBeNull()
-    expect(mar.margemPercentual).toBeNull()
+    const anoAtivo = res.anoAtivo!
+    expect(anoAtivo.totalReceita).toBe(220000)
+    expect(anoAtivo.totalDespesasVariaveis).toBe(70400)
+    expect(anoAtivo.margemTotal).toBe(149600)
+    expect(anoAtivo.margemAnualPercentual).toBeCloseTo(68, 5)
+    expect(anoAtivo.temDados).toBe(true)
   })
 
-  it('receita negativa tratada corretamente na margem %', () => {
-    const meses = criarMeses(2026)
-    const contas: ContaDre[] = [
-      { id: '1', nome: 'Devoluções', categoria: 'Receita', classificacao: 'Receita' },
-      { id: '2', nome: 'Frete', categoria: 'Despesa Variável', classificacao: 'Despesa Variável' },
+  it('mês sem movimento devolve zeros e margemPercentual null (nunca zero enganoso)', () => {
+    const lancamentos: LancamentoRecord[] = [
+      lanc(2026, 1, 10, 'c-rec', 100000),
+      lanc(2026, 1, 15, 'c-var', 10000),
     ]
-    const lancamentos: LancamentoDre[] = [
-      { id: 'a', conta_id: '1', data: '2026-01-10', valor: -50000, centro_id: null },
-      { id: 'b', conta_id: '2', data: '2026-01-15', valor: 10000, centro_id: null },
-    ]
-    const resultado = calcularMargemContribuicao(meses, lancamentos, contas)
-    const jan = resultado.meses[0]
-    expect(jan.receita).toBe(-50000)
-    expect(jan.margemValor).toBe(-60000)
-    expect(jan.margemPercentual).toBeCloseTo(120, 5)
+    const res = calcularMargemContribuicao({
+      lancamentos,
+      contas: contasMock,
+      planoContas: planosMock,
+      anoAtual: 2026,
+    })
+    const marco = res.anoAtivo!.meses[2] // março sem lançamentos
+    expect(marco.chave).toBe('2026-03')
+    expect(marco.receita).toBe(0)
+    expect(marco.despesasVariaveis).toBe(0)
+    expect(marco.margemValor).toBe(0)
+    expect(marco.margemPercentual).toBeNull()
+    expect(marco.temMovimento).toBe(false)
   })
 
-  it('totaliza o período corretamente', () => {
-    const meses = criarMeses(2026)
-    const contas: ContaDre[] = [
-      { id: '1', nome: 'Vendas', categoria: 'Receita', classificacao: 'Receita' },
-      { id: '2', nome: 'ICMS', categoria: 'Despesa Variável', classificacao: 'Despesa Variável' },
+  it('compara anos anteriores da base com variação em p.p. vs ano anterior', () => {
+    const lancamentos: LancamentoRecord[] = [
+      // 2025: receita 100.000, variável 30.000 → margem 70%
+      lanc(2025, 1, 10, 'c-rec', 100000),
+      lanc(2025, 1, 20, 'c-var', 30000),
+      // 2026: receita 110.000, variável 22.000 → margem 80%
+      lanc(2026, 1, 10, 'c-rec', 110000),
+      lanc(2026, 1, 20, 'c-var', 22000),
     ]
-    const lancamentos: LancamentoDre[] = [
-      { id: 'a', conta_id: '1', data: '2026-01-10', valor: 100000, centro_id: null },
-      { id: 'b', conta_id: '2', data: '2026-01-20', valor: 20000, centro_id: null },
-      { id: 'c', conta_id: '1', data: '2026-12-10', valor: 300000, centro_id: null },
-      { id: 'd', conta_id: '2', data: '2026-12-20', valor: 40000, centro_id: null },
-    ]
-    const resultado = calcularMargemContribuicao(meses, lancamentos, contas)
-    expect(resultado.total.receita).toBe(400000)
-    expect(resultado.total.despesasVariaveis).toBe(60000)
-    expect(resultado.total.margemValor).toBe(340000)
-    expect(resultado.total.margemPercentual).toBeCloseTo(85, 5)
-  })
-})
+    const res = calcularMargemContribuicao({
+      lancamentos,
+      contas: contasMock,
+      planoContas: planosMock,
+      anoAtual: 2026,
+    })
 
-describe('compararAnos', () => {
-  it('compara 2026 com 2025, com variação % ano a ano', () => {
-    const contas: ContaDre[] = [
-      { id: '1', nome: 'Vendas', categoria: 'Receita', classificacao: 'Receita' },
-      { id: '2', nome: 'ICMS', categoria: 'Despesa Variável', classificacao: 'Despesa Variável' },
-    ]
-    const meses2026 = criarMeses(2026)
-    const meses2025 = criarMeses(2025)
+    // Janela do mais recente ao mais antigo, anoAtual incluído
+    expect(res.anos.map((a) => a.ano)).toEqual([2026, 2025])
 
-    const lanc2026: LancamentoDre[] = [
-      { id: 'a', conta_id: '1', data: '2026-01-10', valor: 110000, centro_id: null },
-      { id: 'b', conta_id: '2', data: '2026-01-20', valor: 22000, centro_id: null },
-    ]
-    const lanc2025: LancamentoDre[] = [
-      { id: 'a', conta_id: '1', data: '2025-01-10', valor: 100000, centro_id: null },
-      { id: 'b', conta_id: '2', data: '2025-01-20', valor: 30000, centro_id: null },
-    ]
+    const item2026 = res.anos.find((a) => a.ano === 2026)!
+    const item2025 = res.anos.find((a) => a.ano === 2025)!
+    expect(item2026.margemAnualPercentual).toBeCloseTo(80, 5)
+    expect(item2025.margemAnualPercentual).toBeCloseTo(70, 5)
+    // 80% − 70% = +10 p.p.
+    expect(item2026.variacaoPpAnoAnterior).toBeCloseTo(10, 5)
 
-    const m2026 = calcularMargemContribuicao(meses2026, lanc2026, contas)
-    const m2025 = calcularMargemContribuicao(meses2025, lanc2025, contas)
-    const comps = compararAnos([m2025, m2026])
-
-    expect(comps).toHaveLength(1)
-    const comp = comps[0]
-    expect(comp.anoAnterior).toBe(2025)
-    expect(comp.anoAtual).toBe(2026)
-    expect(comp.variacaoMargemPercentual).toBeCloseTo(20, 5) // 80% - 70% = +10 p.p. → 20% de variação relativa?
-
-    // variação de margem percentual: (80 - 70) / 70 * 100 = 14,2857%
-    // Recalculando: 2025: margem 70000/100000 = 70%; 2026: 88000/110000 = 80%
-    // (80 - 70) / 70 * 100 = 14,2857...
-    expect(comp.variacaoMargemPercentual).toBeCloseTo(14.2857, 3)
-
-    // Receita cresceu 10%
-    expect(comp.variacaoReceitaPercentual).toBeCloseTo(10, 5)
-    // Despesas variáveis caíram: 22000 vs 30000 → -26,66%
-    expect(comp.variacaoDespesasPercentual).toBeCloseTo(-26.6667, 3)
+    expect(res.anoAtivo!.ano).toBe(2026)
   })
 
-  it('ignora comparação com ano sem movimento (receita null)', () => {
-    const contas: ContaDre[] = [
-      { id: '1', nome: 'Vendas', categoria: 'Receita', classificacao: 'Receita' },
-      { id: '2', nome: 'ICMS', categoria: 'Despesa Variável', classificacao: 'Despesa Variável' },
+  it('variação p.p. fica null quando o ano anterior não tem receita (sem base)', () => {
+    const lancamentos: LancamentoRecord[] = [
+      // 2026 com dados; 2024 apenas despesa variável (sem receita)
+      lanc(2026, 1, 10, 'c-rec', 100000),
+      lanc(2026, 1, 15, 'c-var', 20000),
+      lanc(2024, 6, 15, 'c-var', 5000),
     ]
-    const meses2026 = criarMeses(2026)
-    const lanc2026: LancamentoDre[] = [
-      { id: 'a', conta_id: '1', data: '2026-01-10', valor: 110000, centro_id: null },
-      { id: 'b', conta_id: '2', data: '2026-01-20', valor: 22000, centro_id: null },
-    ]
-    const m2026 = calcularMargemContribuicao(meses2026, lanc2026, contas)
+    const res = calcularMargemContribuicao({
+      lancamentos,
+      contas: contasMock,
+      planoContas: planosMock,
+      anoAtual: 2026,
+    })
+    const item2024 = res.anos.find((a) => a.ano === 2024)!
+    expect(item2024.margemAnualPercentual).toBeNull()
+    expect(item2024.temDados).toBe(true)
+    // 2024 não tem 2023 na base → sem variação
+    expect(item2024.variacaoPpAnoAnterior).toBeNull()
+  })
 
-    // 2024 sem movimento
-    const meses2024 = criarMeses(2024)
-    const m2024 = calcularMargemContribuicao(meses2024, [], contas)
-
-    const comps = compararAnos([m2024, m2026])
-    expect(comps).toHaveLength(0)
+  it('base vazia devolve resultado sem dados (estado vazio honesto)', () => {
+    const res = calcularMargemContribuicao({
+      lancamentos: [],
+      contas: contasMock,
+      planoContas: planosMock,
+      anoAtual: 2026,
+    })
+    expect(res.temDados).toBe(false)
+    expect(res.anoAtivo!.temDados).toBe(false)
+    expect(res.anoAtivo!.meses).toHaveLength(12)
   })
 })
 
-describe('calcularVariacaoPercentual', () => {
-  it('retorna null quando base é zero ou inválida', () => {
-    expect(calcularVariacaoPercentual(110, 0)).toBeNull()
-    expect(calcularVariacaoPercentual(110, null)).toBeNull()
-    expect(calcularVariacaoPercentual(null, 100)).toBeNull()
-    expect(calcularVariacaoPercentual(null, null)).toBeNull()
+describe('classificarVariacaoMargem', () => {
+  it('melhora quando positivo, piora quando negativo, neutro em volta de zero', () => {
+    expect(classificarVariacaoMargem(10)).toBe('melhora')
+    expect(classificarVariacaoMargem(-0.5)).toBe('piora')
+    expect(classificarVariacaoMargem(0.01)).toBe('neutro')
   })
 
-  it('calcula variação simples', () => {
-    expect(calcularVariacaoPercentual(110, 100)).toBeCloseTo(10, 5)
-    expect(calcularVariacaoPercentual(90, 100)).toBeCloseTo(-10, 5)
-    expect(calcularVariacaoPercentual(100, 100)).toBeCloseTo(0, 5)
+  it('neutro para null/undefined/NaN', () => {
+    expect(classificarVariacaoMargem(null)).toBe('neutro')
+    expect(classificarVariacaoMargem(undefined)).toBe('neutro')
+    expect(classificarVariacaoMargem(Number.NaN)).toBe('neutro')
+  })
+})
+
+describe('gerarListaMeses (contrato usado pela lib)', () => {
+  it('assinatura (ano, mesInicial, qtdMeses) — jan a dez', () => {
+    const meses = gerarListaMeses(2026, 1, 12)
+    expect(meses).toHaveLength(12)
+    expect(meses[0].chave).toBe(MES_JAN)
+    expect(meses[11].chave).toBe('2026-12')
+    expect(meses[0].rotuloCurto).toBe('Jan/26')
   })
 })

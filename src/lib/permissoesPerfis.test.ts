@@ -41,6 +41,8 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     'gerencial_projecao_dre',
     'gerencial_comparativo_mensal',
     'gerencial_comparativo_despesas',
+    'gerencial_estudo_grupos',
+    'gerencial_margem_contribuicao',
     'gerencial_fluxo_caixa',
     'gerencial_indicador_crescimento',
     'gerencial_rentabilidade',
@@ -127,6 +129,13 @@ describe('Permissões de Perfis - Perfil Cliente e Regras de Acesso', () => {
     expect(perfilTemAcesso('cliente', 'gerencial_indicadores')).toBe(false)
     expect(perfilTemAcesso('admin', 'gerencial_dashboard_bi')).toBe(true)
     expect(perfilTemAcesso('admin', 'gerencial_indicadores')).toBe(true)
+  })
+
+  it('garante que gerencial_margem_contribuicao é liberado para admin/empresa e bloqueado para cliente', () => {
+    expect(perfilTemAcesso('admin', 'gerencial_margem_contribuicao')).toBe(true)
+    expect(perfilTemAcesso('empresa', 'gerencial_margem_contribuicao')).toBe(true)
+    expect(perfilTemAcesso('cliente', 'gerencial_margem_contribuicao')).toBe(false)
+    expect(perfilTemAcesso('comercial', 'gerencial_margem_contribuicao')).toBe(false)
   })
 
   it('garante que o cliente acessa gerencial_conta_detalhe (destino dos links de código de conta)', () => {

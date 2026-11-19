@@ -49,4 +49,42 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
+// NÃO REMOVER: useRealtimeDebounced já sumiu do working tree 4+ vezes e quebra o
+// build (Dashboard.tsx e outras telas importam daqui). É o wrapper de useRealtime
+// com debounce trailing de 1,5s — evita refetch em rajada de eventos do PocketBase.
+export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
+  collectionName: string,
+  callback: (data: RecordSubscription<TRecord>) => void,
+  enabled: boolean = true,
+  delayMs: number = 1500,
+) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestRef = useRef<RecordSubscription<TRecord> | null>(null)
+
+  useRealtime<TRecord>(
+    collectionName,
+    (data) => {
+      latestRef.current = data
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        if (latestRef.current) {
+          callback(latestRef.current)
+          latestRef.current = null
+        }
+      }, delayMs)
+    },
+    enabled,
+  )
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [collectionName, enabled, delayMs])
+}
+
 export default useRealtime
