@@ -28,6 +28,7 @@ export type ModuloSistema =
   | 'gerencial_comparativo_despesas'
   | 'gerencial_estudo_grupos'
   | 'gerencial_margem_contribuicao'
+  | 'gerencial_ponto_equilibrio'
   | 'gerencial_fluxo_caixa'
   | 'gerencial_analise_faturamento'
   | 'gerencial_indicador_crescimento'
@@ -94,6 +95,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_comparativo_despesas',
       'gerencial_estudo_grupos',
       'gerencial_margem_contribuicao',
+      'gerencial_ponto_equilibrio',
       'gerencial_fluxo_caixa',
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',
@@ -146,6 +148,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_comparativo_despesas',
       'gerencial_estudo_grupos',
       'gerencial_margem_contribuicao',
+      'gerencial_ponto_equilibrio',
       'gerencial_fluxo_caixa',
       'gerencial_analise_faturamento',
       'gerencial_indicador_crescimento',

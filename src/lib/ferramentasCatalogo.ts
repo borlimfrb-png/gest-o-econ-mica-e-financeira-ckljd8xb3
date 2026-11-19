@@ -83,6 +83,12 @@ export const CATALOGO_FERRAMENTAS: FerramentaCatalogo[] = [
     rota: '/gerencial/margem-contribuicao',
   },
   {
+    id: 'gerencial_ponto_equilibrio',
+    nome: 'Ponto de Equilíbrio',
+    descricao: 'Ponto de equilíbrio contábil, margem de segurança e alavancagem operacional',
+    rota: '/gerencial/ponto-equilibrio',
+  },
+  {
     id: 'gerencial_fluxo_caixa',
     nome: 'Fluxo de Caixa',
     descricao: 'Entradas e saídas consolidadas por período',
