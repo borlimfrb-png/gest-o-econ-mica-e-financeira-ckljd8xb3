@@ -1,6 +1,5 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-dom'
-import { useNavigate as useReactRouterNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
@@ -66,7 +65,7 @@ import {
   exportarEstudoGrupoDespesasCsv,
 } from '@/lib/estudoGrupoDespesasExport'
 import { formatarPercentualExport } from '@/lib/despesasFixasExport'
-import { gerarListaMeses } from '@/lib/dreGerencialCalculo'
+import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import { lancamentosService } from '@/services/financeService'
 import { contasService, planoContasService } from '@/services/financeService'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -104,7 +103,7 @@ interface SerieMensalItem {
 }
 
 export default function EstudoGrupoDespesas() {
-  const navigate = useReactRouterNavigate()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
   const { selectedEmpresaId, selectedEmpresa, selectedAno, isGrupoAtivo, grupoAtivo } = useFilter()

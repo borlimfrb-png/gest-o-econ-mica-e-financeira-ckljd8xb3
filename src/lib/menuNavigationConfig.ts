@@ -498,6 +498,27 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         ],
       },
       {
+        id: 'gerencial-estudo-grupos',
+        name: 'Estudo por Grupo de Despesas',
+        path: '/gerencial/estudo-grupo-despesas',
+        icon: Layers,
+        descricao:
+          'Estudo por grupo de despesa fixa comparado com o faturamento mensal: valor e percentual por grupo',
+        modulo: 'gerencial_estudo_grupos',
+        badge: 'Novo',
+        badgeVariant: 'blue',
+        palavrasChave: [
+          'grupo de despesas',
+          'estudo por grupo',
+          'grupos de despesa',
+          'despesas fixas por grupo',
+          'percentual faturamento',
+          'peso do grupo no faturamento',
+          'classificação de despesas',
+          'faturamento mensal',
+        ],
+      },
+      {
         id: 'gerencial-fluxo-caixa',
         name: 'Fluxo de Caixa (DRE)',
         path: '/gerencial/fluxo-caixa',

@@ -71,6 +71,12 @@ export const CATALOGO_FERRAMENTAS: FerramentaCatalogo[] = [
     rota: '/gerencial/comparativo-despesas',
   },
   {
+    id: 'gerencial_estudo_grupos',
+    nome: 'Estudo por Grupo de Despesas',
+    descricao: 'Grupos de despesa fixa comparados com o faturamento (valor e % por mês)',
+    rota: '/gerencial/estudo-grupo-despesas',
+  },
+  {
     id: 'gerencial_fluxo_caixa',
     nome: 'Fluxo de Caixa',
     descricao: 'Entradas e saídas consolidadas por período',
