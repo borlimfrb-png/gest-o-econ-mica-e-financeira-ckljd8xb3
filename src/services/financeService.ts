@@ -1077,6 +1077,7 @@ export const contasService = {
     tipo: ContaRecord['tipo']
     descricao?: string
     grupo?: string
+    grupo_despesa?: string
     empresa?: string
     classificacao_dre?: ContaRecord['classificacao_dre']
     nao_exibir_dre?: boolean
@@ -1104,6 +1105,7 @@ export const contasService = {
       tipo: data.tipo,
       descricao: data.descricao?.trim() || undefined,
       grupo: data.grupo?.trim() || undefined,
+      grupo_despesa: data.grupo_despesa?.trim() || undefined,
       empresa: data.empresa || undefined,
       classificacao_dre: data.classificacao_dre || undefined,
       nao_exibir_dre: !!data.nao_exibir_dre,
@@ -1124,6 +1126,7 @@ export const contasService = {
         | 'tipo'
         | 'descricao'
         | 'grupo'
+        | 'grupo_despesa'
         | 'empresa'
         | 'classificacao_dre'
         | 'nao_exibir_dre'
@@ -1138,6 +1141,7 @@ export const contasService = {
     if (data.nome !== undefined) payload.nome = data.nome.trim()
     if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
     if (data.grupo !== undefined) payload.grupo = data.grupo.trim() || undefined
+    if (data.grupo_despesa !== undefined) payload.grupo_despesa = data.grupo_despesa.trim() || null
     if (data.classificacao_dre !== undefined)
       payload.classificacao_dre = data.classificacao_dre || null
     if (data.nao_exibir_dre !== undefined) payload.nao_exibir_dre = !!data.nao_exibir_dre

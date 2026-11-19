@@ -85,6 +85,7 @@ const EMPTY_FORM: ContaFormData = {
   centro: '',
   descricao: '',
   classificacao_dre: '',
+  grupo_despesa: '',
   nao_exibir_dre: false,
   nao_exibir_fluxo_caixa: false,
   nao_exibir_em_nada: false,
@@ -344,6 +345,7 @@ export default function Contas() {
           form.classificacao_dre ||
           sugerirClassificacaoDre(form.nome, form.tipo, form.grupo) ||
           undefined,
+        grupo_despesa: form.grupo_despesa,
         nao_exibir_dre: form.nao_exibir_dre,
         nao_exibir_fluxo_caixa: form.nao_exibir_fluxo_caixa,
         nao_exibir_em_nada: form.nao_exibir_em_nada,
@@ -376,6 +378,7 @@ export default function Contas() {
       centro: c.centro || '',
       descricao: c.descricao || '',
       classificacao_dre: c.classificacao_dre || '',
+      grupo_despesa: c.grupo_despesa || '',
       nao_exibir_dre: !!c.nao_exibir_dre,
       nao_exibir_fluxo_caixa: !!c.nao_exibir_fluxo_caixa,
       nao_exibir_em_nada: !!c.nao_exibir_em_nada,
@@ -450,6 +453,7 @@ export default function Contas() {
         centro: form.centro || null,
         descricao: form.descricao,
         classificacao_dre: (form.classificacao_dre as ClassificacaoDre) || undefined,
+        grupo_despesa: form.grupo_despesa,
         nao_exibir_dre: form.nao_exibir_dre,
         nao_exibir_fluxo_caixa: form.nao_exibir_fluxo_caixa,
         nao_exibir_em_nada: form.nao_exibir_em_nada,

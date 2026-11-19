@@ -66,9 +66,20 @@ export interface ContaEdicaoForm {
   descricao: string
   classificacao_dre: ClassificacaoDre | ''
   tipo_despesa?: string
+  grupo_despesa: string
   nao_exibir_dre: boolean
   nao_exibir_fluxo_caixa: boolean
   nao_exibir_em_nada: boolean
+}
+
+/** Grupos de despesa já usados nas outras contas (para sugestão no campo). */
+export function extrairGruposDespesa(contas: ContaRecord[]): string[] {
+  const set = new Set<string>()
+  for (const c of contas) {
+    const g = (c.grupo_despesa || '').trim()
+    if (g) set.add(g)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }))
 }
 
 interface GrupoCentro {
@@ -125,6 +136,8 @@ export function DialogEditarConta({
 }: DialogEditarContaProps) {
   const { toast } = useToast()
   const podeEditar = !isCliente
+
+  const gruposDespesaExistentes = useMemo(() => extrairGruposDespesa(contas), [contas])
 
   // Ordem otimista (ids) e trocas de centro locais enquanto a gravação viaja
   const [ordemIds, setOrdemIds] = useState<string[] | null>(null)
@@ -469,6 +482,33 @@ export function DialogEditarConta({
                 </p>
               </div>
             )}
+
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="edit-conta-grupo-despesa"
+                className="text-xs font-semibold text-slate-700"
+              >
+                Grupo de Despesa
+              </Label>
+              <Input
+                id="edit-conta-grupo-despesa"
+                list="lista-grupos-despesa"
+                value={form.grupo_despesa}
+                onChange={(e) => onFieldChange('grupo_despesa', e.target.value)}
+                placeholder="Ex.: Pessoal, Ocupação, Administrativo (opcional)"
+                className="h-10 text-sm"
+                disabled={!podeEditar}
+              />
+              <datalist id="lista-grupos-despesa">
+                {gruposDespesaExistentes.map((g) => (
+                  <option key={g} value={g} />
+                ))}
+              </datalist>
+              <p className="text-[11px] text-slate-400">
+                Agrupa despesas fixas no Estudo por Grupo de Despesas (comparativo com o
+                faturamento). Vazio = "Sem grupo".
+              </p>
+            </div>
 
             <div className="space-y-1.5">
               <Label

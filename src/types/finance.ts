@@ -267,6 +267,7 @@ export interface ContaRecord extends RecordModel {
   descricao?: string
   tipo: TipoConta
   grupo?: string
+  grupo_despesa?: string
   classificacao_dre?: ClassificacaoDre
   nao_exibir_dre?: boolean
   nao_exibir_fluxo_caixa?: boolean
