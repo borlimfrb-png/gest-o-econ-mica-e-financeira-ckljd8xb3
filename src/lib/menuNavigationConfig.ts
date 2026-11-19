@@ -519,6 +519,28 @@ export const MENU_GRUPOS: NavGroupConfig[] = [
         ],
       },
       {
+        id: 'gerencial-margem-contribuicao',
+        name: 'Margem de Contribuição',
+        path: '/gerencial/margem-contribuicao',
+        icon: Percent,
+        descricao:
+          'Margem de contribuição mês a mês (receita − despesas variáveis) com comparativo entre anos e gráfico de tendências',
+        modulo: 'gerencial_margem_contribuicao',
+        badge: 'Novo',
+        badgeVariant: 'emerald',
+        destaque: true,
+        palavrasChave: [
+          'margem de contribuição',
+          'margem contribuicao',
+          'margem',
+          'despesas variáveis',
+          'receita menos despesas variáveis',
+          'tendência margem',
+          'comparativo anual margem',
+          'contribuição por produto',
+        ],
+      },
+      {
         id: 'gerencial-fluxo-caixa',
         name: 'Fluxo de Caixa (DRE)',
         path: '/gerencial/fluxo-caixa',

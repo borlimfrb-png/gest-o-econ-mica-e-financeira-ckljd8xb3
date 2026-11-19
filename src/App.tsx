@@ -41,6 +41,7 @@ const ProjecaoDre = lazy(() => import('./pages/ProjecaoDre'))
 const DespesasFixasAnalise = lazy(() => import('./pages/DespesasFixasAnalise'))
 const DespesasVariaveisAnalise = lazy(() => import('./pages/DespesasVariaveisAnalise'))
 const EstudoGrupoDespesas = lazy(() => import('./pages/EstudoGrupoDespesas'))
+const MargemContribuicao = lazy(() => import('./pages/MargemContribuicao'))
 const AnaliseFaturamento = lazy(() => import('./pages/AnaliseFaturamento'))
 const ComparativoDespesasAnalise = lazy(() => import('./pages/ComparativoDespesasAnalise'))
 const FluxoCaixaDre = lazy(() => import('./pages/FluxoCaixaDre'))
@@ -427,6 +428,14 @@ const App = () => (
                           element={
                             <ModuloRoute modulo="gerencial_estudo_grupos">
                               <EstudoGrupoDespesas />
+                            </ModuloRoute>
+                          }
+                        />
+                        <Route
+                          path="/gerencial/margem-contribuicao"
+                          element={
+                            <ModuloRoute modulo="gerencial_margem_contribuicao">
+                              <MargemContribuicao />
                             </ModuloRoute>
                           }
                         />

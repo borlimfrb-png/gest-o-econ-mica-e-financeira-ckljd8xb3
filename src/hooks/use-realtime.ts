@@ -49,43 +49,4 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-/**
- * Wrapper de useRealtime com debounce trailing de 1,5s:
- * agrupa múltiplos eventos consecutivos do PocketBase num único callback.
- * Chamado sempre no topo (rules-of-hooks) — o debounce é feito com ref+timeout.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-  delayMs = 1500,
-) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const pendingRef = useRef<RecordSubscription<TRecord> | undefined>(undefined)
-  const callbackRef = useRef(callback)
-  callbackRef.current = callback
-
-  useEffect(() => {
-    if (!enabled) return
-
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    }
-  }, [enabled])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      pendingRef.current = data
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(() => {
-        const pending = pendingRef.current
-        pendingRef.current = undefined
-        if (pending) callbackRef.current(pending)
-      }, delayMs)
-    },
-    enabled,
-  )
-}
-
 export default useRealtime

@@ -77,6 +77,12 @@ export const CATALOGO_FERRAMENTAS: FerramentaCatalogo[] = [
     rota: '/gerencial/estudo-grupo-despesas',
   },
   {
+    id: 'gerencial_margem_contribuicao',
+    nome: 'Margem de Contribuição',
+    descricao: 'Margem de contribuição mês a mês com comparativo entre anos e tendências',
+    rota: '/gerencial/margem-contribuicao',
+  },
+  {
     id: 'gerencial_fluxo_caixa',
     nome: 'Fluxo de Caixa',
     descricao: 'Entradas e saídas consolidadas por período',
