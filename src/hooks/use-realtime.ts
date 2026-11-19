@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -50,51 +50,42 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * NÃO REMOVER: usado por Dashboard e outras telas (DashboardBi, etc.).
- *
- * Wrapper de `useRealtime` com debounce trailing de 1,5s: quando vários
- * eventos chegam em sequência, apenas o último dispara o callback após
- * 1,5s de silêncio — evita recarregar dados pesados a cada evento.
- *
- * IMPORTANTE (rules-of-hooks): `useRealtime` é chamado SEMPRE no topo,
- * independente de qualquer condição.
+ * Wrapper de useRealtime com debounce trailing de 1,5s:
+ * agrupa múltiplos eventos consecutivos do PocketBase num único callback.
+ * Chamado sempre no topo (rules-of-hooks) — o debounce é feito com ref+timeout.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
+  delayMs = 1500,
 ) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const pendingRef = useRef<RecordSubscription<TRecord> | undefined>(undefined)
   const callbackRef = useRef(callback)
   callbackRef.current = callback
 
-  // Evento mais recente fica em ref; o timer (timeout) dispara o callback.
-  const eventoPendenteRef = useRef<RecordSubscription<TRecord> | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Estado dummy apenas para forçar re-render quando o hook interno dispara,
-  // sem recarregar dados — o próprio callback decide o que fazer.
-  const [, setTick] = useState(0)
-
-  const debounced = (data: RecordSubscription<TRecord>) => {
-    eventoPendenteRef.current = data
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null
-      eventoPendenteRef.current = null
-      callbackRef.current(data)
-      setTick((t) => t + 1)
-    }, 1500)
-  }
-
-  useRealtime<TRecord>(collectionName, debounced, enabled)
-
   useEffect(() => {
+    if (!enabled) return
+
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
-  }, [])
+  }, [enabled])
+
+  useRealtime<TRecord>(
+    collectionName,
+    (data) => {
+      pendingRef.current = data
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => {
+        const pending = pendingRef.current
+        pendingRef.current = undefined
+        if (pending) callbackRef.current(pending)
+      }, delayMs)
+    },
+    enabled,
+  )
 }
 
 export default useRealtime

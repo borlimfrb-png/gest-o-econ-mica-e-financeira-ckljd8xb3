@@ -39,6 +39,19 @@ export function exportarEstudoGrupoDespesasExcel(
 
   rows.push({ Grupo: '' })
 
+  const rowTotalVar: Record<string, any> = { Grupo: 'TOTAL DE DESPESAS VARIÁVEIS' }
+  for (const m of resultado.meses) {
+    rowTotalVar[`${m.rotuloCurto} (R$)`] = resultado.totalDespesasVariaveisPorMes[m.chave] || 0
+    rowTotalVar[`${m.rotuloCurto} (%)`] = formatarPercentualExport(
+      resultado.percentualTotalVariaveisPorMes[m.chave],
+    )
+  }
+  rowTotalVar['Total Período (R$)'] = resultado.totalDespesasVariaveisPeriodo
+  rowTotalVar['Total Período (%)'] = formatarPercentualExport(
+    resultado.percentualTotalVariaveisPeriodo,
+  )
+  rows.push(rowTotalVar)
+
   const rowTotal: Record<string, any> = { Grupo: 'TOTAL DE DESPESAS FIXAS' }
   for (const m of resultado.meses) {
     rowTotal[`${m.rotuloCurto} (R$)`] = resultado.totalDespesasFixasPorMes[m.chave] || 0
@@ -69,6 +82,19 @@ export function exportarEstudoGrupoDespesasExcel(
   rowPct['Total Período (R$)'] = '—'
   rowPct['Total Período (%)'] = formatarPercentualExport(resultado.percentualTotalPeriodo)
   rows.push(rowPct)
+
+  const rowPctVar: Record<string, any> = { Grupo: '% DESPESAS VARIÁVEIS / FATURAMENTO' }
+  for (const m of resultado.meses) {
+    rowPctVar[`${m.rotuloCurto} (R$)`] = '—'
+    rowPctVar[`${m.rotuloCurto} (%)`] = formatarPercentualExport(
+      resultado.percentualTotalVariaveisPorMes[m.chave],
+    )
+  }
+  rowPctVar['Total Período (R$)'] = '—'
+  rowPctVar['Total Período (%)'] = formatarPercentualExport(
+    resultado.percentualTotalVariaveisPeriodo,
+  )
+  rows.push(rowPctVar)
 
   const wb = XLSX.utils.book_new()
   const ws = XLSX.utils.json_to_sheet(rows)
@@ -127,6 +153,15 @@ export function exportarEstudoGrupoDespesasCsv(
 
   linhas.push('')
 
+  const linhaTotVar: string[] = ['TOTAL DE DESPESAS VARIÁVEIS']
+  for (const m of resultado.meses) {
+    linhaTotVar.push(formatMoedaCsv(resultado.totalDespesasVariaveisPorMes[m.chave] || 0))
+    linhaTotVar.push(formatarPercentualExport(resultado.percentualTotalVariaveisPorMes[m.chave]))
+  }
+  linhaTotVar.push(formatMoedaCsv(resultado.totalDespesasVariaveisPeriodo))
+  linhaTotVar.push(formatarPercentualExport(resultado.percentualTotalVariaveisPeriodo))
+  linhas.push(linhaTotVar.map(escapeCsv).join(';'))
+
   const linhaTot: string[] = ['TOTAL DE DESPESAS FIXAS']
   for (const m of resultado.meses) {
     linhaTot.push(formatMoedaCsv(resultado.totalDespesasFixasPorMes[m.chave] || 0))
@@ -153,6 +188,15 @@ export function exportarEstudoGrupoDespesasCsv(
   linhaPct.push('—')
   linhaPct.push(formatarPercentualExport(resultado.percentualTotalPeriodo))
   linhas.push(linhaPct.map(escapeCsv).join(';'))
+
+  const linhaPctVar: string[] = ['% DESPESAS VARIÁVEIS / FATURAMENTO']
+  for (const m of resultado.meses) {
+    linhaPctVar.push('—')
+    linhaPctVar.push(formatarPercentualExport(resultado.percentualTotalVariaveisPorMes[m.chave]))
+  }
+  linhaPctVar.push('—')
+  linhaPctVar.push(formatarPercentualExport(resultado.percentualTotalVariaveisPeriodo))
+  linhas.push(linhaPctVar.map(escapeCsv).join(';'))
 
   const csvContent = '\uFEFF' + linhas.join('\n')
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
