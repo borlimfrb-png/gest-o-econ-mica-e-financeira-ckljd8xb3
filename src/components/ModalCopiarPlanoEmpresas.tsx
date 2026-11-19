@@ -93,7 +93,7 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
   const [destinoId, setDestinoId] = useState<string>('')
 
   // Opções de cópia
-  const [modo, setModo] = useState<'adicionar' | 'substituir'>('adicionar')
+  const [modo, setModo] = useState<'adicionar' | 'substituir' | 'atualizar'>('adicionar')
   const [copiarCentrosCusto, setCopiarCentrosCusto] = useState(true)
   const [confirmarSubstituicao, setConfirmarSubstituicao] = useState(false)
 
@@ -212,13 +212,14 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
         totalOrigem: 0,
         totalDestinoAtual: itensDestino.length,
         totalSeraoAdicionadas: 0,
+        totalSeraoAtualizadas: 0,
         totalSeraoPuladas: 0,
         agrupamentoPorTipo: {} as Record<TipoConta, { novas: number; puladas: number }>,
       }
     }
 
     // Se modo substituir: todas da origem serão copiadas
-    if (modo === 'substituir') {
+    if (modo === 'substituir' || modo === 'atualizar') {
       const agrupamento: Record<TipoConta, { novas: number; puladas: number }> = {
         Ativo: { novas: 0, puladas: 0 },
         Passivo: { novas: 0, puladas: 0 },
@@ -235,10 +236,44 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
         }
       }
 
+      if (modo === 'atualizar') {
+        // Copiar de novo: existentes no destino serão ATUALIZADAS (sem duplicar);
+        // contas novas da origem serão adicionadas.
+        let atualizadas = 0
+        let novas = 0
+
+        for (const it of itensOrigem) {
+          const c = it.expand?.conta || contaMap.get(it.conta)
+          const ce = it.expand?.centro || centroMap.get(it.centro)
+          const codNorm = it.codigo_empresa ? normalizar(it.codigo_empresa) : ''
+          const tuplaNorm = `${normalizar(c?.nome || '')}::${normalizar(ce?.nome || '')}`
+          const existe = itensDestino.some((destIt) => {
+            const destCod = destIt.codigo_empresa ? normalizar(destIt.codigo_empresa) : ''
+            if (codNorm && destCod === codNorm) return true
+            const destC = destIt.expand?.conta || contaMap.get(destIt.conta)
+            const destCe = destIt.expand?.centro || centroMap.get(destIt.centro)
+            const destTupla = `${normalizar(destC?.nome || '')}::${normalizar(destCe?.nome || '')}`
+            return tuplaNorm && tuplaNorm === destTupla
+          })
+          if (existe) atualizadas++
+          else novas++
+        }
+
+        return {
+          totalOrigem: itensOrigem.length,
+          totalDestinoAtual: itensDestino.length,
+          totalSeraoAdicionadas: novas,
+          totalSeraoAtualizadas: atualizadas,
+          totalSeraoPuladas: 0,
+          agrupamentoPorTipo: agrupamento,
+        }
+      }
+
       return {
         totalOrigem: itensOrigem.length,
         totalDestinoAtual: itensDestino.length,
         totalSeraoAdicionadas: itensOrigem.length,
+        totalSeraoAtualizadas: 0,
         totalSeraoPuladas: 0,
         agrupamentoPorTipo: agrupamento,
       }
@@ -293,6 +328,7 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
       totalOrigem: itensOrigem.length,
       totalDestinoAtual: itensDestino.length,
       totalSeraoAdicionadas: novas,
+      totalSeraoAtualizadas: 0,
       totalSeraoPuladas: puladas,
       agrupamentoPorTipo: agrupamento,
     }
@@ -388,7 +424,18 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
 
       const resumoMsg: string[] = []
       if (resultado.totalCopiados > 0) {
-        resumoMsg.push(`${resultado.totalCopiados} conta(s) copiada(s)`)
+        resumoMsg.push(`${resultado.totalCopiados} conta(s) criada(s)`)
+      }
+      if (resultado.totalAtualizados > 0) {
+        resumoMsg.push(`${resultado.totalAtualizados} atualizada(s)`)
+      }
+      if (resultado.contasCriadasNoDestino > 0) {
+        resumoMsg.push(`${resultado.contasCriadasNoDestino} conta(s) nova(s) no cadastro`)
+      }
+      if (resultado.contasAtualizadasNoDestino > 0) {
+        resumoMsg.push(
+          `${resultado.contasAtualizadasNoDestino} conta(s) do cadastro sincronizada(s)`,
+        )
       }
       if (resultado.totalIgnoradosDuplicados > 0) {
         resumoMsg.push(`${resultado.totalIgnoradosDuplicados} já existiam (puladas)`)
@@ -530,13 +577,38 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
 
             <RadioGroup
               value={modo}
-              onValueChange={(val: 'adicionar' | 'substituir') => {
+              onValueChange={(val: 'adicionar' | 'substituir' | 'atualizar') => {
                 setModo(val)
                 if (val !== 'substituir') setConfirmarSubstituicao(false)
               }}
               disabled={executando}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5"
+              className="grid grid-cols-1 sm:grid-cols-3 gap-2.5"
             >
+              {/* Opção Copiar de Novo (atualizar) */}
+              <label
+                htmlFor="modo-atualizar"
+                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                  modo === 'atualizar'
+                    ? 'border-violet-500 bg-violet-50/50 text-violet-900'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                <RadioGroupItem value="atualizar" id="modo-atualizar" className="mt-0.5" />
+                <div className="space-y-0.5">
+                  <strong className="text-xs font-semibold block flex items-center gap-1">
+                    <FolderSync className="w-3.5 h-3.5 text-violet-600" />
+                    Copiar de Novo
+                  </strong>
+                  <p className="text-[11px] text-slate-500 leading-tight">
+                    Reexecuta a cópia: atualiza as contas já copiadas no destino (inclusive a
+                    Classificação DRE) e adiciona as novas da origem — <strong>
+                      sem duplicar
+                    </strong>{' '}
+                    e sem apagar nada.
+                  </p>
+                </div>
+              </label>
+
               {/* Opção Adicionar */}
               <label
                 htmlFor="modo-adicionar"
@@ -660,6 +732,17 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
                 {previaCalculada.totalSeraoAdicionadas}
               </strong>
             </div>
+
+            {modo === 'atualizar' && (
+              <div className="p-2.5 rounded-lg bg-violet-50/70 border border-violet-200">
+                <span className="text-[10px] font-semibold uppercase text-violet-700 block">
+                  Serão Atualizadas
+                </span>
+                <strong className="text-sm font-bold text-violet-900">
+                  {previaCalculada.totalSeraoAtualizadas}
+                </strong>
+              </div>
+            )}
 
             <div className="p-2.5 rounded-lg bg-amber-50/70 border border-amber-200">
               <span className="text-[10px] font-semibold uppercase text-amber-700 block">
@@ -835,7 +918,19 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
                           {it.codigo_empresa || '—'}
                         </td>
                         <td className="py-2 px-3">
-                          {modo === 'substituir' ? (
+                          {modo === 'atualizar' ? (
+                            jaExiste ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-700 bg-violet-50 px-1.5 py-0.5 rounded border border-violet-200">
+                                <FolderSync className="w-3 h-3" />
+                                Atualizar
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Adicionar
+                              </span>
+                            )
+                          ) : modo === 'substituir' ? (
                             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                               <CheckCircle2 className="w-3 h-3" />
                               Criar
@@ -901,7 +996,9 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
               className={`text-xs h-9 font-semibold text-white shadow-xs gap-1.5 ${
                 modo === 'substituir'
                   ? 'bg-red-600 hover:bg-red-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  : modo === 'atualizar'
+                    ? 'bg-violet-600 hover:bg-violet-700'
+                    : 'bg-blue-600 hover:bg-blue-700'
               }`}
             >
               {executando ? (
@@ -913,6 +1010,11 @@ export const ModalCopiarPlanoEmpresas: React.FC<ModalCopiarPlanoEmpresasProps> =
                 <>
                   <AlertTriangle className="w-4 h-4" />
                   Confirmar Substituição do Plano
+                </>
+              ) : modo === 'atualizar' ? (
+                <>
+                  <FolderSync className="w-4 h-4" />
+                  Copiar de Novo (Atualizar)
                 </>
               ) : (
                 <>

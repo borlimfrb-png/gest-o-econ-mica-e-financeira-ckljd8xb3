@@ -53,7 +53,9 @@ export interface ResultadoLotePlano {
 export interface OpcoesCopiarPlanoEmpresa {
   origemEmpresaId: string
   destinoEmpresaId: string
-  modo: 'substituir' | 'adicionar' // 'substituir': remove plano anterior do destino; 'adicionar': pula duplicados
+  // 'substituir': remove plano anterior do destino; 'adicionar': pula duplicados;
+  // 'atualizar' (copiar de novo): atualiza os itens já copiados a partir da origem, sem duplicar
+  modo: 'substituir' | 'adicionar' | 'atualizar'
   copiarCentrosCusto?: boolean // se true, cria centros de custo no destino caso inexistentes e mapeia; se false, usa centros equivalentes no destino ou cria um padrão
   onProgress?: (progresso: {
     fase: string
@@ -68,9 +70,11 @@ export interface ResultadoCopiarPlanoEmpresa {
   totalCopiados: number
   totalIgnoradosDuplicados: number
   totalRemovidosAnteriores: number
+  totalAtualizados: number
   totalErros: number
   errosDetalhes: string[]
   contasCriadasNoDestino: number
+  contasAtualizadasNoDestino: number
   centrosCriadosNoDestino: number
   tiposCriadosNoDestino: number
 }
@@ -452,6 +456,12 @@ export const planoContasLoteService = {
    * Suporta:
    * - Modo 'substituir': remove os itens atuais de plano_contas da empresa de destino e recria a partir da origem.
    * - Modo 'adicionar': pula contas/vínculos que já existam no destino (por código da empresa ou por nome da conta + centro).
+   * - Modo 'atualizar' (copiar de novo): reidentifica cada conta já copiada no destino (pelo código
+   *   interno da empresa ou pela tupla conta + centro) e ATUALIZA o registro existente em vez de
+   *   duplicar; contas novas da origem são adicionadas.
+   * - TODOS os atributos da conta são levados na cópia: código interno, nome, tipo, grupo, centro de
+   *   custo, tipo de despesa, descrição, grupo de despesa, ordem, flags de exibição e principalmente
+   *   a Classificação DRE Gerencial (classificacao_dre).
    * - Vínculo com centros de custo: se copiarCentrosCusto=true, busca centros equivalentes por nome na empresa de destino ou cria automaticamente no destino.
    * - Criação/reaproveitamento automático de Contas e Tipos de Despesa para a empresa de destino.
    */
@@ -480,6 +490,8 @@ export const planoContasLoteService = {
       totalRemovidosAnteriores: 0,
       totalErros: 0,
       errosDetalhes: [],
+      totalAtualizados: 0,
+      contasAtualizadasNoDestino: 0,
       contasCriadasNoDestino: 0,
       centrosCriadosNoDestino: 0,
       tiposCriadosNoDestino: 0,
@@ -533,6 +545,59 @@ export const planoContasLoteService = {
     const contasDestinoCache = [...contasDestino]
     const centrosDestinoCache = [...centrosDestino]
     const tiposDestinoCache = [...tiposDestino]
+
+    // Mapa de contas do destino por código normalizado (código contábil é a chave
+    // usada para sincronizar atributos em re-execuções da cópia)
+    const contasDestinoPorChave = new Map<string, ContaRecord>()
+    for (const c of contasDestino) {
+      const chave = normalizar(c.codigo) || normalizar(c.nome)
+      if (chave) contasDestinoPorChave.set(chave, c)
+    }
+
+    // Atualiza a conta reaproveitada no destino para refletir os atributos da origem
+    // (código, tipo, grupo, grupo de despesa, classificação DRE, flags e ordem).
+    const sincronizarContaDestino = async (
+      contaDestino: ContaRecord,
+      contaOrigem: ContaRecord,
+    ): Promise<void> => {
+      const origemNormCodigo = normalizar(contaOrigem.codigo)
+      const destinoNormCodigo = normalizar(contaDestino.codigo)
+
+      const precisaAtualizar =
+        (origemNormCodigo && origemNormCodigo !== destinoNormCodigo) ||
+        contaDestino.tipo !== contaOrigem.tipo ||
+        (contaOrigem.grupo || '') !== (contaDestino.grupo || '') ||
+        (contaOrigem.grupo_despesa || '') !== (contaDestino.grupo_despesa || '') ||
+        (contaOrigem.classificacao_dre || '') !== (contaDestino.classificacao_dre || '') ||
+        !!contaOrigem.nao_exibir_dre !== !!contaDestino.nao_exibir_dre ||
+        !!contaOrigem.nao_exibir_fluxo_caixa !== !!contaDestino.nao_exibir_fluxo_caixa ||
+        !!contaOrigem.nao_exibir_em_nada !== !!contaDestino.nao_exibir_em_nada ||
+        (contaOrigem.ordem != null ? Number(contaOrigem.ordem) : null) !==
+          (contaDestino.ordem != null ? Number(contaDestino.ordem) : null)
+
+      if (!precisaAtualizar) return
+
+      try {
+        const atualizada = await contasService.update(contaDestino.id, {
+          ...(origemNormCodigo ? { codigo: contaOrigem.codigo } : {}),
+          tipo: contaOrigem.tipo,
+          grupo: contaOrigem.grupo || undefined,
+          grupo_despesa: contaOrigem.grupo_despesa || null,
+          classificacao_dre: contaOrigem.classificacao_dre || null,
+          nao_exibir_dre: !!contaOrigem.nao_exibir_dre,
+          nao_exibir_fluxo_caixa: !!contaOrigem.nao_exibir_fluxo_caixa,
+          nao_exibir_em_nada: !!contaOrigem.nao_exibir_em_nada,
+          ...(contaOrigem.ordem != null ? { ordem: Number(contaOrigem.ordem) } : {}),
+        })
+        const idx = contasDestinoCache.findIndex((c) => c.id === atualizada.id)
+        if (idx >= 0) contasDestinoCache[idx] = atualizada
+        const novaChave = normalizar(atualizada.codigo) || normalizar(atualizada.nome)
+        if (novaChave) contasDestinoPorChave.set(novaChave, atualizada)
+        resultado.contasAtualizadasNoDestino++
+      } catch (err: any) {
+        console.warn(`Não foi possível sincronizar a conta "${contaDestino.nome}":`, err)
+      }
+    }
 
     // 2. Se modo for 'substituir', remove os itens anteriores de plano_contas do destino
     if (modo === 'substituir' && itensDestinoAtuais.length > 0) {
@@ -590,14 +655,30 @@ export const planoContasLoteService = {
       const existente = contasDestinoCache.find((c) => normalizar(c.nome) === normNome)
       if (existente) return existente
 
+      // Reaproveita conta do destino pelo código contábil (chave estável entre empresas)
+      const chaveCodigo = normalizar(contaOrigem.codigo)
+      if (chaveCodigo) {
+        const peloCodigo = contasDestinoPorChave.get(chaveCodigo)
+        if (peloCodigo) return peloCodigo
+      }
+
       const nova = await contasService.create({
+        codigo: contaOrigem.codigo || undefined,
         nome: contaOrigem.nome,
         tipo: contaOrigem.tipo,
         grupo: contaOrigem.grupo || undefined,
+        grupo_despesa: contaOrigem.grupo_despesa || undefined,
         descricao: contaOrigem.descricao || undefined,
+        classificacao_dre: contaOrigem.classificacao_dre || undefined,
+        nao_exibir_dre: !!contaOrigem.nao_exibir_dre,
+        nao_exibir_fluxo_caixa: !!contaOrigem.nao_exibir_fluxo_caixa,
+        nao_exibir_em_nada: !!contaOrigem.nao_exibir_em_nada,
+        ...(contaOrigem.ordem != null ? { ordem: Number(contaOrigem.ordem) } : {}),
         empresa: destinoEmpresaId,
       })
       contasDestinoCache.push(nova)
+      const novaChave = normalizar(nova.codigo) || normalizar(nova.nome)
+      if (novaChave) contasDestinoPorChave.set(novaChave, nova)
       resultado.contasCriadasNoDestino++
       return nova
     }
@@ -715,6 +796,50 @@ export const planoContasLoteService = {
         }
       }
 
+      // Modo 'atualizar' (copiar de novo): localiza o item já copiado no destino
+      // (pelo código interno da empresa ou pela tupla conta + centro) e atualiza
+      // o registro existente em vez de criar um duplicado.
+      if (modo === 'atualizar') {
+        const codEmpresaNorm = itemOrigem.codigo_empresa
+          ? normalizar(itemOrigem.codigo_empresa)
+          : ''
+        const tuplaNorm = `${normalizar(contaOrigem.nome)}::${normalizar(centroOrigem?.nome || '')}`
+
+        const itemExistente = itensDestinoAtuais.find((it) => {
+          const itCod = it.codigo_empresa ? normalizar(it.codigo_empresa) : ''
+          if (codEmpresaNorm && itCod === codEmpresaNorm) return true
+          const itConta = it.expand?.conta || mapContaOrigem.get(it.conta)
+          const itCentro = it.expand?.centro || mapCentroOrigem.get(it.centro)
+          const itTupla = `${normalizar(itConta?.nome || '')}::${normalizar(itCentro?.nome || '')}`
+          return tuplaNorm && itTupla === tuplaNorm
+        })
+
+        if (itemExistente) {
+          try {
+            const contaDestino = await obterOuCriarContaDestino(contaOrigem)
+            const centroDestino = await obterOuCriarCentroDestino(centroOrigem, contaOrigem.tipo)
+            const tipoDestino = await obterOuCriarTipoDespesaDestino(tipoDespesaOrigem)
+
+            await sincronizarContaDestino(contaDestino, contaOrigem)
+
+            await planoContasService.update(itemExistente.id, {
+              conta: contaDestino.id,
+              centro: centroDestino.id,
+              tipo_despesa: tipoDestino?.id,
+              descricao: itemOrigem.descricao || undefined,
+              codigo_empresa: itemOrigem.codigo_empresa || undefined,
+            })
+            resultado.totalAtualizados++
+          } catch (err: any) {
+            resultado.totalErros++
+            const msg = `Conta "${contaOrigem.nome}": ${err?.message || 'Falha ao atualizar'}`
+            resultado.errosDetalhes.push(msg)
+            console.error('Erro ao atualizar conta copiada no destino:', err)
+          }
+          continue
+        }
+      }
+
       try {
         // Obter ou criar conta no destino
         const contaDestino = await obterOuCriarContaDestino(contaOrigem)
@@ -724,6 +849,12 @@ export const planoContasLoteService = {
 
         // Obter ou criar tipo de despesa no destino
         const tipoDestino = await obterOuCriarTipoDespesaDestino(tipoDespesaOrigem)
+
+        // Nos modos 'atualizar' e 'substituir', sincroniza os atributos da conta
+        // reaproveitada (ex.: classificação DRE ajustada na origem depois da 1ª cópia)
+        if (modo !== 'adicionar') {
+          await sincronizarContaDestino(contaDestino, contaOrigem)
+        }
 
         // Criar registro em plano_contas para a empresa destino
         await planoContasService.create({

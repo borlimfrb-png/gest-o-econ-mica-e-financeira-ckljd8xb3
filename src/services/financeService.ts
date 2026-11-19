@@ -1075,6 +1075,7 @@ export const contasService = {
   async create(data: {
     nome: string
     tipo: ContaRecord['tipo']
+    codigo?: string
     descricao?: string
     grupo?: string
     grupo_despesa?: string
@@ -1103,6 +1104,7 @@ export const contasService = {
     return await pb.collection('contas').create<ContaRecord>({
       nome: data.nome.trim(),
       tipo: data.tipo,
+      codigo: data.codigo?.trim() || undefined,
       descricao: data.descricao?.trim() || undefined,
       grupo: data.grupo?.trim() || undefined,
       grupo_despesa: data.grupo_despesa?.trim() || undefined,
@@ -1124,6 +1126,7 @@ export const contasService = {
         ContaRecord,
         | 'nome'
         | 'tipo'
+        | 'codigo'
         | 'descricao'
         | 'grupo'
         | 'grupo_despesa'
@@ -1140,8 +1143,10 @@ export const contasService = {
     const payload: Record<string, unknown> = { ...data }
     if (data.nome !== undefined) payload.nome = data.nome.trim()
     if (data.descricao !== undefined) payload.descricao = data.descricao.trim() || undefined
+    if (data.codigo !== undefined) payload.codigo = data.codigo?.trim() || null
     if (data.grupo !== undefined) payload.grupo = data.grupo.trim() || undefined
-    if (data.grupo_despesa !== undefined) payload.grupo_despesa = data.grupo_despesa.trim() || null
+    if (data.grupo_despesa !== undefined)
+      payload.grupo_despesa = data.grupo_despesa ? String(data.grupo_despesa).trim() || null : null
     if (data.classificacao_dre !== undefined)
       payload.classificacao_dre = data.classificacao_dre || null
     if (data.nao_exibir_dre !== undefined) payload.nao_exibir_dre = !!data.nao_exibir_dre
