@@ -20,6 +20,7 @@ import { formatBrlPontoEquilibrio } from './pontoEquilibrioFormat'
 const CORES = {
   receita: '#059669',
   pe: '#dc2626',
+  meta: '#2563eb',
   verde: '#10b981',
   ambar: '#f59e0b',
   vermelho: '#f43f5e',
@@ -30,6 +31,8 @@ export interface PontoGraficoData {
   receita: number | null
   pontoEquilibrio: number | null
   margemSeguranca: number | null
+  /** Meta de receita do mês (null = sem meta — a linha não desenha) */
+  meta: number | null
 }
 
 export function PontoEquilibrioGraficos({
@@ -50,8 +53,8 @@ export function PontoEquilibrioGraficos({
             Receita vs Ponto de Equilíbrio ({exercicio})
           </CardTitle>
           <CardDescription className="text-xs">
-            Área verde = receita do mês; linha vermelha = PE do mês. Quando a área fica abaixo da
-            linha, o mês operou abaixo do ponto de equilíbrio.
+            Área verde = receita do mês; linha vermelha = PE do mês; linha azul tracejada = meta de
+            receita. Quando a área fica abaixo da linha, o mês operou abaixo do ponto de equilíbrio.
           </CardDescription>
         </CardHeader>
         <CardContent className="py-4 px-4">
@@ -76,7 +79,11 @@ export function PontoEquilibrioGraficos({
                       value === null || value === undefined
                         ? '—'
                         : formatBrlPontoEquilibrio(Number(value)),
-                      name === 'receita' ? 'Receita' : 'Ponto de Equilíbrio',
+                      name === 'receita'
+                        ? 'Receita'
+                        : name === 'meta'
+                          ? 'Meta de Receita'
+                          : 'Ponto de Equilíbrio',
                     ]}
                     labelStyle={{ fontWeight: 700, color: '#0B1F3A' }}
                     contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }}
@@ -89,6 +96,16 @@ export function PontoEquilibrioGraficos({
                     fill={CORES.receita}
                     fillOpacity={0.15}
                     strokeWidth={2}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="meta"
+                    name="meta"
+                    stroke={CORES.meta}
+                    strokeWidth={2}
+                    strokeDasharray="2 4"
+                    dot={{ r: 2 }}
                     connectNulls={false}
                   />
                   <Line

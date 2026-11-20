@@ -1,30 +1,50 @@
 import * as XLSX from 'xlsx'
-import type { PontoEquilibrioResultado, PontoEquilibrioAno } from './pontoEquilibrioCalculo'
+import type {
+  PontoEquilibrioAnoComMeta,
+  PontoEquilibrioMesComMeta,
+} from './pontoEquilibrioMetaComparativo'
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
 import { formatarPercentualExport } from './despesasFixasExport'
+
+/** Contrato mínimo usado pela exportação: o ano ativo já com metas mescladas. */
+export type PontoEquilibrioResultadoComMeta = {
+  anoAtivo: PontoEquilibrioAnoComMeta | null
+}
+
+type Mes = PontoEquilibrioMesComMeta
 
 function formatMoedaCsv(v: number | undefined | null): string {
   if (v === undefined || v === null || !Number.isFinite(v)) return '—'
   return v.toFixed(2).replace('.', ',')
 }
 
-type Mes = PontoEquilibrioAno['meses'][number]
-
-function novoCabecalho(ano: PontoEquilibrioAno): string[] {
+function novoCabecalho(ano: PontoEquilibrioAnoComMeta): string[] {
   return ['Indicador', ...ano.meses.map((m) => m.rotuloCurto), 'Total Ano']
 }
 
 /**
  * Monta as linhas da matriz (uma por indicador, colunas jan–dez + Total Ano).
- * Reaproveitada pelo Excel e pelo CSV para nunca divergirem.
+ * Reaproveitada pelo Excel e pelo CSV para nunca divergirem. Inclui as linhas
+ * de Meta de Receita, % da Meta Atingido e Diferença Realizado − Meta.
  */
-function gerarLinhasMatriz(ano: PontoEquilibrioAno): LinhaPontoEquilibrio[] {
-  const ao = ano
+function gerarLinhasMatriz(ao: PontoEquilibrioAnoComMeta): LinhaPontoEquilibrio[] {
   return [
     {
       Indicador: 'Receita Bruta (R$)',
       ...valores(ao, (m) => m.receita, ao.totalReceita, formatMoedaCsv),
+    },
+    {
+      Indicador: 'Meta de Receita (R$)',
+      ...valores(ao, (m) => m.meta, ao.totalMeta, formatMoedaCsv),
+    },
+    {
+      Indicador: '% da Meta Atingido (%)',
+      ...valores(ao, (m) => m.percentualMeta, ao.totalPercentualMeta, formatarPercentualExport),
+    },
+    {
+      Indicador: 'Diferença Realizado − Meta (R$)',
+      ...valores(ao, (m) => m.diferencaMeta, ao.totalDiferencaMeta, formatMoedaCsv),
     },
     {
       Indicador: 'Despesas Variáveis (R$)',
@@ -69,7 +89,7 @@ function gerarLinhasMatriz(ano: PontoEquilibrioAno): LinhaPontoEquilibrio[] {
 export interface LinhaPontoEquilibrio extends Record<string, string> {}
 
 function valores(
-  ano: PontoEquilibrioAno,
+  ano: PontoEquilibrioAnoComMeta,
   pegar: (m: Mes) => number | null,
   total: number | null,
   formatar: (v: number | null) => string,
@@ -82,11 +102,11 @@ function valores(
 
 /**
  * Exporta o Ponto de Equilíbrio para planilha Excel (.xlsx): matriz mês a mês
- * (receita, variáveis, MC em R$ e %, fixas, PE, margem de segurança, resultado
- * e GAO) com a coluna "Total Ano" consolidada.
+ * (metas, receita, variáveis, MC em R$ e %, fixas, PE, margem de segurança,
+ * resultado e GAO) com a coluna "Total Ano" consolidada.
  */
 export function exportarPontoEquilibrioExcel(
-  resultado: PontoEquilibrioResultado,
+  resultado: PontoEquilibrioResultadoComMeta,
   empresa?: EmpresaRecord | null,
   exercicioAno?: number,
 ) {
@@ -101,7 +121,7 @@ export function exportarPontoEquilibrioExcel(
   const rows: Record<string, string>[] = [
     { Indicador: `EXERCÍCIO ${ao.ano} — PONTO DE EQUILÍBRIO CONTÁBIL` },
     ...gerarLinhasMatriz(ao),
-    { Indicador: 'Valores "—" indicam mês sem movimento ou PE indefinido (margem % <= 0)' },
+    { Indicador: 'Valores "—" indicam mês sem movimento, PE indefinido ou meta não cadastrada' },
     { Indicador: `Empresa: ${nomeEmpresa}` },
     { Indicador: `Exercício: ${exercicioAno || ao.ano}` },
   ]
@@ -117,7 +137,7 @@ export function exportarPontoEquilibrioExcel(
  * (Excel abre sem corromper acentuação) — padrão das telas irmãs.
  */
 export function exportarPontoEquilibrioCsv(
-  resultado: PontoEquilibrioResultado,
+  resultado: PontoEquilibrioResultadoComMeta,
   empresa?: EmpresaRecord | null,
   exercicioAno?: number,
 ) {
@@ -135,7 +155,9 @@ export function exportarPontoEquilibrioCsv(
     linhas.push(cabecalho.map((c) => escapar(row[c] ?? '')).join(';'))
   }
   linhas.push('')
-  linhas.push(escapar('Valores "—" indicam mês sem movimento ou PE indefinido (margem % <= 0)'))
+  linhas.push(
+    escapar('Valores "—" indicam mês sem movimento, PE indefinido ou meta não cadastrada'),
+  )
   linhas.push(`Empresa;${escapar(nomeEmpresa)}`)
   linhas.push(`Exercício;${escapar(String(exercicioAno || ao.ano))}`)
 

@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge'
 import { Grid3x3 } from 'lucide-react'
 import { formatBrlPontoEquilibrio, formatPercentualPontoEquilibrio } from './pontoEquilibrioFormat'
 import { getClassesMargemSeguranca, type PontoEquilibrioAno } from '@/lib/pontoEquilibrioCalculo'
+import type { PontoEquilibrioAnoComMeta } from '@/lib/pontoEquilibrioMetaComparativo'
+import { getClassesPercentualMeta } from '@/lib/pontoEquilibrioMetaComparativo'
 
 const TRACO = '—'
 
@@ -41,7 +43,7 @@ const badgePosicao: Record<Posicao, { texto: string; classes: string }> = {
   },
 }
 
-export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAno }) {
+export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAnoComMeta }) {
   const meses = ano.meses
 
   const totalReceita = useMemo(() => ano.totalReceita, [ano])
@@ -58,8 +60,9 @@ export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAno }) {
           Cálculo Mês a Mês ({ano.ano})
         </CardTitle>
         <CardDescription className="text-xs">
-          PE = Despesas Fixas ÷ Margem de Contribuição %. "—" = mês sem movimento ou PE indefinido
-          (margem ≤ 0). Passe o mouse sobre os badges para a posição do mês.
+          PE = Despesas Fixas ÷ Margem de Contribuição %. "—" = mês sem movimento, PE indefinido
+          (margem ≤ 0) ou meta não cadastrada. Verde ≥ 100% da meta, âmbar 80–99,99%, vermelho &lt;
+          80%. Passe o mouse sobre os badges para a posição do mês.
         </CardDescription>
       </CardHeader>
       <CardContent className="px-2 py-0">
@@ -89,6 +92,59 @@ export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAno }) {
                 destacar={false}
                 celulas={meses.map((m) => (m.temMovimento ? fmtNum(m.receita) : TRACO))}
                 total={totalReceita !== 0 ? fmtNum(totalReceita) : TRACO}
+              />
+              <Linha
+                label="Meta de Receita"
+                destacar={false}
+                celulas={meses.map((m) => (m.meta !== null ? fmtNum(m.meta) : TRACO))}
+                total={ano.totalMeta !== null ? fmtNum(ano.totalMeta) : TRACO}
+              />
+              <Linha
+                label="% da Meta Atingido"
+                destacar={false}
+                celulas={meses.map((m) => {
+                  if (m.percentualMeta === null) return TRACO
+                  const cls = getClassesPercentualMeta(m.percentualMeta)
+                  return (
+                    <span className={`font-medium ${cls.texto}`}>{fmtPct(m.percentualMeta)}</span>
+                  )
+                })}
+                total={(() => {
+                  if (ano.totalPercentualMeta === null) return TRACO
+                  const cls = getClassesPercentualMeta(ano.totalPercentualMeta)
+                  return (
+                    <span className={`font-bold ${cls.texto}`}>
+                      {fmtPct(ano.totalPercentualMeta)}
+                    </span>
+                  )
+                })()}
+              />
+              <Linha
+                label="Diferença Realizado − Meta"
+                destacar={false}
+                celulas={meses.map((m) =>
+                  m.diferencaMeta !== null ? (
+                    <span className={m.diferencaMeta >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+                      {fmtNum(m.diferencaMeta)}
+                    </span>
+                  ) : (
+                    TRACO
+                  ),
+                )}
+                total={(() => {
+                  if (ano.totalDiferencaMeta === null) return TRACO
+                  return (
+                    <span
+                      className={
+                        ano.totalDiferencaMeta >= 0
+                          ? 'text-emerald-700 font-bold'
+                          : 'text-rose-700 font-bold'
+                      }
+                    >
+                      {fmtNum(ano.totalDiferencaMeta)}
+                    </span>
+                  )
+                })()}
               />
               <Linha
                 label="Despesas Variáveis"
