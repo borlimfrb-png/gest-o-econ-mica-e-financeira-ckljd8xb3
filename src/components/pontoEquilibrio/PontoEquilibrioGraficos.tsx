@@ -21,6 +21,7 @@ const CORES = {
   receita: '#059669',
   pe: '#dc2626',
   meta: '#2563eb',
+  metaDespesa: '#9333ea',
   verde: '#10b981',
   ambar: '#f59e0b',
   vermelho: '#f43f5e',
@@ -33,6 +34,10 @@ export interface PontoGraficoData {
   margemSeguranca: number | null
   /** Meta de receita do mês (null = sem meta — a linha não desenha) */
   meta: number | null
+  /** Meta de despesa do mês (null = sem meta — a linha não desenha) */
+  metaDespesa: number | null
+  /** Despesas fixas realizadas do mês (null = sem movimento — a linha não desenha) */
+  despesasFixas: number | null
 }
 
 export function PontoEquilibrioGraficos({
@@ -54,7 +59,8 @@ export function PontoEquilibrioGraficos({
           </CardTitle>
           <CardDescription className="text-xs">
             Área verde = receita do mês; linha vermelha = PE do mês; linha azul tracejada = meta de
-            receita. Quando a área fica abaixo da linha, o mês operou abaixo do ponto de equilíbrio.
+            receita; linha roxa tracejada = meta de despesa (realizado: linha vermelha fina). Quando
+            a área fica abaixo da linha do PE, o mês operou abaixo do ponto de equilíbrio.
           </CardDescription>
         </CardHeader>
         <CardContent className="py-4 px-4">
@@ -83,7 +89,11 @@ export function PontoEquilibrioGraficos({
                         ? 'Receita'
                         : name === 'meta'
                           ? 'Meta de Receita'
-                          : 'Ponto de Equilíbrio',
+                          : name === 'metaDespesa'
+                            ? 'Meta de Despesa'
+                            : name === 'despesasFixas'
+                              ? 'Despesas Fixas (realizado)'
+                              : 'Ponto de Equilíbrio',
                     ]}
                     labelStyle={{ fontWeight: 700, color: '#0B1F3A' }}
                     contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }}
@@ -116,6 +126,25 @@ export function PontoEquilibrioGraficos({
                     strokeWidth={2}
                     strokeDasharray="6 3"
                     dot={{ r: 3 }}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="despesasFixas"
+                    name="despesasFixas"
+                    stroke={CORES.pe}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    connectNulls={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="metaDespesa"
+                    name="metaDespesa"
+                    stroke={CORES.metaDespesa}
+                    strokeWidth={2}
+                    strokeDasharray="2 4"
+                    dot={{ r: 2 }}
                     connectNulls={false}
                   />
                 </ComposedChart>

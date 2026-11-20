@@ -49,31 +49,37 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-// NÃO REMOVER: useRealtimeDebounced é usado por Dashboard, DashboardBi e PontoEquilibrio.
-// Wrapper que assina via useRealtime com debounce trailing de 1,5s.
+export default useRealtime
+
+/**
+ * useRealtimeDebounced — wrapper de useRealtime com debounce trailing de 1,5s.
+ * NÃO REMOVER: usado por Dashboard, DashboardBi, PontoEquilibrio e outras telas
+ * que não devem recarregar a cada evento da sincronização (evita disparo em
+ * rajada quando o backend emite vários eventos seguidos).
+ */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
-  callback: () => void,
+  callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const callbackRef = useRef(callback)
   callbackRef.current = callback
-
-  useRealtime(
-    collectionName,
-    () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => callbackRef.current(), 1500)
-    },
-    enabled,
-  )
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
-}
 
-export default useRealtime
+  return useRealtime<TRecord>(
+    collectionName,
+    (data) => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => {
+        callbackRef.current(data)
+      }, 1500)
+    },
+    enabled,
+  )
+}

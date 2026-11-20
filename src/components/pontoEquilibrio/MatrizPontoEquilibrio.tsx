@@ -12,8 +12,9 @@ import { Badge } from '@/components/ui/badge'
 import { Grid3x3 } from 'lucide-react'
 import { formatBrlPontoEquilibrio, formatPercentualPontoEquilibrio } from './pontoEquilibrioFormat'
 import { getClassesMargemSeguranca, type PontoEquilibrioAno } from '@/lib/pontoEquilibrioCalculo'
-import type { PontoEquilibrioAnoComMeta } from '@/lib/pontoEquilibrioMetaComparativo'
+import type { PontoEquilibrioAnoComMetaDespesa } from '@/lib/pontoEquilibrioMetaDespesaComparativo'
 import { getClassesPercentualMeta } from '@/lib/pontoEquilibrioMetaComparativo'
+import { getClassesPercentualMetaDespesa } from '@/lib/pontoEquilibrioMetaDespesaComparativo'
 
 const TRACO = '—'
 
@@ -43,7 +44,7 @@ const badgePosicao: Record<Posicao, { texto: string; classes: string }> = {
   },
 }
 
-export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAnoComMeta }) {
+export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAnoComMetaDespesa }) {
   const meses = ano.meses
 
   const totalReceita = useMemo(() => ano.totalReceita, [ano])
@@ -230,6 +231,65 @@ export function MatrizPontoEquilibrio({ ano }: { ano: PontoEquilibrioAnoComMeta 
                     TRACO
                   )
                 }
+              />
+              <Linha
+                label="Meta de Despesa"
+                destacar={false}
+                celulas={meses.map((m) => (m.metaDespesa !== null ? fmtNum(m.metaDespesa) : TRACO))}
+                total={ano.totalMetaDespesa !== null ? fmtNum(ano.totalMetaDespesa) : TRACO}
+              />
+              <Linha
+                label="% da Meta de Despesa"
+                destacar={false}
+                celulas={meses.map((m) => {
+                  if (m.percentualMetaDespesa === null) return TRACO
+                  const cls = getClassesPercentualMetaDespesa(m.percentualMetaDespesa)
+                  return (
+                    <span className={`font-medium ${cls.texto}`}>
+                      {fmtPct(m.percentualMetaDespesa)}
+                    </span>
+                  )
+                })}
+                total={(() => {
+                  if (ano.totalPercentualMetaDespesa === null) return TRACO
+                  const cls = getClassesPercentualMetaDespesa(ano.totalPercentualMetaDespesa)
+                  return (
+                    <span className={`font-bold ${cls.texto}`}>
+                      {fmtPct(ano.totalPercentualMetaDespesa)}
+                    </span>
+                  )
+                })()}
+              />
+              <Linha
+                label="Diferença Realizado − Meta de Despesa"
+                destacar={false}
+                celulas={meses.map((m) =>
+                  m.diferencaMetaDespesa !== null ? (
+                    <span
+                      className={
+                        m.diferencaMetaDespesa <= 0 ? 'text-emerald-700' : 'text-amber-700'
+                      }
+                    >
+                      {fmtNum(m.diferencaMetaDespesa)}
+                    </span>
+                  ) : (
+                    TRACO
+                  ),
+                )}
+                total={(() => {
+                  if (ano.totalDiferencaMetaDespesa === null) return TRACO
+                  return (
+                    <span
+                      className={
+                        ano.totalDiferencaMetaDespesa <= 0
+                          ? 'text-emerald-700 font-bold'
+                          : 'text-amber-700 font-bold'
+                      }
+                    >
+                      {fmtNum(ano.totalDiferencaMetaDespesa)}
+                    </span>
+                  )
+                })()}
               />
               <Linha
                 label="Posição vs PE"

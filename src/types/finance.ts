@@ -474,6 +474,17 @@ export interface MetaReceitaMensalRecord extends RecordModel {
   updated?: string
 }
 
+/** Meta mensal de despesa do Ponto de Equilíbrio (coleção `metas_despesa_mensal`, migração 0117). */
+export interface MetaDespesaMensalRecord extends RecordModel {
+  empresa: string
+  ano: number
+  mes: number
+  valor: number
+  user: string
+  created?: string
+  updated?: string
+}
+
 export interface MetaLancamentoRecord extends RecordModel {
   empresa: string
   tipo: TipoMetaLancamento

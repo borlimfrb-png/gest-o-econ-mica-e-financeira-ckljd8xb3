@@ -1,25 +1,22 @@
 import * as XLSX from 'xlsx'
-import type {
-  PontoEquilibrioAnoComMeta,
-  PontoEquilibrioMesComMeta,
-} from './pontoEquilibrioMetaComparativo'
+import type { PontoEquilibrioAnoComMetaDespesa } from './pontoEquilibrioMetaDespesaComparativo'
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
 import { formatarPercentualExport } from './despesasFixasExport'
 
-/** Contrato mínimo usado pela exportação: o ano ativo já com metas mescladas. */
+/** Contrato mínimo usado pela exportação: o ano ativo já com as duas metas mescladas. */
 export type PontoEquilibrioResultadoComMeta = {
-  anoAtivo: PontoEquilibrioAnoComMeta | null
+  anoAtivo: PontoEquilibrioAnoComMetaDespesa | null
 }
 
-type Mes = PontoEquilibrioMesComMeta
+type Mes = PontoEquilibrioAnoComMetaDespesa['meses'][number]
 
 function formatMoedaCsv(v: number | undefined | null): string {
   if (v === undefined || v === null || !Number.isFinite(v)) return '—'
   return v.toFixed(2).replace('.', ',')
 }
 
-function novoCabecalho(ano: PontoEquilibrioAnoComMeta): string[] {
+function novoCabecalho(ano: PontoEquilibrioAnoComMetaDespesa): string[] {
   return ['Indicador', ...ano.meses.map((m) => m.rotuloCurto), 'Total Ano']
 }
 
@@ -28,7 +25,7 @@ function novoCabecalho(ano: PontoEquilibrioAnoComMeta): string[] {
  * Reaproveitada pelo Excel e pelo CSV para nunca divergirem. Inclui as linhas
  * de Meta de Receita, % da Meta Atingido e Diferença Realizado − Meta.
  */
-function gerarLinhasMatriz(ao: PontoEquilibrioAnoComMeta): LinhaPontoEquilibrio[] {
+function gerarLinhasMatriz(ao: PontoEquilibrioAnoComMetaDespesa): LinhaPontoEquilibrio[] {
   return [
     {
       Indicador: 'Receita Bruta (R$)',
@@ -49,6 +46,23 @@ function gerarLinhasMatriz(ao: PontoEquilibrioAnoComMeta): LinhaPontoEquilibrio[
     {
       Indicador: 'Despesas Variáveis (R$)',
       ...valores(ao, (m) => m.despesasVariaveis, ao.totalDespesasVariaveis, formatMoedaCsv),
+    },
+    {
+      Indicador: 'Meta de Despesa (R$)',
+      ...valores(ao, (m) => m.metaDespesa, ao.totalMetaDespesa, formatMoedaCsv),
+    },
+    {
+      Indicador: '% da Meta de Despesa (%)',
+      ...valores(
+        ao,
+        (m) => m.percentualMetaDespesa,
+        ao.totalPercentualMetaDespesa,
+        formatarPercentualExport,
+      ),
+    },
+    {
+      Indicador: 'Diferença Realizado − Meta de Despesa (R$)',
+      ...valores(ao, (m) => m.diferencaMetaDespesa, ao.totalDiferencaMetaDespesa, formatMoedaCsv),
     },
     {
       Indicador: 'Margem de Contribuição (R$)',
@@ -89,7 +103,7 @@ function gerarLinhasMatriz(ao: PontoEquilibrioAnoComMeta): LinhaPontoEquilibrio[
 export interface LinhaPontoEquilibrio extends Record<string, string> {}
 
 function valores(
-  ano: PontoEquilibrioAnoComMeta,
+  ano: PontoEquilibrioAnoComMetaDespesa,
   pegar: (m: Mes) => number | null,
   total: number | null,
   formatar: (v: number | null) => string,

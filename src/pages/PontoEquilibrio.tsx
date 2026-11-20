@@ -25,9 +25,15 @@ import {
   mesclarMetasNoAno,
   mapearMetasPorMes,
   getClassesPercentualMeta,
-  type PontoEquilibrioAnoComMeta,
 } from '@/lib/pontoEquilibrioMetaComparativo'
+import {
+  mesclarMetasDespesaNoAno,
+  mapearMetasDespesaPorMes,
+  getClassesPercentualMetaDespesa,
+  type PontoEquilibrioAnoComMetaDespesa,
+} from '@/lib/pontoEquilibrioMetaDespesaComparativo'
 import { metasReceitaService } from '@/services/metasReceitaService'
+import { metasDespesaService } from '@/services/metasDespesaService'
 import { parseValorMoeda, formatarValorParaEdicao } from '@/lib/moedaInput'
 import type { PontoGraficoData } from '@/components/pontoEquilibrio/PontoEquilibrioGraficos'
 import {
@@ -42,6 +48,7 @@ import {
 import { MatrizPontoEquilibrio } from '@/components/pontoEquilibrio/MatrizPontoEquilibrio'
 import { PontoEquilibrioGraficos } from '@/components/pontoEquilibrio/PontoEquilibrioGraficos'
 import { EditorMetasMensais } from '@/components/pontoEquilibrio/EditorMetasMensais'
+import { EditorMetasDespesaMensais } from '@/components/pontoEquilibrio/EditorMetasDespesaMensais'
 import { lancamentosService } from '@/services/financeService'
 import { contasService, planoContasService } from '@/services/financeService'
 
@@ -103,6 +110,9 @@ export default function PontoEquilibrio() {
   const [metas, setMetas] = useState<Map<number, number>>(new Map())
   const [rascunho, setRascunho] = useState<Record<number, string>>({})
   const [salvandoMetas, setSalvandoMetas] = useState(false)
+  const [metasDespesa, setMetasDespesa] = useState<Map<number, number>>(new Map())
+  const [rascunhoDespesa, setRascunhoDespesa] = useState<Record<number, string>>({})
+  const [salvandoMetasDespesa, setSalvandoMetasDespesa] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [exercicioAno, setExercicioAno] = useState<number>(selectedAno || new Date().getFullYear())
 
@@ -179,9 +189,24 @@ export default function PontoEquilibrio() {
     }
   }, [selectedEmpresaId, exercicioAno])
 
+  // Metas de despesa da empresa ativa (todos os anos — o mapa filtra pelo ano)
+  const carregarMetasDespesa = useCallback(async () => {
+    if (!selectedEmpresaId || selectedEmpresaId.startsWith('grupo-')) {
+      setMetasDespesa(new Map())
+      return
+    }
+    try {
+      const lista = await metasDespesaService.getAll({ empresaId: selectedEmpresaId })
+      setMetasDespesa(mapearMetasDespesaPorMes(lista, exercicioAno))
+    } catch (e) {
+      console.error(e)
+      setMetasDespesa(new Map())
+    }
+  }, [selectedEmpresaId, exercicioAno])
+
   useEffect(() => {
-    carregarMetas()
-  }, [carregarMetas])
+    carregarMetasDespesa()
+  }, [carregarMetasDespesa])
 
   useEffect(() => {
     const handleRecarregar = () => carregar()
@@ -199,10 +224,14 @@ export default function PontoEquilibrio() {
     [lancamentos, contas, planoContas, exercicioAno],
   )
 
-  // Ano ativo já com as metas mescladas (receita vs. meta por mês)
-  const ao: PontoEquilibrioAnoComMeta | null = useMemo(
+  // Ano ativo já com as metas mescladas (receita e despesa vs. meta por mês)
+  const aoBase = useMemo(
     () => (resultado.anoAtivo ? mesclarMetasNoAno(resultado.anoAtivo, metas) : null),
     [resultado.anoAtivo, metas],
+  )
+  const ao: PontoEquilibrioAnoComMetaDespesa | null = useMemo(
+    () => (aoBase ? mesclarMetasDespesaNoAno(aoBase, metasDespesa) : null),
+    [aoBase, metasDespesa],
   )
 
   const exerciciosDisponiveis = useMemo(() => resultado.anos.map((a) => a.ano), [resultado])
@@ -221,6 +250,10 @@ export default function PontoEquilibrio() {
   useEffect(() => {
     setRascunho(preencherRascunho(metas))
   }, [metas, exercicioAno])
+
+  useEffect(() => {
+    setRascunhoDespesa(preencherRascunho(metasDespesa))
+  }, [metasDespesa, exercicioAno])
 
   const handleSalvarMetas = useCallback(async () => {
     if (!selectedEmpresaId || selectedEmpresaId.startsWith('grupo-')) {
@@ -264,6 +297,48 @@ export default function PontoEquilibrio() {
     }
   }, [selectedEmpresaId, exercicioAno, rascunho, toast, carregarMetas])
 
+  const handleSalvarMetasDespesa = useCallback(async () => {
+    if (!selectedEmpresaId || selectedEmpresaId.startsWith('grupo-')) {
+      toast({
+        title: 'Selecione uma empresa',
+        description: 'As metas são cadastradas por empresa — selecione uma no seletor do topo.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setSalvandoMetasDespesa(true)
+    try {
+      const itens = Array.from({ length: 12 }, (_, i) => ({
+        empresa: selectedEmpresaId,
+        ano: exercicioAno,
+        mes: i + 1,
+        valor: parseValorMoeda(rascunhoDespesa[i + 1] ?? ''),
+      }))
+      const { ok, falhas } = await metasDespesaService.salvarLote(itens)
+      if (falhas > 0) {
+        toast({
+          title: 'Metas salvas com ressalvas',
+          description: `${ok} mês(es) salvos, ${falhas} falha(s). Tente novamente para as pendentes.`,
+        })
+      } else {
+        toast({
+          title: 'Metas de despesa salvas',
+          description: `Metas de despesa de ${exercicioAno} salvas com sucesso.`,
+        })
+      }
+      await carregarMetasDespesa()
+    } catch (e) {
+      console.error(e)
+      toast({
+        title: 'Erro ao salvar metas',
+        description: 'Não foi possível salvar as metas de despesa. Tente novamente.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSalvandoMetasDespesa(false)
+    }
+  }, [selectedEmpresaId, exercicioAno, rascunhoDespesa, toast, carregarMetasDespesa])
+
   /** Dados dos gráficos: um ponto por mês, null = "—" (sem movimento / PE indefinido). */
   const dadosGrafico: PontoGraficoData[] = useMemo(
     () =>
@@ -273,11 +348,14 @@ export default function PontoEquilibrio() {
         pontoEquilibrio: m.pontoEquilibrio,
         margemSeguranca: m.margemSegurancaPercentual,
         meta: m.meta,
+        metaDespesa: m.metaDespesa,
+        despesasFixas: m.despesasFixas,
       })),
     [ao],
   )
 
   const temMetasCadastradas = ao?.totalMetaDefinida ?? false
+  const temMetasDespesaCadastradas = ao?.totalMetaDespesaDefinida ?? false
 
   if (!selectedEmpresaId) {
     return (
@@ -374,15 +452,26 @@ export default function PontoEquilibrio() {
         <>
           {/* Editor de metas (acima dos cards — é o ponto de partida do painel) */}
           {!isGrupoAtivo && (
-            <EditorMetasMensais
-              ano={ao}
-              rascunho={rascunho}
-              onRascunho={(mes, valor) => setRascunho((r) => ({ ...r, [mes]: valor }))}
-              onSalvar={handleSalvarMetas}
-              onDescartar={() => setRascunho(preencherRascunho(metas))}
-              salvando={salvandoMetas}
-              habilitado={podeEditarMetas}
-            />
+            <div className="space-y-3">
+              <EditorMetasMensais
+                ano={ao}
+                rascunho={rascunho}
+                onRascunho={(mes, valor) => setRascunho((r) => ({ ...r, [mes]: valor }))}
+                onSalvar={handleSalvarMetas}
+                onDescartar={() => setRascunho(preencherRascunho(metas))}
+                salvando={salvandoMetas}
+                habilitado={podeEditarMetas}
+              />
+              <EditorMetasDespesaMensais
+                ano={ao}
+                rascunho={rascunhoDespesa}
+                onRascunho={(mes, valor) => setRascunhoDespesa((r) => ({ ...r, [mes]: valor }))}
+                onSalvar={handleSalvarMetasDespesa}
+                onDescartar={() => setRascunhoDespesa(preencherRascunho(metasDespesa))}
+                salvando={salvandoMetasDespesa}
+                habilitado={podeEditarMetas}
+              />
+            </div>
           )}
 
           {/* Cards de resumo */}
@@ -435,6 +524,27 @@ export default function PontoEquilibrio() {
               badgeClasses={getClassesPercentualMeta(ao.totalPercentualMeta).badge}
             />
             <CardResumo
+              titulo={`Meta de Despesa ${ao.ano}`}
+              valor={temMetasDespesaCadastradas ? formatarMoeda(ao.totalMetaDespesa) : '—'}
+              sub={
+                temMetasDespesaCadastradas
+                  ? `Realizado ÷ Meta: ${formatarPercentual(ao.totalPercentualMetaDespesa)} · Diferença: ${
+                      ao.totalDiferencaMetaDespesa !== null
+                        ? (ao.totalDiferencaMetaDespesa > 0 ? '+' : '') +
+                          formatarMoeda(ao.totalDiferencaMetaDespesa)
+                        : '—'
+                    }`
+                  : 'Nenhuma meta cadastrada — preencha no editor de metas acima'
+              }
+              icone={<Target className={CORES_CARD_ICONE} />}
+              badge={
+                ao.totalPercentualMetaDespesa !== null
+                  ? `${ao.totalPercentualMetaDespesa.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}% do previsto`
+                  : undefined
+              }
+              badgeClasses={getClassesPercentualMetaDespesa(ao.totalPercentualMetaDespesa).badge}
+            />
+            <CardResumo
               titulo="Lucro / Prejuízo"
               valor={formatarMoeda(ao.resultadoAnual)}
               icone={
@@ -474,7 +584,12 @@ export default function PontoEquilibrio() {
             exercicio={ao.ano}
             dados={dadosGrafico}
             temDados={dadosGrafico.some(
-              (d) => d.receita !== null || d.pontoEquilibrio !== null || d.meta !== null,
+              (d) =>
+                d.receita !== null ||
+                d.pontoEquilibrio !== null ||
+                d.meta !== null ||
+                d.metaDespesa !== null ||
+                d.despesasFixas !== null,
             )}
           />
 
