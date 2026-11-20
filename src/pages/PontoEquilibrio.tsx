@@ -1,14 +1,8 @@
 import { useMemo, useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
-import pb from '@/lib/pocketbase/client'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtimeDebounced } from '@/hooks/use-realtime'
-import type {
-  ContaRecord,
-  EmpresaRecord,
-  LancamentoRecord,
-  PlanoContaRecord,
-} from '@/types/finance'
+import { useFilter } from '@/contexts/FilterContext'
+import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -37,6 +31,8 @@ import {
 } from '@/lib/pontoEquilibrioExport'
 import { MatrizPontoEquilibrio } from '@/components/pontoEquilibrio/MatrizPontoEquilibrio'
 import { PontoEquilibrioGraficos } from '@/components/pontoEquilibrio/PontoEquilibrioGraficos'
+import { lancamentosService } from '@/services/financeService'
+import { contasService, planoContasService } from '@/services/financeService'
 
 const CORES_CARD_ICONE = 'h-4 w-4'
 
@@ -75,36 +71,49 @@ function CardResumo({
 }
 
 export default function PontoEquilibrio() {
-  const { id: empresaId } = useParams<{ id: string }>()
+  // Padrão das telas irmãs do Menu Gerencial: empresa ativa vem do seletor global
+  // (FilterContext), que já auto-seleciona a primeira empresa/grupo válido —
+  // inclusive quando o usuário tem uma única empresa vinculada.
+  const { selectedEmpresaId, selectedEmpresa, selectedAno, isGrupoAtivo, grupoAtivo } = useFilter()
   const { toast } = useToast()
-  const [empresa, setEmpresa] = useState<EmpresaRecord | null>(null)
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
   const [carregando, setCarregando] = useState(true)
-  const [exercicioAno, setExercicioAno] = useState<number>(new Date().getFullYear())
+  const [exercicioAno, setExercicioAno] = useState<number>(selectedAno || new Date().getFullYear())
 
   const carregar = useCallback(async () => {
-    if (!empresaId) return
     setCarregando(true)
     try {
-      const emp = await pb.collection('empresas').getOne<EmpresaRecord>(empresaId)
-      setEmpresa(emp)
+      let lancsPromise: Promise<LancamentoRecord[]>
+      let contasPromise: Promise<ContaRecord[]>
+      let planosPromise: Promise<PlanoContaRecord[]>
 
-      const [lancs, cts, plano] = await Promise.all([
-        pb.collection('lancamentos').getFullList<LancamentoRecord>({
-          filter: `empresa = "${empresaId}"`,
-          sort: '-data',
-        }),
-        pb.collection('contas').getFullList<ContaRecord>({
-          filter: `empresa = "${empresaId}"`,
-          sort: 'ordem',
-        }),
-        pb.collection('plano_contas').getFullList<PlanoContaRecord>({
-          filter: `empresa = "${empresaId}"`,
-          sort: 'codigo',
-        }),
-      ])
+      if (isGrupoAtivo && grupoAtivo && grupoAtivo.empresas && grupoAtivo.empresas.length > 0) {
+        const empIds = new Set(grupoAtivo.empresas)
+        lancsPromise = lancamentosService
+          .getAll({ expandRelations: true })
+          .then((list) => list.filter((l) => empIds.has(l.empresa)))
+        contasPromise = contasService
+          .getAll()
+          .then((list) => list.filter((c) => !c.empresa || empIds.has(c.empresa)))
+        planosPromise = planoContasService
+          .getAll()
+          .then((list) => list.filter((p) => !p.empresa || empIds.has(p.empresa)))
+      } else if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
+        lancsPromise = lancamentosService.getAll({
+          empresaId: selectedEmpresaId,
+          expandRelations: true,
+        })
+        contasPromise = contasService.getAll({ empresaId: selectedEmpresaId })
+        planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
+      } else {
+        lancsPromise = lancamentosService.getAll({ expandRelations: true })
+        contasPromise = contasService.getAll()
+        planosPromise = planoContasService.getAll()
+      }
+
+      const [lancs, cts, plano] = await Promise.all([lancsPromise, contasPromise, planosPromise])
       setLancamentos(lancs)
       setContas(cts)
       setPlanoContas(plano)
@@ -118,7 +127,7 @@ export default function PontoEquilibrio() {
     } finally {
       setCarregando(false)
     }
-  }, [empresaId, toast])
+  }, [selectedEmpresaId, isGrupoAtivo, grupoAtivo, toast])
 
   useEffect(() => {
     carregar()
@@ -127,6 +136,17 @@ export default function PontoEquilibrio() {
   useRealtimeDebounced('lancamentos', carregar)
   useRealtimeDebounced('contas', carregar)
   useRealtimeDebounced('plano_contas', carregar)
+
+  useEffect(() => {
+    const handleRecarregar = () => carregar()
+    window.addEventListener('dre-contas-atualizado', handleRecarregar)
+    return () => window.removeEventListener('dre-contas-atualizado', handleRecarregar)
+  }, [carregar])
+
+  // Acompanha o exercício do seletor global (padrão das telas irmãs)
+  useEffect(() => {
+    if (selectedAno) setExercicioAno(selectedAno)
+  }, [selectedAno])
 
   const resultado = useMemo(
     () => calcularPontoEquilibrio({ lancamentos, contas, planoContas, anoAtual: exercicioAno }),
@@ -159,12 +179,12 @@ export default function PontoEquilibrio() {
     [ao],
   )
 
-  if (!empresaId) {
+  if (!selectedEmpresaId) {
     return (
       <div className="p-6">
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
-            Selecione uma empresa no menu superior para visualizar o ponto de equilíbrio.
+            Selecione uma empresa no seletor do topo para visualizar o ponto de equilíbrio.
           </CardContent>
         </Card>
         <Button variant="outline" className="mt-4" onClick={() => window.history.back()}>
@@ -185,7 +205,10 @@ export default function PontoEquilibrio() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Ponto de Equilíbrio</h1>
             <p className="text-sm text-muted-foreground">
-              {empresa?.nome || 'Carregando...'} · Exercício {ao?.ano || exercicioAno}
+              {isGrupoAtivo && grupoAtivo
+                ? `Grupo ${grupoAtivo.nome}`
+                : selectedEmpresa?.nome || 'Carregando...'}{' '}
+              · Exercício {ao?.ano || exercicioAno}
             </p>
           </div>
         </div>
@@ -204,14 +227,14 @@ export default function PontoEquilibrio() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportarPontoEquilibrioExcel(resultado, empresa, exercicioAno)}
+            onClick={() => exportarPontoEquilibrioExcel(resultado, selectedEmpresa, exercicioAno)}
           >
             <FileSpreadsheet className="mr-2 h-4 w-4" /> Excel
           </Button>
           <Button
             variant="outline"
             size="sm"
-            onClick={() => exportarPontoEquilibrioCsv(resultado, empresa, exercicioAno)}
+            onClick={() => exportarPontoEquilibrioCsv(resultado, selectedEmpresa, exercicioAno)}
           >
             <Download className="mr-2 h-4 w-4" /> CSV
           </Button>
