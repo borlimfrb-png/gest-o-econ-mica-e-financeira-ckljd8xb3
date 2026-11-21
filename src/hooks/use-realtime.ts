@@ -49,37 +49,60 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-export default useRealtime
-
-/**
- * useRealtimeDebounced — wrapper de useRealtime com debounce trailing de 1,5s.
- * NÃO REMOVER: usado por Dashboard, DashboardBi, PontoEquilibrio e outras telas
- * que não devem recarregar a cada evento da sincronização (evita disparo em
- * rajada quando o backend emite vários eventos seguidos).
- */
+// NÃO REMOVER — wrapper usado por Dashboard, DashboardBi, PontoEquilibrio etc.
+// Debounce trailing de 1,5s: em rajadas de eventos (ex.: importação em lote),
+// só o ÚLTIMO evento é repassado ao callback, 1,5s depois do silêncio.
+// Este export some do working tree com frequência e quebra o build.
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
+  delayMs = 1500,
 ) {
   const callbackRef = useRef(callback)
   callbackRef.current = callback
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-    }
-  }, [])
+    if (!enabled) return
 
-  return useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(() => {
-        callbackRef.current(data)
-      }, 1500)
-    },
-    enabled,
-  )
+    let unsubscribeFn: (() => Promise<void>) | undefined
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let lastEvent: RecordSubscription<TRecord> | null = null
+
+    const schedule = (e: RecordSubscription<TRecord>) => {
+      lastEvent = e
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timer = null
+        if (lastEvent) {
+          callbackRef.current(lastEvent)
+          lastEvent = null
+        }
+      }, delayMs)
+    }
+
+    pb.collection<TRecord>(collectionName)
+      .subscribe('*', (e) => {
+        schedule(e)
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn().catch(() => {})
+        } else {
+          unsubscribeFn = fn
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      if (unsubscribeFn) {
+        unsubscribeFn().catch(() => {})
+      }
+    }
+  }, [collectionName, enabled, delayMs])
 }
+
+export default useRealtime

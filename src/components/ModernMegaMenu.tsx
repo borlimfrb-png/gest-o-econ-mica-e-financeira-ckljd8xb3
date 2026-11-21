@@ -305,10 +305,12 @@ export function ModernMegaMenu({
             </div>
 
             {/* Conteúdo: Mega Menu por Colunas */}
+            {/* Área com scroll interno: garante que TODOS os itens fiquem acessíveis
+                mesmo quando o painel excede a altura da viewport (ex.: Gerencial) */}
             {isMega && grupo.colunas && (
               <div
                 className={cn(
-                  'grid gap-3',
+                  'grid gap-3 max-h-[calc(100vh-12rem)] overflow-y-auto overscroll-contain pr-1',
                   columnCount === 2 && 'grid-cols-2',
                   columnCount >= 3 && 'grid-cols-3',
                 )}
@@ -337,8 +339,11 @@ export function ModernMegaMenu({
             )}
 
             {/* Conteúdo: Dropdown Simples com visual de cards ricos */}
+            {/* Scroll interno: dropdowns longos (ex.: Gerencial) nunca cortam itens na viewport */}
             {!isMega && grupo.itens && (
-              <div className="flex flex-col gap-1">{grupo.itens.map(renderItemCard)}</div>
+              <div className="flex flex-col gap-1 max-h-[calc(100vh-12rem)] overflow-y-auto overscroll-contain pr-1">
+                {grupo.itens.map(renderItemCard)}
+              </div>
             )}
 
             {/* Rodapé sutil com atalho de teclado rápido */}

@@ -744,11 +744,12 @@ export default function Layout() {
                     <DropdownMenuContent
                       align="end"
                       sideOffset={8}
-                      className="w-72 bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
+                      className="w-72 max-h-[75vh] overflow-y-auto overscroll-contain bg-[#0B1F3A] border-slate-700/80 text-white shadow-2xl rounded-2xl p-2 z-50 backdrop-blur-md"
                     >
-                      <div className="px-2.5 py-1.5 text-[10px] font-bold text-blue-200 uppercase tracking-wider border-b border-white/10 mb-1">
+                      <div className="px-2.5 py-1.5 text-[10px] font-bold text-blue-200 uppercase tracking-wider border-b border-white/10 mb-1 sticky top-0 bg-[#0B1F3A] z-10">
                         Módulos Adicionais
                       </div>
+                      {/* Scroll interno: nenhum grupo/módulo pode ficar inacessível no dropdown "Mais" */}
                       {gruposExcedentes.map((grupo) => {
                         const GroupIcon = grupo.icon
                         const active = isGroupActive(grupo)
