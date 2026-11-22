@@ -483,15 +483,59 @@ export function matchDespesaComPlanoContas(
   }
 }
 
+const MESES_PT: Record<string, number> = {
+  jan: 1,
+  janeiro: 1,
+  fev: 2,
+  fevereiro: 2,
+  mar: 3,
+  marco: 3,
+  abr: 4,
+  abril: 4,
+  mai: 5,
+  maio: 5,
+  jun: 6,
+  junho: 6,
+  jul: 7,
+  julho: 7,
+  ago: 8,
+  agosto: 8,
+  set: 9,
+  setembro: 9,
+  out: 10,
+  outubro: 10,
+  nov: 11,
+  novembro: 11,
+  dez: 12,
+  dezembro: 12,
+}
+
 /**
- * Converte data para o formato padrão YYYY-MM-DD
+ * Monta ISO YYYY-MM-DD validando dia/mês/ano — devolve '' quando inválido
+ * (o chamador decide o fallback, evitando datas absurdas entrarem na revisão).
+ */
+function montarIsoValido(ano: number, mes: number, dia: number): string {
+  if (!Number.isFinite(ano) || !Number.isFinite(mes) || !Number.isFinite(dia)) return ''
+  if (mes < 1 || mes > 12) return ''
+  if (dia < 1 || dia > 31) return ''
+  if (ano < 1900 || ano > 2100) return ''
+  const y = String(ano).padStart(4, '0')
+  const m = String(mes).padStart(2, '0')
+  const d = String(dia).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+/**
+ * Converte data para o formato padrão YYYY-MM-DD.
+ * Aceita: dd/mm/aaaa, dd-mm-aaaa, dd.mm.aaaa, dd/mm/aa, ISO (yyyy-mm-dd),
+ * serial do Excel, AAAAMMDD, "15 jan 2025", "15-jan-25", "jan/25", "janeiro/2025".
+ * Devolve '' quando não reconhece (cabe ao chamador aplicar fallback).
  */
 function normalizeDateStr(rawDate: unknown): string {
-  const hoje = new Date().toISOString().slice(0, 10)
-  if (!rawDate) return hoje
+  if (!rawDate) return ''
 
   if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
-    return rawDate.toISOString().slice(0, 10)
+    return montarIsoValido(rawDate.getFullYear(), rawDate.getMonth() + 1, rawDate.getDate())
   }
 
   if (typeof rawDate === 'number') {
@@ -499,37 +543,118 @@ function normalizeDateStr(rawDate: unknown): string {
     try {
       const parsed = XLSX.SSF.parse_date_code(rawDate)
       if (parsed) {
-        const y = String(parsed.y).padStart(4, '0')
-        const m = String(parsed.m).padStart(2, '0')
-        const d = String(parsed.d).padStart(2, '0')
-        return `${y}-${m}-${d}`
+        return montarIsoValido(parsed.y, parsed.m, parsed.d)
       }
     } catch {
       /* intentionally ignored */
     }
+    return ''
   }
 
-  if (typeof rawDate === 'string') {
-    const s = rawDate.trim()
-    // DD/MM/YYYY
-    const brMatch = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})/)
-    if (brMatch) {
-      const d = brMatch[1].padStart(2, '0')
-      const m = brMatch[2].padStart(2, '0')
-      const y = brMatch[3]
-      return `${y}-${m}-${d}`
-    }
-    // YYYY-MM-DD
-    const isoMatch = s.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/)
-    if (isoMatch) {
-      const y = isoMatch[1]
-      const m = isoMatch[2].padStart(2, '0')
-      const d = isoMatch[3].padStart(2, '0')
-      return `${y}-${m}-${d}`
+  if (typeof rawDate !== 'string') return ''
+
+  const s = rawDate.trim()
+  if (!s) return ''
+  const sLow = s.toLowerCase()
+
+  // DD/MM/YYYY (ou com - e .) e DD/MM/YY (ano de 2 dígitos => 2000+)
+  const brMatch = sLow.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4}|\d{2})$/)
+  if (brMatch) {
+    const d = Number(brMatch[1])
+    const m = Number(brMatch[2])
+    const yRaw = Number(brMatch[3])
+    const y = brMatch[3].length === 2 ? 2000 + yRaw : yRaw
+    return montarIsoValido(y, m, d)
+  }
+
+  // YYYY-MM-DD (ISO)
+  const isoMatch = sLow.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})/)
+  if (isoMatch) {
+    return montarIsoValido(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]))
+  }
+
+  // AAAAMMDD compacto
+  const compactMatch = sLow.match(/^(\d{4})(\d{2})(\d{2})$/)
+  if (compactMatch) {
+    return montarIsoValido(
+      Number(compactMatch[1]),
+      Number(compactMatch[2]),
+      Number(compactMatch[3]),
+    )
+  }
+
+  // "15 jan 2025", "15-jan-25", "15 de jan de 2025"
+  const diaMesNome = sLow.match(/^(\d{1,2})\s*(?:de\s*)?([a-zç]{3,9})\s*(?:de\s*)?(\d{4}|\d{2})$/)
+  if (diaMesNome) {
+    const mes = MESES_PT[diaMesNome[2]] || MESES_PT[diaMesNome[2].slice(0, 3)]
+    if (mes) {
+      const d = Number(diaMesNome[1])
+      const yRaw = Number(diaMesNome[3])
+      const y = diaMesNome[3].length === 2 ? 2000 + yRaw : yRaw
+      return montarIsoValido(y, mes, d)
     }
   }
 
-  return hoje
+  // "jan/25", "janeiro/2025", "jan-2025" => primeiro dia do mês (competência)
+  const mesNomeAno = sLow.match(/^([a-zç]{3,9})[/\-\s]*(\d{4}|\d{2})$/)
+  if (mesNomeAno) {
+    const mes = MESES_PT[mesNomeAno[1]] || MESES_PT[mesNomeAno[1].slice(0, 3)]
+    if (mes) {
+      const yRaw = Number(mesNomeAno[2])
+      const y = mesNomeAno[2].length === 2 ? 2000 + yRaw : yRaw
+      return montarIsoValido(y, mes, 1)
+    }
+  }
+
+  return ''
+}
+
+/**
+ * Ruído típico de extratos/relatórios que NÃO é lançamento: totais, subtotais,
+ * saldos, cabeçalhos de página e linhas repetidas de cabeçalho de tabela.
+ */
+const LINHAS_RUIDO = [
+  'saldo',
+  'total',
+  'subtotal',
+  'somatorio',
+  'acumulado',
+  'transporte',
+  'pagina',
+  'folha',
+  'página',
+  'balancete',
+  'balanco',
+  'demonstrativo',
+  'relatorio',
+  'exercicio',
+  'usuario',
+  'emissao',
+  'periodo',
+  'cnpj',
+  'cpf',
+  'data lancamento',
+  'data movimento',
+  'data vencimento',
+  'historico',
+  'descricao',
+  'documento',
+  'lancamento',
+  'nenhum movimento',
+  'nao ha lancamentos',
+  'nao ha registros',
+]
+
+/**
+ * Avalia se uma descrição extraída é linha de cabeçalho/total/ruído
+ * (não deve virar lançamento na revisão).
+ */
+function isLinhaRuido(descricao: string): boolean {
+  const norm = cleanForComparison(descricao)
+  if (!norm) return true
+  // Descrição sem nenhuma letra => código/número puro => ruído
+  if (!/[a-zà-ú]/.test(norm)) return true
+  return LINHAS_RUIDO.some((n) => norm === n || norm.startsWith(n + ' '))
 }
 
 /**
@@ -633,43 +758,46 @@ export async function parseExcelDespesas(
       }
     }
 
-    if (descVal && valorVal > 0) {
-      const catSugerida = catVal || identificarCategoriaDespesa(descVal)
-      const match = matchDespesaComPlanoContas(
-        descVal,
-        catSugerida,
-        planoContas,
-        memoriasFornecedores,
-      )
-      result.push({
-        id: `excel_${idx}_${Math.random().toString(36).slice(2, 7)}`,
-        sourceFile: file.name,
-        sourceType: 'excel',
-        data: dateVal || new Date().toISOString().slice(0, 10),
-        descricao: descVal,
-        categoriaSugerida: match.categoriaSugerida || catSugerida,
-        valor: valorVal,
-        pageOrRowInfo: `Linha ${idx + 2}`,
-        isCadastrada: match.isCadastrada,
-        planoContaId: match.planoConta?.id,
-        planoContaCodigo: match.planoConta?.codigo,
-        planoContaNome: match.planoConta?.expand?.conta?.nome,
-        matchConfidence: match.confidence,
-        matchScore: match.score,
-        origemSugestao: match.origemSugestao,
-        sugestaoContaNome: descVal,
-        selecionada: true,
-      })
-    }
+    // Descarta linhas de cabeçalho/total/ruído antes de entrarem na revisão
+    if (isLinhaRuido(descVal)) return
+    if (!descVal || valorVal <= 0) return
+
+    const catSugerida = catVal || identificarCategoriaDespesa(descVal)
+    const match = matchDespesaComPlanoContas(
+      descVal,
+      catSugerida,
+      planoContas,
+      memoriasFornecedores,
+    )
+    result.push({
+      id: `excel_${idx}_${Math.random().toString(36).slice(2, 7)}`,
+      sourceFile: file.name,
+      sourceType: 'excel',
+      data: dateVal || new Date().toISOString().slice(0, 10),
+      descricao: descVal,
+      categoriaSugerida: match.categoriaSugerida || catSugerida,
+      valor: valorVal,
+      pageOrRowInfo: `Linha ${idx + 2}`,
+      isCadastrada: match.isCadastrada,
+      planoContaId: match.planoConta?.id,
+      planoContaCodigo: match.planoConta?.codigo,
+      planoContaNome: match.planoConta?.expand?.conta?.nome,
+      matchConfidence: match.confidence,
+      matchScore: match.score,
+      origemSugestao: match.origemSugestao,
+      sugestaoContaNome: descVal,
+      selecionada: true,
+    })
   })
 
   return result
 }
 
 /**
- * Regex para capturar data em linhas de PDF (ex: 15/01/2025 ou 2025-01-15)
+ * Regex para capturar data em linhas de PDF (ex: 15/01/2025, 2025-01-15, 15 jan 2025)
  */
-const DATE_IN_LINE_REGEX = /\b(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{4}|\d{4}[/\-.]\d{1,2}[/\-.]\d{1,2})\b/
+const DATE_IN_LINE_REGEX =
+  /\b(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{4}|\d{4}[/\-.]\d{1,2}[/\-.]\d{1,2}|\d{1,2}\s*[-\s]?\s*(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\s*[-/\s]?\s*(?:\d{4}|\d{2}))\b/i
 
 /**
  * Processador de arquivos PDF para extrair despesas individuais
@@ -690,11 +818,10 @@ export async function parsePdfDespesas(
       const lineTrim = line.trim()
       if (!lineTrim || lineTrim.length < 5) continue
 
-      // Procura data na linha
+      // Procura data na linha (com fallback para hoje quando ilegível)
       const dateMatch = lineTrim.match(DATE_IN_LINE_REGEX)
-      const extractedDate = dateMatch
-        ? normalizeDateStr(dateMatch[0])
-        : new Date().toISOString().slice(0, 10)
+      const extractedDate =
+        (dateMatch ? normalizeDateStr(dateMatch[0]) : '') || new Date().toISOString().slice(0, 10)
 
       // Procura valores monetários
       const valMatches = Array.from(
@@ -726,24 +853,8 @@ export async function parsePdfDespesas(
 
       if (cleanDesc.length < 3 || cleanDesc.length > 150) continue
 
-      const normDesc = cleanForComparison(cleanDesc)
-      const noise = [
-        'saldo',
-        'total',
-        'subtotal',
-        'pagina',
-        'folha',
-        'balancete',
-        'demonstrativo',
-        'exercicio',
-        'usuario',
-        'periodo',
-        'cnpj',
-        'cpf',
-      ]
-      if (noise.some((n) => normDesc === n || normDesc.startsWith(n + ' '))) {
-        continue
-      }
+      // Descarta cabeçalhos, totais, saldos e outras linhas de ruído
+      if (isLinhaRuido(cleanDesc)) continue
 
       const catSugerida = identificarCategoriaDespesa(cleanDesc)
       const match = matchDespesaComPlanoContas(
