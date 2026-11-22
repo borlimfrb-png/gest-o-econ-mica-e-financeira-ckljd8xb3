@@ -1,330 +1,139 @@
-import pb from '@/lib/pocketbase/client'
-import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
-
 /**
- * Serviço do Planejamento Econômico (menu Planejamento → PLANEJAMENTO ECONÔMICO).
+ * Serviço do Planejamento Econômico.
  *
- * Fluxo:
- * 1. Coleta o DRE Gerencial CONTA POR CONTA dos últimos 3 anos + ano atual
- *    (reutiliza contasService/lancamentosService e a classificação da DRE).
- * 2. POST /backend/v1/planejamento-economico/analyze — hook que aciona o agente
- *    nativo 'planejamento-economico' e grava a projeção na coleção
- *    planejamento_economico (isolada por empresa).
- * 3. Reabrir a tela carrega a projeção salva (sem regerar).
+ * Monta o payload da chamada ao hook JSVM (POST /backend/v1/planejamento-economico/analyze)
+ * e alimenta a tela /planejamento/economico.
+ *
+ * CONTRATO com o hook — nunca renomear só um dos lados:
+ *   { sucesso, planejamento, regenerado }
+ *
+ * NOVO: além dos DREs (3 anos fechados + ano base), envia os 29 INDICADORES
+ * por exercício (agregador oficial `agregarIndicadoresPlanejamento`).
  */
+import { pb } from '@/lib/pocketbase/client'
+import type { BalancoRecord, DreRecord, BscKpiRecord } from '@/types/finance'
+import {
+  agregarIndicadoresPlanejamento,
+  type IndicadoresPlanejamento,
+} from '@/lib/indicadoresPlanejamento'
+import { bscService } from '@/services/bscService'
 
-export interface ContaHistoricoPlanejamento {
-  conta_id: string
-  codigo?: string
-  nome: string
-  grupo?: string
-  classificacao: string
-  centro_nome?: string
-  anos: number[] // [a-3, a-2, a-1] anos fechados
-  atual: number // exercício base (acumulado até o último mês com dados)
-  meses_com_dados: number
+export interface PayloadAnalyzePlanejamento {
+  empresa_id: string
+  empresa_nome: string
+  segmento: string | null
+  ano_base: number
+  dres: Array<Record<string, unknown>>
+  indicadores: IndicadoresPlanejamento
 }
 
-export interface ContaProjetadaPlanejamento {
-  conta_id: string
-  codigo?: string
-  nome: string
-  grupo?: string
-  classificacao: string
-  centro_nome?: string
-  anos: number[]
-  atual: number
-  valor_projetado: number
-  variacao_pct: number
-  confianca: string
-  comentario: string
+export interface PlanejamentoEconomicoResposta {
+  sucesso: boolean
+  planejamento: Record<string, unknown> | null
+  regenerado: boolean
+  erro?: string
 }
 
-export interface PlanejamentoEconomicoAnalise {
+export interface PlanejamentoRegistro {
   id: string
   empresa: string
   ano_base: number
-  ano_projecao: number
-  benchmark_rotulo: string
-  benchmark_mencionado: string
-  parecer_geral: string
-  receita_projetada: number
-  contas: ContaProjetadaPlanejamento[]
-  created: string
+  conteudo: string
+  criado_por?: string
+  atualizado_em?: string
+  atualizado_por?: string
+  projecao_mensal?: unknown
+  indicadores?: unknown
+  created?: string
+  updated?: string
+  expand?: Record<string, unknown>
 }
 
-export interface EmpresaAnosDisponiveis {
-  empresa: string
-  empresaNome: string
-  anosFechados: number[]
-  anosAbertos: number[]
+export interface CarregarPlanejamentoParams {
+  empresaId: string
+  anoBase: number
 }
 
-export interface PlanejamentoEconomicoPayload {
-  empresa_id: string
-  empresa_nome: string
-  ano_base: number
-  ano_projecao: number
-  meses_com_dados: number
-  benchmark_rotulo: string
-  benchmark: {
-    margem_bruta: number | null
-    margem_operacional: number | null
-    margem_ebitda: number | null
-    margem_liquida: number | null
+const COLECAO = 'planejamento_economico'
+
+/** Anos da janela (3 fechados + base) — mesma regra usada nos indicadores. */
+export function anosDaJanela(anoBase: number): number[] {
+  return [anoBase - 3, anoBase - 2, anoBase - 1, anoBase]
+}
+
+/** Carrega DREs dos anos da janela (a tela já traz os balanços). */
+export async function carregarDresJanela(empresaId: string, anoBase: number): Promise<DreRecord[]> {
+  const anos = anosDaJanela(anoBase)
+  const filtros = anos.map((a) => `ano=${a}`).join(' || ')
+  try {
+    return await pb.collection('dre').getFullList({
+      filter: `empresa="${empresaId}" && (${filtros})`,
+      sort: '-ano',
+    })
+  } catch {
+    return []
   }
-  contas: ContaHistoricoPlanejamento[]
 }
 
-interface AnaliseResponse {
-  sucesso: boolean
-  planejamento: PlanejamentoEconomicoAnalise
-  regenerado: boolean
-  error?: string
-}
-
-/** Empresa ativa + anos com DRE (fechados e em aberto) — alimenta o seletor. */
-export async function carregarEmpresasEAnos(): Promise<EmpresaAnosDisponiveis[]> {
-  const lancamentos = await pb
-    .collection('lancamentos')
-    .getFullList<LancamentoRecord>({ fields: 'empresa,data,estornado', filter: '' })
-    .catch(() => [] as LancamentoRecord[])
-
-  const porEmpresa = new Map<string, { fechados: Set<number>; abertos: Set<number> }>()
-  const agora = new Date().getFullYear()
-  for (const l of lancamentos) {
-    if (l.estornado || !l.data) continue
-    const ano = Number(l.data.slice(0, 4))
-    if (!ano || ano > agora) continue
-    if (!porEmpresa.has(l.empresa))
-      porEmpresa.set(l.empresa, { fechados: new Set(), abertos: new Set() })
-    const entrada = porEmpresa.get(l.empresa)!
-    if (Number(l.data.slice(5, 7)) === 12) entrada.fechados.add(ano)
-    else entrada.abertos.add(ano)
+/** Carrega os KPIs de BSC do ano base (contexto dos indicadores do catálogo). */
+export async function carregarBscKpis(empresaId: string, anoBase: number): Promise<BscKpiRecord[]> {
+  try {
+    return await bscService.getByEmpresaEAno(empresaId, anoBase)
+  } catch {
+    return []
   }
-
-  const ids = [...porEmpresa.keys()]
-  const empresas = await Promise.all(
-    ids.map((id) =>
-      pb
-        .collection('empresas')
-        .getOne<{ id: string; nome: string }>(id)
-        .catch(() => null),
-    ),
-  )
-
-  return ids
-    .map((id, i) => ({
-      empresa: id,
-      empresaNome: empresas[i]?.nome || id,
-      anosFechados: [...(porEmpresa.get(id)?.fechados ?? [])].sort((a, b) => a - b),
-      anosAbertos: [...(porEmpresa.get(id)?.abertos ?? [])].sort((a, b) => a - b),
-    }))
-    .sort((a, b) => a.empresaNome.localeCompare(b.empresaNome))
 }
 
-/**
- * Monta o histórico CONTA POR CONTA dos últimos 3 anos + ano atual,
- * no mesmo formato da DRE Gerencial (classificação por conta, lançamentos
- * estornados ignorados).
- */
-export async function montarPayloadPlanejamento(params: {
+/** Monta os 29 indicadores por ano (agregador oficial, reusa catálogo + motor). */
+export function montarIndicadores(
+  dres: DreRecord[],
+  balancos: BalancoRecord[],
+  anoBase: number,
+  bscKpis: BscKpiRecord[] = [],
+): IndicadoresPlanejamento {
+  return agregarIndicadoresPlanejamento({ dres, balancos, anoBase, bscKpis })
+}
+
+/** Analisa o planejamento econômico via hook JSVM (contrato {sucesso, planejamento, regenerado}). */
+export async function analisarPlanejamentoEconomico(params: {
   empresaId: string
   empresaNome: string
+  segmento: string | null
   anoBase: number
-  benchmarkRotulo: string
-  benchmark: PlanejamentoEconomicoPayload['benchmark']
-}): Promise<PlanejamentoEconomicoPayload> {
-  const { empresaId, empresaNome, anoBase, benchmarkRotulo, benchmark } = params
-  const anosHistoricos = [anoBase - 3, anoBase - 2, anoBase - 1]
+  dres: DreRecord[]
+  balancos: BalancoRecord[]
+  bscKpis?: BscKpiRecord[]
+}): Promise<PlanejamentoEconomicoResposta> {
+  const { empresaId, empresaNome, segmento, anoBase, dres, balancos, bscKpis } = params
 
-  const [contas, lancamentos, planoContas] = await Promise.all([
-    pb.collection('contas').getFullList<ContaRecord>({ sort: 'ordem,codigo,nome' }),
-    pb.collection('lancamentos').getFullList<LancamentoRecord>({
-      filter: `empresa = '${empresaId}'`,
-      expand: 'plano_conta.conta',
-    }),
-    pb.collection('plano_contas').getFullList<PlanoContaRecord>({
-      filter: `empresa = '${empresaId}'`,
-      expand: 'conta,centro',
-    }),
-  ])
+  const indicadores = montarIndicadores(dres, balancos, anoBase, bscKpis)
 
-  type PlanoContaExpand = PlanoContaRecord & {
-    expand?: {
-      conta?: ContaRecord
-      centro?: { nome?: string; id?: string }
-    }
-  }
-
-  // plano_conta id -> conta (expand ou fallback)
-  const planoParaConta = new Map<string, string>()
-  for (const p of planoContas) {
-    const contaId = p.expand?.conta?.id || p.conta
-    if (contaId) planoParaConta.set(p.id, contaId)
-  }
-
-  const contasPorId = new Map(contas.map((c) => [c.id, c]))
-
-  // contaId -> ano -> valor acumulado
-  const acumulado = new Map<string, Map<number, number>>()
-  const mesesComDados = new Map<string, Set<number>>() // contaId -> anos com lançamento no ano atual
-
-  for (const l of lancamentos) {
-    if (l.estornado || !l.data) continue
-    const contaId = planoParaConta.get(l.plano_conta) || l.expand?.plano_conta?.expand?.conta?.id
-    if (!contaId) continue
-    const ano = Number(l.data.slice(0, 4))
-    const historico = anosHistoricos.includes(ano) || ano === anoBase
-    if (!historico) continue
-    if (!acumulado.has(contaId)) acumulado.set(contaId, new Map())
-    const porAno = acumulado.get(contaId)!
-    porAno.set(ano, (porAno.get(ano) || 0) + (Number(l.valor) || 0))
-    if (ano === anoBase) {
-      if (!mesesComDados.has(contaId)) mesesComDados.set(contaId, new Set())
-      mesesComDados.get(contaId)!.add(Number(l.data.slice(5, 7)))
-    }
-  }
-
-  const contasHistorico: ContaHistoricoPlanejamento[] = []
-  for (const [contaId, porAno] of acumulado) {
-    const conta = contasPorId.get(contaId)
-    const temHistorico = anosHistoricos.some((a) => (porAno.get(a) || 0) !== 0)
-    const atual = porAno.get(anoBase) || 0
-    if (!conta || (!temHistorico && atual === 0)) continue
-    const planoDaConta = (planoContas as PlanoContaExpand[]).find(
-      (p) => (p.expand?.conta?.id || p.conta) === contaId,
-    )
-    contasHistorico.push({
-      conta_id: contaId,
-      codigo: conta.codigo,
-      nome: conta.nome,
-      grupo: conta.grupo,
-      classificacao: conta.classificacao_dre || 'NaoClassificado',
-      centro_nome: planoDaConta?.expand?.centro?.nome,
-      anos: anosHistoricos.map((a) => porAno.get(a) || 0),
-      atual,
-      meses_com_dados: mesesComDados.get(contaId)?.size || 0,
-    })
-  }
-
-  contasHistorico.sort((a, b) => {
-    const ordemClassificacao = [
-      'Receita',
-      'Despesa Variável',
-      'Despesa Fixa',
-      'Despesa Financeira',
-      'Receita Financeira',
-    ]
-    const d =
-      ordemClassificacao.indexOf(a.classificacao) - ordemClassificacao.indexOf(b.classificacao)
-    if (d !== 0) return d
-    return a.nome.localeCompare(b.nome)
-  })
-
-  return {
+  const payload: PayloadAnalyzePlanejamento = {
     empresa_id: empresaId,
     empresa_nome: empresaNome,
+    segmento,
     ano_base: anoBase,
-    ano_projecao: anoBase + 1,
-    meses_com_dados: 12,
-    benchmark_rotulo: benchmarkRotulo,
-    benchmark,
-    contas: contasHistorico,
+    dres: dres.map((d) => ({
+      id: d.id,
+      ano: d.ano,
+      mes: d.mes,
+      receita_bruta: d.receita_bruta,
+      deducoes_receita: d.deducoes_receita,
+      custo_mercadorias: d.custo_mercadorias,
+      despesas_operacionais: d.despesas_operacionais,
+      despesas_financeiras: d.despesas_financeiras,
+      outras_receitas_despesas: d.outras_receitas_despesas,
+      imposto_renda: d.imposto_renda,
+    })),
+    indicadores,
   }
+
+  const resposta = await pb.send('/backend/v1/planejamento-economico/analyze', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  })
+  return resposta as PlanejamentoEconomicoResposta
 }
 
-/**
- * Aciona o agente nativo 'planejamento-economico' via hook
- * /backend/v1/planejamento-economico/analyze.
- * Se já existir projeção salva para empresa/ano base, o hook devolve a salva
- * (regenerado=false) — fechar e reabrir NÃO regera.
- */
-/** Timeout client-side: a análise conta por conta pode levar ~1 min no agente. */
-const TIMEOUT_ANALISE_MS = 180_000
-
-function mensagemErroHttp(status: number): string {
-  if (status === 401 || status === 403)
-    return 'Sessão expirada ou sem permissão para analisar esta empresa — faça login novamente.'
-  if (status === 404)
-    return 'Serviço de Planejamento Econômico indisponível no servidor (endpoint não encontrado). Atualize a página ou contate o suporte.'
-  if (status === 503)
-    return 'Agente de IA temporariamente indisponível no servidor. Tente novamente em alguns minutos.'
-  if (status >= 500)
-    return `O agente de IA falhou ao processar a análise (erro ${status}). Tente novamente — se persistir, verifique o serviço de IA.`
-  return `Falha na análise (erro ${status}).`
-}
-
-export async function analisarPlanejamentoEconomico(
-  payload: PlanejamentoEconomicoPayload,
-  opcoes?: { forcarRegenerar?: boolean },
-): Promise<{ planejamento: PlanejamentoEconomicoAnalise; regenerado: boolean }> {
-  const backendUrl = import.meta.env.VITE_POCKETBASE_URL
-  const token = pb.authStore.token
-  if (!token) throw new Error('Usuário não autenticado no sistema.')
-
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_ANALISE_MS)
-  let response: Response
-  try {
-    response = await fetch(`${backendUrl}/backend/v1/planejamento-economico/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: token },
-      body: JSON.stringify({ ...payload, forcar_regenerar: opcoes?.forcarRegenerar ?? false }),
-      signal: controller.signal,
-    })
-  } catch (err) {
-    if (controller.signal.aborted) {
-      throw new Error(
-        'A análise excedeu o tempo limite (3 min) — o DRE pode ter muitas contas para o agente processar. Tente novamente ou reduza o período.',
-      )
-    }
-    throw new Error(
-      'Falha de rede ao contatar o servidor do agente de IA. Verifique sua conexão e tente novamente.',
-    )
-  } finally {
-    clearTimeout(timer)
-  }
-
-  // O corpo pode vir vazio ou truncado (ex.: hook derrubado no meio). Nesse
-  // caso damos mensagem ESPECÍFICA em vez de explodir no JSON.parse
-  // ("Unexpected end of JSON input (EOF)").
-  const texto = await response.text().catch(() => '')
-  let data: (AnaliseResponse & { message?: string }) | null = null
-  if (texto.trim()) {
-    try {
-      data = JSON.parse(texto) as AnaliseResponse & { message?: string }
-    } catch {
-      data = null
-    }
-  }
-  if (!data) {
-    throw new Error(
-      response.ok
-        ? 'O agente não respondeu (resposta vazia ou interrompida pelo servidor). Clique em "Analisar e Projetar" para tentar regenerar.'
-        : `O agente não respondeu (erro ${response.status}, resposta vazia ou interrompida). Clique em "Analisar e Projetar" para tentar regenerar.`,
-    )
-  }
-  if (!response.ok || !data.sucesso) {
-    throw new Error(
-      data.error ||
-        (response.status >= 400 && response.status < 500 && data.message
-          ? data.message
-          : mensagemErroHttp(response.status)),
-    )
-  }
-  return { planejamento: data.planejamento, regenerado: data.regenerado }
-}
-
-/** Lista as projeções salvas (para pré-carregar a tela). */
-export async function listarPlanejamentosSalvos(
-  empresaId: string,
-): Promise<PlanejamentoEconomicoAnalise[]> {
-  return await pb
-    .collection('planejamento_economico')
-    .getFullList<PlanejamentoEconomicoAnalise>({
-      filter: `empresa = '${empresaId}'`,
-      sort: '-ano_base',
-    })
-    .catch(() => [])
-}
+export { COLECAO }
