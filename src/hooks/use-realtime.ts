@@ -49,39 +49,4 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-/**
- * Igual ao useRealtime, mas com debounce de 1,5s (trailing) nos callbacks —
- * para coleções que disparam muitos eventos seguidos (ex.: lancamentos).
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled = true,
-) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const callbackRef = useRef(callback)
-  callbackRef.current = callback
-
-  useEffect(() => {
-    if (!enabled) return
-    let unsubscribeFn: (() => Promise<void>) | undefined
-    let cancelled = false
-    pb.collection<TRecord>(collectionName)
-      .subscribe('*', (e) => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        timeoutRef.current = setTimeout(() => callbackRef.current(e), 1500)
-      })
-      .then((fn) => {
-        if (cancelled) fn().catch(() => {})
-        else unsubscribeFn = fn
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      if (unsubscribeFn) unsubscribeFn().catch(() => {})
-    }
-  }, [collectionName, enabled])
-}
-
 export default useRealtime

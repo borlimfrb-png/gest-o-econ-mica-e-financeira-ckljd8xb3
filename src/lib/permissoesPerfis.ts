@@ -49,6 +49,7 @@ export type ModuloSistema =
   | 'planejamento_setores'
   | 'analise_tributaria'
   | 'importacao'
+  | 'importacao_despesas_ia'
   | 'relatorios'
   | 'relatorio_anual'
   | 'agente_ia'
@@ -116,6 +117,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'planejamento_setores',
       'analise_tributaria',
       'importacao',
+      'importacao_despesas_ia',
       'relatorios',
       'relatorio_anual',
       'agente_ia',
@@ -168,6 +170,7 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'planejamento',
       'analise_tributaria',
       'importacao',
+      'importacao_despesas_ia',
       'relatorios',
       'relatorio_anual',
       'agente_ia',

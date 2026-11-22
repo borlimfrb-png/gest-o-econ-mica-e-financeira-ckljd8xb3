@@ -89,6 +89,7 @@ const IndicadoresPontoEquilibrio = lazy(() => import('./pages/IndicadoresPontoEq
 const IndicadoresKanitz = lazy(() => import('./pages/IndicadoresKanitz'))
 const AgenteIA = lazy(() => import('./pages/AgenteIA'))
 const Importacao = lazy(() => import('./pages/Importacao'))
+const DespesasIA = lazy(() => import('./pages/DespesasIA'))
 const AnaliseTributaria = lazy(() => import('./pages/AnaliseTributaria'))
 const ReformaTributaria = lazy(() => import('./pages/ReformaTributaria'))
 const BalancedScorecard = lazy(() => import('./pages/BalancedScorecard'))
@@ -908,7 +909,15 @@ const App = () => (
                               <Importacao />
                             </ModuloRoute>
                           }
-                        />{' '}
+                        />
+                        <Route
+                          path="/importacao/despesas-ia"
+                          element={
+                            <ModuloRoute modulo="importacao_despesas_ia">
+                              <DespesasIA />
+                            </ModuloRoute>
+                          }
+                        />
                         <Route
                           path="/configuracoes"
                           element={

@@ -197,6 +197,12 @@ export const CATALOGO_FERRAMENTAS: FerramentaCatalogo[] = [
     rota: '/importacao',
   },
   {
+    id: 'importacao_despesas_ia',
+    nome: 'Despesas (IA)',
+    descricao: 'Importação de despesas assistida por IA (PDF, imagem ou extrato)',
+    rota: '/importacao/despesas-ia',
+  },
+  {
     id: 'relatorios',
     nome: 'Relatórios Executivos',
     descricao: 'Impressão e exportação de demonstrativos',
