@@ -11,7 +11,7 @@
  * por exercício (agregador oficial `agregarIndicadoresPlanejamento`) e o
  * DRE Gerencial CONTA POR CONTA (mesma matriz do motor oficial).
  */
-import { pb } from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import type {
   BalancoRecord,
   DreRecord,

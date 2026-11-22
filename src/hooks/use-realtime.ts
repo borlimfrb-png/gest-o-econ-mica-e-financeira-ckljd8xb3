@@ -50,38 +50,29 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Igual ao useRealtime, mas com debounce (trailing) no callback — evita
- * recarregar os dados dezenas de vezes quando vários registros mudam em
- * sequência (importações em lote, sync de DRE etc.).
+ * Same as useRealtime, but debounces the callback (trailing 1,5s)
+ * so bursts of events trigger a single reload.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
-  delayMs: number = 1500,
+  debounceMs: number = 1500,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        callback(data)
-      }, delayMs)
-    },
-    enabled,
-  )
+  const debouncedCallback = (data: RecordSubscription<TRecord>) => {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => callback(data), debounceMs)
+  }
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
+
+  useRealtime<TRecord>(collectionName, debouncedCallback, enabled)
 }
 
 export default useRealtime
