@@ -395,27 +395,40 @@ export async function extractTextFromPdf(
       hasEOL?: boolean
     }>
 
-    const lineMap = new Map<number, string[]>()
+    // Estrutura auxiliar: linha com Y de referência e textos acumulados
+    interface LinhaTmp {
+      yRef: number
+      textos: string[]
+    }
+    const linhasTmp: LinhaTmp[] = []
+    // Tolerância de ±2px: PDFs com fontes variadas (ex.: subscritos, negrito)
+    // fragmentam a mesma linha visual em múltiplos Y próximos.
+    const TOLERANCIA_Y = 2
 
-    // Agrupa texto por linha (mesmo translateY aproximado)
+    // Agrupa texto por linha (translateY aproximado, com tolerância)
     for (const item of items) {
       if (!item || !('str' in item)) continue
       const str = item.str
       if (!str && !item.hasEOL) continue
 
       // Usa a coordenada Y do transform para agrupar na mesma linha
-      const y = item.transform ? Math.round(item.transform[5]) : 0
-      const existing = lineMap.get(y) || []
-      existing.push(str)
-      lineMap.set(y, existing)
+      const y = item.transform ? item.transform[5] : 0
+
+      // Procura uma linha existente cujo Y de referência esteja dentro da tolerância
+      let linha = linhasTmp.find((l) => Math.abs(l.yRef - y) <= TOLERANCIA_Y)
+      if (!linha) {
+        linha = { yRef: y, textos: [] }
+        linhasTmp.push(linha)
+      }
+      linha.textos.push(str)
     }
 
     // Ordena do topo para a base (Y decrescente em PDF)
-    const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a)
+    linhasTmp.sort((a, b) => b.yRef - a.yRef)
     const lines: string[] = []
 
-    for (const y of sortedY) {
-      const lineStr = (lineMap.get(y) || []).join(' ').replace(/\s+/g, ' ').trim()
+    for (const linha of linhasTmp) {
+      const lineStr = linha.textos.join(' ').replace(/\s+/g, ' ').trim()
       if (lineStr) {
         lines.push(lineStr)
       }

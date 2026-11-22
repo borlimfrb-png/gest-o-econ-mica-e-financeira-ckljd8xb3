@@ -640,8 +640,8 @@ const LINHAS_RUIDO = [
   'data vencimento',
   'historico',
   'descricao',
-  'documento',
-  'lancamento',
+  // 'documento' e 'lancamento' genéricos removidos: derrubavam lançamentos válidos
+  // como "Documento fiscal 123 - Material de limpeza" ou "Lancamento manual - energia"
   'nenhum movimento',
   'nao ha lancamentos',
   'nao ha registros',
@@ -656,6 +656,13 @@ function isLinhaRuido(descricao: string): boolean {
   if (!norm) return true
   // Descrição sem nenhuma letra => código/número puro => ruído
   if (!/[a-zà-ú]/.test(norm)) return true
+  // PROTEÇÃO contra perda de linhas válidas: "Lancamento manual - energia",
+  // "Documento fiscal 123 - Material de limpeza" etc. começam com termos da
+  // lista, mas são lançamentos reais. O startsWith só vale para descrições
+  // CURTAS (títulos de cabeçalho tipo "Total Geral", "Historico de Lancamentos");
+  // descrições longas com complemento ("- Material de limpeza") são válidas.
+  const palavras = norm.split(' ').filter(Boolean).length
+  if (palavras >= 6) return false
   return LINHAS_RUIDO.some((n) => norm === n || norm.startsWith(n + ' '))
 }
 
@@ -684,21 +691,24 @@ export async function parseExcelDespesas(
     let dateVal = ''
     let valorVal = 0
     let catVal = ''
+    const candidatosValor: number[] = []
 
+    // PROTEÇÃO contra perda de linhas válidas: a coluna 'conta' (código/nome do
+    // plano de contas) NÃO deve vencer 'historico'/'descricao' como descrição.
+    // Duas passadas: primeiro as colunas fortes de descrição, depois 'conta'.
+    const CHAVES_DESCRICAO_FORTE = [
+      'descricao',
+      'historico',
+      'fornecedor',
+      'despesa',
+      'item',
+      'titulo',
+    ]
     for (const k of keys) {
       const kNorm = cleanForComparison(k)
       const val = row[k]
 
-      if (
-        !descVal &&
-        (kNorm.includes('descricao') ||
-          kNorm.includes('historico') ||
-          kNorm.includes('fornecedor') ||
-          kNorm.includes('despesa') ||
-          kNorm.includes('conta') ||
-          kNorm.includes('item') ||
-          kNorm.includes('titulo'))
-      ) {
+      if (!descVal && CHAVES_DESCRICAO_FORTE.some((c) => kNorm.includes(c))) {
         descVal = String(val).trim()
       } else if (
         !dateVal &&
@@ -711,19 +721,21 @@ export async function parseExcelDespesas(
       ) {
         dateVal = normalizeDateStr(val)
       } else if (
-        valorVal === 0 &&
-        (kNorm.includes('valor') ||
-          kNorm.includes('total') ||
-          kNorm.includes('debito') ||
-          kNorm.includes('preco') ||
-          kNorm.includes('quantia') ||
-          kNorm.includes('liquido') ||
-          kNorm.includes('pago'))
+        kNorm.includes('valor') ||
+        kNorm.includes('total') ||
+        kNorm.includes('debito') ||
+        kNorm.includes('preco') ||
+        kNorm.includes('quantia') ||
+        kNorm.includes('liquido') ||
+        kNorm.includes('pago')
       ) {
-        if (typeof val === 'number') {
-          valorVal = Math.abs(val)
+        // Acumula TODOS os candidatos a valor de colunas nomeadas (pode haver
+        // débito e crédito na mesma linha); o melhor é escolhido no final.
+        if (typeof val === 'number' && val !== 0) {
+          candidatosValor.push(Math.abs(val))
         } else if (typeof val === 'string') {
-          valorVal = Math.abs(parseBrlNumber(val))
+          const parsed = parseBrlNumber(val)
+          if (parsed > 0) candidatosValor.push(Math.abs(parsed))
         }
       } else if (
         !catVal &&
@@ -734,6 +746,19 @@ export async function parseExcelDespesas(
           kNorm.includes('centro'))
       ) {
         catVal = String(val).trim()
+      }
+    }
+
+    // Segunda passada: 'conta' só vira descrição se nada mais foi encontrado
+    if (!descVal) {
+      for (const k of keys) {
+        if (cleanForComparison(k).includes('conta')) {
+          const val = row[k]
+          if (typeof val === 'string' && val.trim().length > 3 && isNaN(Number(val))) {
+            descVal = val.trim()
+            break
+          }
+        }
       }
     }
 
@@ -748,16 +773,28 @@ export async function parseExcelDespesas(
       }
     }
 
-    // Se o valor não foi encontrado por nome de coluna, procura o primeiro número válido
-    if (valorVal === 0) {
+    // Se o valor não foi encontrado por nome de coluna, procura em TODAS as
+    // células numéricas da linha (quantidade também entra como candidato —
+    // o critério final de escolha abaixo resolve).
+    if (candidatosValor.length === 0) {
       for (const k of keys) {
         const val = row[k]
         const parsed = typeof val === 'number' ? Math.abs(val) : parseBrlNumber(String(val))
         if (parsed > 0) {
-          valorVal = parsed
-          break
+          candidatosValor.push(parsed)
         }
       }
+    }
+
+    // Escolha do melhor candidato a valor: entre os que têm 2 decimais
+    // (formato monetário típico), o de MAIOR magnitude; se nenhum tem 2
+    // decimais, o de maior magnitude entre todos.
+    const com2Decimais = candidatosValor.filter(
+      (v) => Number.isInteger(Math.round(v * 100)) && !Number.isInteger(v),
+    )
+    const pool = com2Decimais.length > 0 ? com2Decimais : candidatosValor
+    if (pool.length > 0) {
+      valorVal = Math.max(...pool)
     }
 
     // Descarta linhas de cabeçalho/total/ruído antes de entrarem na revisão
@@ -814,6 +851,10 @@ export async function parsePdfDespesas(
   const result: DespesaExtraidaItem[] = []
 
   let itemIdx = 0
+  // Descrição "órfã": linha sem valor (quebra de linha do PDF) cujo texto
+  // pertence ao lançamento da linha seguinte. Guardamos para não perder a
+  // descrição quebrada em duas linhas no relatório.
+  let descPendente = ''
 
   for (const page of pdfResult.pages) {
     for (const line of page.lines) {
@@ -832,21 +873,50 @@ export async function parsePdfDespesas(
         ),
       )
 
-      if (valMatches.length === 0) continue
+      if (valMatches.length === 0) {
+        // Linha sem valor: pode ser a descrição quebrada em duas linhas do
+        // lançamento seguinte. Guarda como pendente (se for texto válido)
+        // em vez de descartar.
+        if (!isLinhaRuido(lineTrim)) {
+          descPendente = lineTrim
+        }
+        continue
+      }
 
-      const lastMatch = valMatches[valMatches.length - 1]
-      const valor = Math.abs(parseBrlNumber(lastMatch[0]))
+      // Heurística de escolha do valor: em linhas com duas colunas numéricas
+      // (débito/crédito ou valor + acumulado), pegar só o ÚLTIMO valor pode pegar
+      // o errado. Preferimos um candidato com 2 decimais (formato monetário típico)
+      // e, em caso de empate, o último deles.
+      const candidatos = valMatches.filter((m) => /,\d{2}\b/.test(m[0]))
+      const valorMatch =
+        candidatos.length > 0
+          ? candidatos[candidatos.length - 1]
+          : valMatches[valMatches.length - 1]
+      const valor = Math.abs(parseBrlNumber(valorMatch[0]))
       if (valor <= 0) continue
 
-      // Extrai a descrição removendo data, valores e pontuação estrutural
-      let descPart = lineTrim.slice(0, lastMatch.index).trim()
+      // Extrai a descrição removendo data, valores e pontuação estrutural.
+      // PROTEÇÃO contra perda de linhas: em relatórios em que a descrição vem
+      // ANTES do valor, montamos o texto a partir do primeiro número (não do
+      // último), evitando arrastar colunas numéricas (débito/crédito) para a
+      // descrição quando há duas colunas de valores.
+      const primeiroNumero = lineTrim.search(/(?:R\$\s*)?\d/)
+      let descPart = (
+        primeiroNumero > 0 ? lineTrim.slice(0, primeiroNumero) : lineTrim.slice(0, valorMatch.index)
+      ).trim()
       if (dateMatch && dateMatch.index !== undefined) {
         // Remove a data da descrição
         descPart = descPart.replace(dateMatch[0], ' ')
       }
       // Fallback: valor ANTES da descrição na linha (ex: "1.250,00 - ENERGIA ELÉTRICA")
       if (descPart.length < 3) {
-        descPart = lineTrim.slice((lastMatch.index ?? 0) + lastMatch[0].length).trim()
+        descPart = lineTrim.slice((valorMatch.index ?? 0) + valorMatch[0].length).trim()
+      }
+      // Descrição "órfã" da linha anterior (quebrada em duas linhas no PDF):
+      // se a linha atual não gerou descrição própria, mas há uma pendente,
+      // usamos ela em vez de descartar o lançamento.
+      if (descPart.length < 3 && descPendente) {
+        descPart = descPendente
       }
 
       // Limpeza da descrição
@@ -857,10 +927,19 @@ export async function parsePdfDespesas(
         .replace(/\s+/g, ' ')
         .trim()
 
-      if (cleanDesc.length < 3 || cleanDesc.length > 400) continue
+      if (cleanDesc.length < 3 || cleanDesc.length > 400) {
+        // Não gerou descrição utilizável: preserva a pendente para a próxima linha
+        continue
+      }
 
       // Descarta cabeçalhos, totais, saldos e outras linhas de ruído
-      if (isLinhaRuido(cleanDesc)) continue
+      if (isLinhaRuido(cleanDesc)) {
+        descPendente = ''
+        continue
+      }
+
+      // Linha processada com sucesso: a pendente já foi consumida
+      descPendente = ''
 
       const catSugerida = identificarCategoriaDespesa(cleanDesc)
       const match = matchDespesaComPlanoContas(
