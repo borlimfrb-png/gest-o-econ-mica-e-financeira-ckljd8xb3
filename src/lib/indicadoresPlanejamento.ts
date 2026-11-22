@@ -20,8 +20,6 @@ import {
   CATALOGO_INDICADORES,
   type ContextoCalculoIndicadores,
 } from '@/lib/catalogoApresentacaoIndicadores'
-import { selecionarMelhorBalancoDoAno } from '@/lib/comparativoIndicadoresAnuais'
-import type { PainelIndicadoresFinanceiros } from '@/lib/indicadoresFinanceirosCalculo'
 
 /** Sigla legível curta por categoria — para o prompt do agente. */
 const ROTULO_CATEGORIA: Record<string, string> = {

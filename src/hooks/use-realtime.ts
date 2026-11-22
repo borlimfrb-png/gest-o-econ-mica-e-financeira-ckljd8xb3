@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -47,30 +47,6 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
       }
     }
   }, [collectionName, enabled])
-}
-
-/**
- * Wrapper de useRealtime com debounce trailing de 1,5s — evita recarregar
- * a tela dezenas de vezes quando uma importação dispara dezenas de eventos
- * de realtime em sequência. NÃO REMOVER: este export soma com frequência do
- * working tree e quebra o build (Dashboard e DashboardBi dependem dele).
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-) {
-  const callbackRef = useRef(callback)
-  callbackRef.current = callback
-
-  useRealtime<TRecord>(
-    collectionName,
-    useCallback((data: RecordSubscription<TRecord>) => {
-      const cb = callbackRef.current
-      window.setTimeout(() => cb(data), 1500)
-    }, []),
-    enabled,
-  )
 }
 
 export default useRealtime
