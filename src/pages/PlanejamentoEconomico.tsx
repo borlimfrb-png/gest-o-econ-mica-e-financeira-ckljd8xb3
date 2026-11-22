@@ -9,8 +9,10 @@ import {
   analisarPlanejamentoEconomico,
   carregarEmpresasEAnos,
   montarPayloadPlanejamento,
+  normalizarProjecaoMensal,
   type EmpresaAnosDisponiveis,
   type PlanejamentoEconomicoAnalise,
+  type ProjecaoMensalPlanejamento,
 } from '@/services/planejamentoEconomicoService'
 import {
   exportarCsvPlanejamento,
@@ -192,6 +194,12 @@ export default function PlanejamentoEconomico() {
 
   const baixarCsv = () => planejamento && exportarCsvPlanejamento(planejamento, empresaNome)
   const baixarXlsx = () => planejamento && exportarXlsxPlanejamento(planejamento, empresaNome)
+
+  /** Projeção mensal jan–dez (normalizada; null quando ausente/malformada). */
+  const projecaoMensal: ProjecaoMensalPlanejamento | null = useMemo(
+    () => normalizarProjecaoMensal(planejamento?.projecao_mensal),
+    [planejamento],
+  )
 
   const contasPorClassificacao = useMemo(() => {
     const mapa = new Map<string, PlanejamentoEconomicoAnalise['contas']>()
@@ -481,6 +489,9 @@ export default function PlanejamentoEconomico() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Projeção Mensal 12 Meses (opcional — só quando a IA devolveu) */}
+            {projecaoMensal && <SecaoProjecaoMensal projecao={projecaoMensal} />}
           </>
         )}
 
@@ -569,5 +580,183 @@ function SecaoClassificacao({
         )
       })}
     </>
+  )
+}
+
+const MESES_ABREV = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+] as const
+
+const fmtNum = (v: number) =>
+  (Number.isFinite(v) ? v : 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+
+const COR_CONFIANCA: Record<string, string> = {
+  alta: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+  media: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+  baixa: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200',
+}
+
+/** Badge colorido da confiança da projeção. */
+function BadgeConfianca({ confianca }: { confianca: string }) {
+  const c = String(confianca || 'media')
+  return (
+    <span
+      className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${COR_CONFIANCA[c] ?? COR_CONFIANCA.media}`}
+    >
+      {c}
+    </span>
+  )
+}
+
+/**
+ * Seção "Projeção Mensal 12 Meses": matriz conta × jan–dez, agrupada por
+ * Faturamento / Despesas Fixas / Despesas Variáveis, com subtotal por grupo,
+ * total geral e comentário da IA por conta. Renderizada só quando o agente
+ * devolveu `projecao_mensal` — ausente, a seção não aparece.
+ */
+function SecaoProjecaoMensal({ projecao }: { projecao: ProjecaoMensalPlanejamento }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarClock className="h-4 w-4 text-primary" /> Projeção Mensal 12 Meses —{' '}
+          {projecao.ano || 'próximo exercício'}
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">
+          Distribuição mês a mês conta por conta (jan–dez), com subtotal por grupo e total geral.
+          Confiança da projeção e comentário do agente por conta.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {projecao.grupos.map((g) => (
+          <div key={g.grupo} className="space-y-1.5">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1100px] text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Conta</th>
+                    {MESES_ABREV.map((m) => (
+                      <th key={m} className="px-2 py-2 text-right font-medium">
+                        {m}
+                      </th>
+                    ))}
+                    <th className="px-2 py-2 text-right font-medium">Total</th>
+                    <th className="px-2 py-2 text-right font-medium">Var.</th>
+                    <th className="py-2 pr-3 text-right font-medium">Confiança</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-muted/50">
+                    <td
+                      colSpan={3 + MESES_ABREV.length}
+                      className="py-1.5 pl-2 text-xs font-semibold uppercase tracking-wide"
+                    >
+                      {g.grupo}
+                    </td>
+                  </tr>
+                  {g.contas.map((c) => (
+                    <tr
+                      key={`${g.grupo}-${c.codigo}-${c.nome}`}
+                      className="border-b hover:bg-muted/30"
+                    >
+                      <td className="max-w-[220px] py-2 pr-3">
+                        <span className="block truncate font-medium" title={c.nome}>
+                          {c.nome}
+                        </span>
+                        {c.codigo && (
+                          <span className="text-xs text-muted-foreground">{c.codigo}</span>
+                        )}
+                      </td>
+                      {c.meses.slice(0, 12).map((m, i) => (
+                        <td key={i} className="px-2 py-2 text-right tabular-nums">
+                          {m.valor === 0 ? (
+                            <span className="text-muted-foreground/50">–</span>
+                          ) : (
+                            fmtNum(m.valor)
+                          )}
+                        </td>
+                      ))}
+                      <td className="px-2 py-2 text-right font-semibold tabular-nums">
+                        {fmtNum(c.valor_total)}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <Badge
+                          variant={c.variacao_pct >= 0 ? 'default' : 'destructive'}
+                          className="tabular-nums"
+                        >
+                          {fmtPct(c.variacao_pct)}
+                        </Badge>
+                      </td>
+                      <td className="py-2 pr-3 text-right">
+                        <BadgeConfianca confianca={c.confianca} />
+                      </td>
+                    </tr>
+                  ))}
+                  {/* Subtotal do grupo */}
+                  <tr className="border-b-2 font-semibold">
+                    <td className="py-2 pr-3">Subtotal {g.grupo}</td>
+                    {MESES_ABREV.map((_, i) => {
+                      const subtotal = g.contas.reduce(
+                        (acc, c) => acc + (Number(c.meses?.[i]?.valor) || 0),
+                        0,
+                      )
+                      return (
+                        <td key={i} className="px-2 py-2 text-right tabular-nums">
+                          {fmtNum(subtotal)}
+                        </td>
+                      )
+                    })}
+                    <td className="px-2 py-2 text-right tabular-nums">
+                      {fmtNum(g.contas.reduce((acc, c) => acc + (Number(c.valor_total) || 0), 0))}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                  {/* Comentários da IA */}
+                  {g.contas.some((c) => c.comentario) && (
+                    <tr className="align-top">
+                      <td
+                        colSpan={3 + MESES_ABREV.length}
+                        className="py-2 pr-3 text-xs text-muted-foreground"
+                      >
+                        <span className="font-medium text-foreground">Análise do agente: </span>
+                        {g.contas
+                          .filter((c) => c.comentario)
+                          .map((c) => `${c.nome}: ${c.comentario}`)
+                          .join(' · ')}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+        {/* Total geral */}
+        <Separator />
+        <div className="flex items-center justify-between text-sm font-semibold">
+          <span>Total geral ({projecao.grupos.length} grupos)</span>
+          <span className="tabular-nums">
+            {fmtBRL(
+              projecao.total_geral ||
+                projecao.grupos.reduce(
+                  (acc, g) => acc + g.contas.reduce((a, c) => a + (Number(c.valor_total) || 0), 0),
+                  0,
+                ),
+            )}
+          </span>
+        </div>
+      </CardContent>
+    </Card>
   )
 }

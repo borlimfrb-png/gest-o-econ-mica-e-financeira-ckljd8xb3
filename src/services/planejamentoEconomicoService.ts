@@ -22,6 +22,7 @@ import type {
 } from '@/types/finance'
 import {
   agregarIndicadoresPlanejamento,
+  indicadoresParaPrompt,
   type IndicadoresPlanejamento,
 } from '@/lib/indicadoresPlanejamento'
 import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
@@ -45,6 +46,8 @@ export interface PayloadAnalyzePlanejamento {
   dres: Array<Record<string, unknown>>
   contas: ContaEntradaPlanejamento[]
   indicadores: IndicadoresPlanejamento
+  /** Texto dos 29 indicadores pronto para o prompt do agente (indicadoresParaPrompt). */
+  indicadores_prompt: string
 }
 
 /** Uma conta do DRE Gerencial enviada ao agente (entrada conta por conta). */
@@ -79,7 +82,31 @@ export interface ContaPlanejamento {
   comentario: string
 }
 
-/** Análise devolvida pelo hook / registrada na coleção planejamento_economico. */
+/** Uma conta da projeção mensal (jan–dez) devolvida pelo agente. */
+export interface ContaProjecaoMensal {
+  codigo: string
+  nome: string
+  valor_total: number
+  meses: Array<{ mes: number; valor: number }>
+  confianca: 'alta' | 'media' | 'baixa'
+  comentario: string
+  variacao_pct: number
+}
+
+/** Um grupo da projeção mensal (Faturamento / Despesas Fixas / Despesas Variáveis). */
+export interface GrupoProjecaoMensal {
+  grupo: string
+  contas: ContaProjecaoMensal[]
+  total: number
+}
+
+/** Projeção mensal completa do ano projetado (opcional — ausente = sem seção). */
+export interface ProjecaoMensalPlanejamento {
+  ano: number
+  grupos: GrupoProjecaoMensal[]
+  total_geral: number
+}
+
 export interface PlanejamentoEconomicoAnalise {
   id: string
   empresa: string
@@ -90,8 +117,30 @@ export interface PlanejamentoEconomicoAnalise {
   parecer_geral: string
   receita_projetada: number
   contas: ContaPlanejamento[]
-  projecao_mensal?: unknown
+  /** Projeção mensal jan–dez conta por conta (opcional; ausente = sem seção). */
+  projecao_mensal?: ProjecaoMensalPlanejamento | null
   created?: string
+}
+
+/** Normaliza o campo projecao_mensal (pode chegar como string JSON do PocketBase). */
+export function normalizarProjecaoMensal(bruto: unknown): ProjecaoMensalPlanejamento | null {
+  if (!bruto) return null
+  let obj = bruto
+  if (typeof bruto === 'string') {
+    try {
+      obj = JSON.parse(bruto)
+    } catch {
+      return null
+    }
+  }
+  if (typeof obj !== 'object' || obj === null) return null
+  const pm = obj as ProjecaoMensalPlanejamento
+  if (!Array.isArray(pm.grupos) || pm.grupos.length === 0) return null
+  const grupos = pm.grupos.filter(
+    (g) => g && typeof g === 'object' && Array.isArray(g.contas) && g.contas.length > 0,
+  )
+  if (grupos.length === 0) return null
+  return { ano: Number(pm.ano) || 0, grupos, total_geral: Number(pm.total_geral) || 0 }
 }
 
 export interface EmpresaAnosDisponiveis {
@@ -406,6 +455,7 @@ export async function montarPayloadPlanejamento(params: {
     })),
     contas,
     indicadores,
+    indicadores_prompt: indicadoresParaPrompt(indicadores).join('\n'),
   }
 }
 

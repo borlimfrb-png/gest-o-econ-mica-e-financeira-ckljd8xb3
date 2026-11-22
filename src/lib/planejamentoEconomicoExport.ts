@@ -1,4 +1,8 @@
-import type { PlanejamentoEconomicoAnalise } from '@/services/planejamentoEconomicoService'
+import {
+  normalizarProjecaoMensal,
+  type PlanejamentoEconomicoAnalise,
+  type ProjecaoMensalPlanejamento,
+} from '@/services/planejamentoEconomicoService'
 
 /**
  * Exportação Excel/CSV do Planejamento Econômico — padrão Borlim
@@ -66,6 +70,10 @@ export function exportarCsvPlanejamento(p: PlanejamentoEconomicoAnalise, nomeEmp
   linhas.push(['Benchmark (análise do agente)', p.benchmark_mencionado || ''])
   linhas.push(['Parecer geral do agente', p.parecer_geral || ''])
 
+  // Projeção mensal jan–dez conta por conta (quando a IA devolveu)
+  const pm = normalizarProjecaoMensal(p.projecao_mensal)
+  if (pm) linhasProjecaoMensal(pm, (l) => linhas.push(l))
+
   const csv = '\uFEFF' + linhas.map((l) => l.map(esc).join(';')).join('\n')
   const nome = `planejamento-economico-${nomeEmpresa.replace(/\s+/g, '-')}-${p.ano_projecao}.csv`
   baixarBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), nome)
@@ -110,7 +118,95 @@ export function montarLinhasXlsxPlanejamento(
   linhas.push(['Receita projetada', fmtBRL(p.receita_projetada)])
   linhas.push(['Benchmark (análise do agente)', p.benchmark_mencionado || ''])
   linhas.push(['Parecer geral do agente', p.parecer_geral || ''])
+
+  // Projeção mensal jan–dez conta por conta (quando a IA devolveu)
+  const pm = normalizarProjecaoMensal(p.projecao_mensal)
+  if (pm) linhasProjecaoMensal(pm, (l) => linhas.push(l))
+
   return linhas
+}
+
+const MESES_EXPORT = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+] as const
+
+/**
+ * Anexa o bloco "Projeção Mensal 12 Meses" (conta × jan–dez, subtotal por grupo
+ * e total geral) às linhas de exportação — usado pelo CSV e pelo XLSX.
+ */
+function linhasProjecaoMensal(pm: ProjecaoMensalPlanejamento, push: (linha: string[]) => void) {
+  push([])
+  push([`PROJEÇÃO MENSAL 12 MESES — ${pm.ano || ''}`])
+  push(['Grupo', 'Código', 'Conta', ...MESES_EXPORT, 'Total', 'Var. %', 'Confiança', 'Comentário'])
+  for (const g of pm.grupos) {
+    push([g.grupo])
+    for (const c of g.contas) {
+      const porMes = new Map<number, number>()
+      for (const m of c.meses || []) porMes.set(Number(m.mes), Number(m.valor) || 0)
+      push([
+        '',
+        c.codigo || '',
+        c.nome,
+        ...MESES_EXPORT.map((_, i) => fmtBRL(porMes.get(i + 1) ?? 0)),
+        fmtBRL(Number(c.valor_total) || 0),
+        fmtPct(Number(c.variacao_pct) || 0),
+        c.confianca || '',
+        c.comentario || '',
+      ])
+    }
+    // Subtotal do grupo por mês
+    const subtotalMeses = MESES_EXPORT.map((_, i) =>
+      g.contas.reduce((acc, c) => {
+        const m = (c.meses || []).find((x) => Number(x.mes) === i + 1)
+        return acc + (Number(m?.valor) || 0)
+      }, 0),
+    )
+    push([
+      '',
+      '',
+      `Subtotal ${g.grupo}`,
+      ...subtotalMeses.map((v) => fmtBRL(v)),
+      fmtBRL(g.contas.reduce((acc, c) => acc + (Number(c.valor_total) || 0), 0)),
+      '',
+      '',
+      '',
+    ])
+  }
+  // Total geral
+  const totalMeses = MESES_EXPORT.map((_, i) =>
+    pm.grupos.reduce(
+      (acc, g) =>
+        acc +
+        g.contas.reduce((a, c) => {
+          const m = (c.meses || []).find((x) => Number(x.mes) === i + 1)
+          return a + (Number(m?.valor) || 0)
+        }, 0),
+      0,
+    ),
+  )
+  push([
+    '',
+    '',
+    'Total geral',
+    ...totalMeses.map((v) => fmtBRL(v)),
+    fmtBRL(
+      pm.grupos.reduce(
+        (acc, g) => acc + g.contas.reduce((a, c) => acc + (Number(c.valor_total) || 0), 0),
+        0,
+      ),
+    ),
+  ])
 }
 
 /** XLSX real via SheetJS (padrão Borlim); fallback CSV se a lib não estiver presente. */
