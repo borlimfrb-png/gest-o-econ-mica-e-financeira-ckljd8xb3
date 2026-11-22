@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { ImportarBalanceteMensal } from '@/components/ImportarBalanceteMensal'
 import { ImportarDespesasIA } from '@/components/ImportarDespesasIA'
+import { SeletorPlanoContaCombobox } from '@/components/SeletorPlanoContaCombobox'
 import { ImportarLancamentosExcelIA } from '@/components/ImportarLancamentosExcelIA'
 import { ImportacaoAssistidaIa } from '@/components/ImportacaoAssistidaIa'
 import { useAuth } from '@/contexts/AuthContext'
@@ -2744,27 +2745,19 @@ export default function Importacao() {
                             </td>
                             <td className="py-3 px-4">
                               <div className="space-y-1">
-                                <Select
+                                <SeletorPlanoContaCombobox
                                   value={item.planoContaId || ''}
                                   onValueChange={(val) => handleItemPlanoChange(item.id, val)}
-                                >
-                                  <SelectTrigger className="h-8 text-xs bg-white">
-                                    <SelectValue
-                                      placeholder={
-                                        item.planoConta
-                                          ? formatPlanoContaDisplay(item.planoConta)
-                                          : 'Selecionar Plano'
-                                      }
-                                    />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-64">
-                                    {planoContas.map((p) => (
-                                      <SelectItem key={p.id} value={p.id} className="text-xs">
-                                        {formatPlanoContaDisplay(p)}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
+                                  planoContas={planoContas}
+                                  placeholder={
+                                    item.planoConta
+                                      ? formatPlanoContaDisplay(item.planoConta)
+                                      : 'Selecionar Plano'
+                                  }
+                                  className="h-8 text-xs bg-white"
+                                  empresaAtivaId={selectedEmpresaId}
+                                  allowClear
+                                />
                               </div>
                             </td>
                             <td className="py-3 px-4 text-right">
