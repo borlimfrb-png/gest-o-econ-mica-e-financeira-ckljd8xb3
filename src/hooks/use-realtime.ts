@@ -50,9 +50,13 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * PROTEÇÃO: useRealtimeDebounced é exportado deste arquivo e usado por
- * Dashboard.tsx (e outros). NUNCA remover este export — já quebrou o build
- * (MISSING_EXPORT/TS2614) várias vezes no projeto.
+ * Versão com debounce (trailing) do useRealtime: quando uma rajada de
+ * eventos chega (importação em lote gravando em várias coleções de uma
+ * vez), os callbacks são coalescidos numa única execução por coleção,
+ * evitando estourar o rate limit do backend (429) e telas piscando.
+ *
+ * Mantém a MESMA assinatura do useRealtime (coleção + callback + enabled)
+ * para que os consumidores possam alternar entre os dois sem mudanças.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
@@ -60,33 +64,38 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   enabled: boolean = true,
   delayMs: number = 1500,
 ) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastEventRef = useRef<RecordSubscription<TRecord> | null>(null)
   const callbackRef = useRef(callback)
   callbackRef.current = callback
 
-  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => {
+    if (!enabled) return
 
-  // Assinatura realtime: dispara o debounce a cada evento recebido.
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [enabled])
+
   useRealtime<TRecord>(
     collectionName,
     (data) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
+      lastEventRef.current = data
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
       }
-      // Debounce trailing: executa o callback após o último evento (1,5s padrão).
-      timeoutRef.current = setTimeout(() => {
-        callbackRef.current(data)
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        const evt = lastEventRef.current
+        lastEventRef.current = null
+        if (evt) callbackRef.current(evt)
       }, delayMs)
     },
     enabled,
   )
-
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-    }
-  }, [])
 }
 
 export default useRealtime

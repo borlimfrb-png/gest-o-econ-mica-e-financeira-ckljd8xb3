@@ -28,6 +28,8 @@ import {
   History,
   Printer,
   FileCheck2,
+  Search,
+  MousePointerClick,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -73,6 +75,7 @@ import {
   type DespesaGrupoResumo,
 } from '@/lib/despesasParser'
 import { ModalRelatorioConferenciaDespesas } from '@/components/ModalRelatorioConferenciaDespesas'
+import { normalizeText } from '@/components/SeletorPlanoContaCombobox'
 import type {
   EmpresaRecord,
   PlanoContaRecord,
@@ -216,6 +219,10 @@ export function ImportarDespesasIA({
   const [editData, setEditData] = useState('')
   const [editValor, setEditValor] = useState<number>(0)
   const [editPlanoId, setEditPlanoId] = useState('')
+
+  // Painel direito do Plano de Contas: linha selecionada + campo de digitação da conta
+  const [despesaSelecionadaId, setDespesaSelecionadaId] = useState<string | null>(null)
+  const [buscaContaPainel, setBuscaContaPainel] = useState('')
 
   // Modal de Relatório de Conferência da Importação em PDF A4
   const [modalRelatorioOpen, setModalRelatorioOpen] = useState(false)
@@ -471,6 +478,7 @@ export function ImportarDespesasIA({
 
   const handleRemoveItem = (id: string) => {
     setDespesas((prev) => prev.filter((item) => item.id !== id))
+    if (despesaSelecionadaId === id) setDespesaSelecionadaId(null)
   }
 
   const handleStartEdit = (item: DespesaExtraidaItem) => {
@@ -528,6 +536,63 @@ export function ImportarDespesasIA({
 
   const handleCancelEdit = () => {
     setEditingItemId(null)
+  }
+
+  // ----------------------------------------------------
+  // Painel direito: vínculo da conta digitada/selecionada à linha selecionada.
+  // Mesmo comportamento do vínculo manual da edição (handleSaveEdit):
+  // atualiza a linha e registra a Memória de Fornecedores.
+  // ----------------------------------------------------
+  const handleVincularContaDigitada = async (pc: PlanoContaRecord) => {
+    if (!despesaSelecionadaId) {
+      toast({
+        title: 'Nenhuma despesa selecionada',
+        description:
+          'Clique na descrição de uma linha da tabela para selecioná-la antes de vincular a conta.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const itemTarget = despesas.find((d) => d.id === despesaSelecionadaId)
+    if (!itemTarget) return
+
+    setDespesas((prev) =>
+      prev.map((item) =>
+        item.id === despesaSelecionadaId
+          ? {
+              ...item,
+              planoContaId: pc.id,
+              planoContaCodigo: pc.codigo,
+              planoContaNome: pc.expand?.conta?.nome,
+              isCadastrada: true,
+              matchConfidence: 'manual',
+              matchScore: 100,
+              origemSugestao: 'vínculo manual pela digitação no Plano de Contas',
+            }
+          : item,
+      ),
+    )
+
+    // Registra a memória de fornecedores (mesma gravação do clique/vínculo manual)
+    try {
+      await memoriaFornecedoresService.registrarOuAtualizarVinculo({
+        fornecedor_padrao: itemTarget.descricao,
+        termo_busca: itemTarget.descricao,
+        plano_conta: pc.id,
+        empresa: selectedEmpresaId || undefined,
+        categoria_sugerida: itemTarget.categoriaSugerida,
+      })
+      const data = await memoriaFornecedoresService.getByEmpresa(selectedEmpresaId || undefined)
+      setMemoriasFornecedores(data)
+    } catch (err) {
+      console.warn('Erro ao salvar vínculo na memória:', err)
+    }
+
+    toast({
+      title: 'Conta vinculada!',
+      description: `${pc.codigo || ''} ${pc.expand?.conta?.nome || ''} vinculada a "${itemTarget.descricao}" e salva na memória de fornecedores.`,
+    })
   }
 
   // ----------------------------------------------------
@@ -957,6 +1022,26 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
       return true
     })
   }, [despesas, filtroStatus, filtroCategoria, searchTerm])
+
+  // Painel direito: filtro do Plano de Contas por digitação (ignora acentos,
+  // mesma normalização do SeletorPlanoContaCombobox)
+  const planoContasPainelFiltrado = useMemo(() => {
+    const termo = normalizeText(buscaContaPainel)
+    if (!termo) return planoContas
+    return planoContas.filter((pc) => {
+      const alvo = normalizeText(
+        `${pc.codigo || ''} ${pc.codigo_empresa || ''} ${pc.expand?.conta?.codigo || ''} ${
+          pc.expand?.conta?.nome || ''
+        } ${pc.expand?.centro?.nome || ''}`,
+      )
+      return alvo.includes(termo)
+    })
+  }, [planoContas, buscaContaPainel])
+
+  const despesaSelecionada = useMemo(
+    () => despesas.find((d) => d.id === despesaSelecionadaId) || null,
+    [despesas, despesaSelecionadaId],
+  )
 
   const gruposPorCategoria = useMemo(() => {
     return agruparDespesasPorCategoria(despesas)
@@ -1406,521 +1491,676 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
             </Accordion>
           </Card>
 
-          {/* Card Principal da Tabela de Despesas */}
-          <Card className="bg-white border-slate-200 shadow-xs">
-            <CardHeader className="pb-3 border-b border-slate-100">
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                    <SlidersHorizontal className="w-4 h-4 text-blue-600" />
-                    Revisão das Despesas Extraídas ({despesasFiltradas.length} de {despesas.length})
-                  </CardTitle>
-                  <CardDescription className="text-xs mt-0.5">
-                    Revise cada lançamento, edite valores se necessário, vincule ao Plano de Contas
-                    e selecione o que gravar.
-                  </CardDescription>
-                </div>
-
-                {/* Filtros e Ações da Tabela */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <div className="w-44">
-                    <Input
-                      placeholder="Buscar despesa, conta..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="h-8 text-xs bg-white"
-                    />
+          {/* Tabela (esquerda) + Painel do Plano de Contas com digitação (direita) */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
+            {/* Card Principal da Tabela de Despesas */}
+            <Card className="bg-white border-slate-200 shadow-xs xl:col-span-2">
+              <CardHeader className="pb-3 border-b border-slate-100">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                      <SlidersHorizontal className="w-4 h-4 text-blue-600" />
+                      Revisão das Despesas Extraídas ({despesasFiltradas.length} de{' '}
+                      {despesas.length})
+                    </CardTitle>
+                    <CardDescription className="text-xs mt-0.5">
+                      Revise cada lançamento, edite valores se necessário, vincule ao Plano de
+                      Contas e selecione o que gravar.
+                    </CardDescription>
                   </div>
 
-                  <Select value={filtroStatus} onValueChange={(val: any) => setFiltroStatus(val)}>
-                    <SelectTrigger className="h-8 text-xs bg-white w-36">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos" className="text-xs">
-                        Todos os Status
-                      </SelectItem>
-                      <SelectItem
-                        value="cadastradas"
-                        className="text-xs text-emerald-700 font-medium"
-                      >
-                        Cadastradas
-                      </SelectItem>
-                      <SelectItem
-                        value="nao_cadastradas"
-                        className="text-xs text-amber-700 font-medium"
-                      >
-                        Não Cadastradas
-                      </SelectItem>
-                      <SelectItem value="memoria" className="text-xs text-purple-700 font-medium">
-                        Memória Recorrente
-                      </SelectItem>
-                      <SelectItem value="baixa" className="text-xs text-amber-700 font-medium">
-                        Baixa Confiança
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {/* Filtros e Ações da Tabela */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="w-44">
+                      <Input
+                        placeholder="Buscar despesa, conta..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="h-8 text-xs bg-white"
+                      />
+                    </div>
 
-                  <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
-                    <SelectTrigger className="h-8 text-xs bg-white w-40">
-                      <SelectValue placeholder="Categoria" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-60">
-                      <SelectItem value="todas" className="text-xs">
-                        Todas as Categorias
-                      </SelectItem>
-                      {categoriasUnicas.map((cat) => (
-                        <SelectItem key={cat} value={cat} className="text-xs">
-                          {cat}
+                    <Select value={filtroStatus} onValueChange={(val: any) => setFiltroStatus(val)}>
+                      <SelectTrigger className="h-8 text-xs bg-white w-36">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos" className="text-xs">
+                          Todos os Status
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        <SelectItem
+                          value="cadastradas"
+                          className="text-xs text-emerald-700 font-medium"
+                        >
+                          Cadastradas
+                        </SelectItem>
+                        <SelectItem
+                          value="nao_cadastradas"
+                          className="text-xs text-amber-700 font-medium"
+                        >
+                          Não Cadastradas
+                        </SelectItem>
+                        <SelectItem value="memoria" className="text-xs text-purple-700 font-medium">
+                          Memória Recorrente
+                        </SelectItem>
+                        <SelectItem value="baixa" className="text-xs text-amber-700 font-medium">
+                          Baixa Confiança
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                  {/* Botão Reprocessar Apenas Não Classificadas */}
-                  {naoCadastradasCount > 0 && (
+                    <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                      <SelectTrigger className="h-8 text-xs bg-white w-40">
+                        <SelectValue placeholder="Categoria" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-60">
+                        <SelectItem value="todas" className="text-xs">
+                          Todas as Categorias
+                        </SelectItem>
+                        {categoriasUnicas.map((cat) => (
+                          <SelectItem key={cat} value={cat} className="text-xs">
+                            {cat}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Botão Reprocessar Apenas Não Classificadas */}
+                    {naoCadastradasCount > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleReprocessarNaoClassificadas}
+                        disabled={isReprocessing}
+                        className="h-8 text-xs gap-1.5 bg-amber-50/70 border-amber-300 text-amber-900 hover:bg-amber-100 font-semibold"
+                        title="Reprocessar apenas despesas não classificadas"
+                      >
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 text-amber-700 ${isReprocessing ? 'animate-spin' : ''}`}
+                        />
+                        Reprocessar ({naoCadastradasCount})
+                      </Button>
+                    )}
+
+                    {/* Botão Relatório de Conferência em PDF */}
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={handleReprocessarNaoClassificadas}
-                      disabled={isReprocessing}
-                      className="h-8 text-xs gap-1.5 bg-amber-50/70 border-amber-300 text-amber-900 hover:bg-amber-100 font-semibold"
-                      title="Reprocessar apenas despesas não classificadas"
+                      onClick={() => setModalRelatorioOpen(true)}
+                      className="h-8 text-xs gap-1.5 bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-300 font-semibold"
+                      title="Visualizar e Imprimir Relatório de Conferência A4 em PDF"
                     >
-                      <RefreshCw
-                        className={`w-3.5 h-3.5 text-amber-700 ${isReprocessing ? 'animate-spin' : ''}`}
-                      />
-                      Reprocessar ({naoCadastradasCount})
+                      <Printer className="w-3.5 h-3.5 text-blue-700" />
+                      Relatório PDF
                     </Button>
-                  )}
 
-                  {/* Botão Relatório de Conferência em PDF */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAiHelper(!showAiHelper)}
+                      className={`h-8 text-xs gap-1.5 ${
+                        showAiHelper ? 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white'
+                      }`}
+                    >
+                      <Bot className="w-3.5 h-3.5 text-blue-600" />
+                      Consultar IA
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+
+              {/* Painel do Assistente de IA de Suporte */}
+              {showAiHelper && (
+                <div className="p-4 bg-slate-900 text-white border-b border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
+                      <Bot className="w-4 h-4 text-blue-400" />
+                      Agente Especialista em Despesas · Consulta em Tempo Real
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowAiHelper(false)}
+                      className="h-6 w-6 p-0 text-slate-400 hover:text-white"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ex: Como devo classificar a despesa de Google Ads? Qual centro de custo é mais adequado?"
+                      value={aiAnalysisPrompt}
+                      onChange={(e) => setAiAnalysisPrompt(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleConsultarAgente()}
+                      className="h-8 text-xs bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
+                    />
+                    <Button
+                      size="sm"
+                      disabled={isAiLoading || !aiAnalysisPrompt.trim()}
+                      onClick={handleConsultarAgente}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3 shrink-0"
+                    >
+                      {isAiLoading ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        'Perguntar'
+                      )}
+                    </Button>
+                  </div>
+                  {aiResponse && (
+                    <div className="p-3 bg-slate-800/80 rounded-lg text-xs text-slate-200 leading-relaxed border border-slate-700">
+                      <p className="font-semibold text-blue-300 mb-1">Resposta do Agente:</p>
+                      <div className="whitespace-pre-wrap">{aiResponse}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <CardContent className="p-0">
+                {despesasFiltradas.length === 0 ? (
+                  <div className="py-12 text-center text-slate-500">
+                    <HelpCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-semibold">
+                      Nenhuma despesa encontrada com os filtros selecionados.
+                    </p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Tente limpar a busca ou mudar o filtro de status.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 font-semibold">
+                          <th className="py-3 px-3 w-10 text-center">
+                            <input
+                              type="checkbox"
+                              checked={
+                                despesasFiltradas.length > 0 &&
+                                despesasFiltradas.every((d) => d.selecionada)
+                              }
+                              onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                            />
+                          </th>
+                          <th className="py-3 px-3 w-24">Data</th>
+                          <th className="py-3 px-3 min-w-[200px]">Descrição / Fornecedor</th>
+                          <th className="py-3 px-3 min-w-[140px]">Categoria Sugerida</th>
+                          <th className="py-3 px-3 text-right w-28">Valor (R$)</th>
+                          <th className="py-3 px-3 min-w-[220px]">Status no Plano de Contas</th>
+                          <th className="py-3 px-3 min-w-[150px]">Origem / Sugestão</th>
+                          <th className="py-3 px-3 text-right w-20">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {despesasFiltradas.map((item) => {
+                          const isEditing = editingItemId === item.id
+
+                          return (
+                            <tr
+                              key={item.id}
+                              className={`transition-colors align-top ${
+                                !item.selecionada ? 'opacity-50 bg-slate-50/40' : ''
+                              } ${!item.isCadastrada ? 'bg-amber-50/20' : ''} ${
+                                item.matchConfidence === 'memoria' ? 'bg-purple-50/20' : ''
+                              } ${
+                                item.matchConfidence === 'baixa' ||
+                                item.matchConfidence === 'nenhuma'
+                                  ? 'bg-amber-100/60 border-l-4 border-amber-400'
+                                  : ''
+                              } ${
+                                item.matchConfidence === 'baixa' ||
+                                item.matchConfidence === 'nenhuma'
+                                  ? 'hover:bg-amber-100'
+                                  : 'hover:bg-slate-50/80'
+                              } ${
+                                despesaSelecionadaId === item.id
+                                  ? 'ring-1 ring-inset ring-blue-500 bg-blue-50/70'
+                                  : ''
+                              }`}
+                            >
+                              {/* Checkbox de seleção */}
+                              <td className="py-3 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={item.selecionada}
+                                  onChange={() => handleToggleSelectItem(item.id)}
+                                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                              </td>
+
+                              {/* Data */}
+                              <td className="py-3 px-3 whitespace-nowrap">
+                                {isEditing ? (
+                                  <Input
+                                    type="date"
+                                    value={editData}
+                                    onChange={(e) => setEditData(e.target.value)}
+                                    className="h-7 text-xs p-1"
+                                  />
+                                ) : (
+                                  <span className="text-slate-700 font-medium font-mono">
+                                    {item.data.split('-').reverse().join('/')}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Descrição (clique seleciona a linha para vínculo no painel direito) */}
+                              <td
+                                className="py-3 px-3 cursor-pointer"
+                                onClick={() =>
+                                  setDespesaSelecionadaId(
+                                    despesaSelecionadaId === item.id ? null : item.id,
+                                  )
+                                }
+                                title="Clique para selecionar esta despesa e vincular uma conta pelo painel do Plano de Contas"
+                              >
+                                {isEditing ? (
+                                  <Input
+                                    value={editDescricao}
+                                    onChange={(e) => setEditDescricao(e.target.value)}
+                                    className="h-7 text-xs p-1"
+                                  />
+                                ) : (
+                                  <div>
+                                    <p
+                                      className="font-semibold text-slate-900"
+                                      title={item.descricao}
+                                    >
+                                      {item.descricao}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                      Origem: {item.sourceFile} · {item.pageOrRowInfo}
+                                    </p>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Categoria Sugerida */}
+                              <td className="py-3 px-3">
+                                <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                  {item.categoriaSugerida}
+                                </span>
+                              </td>
+
+                              {/* Valor */}
+                              <td className="py-3 px-3 text-right whitespace-nowrap">
+                                {isEditing ? (
+                                  <Input
+                                    type="number"
+                                    step="0.01"
+                                    value={editValor}
+                                    onChange={(e) => setEditValor(parseFloat(e.target.value) || 0)}
+                                    className="h-7 text-xs text-right p-1 font-mono font-bold"
+                                  />
+                                ) : (
+                                  <span className="font-bold text-slate-900 font-mono">
+                                    {formatMoeda(item.valor)}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Status no Plano de Contas */}
+                              <td className="py-3 px-3">
+                                {isEditing ? (
+                                  <Select value={editPlanoId} onValueChange={setEditPlanoId}>
+                                    <SelectTrigger className="h-7 text-xs bg-white">
+                                      <SelectValue placeholder="Vincular Plano de Contas" />
+                                    </SelectTrigger>
+                                    <SelectContent className="max-h-60 max-w-[360px]">
+                                      {planoContas.map((pc) => (
+                                        <SelectItem key={pc.id} value={pc.id} className="text-xs">
+                                          {pc.codigo} | {pc.expand?.conta?.nome} (
+                                          {pc.expand?.centro?.nome})
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : item.isCadastrada ? (
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-[10px] font-bold px-1.5 py-0">
+                                        <Check className="w-2.5 h-2.5 mr-1" />
+                                        Encontrada no Plano
+                                      </Badge>
+                                      <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
+                                        {item.planoContaCodigo || 'PC-???'}
+                                      </span>
+                                    </div>
+                                    <p
+                                      className="text-[11px] text-slate-700 font-medium truncate max-w-[220px]"
+                                      title={item.planoContaNome}
+                                    >
+                                      {item.planoContaNome}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300 text-[10px] font-bold px-1.5 py-0">
+                                      <AlertCircle className="w-2.5 h-2.5 mr-1 text-amber-600" />
+                                      Não cadastrada
+                                    </Badge>
+                                    <div>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleOpenCadastro(item)}
+                                        className="h-6 text-[10px] px-2 bg-white text-amber-800 border-amber-300 hover:bg-amber-50 font-semibold gap-1"
+                                      >
+                                        <Plus className="w-2.5 h-2.5" />
+                                        Cadastrar no Plano
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* Origem da Sugestão / Memória */}
+                              <td className="py-3 px-3">
+                                {item.matchConfidence === 'codigo_empresa' ? (
+                                  <div className="space-y-0.5">
+                                    <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-100 text-[9px] font-bold gap-1">
+                                      <Check className="w-2.5 h-2.5 text-emerald-700" />
+                                      Código da Empresa
+                                    </Badge>
+                                    <p className="text-[10px] text-emerald-700 leading-tight">
+                                      {item.origemSugestao || 'casado por código da empresa'}
+                                    </p>
+                                  </div>
+                                ) : item.matchConfidence === 'memoria' ? (
+                                  <div className="space-y-0.5">
+                                    <Badge className="bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-100 text-[9px] font-bold gap-1">
+                                      <History className="w-2.5 h-2.5 text-purple-700" />
+                                      Memória Recorrente
+                                    </Badge>
+                                    <p className="text-[10px] text-purple-700 leading-tight">
+                                      Baseado em importações anteriores
+                                    </p>
+                                  </div>
+                                ) : item.matchConfidence === 'baixa' ||
+                                  item.matchConfidence === 'nenhuma' ? (
+                                  <div className="space-y-0.5">
+                                    <Badge className="bg-amber-200 text-amber-900 border-amber-400 hover:bg-amber-200 text-[9px] font-bold gap-1">
+                                      <AlertCircle className="w-2.5 h-2.5 text-amber-700" />
+                                      Confiança baixa — revisar
+                                    </Badge>
+                                    <p className="text-[10px] text-amber-800 leading-tight">
+                                      {item.origemSugestao ||
+                                        'Vínculo incerto: confirme ou ajuste manualmente'}
+                                    </p>
+                                  </div>
+                                ) : item.origemSugestao ? (
+                                  <span className="text-[10px] text-slate-500 leading-tight block">
+                                    {item.origemSugestao}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-slate-400">
+                                    Classificação IA
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Ações */}
+                              <td className="py-3 px-3 text-right whitespace-nowrap">
+                                {isEditing ? (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleSaveEdit(item.id)}
+                                      className="h-7 w-7 p-0 text-emerald-600 hover:bg-emerald-50"
+                                      title="Salvar alterações"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={handleCancelEdit}
+                                      className="h-7 w-7 p-0 text-slate-500 hover:bg-slate-100"
+                                      title="Cancelar"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-end gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleStartEdit(item)}
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                      title="Editar despesa"
+                                    >
+                                      <Edit2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleRemoveItem(item.id)}
+                                      className="h-7 w-7 p-0 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
+                                      title="Remover da lista"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+
+                      {/* Rodapé Totalizador */}
+                      <tfoot>
+                        <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
+                          <td colSpan={4} className="py-3 px-3 text-xs">
+                            Total Selecionado para Lançamento ({selecionadasCount} despesa
+                            {selecionadasCount !== 1 ? 's' : ''})
+                          </td>
+                          <td className="py-3 px-3 text-right text-xs font-mono text-emerald-700">
+                            {formatMoeda(selecionadasValor)}
+                          </td>
+                          <td colSpan={3} className="py-3 px-3 text-slate-500 text-[11px]">
+                            {memoriaCount > 0 && (
+                              <span className="text-purple-700 mr-2">
+                                🧠 {memoriaCount} lembrada(s)
+                              </span>
+                            )}
+                            {naoCadastradasCount > 0 && (
+                              <span className="text-amber-700">
+                                ⚠️ {naoCadastradasCount} pendente(s)
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+
+              {/* Rodapé com Botão Principal de Geração de Lançamentos e Relatório */}
+              <div className="p-4 bg-slate-50/90 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setStep('upload')}
+                    className="text-xs bg-white"
+                  >
+                    ← Carregar Outros Arquivos
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setModalRelatorioOpen(true)}
-                    className="h-8 text-xs gap-1.5 bg-slate-50 text-slate-800 hover:bg-slate-100 border-slate-300 font-semibold"
-                    title="Visualizar e Imprimir Relatório de Conferência A4 em PDF"
+                    className="text-xs bg-white text-slate-700 border-slate-300 gap-1.5"
                   >
-                    <Printer className="w-3.5 h-3.5 text-blue-700" />
-                    Relatório PDF
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                    Visualizar Relatório de Conferência (PDF)
                   </Button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="text-right hidden sm:block">
+                    <p className="text-xs font-semibold text-slate-700">
+                      {selecionadasCount} lançamento(s) prontos para{' '}
+                      <strong>{empresaSelecionada?.nome || 'Empresa'}</strong>
+                    </p>
+                    <p className="text-[11px] text-emerald-700 font-bold">
+                      Total: {formatMoeda(selecionadasValor)}
+                    </p>
+                  </div>
 
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAiHelper(!showAiHelper)}
-                    className={`h-8 text-xs gap-1.5 ${
-                      showAiHelper ? 'bg-blue-50 text-blue-700 border-blue-300' : 'bg-white'
-                    }`}
+                    onClick={handleGerarLancamentos}
+                    disabled={isGeneratingLancamentos || selecionadasCount === 0}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-5 shadow-sm gap-2"
                   >
-                    <Bot className="w-3.5 h-3.5 text-blue-600" />
-                    Consultar IA
+                    {isGeneratingLancamentos ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        Gravando lançamentos...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Gerar Lançamentos em Lançamentos Rápidos
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>
-            </CardHeader>
+            </Card>
 
-            {/* Painel do Assistente de IA de Suporte */}
-            {showAiHelper && (
-              <div className="p-4 bg-slate-900 text-white border-b border-slate-800 space-y-3">
+            {/* =================================================================== */}
+            {/* PAINEL DIREITO: Plano de Contas com vínculo por digitação           */}
+            {/* =================================================================== */}
+            <Card className="bg-white border-slate-200 shadow-xs xl:sticky xl:top-4">
+              <CardHeader className="pb-3 border-b border-slate-100">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs font-bold text-blue-300">
-                    <Bot className="w-4 h-4 text-blue-400" />
-                    Agente Especialista em Despesas · Consulta em Tempo Real
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAiHelper(false)}
-                    className="h-6 w-6 p-0 text-slate-400 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
+                  <CardTitle className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-indigo-600" />
+                    Plano de Contas
+                  </CardTitle>
+                  <Badge variant="outline" className="text-[10px] font-mono text-slate-600">
+                    {planoContasPainelFiltrado.length}/{planoContas.length}
+                  </Badge>
                 </div>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Ex: Como devo classificar a despesa de Google Ads? Qual centro de custo é mais adequado?"
-                    value={aiAnalysisPrompt}
-                    onChange={(e) => setAiAnalysisPrompt(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleConsultarAgente()}
-                    className="h-8 text-xs bg-slate-800 border-slate-700 text-white placeholder:text-slate-400"
-                  />
-                  <Button
-                    size="sm"
-                    disabled={isAiLoading || !aiAnalysisPrompt.trim()}
-                    onClick={handleConsultarAgente}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs h-8 px-3 shrink-0"
-                  >
-                    {isAiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : 'Perguntar'}
-                  </Button>
-                </div>
-                {aiResponse && (
-                  <div className="p-3 bg-slate-800/80 rounded-lg text-xs text-slate-200 leading-relaxed border border-slate-700">
-                    <p className="font-semibold text-blue-300 mb-1">Resposta do Agente:</p>
-                    <div className="whitespace-pre-wrap">{aiResponse}</div>
-                  </div>
-                )}
-              </div>
-            )}
+                <CardDescription className="text-xs mt-0.5">
+                  Digite o código ou nome da conta (sem acentos) e clique nela para vincular à
+                  despesa selecionada.
+                </CardDescription>
 
-            <CardContent className="p-0">
-              {despesasFiltradas.length === 0 ? (
-                <div className="py-12 text-center text-slate-500">
-                  <HelpCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-sm font-semibold">
-                    Nenhuma despesa encontrada com os filtros selecionados.
-                  </p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    Tente limpar a busca ou mudar o filtro de status.
-                  </p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 font-semibold">
-                        <th className="py-3 px-3 w-10 text-center">
-                          <input
-                            type="checkbox"
-                            checked={
-                              despesasFiltradas.length > 0 &&
-                              despesasFiltradas.every((d) => d.selecionada)
-                            }
-                            onChange={(e) => handleToggleSelectAll(e.target.checked)}
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                          />
-                        </th>
-                        <th className="py-3 px-3 w-24">Data</th>
-                        <th className="py-3 px-3 min-w-[200px]">Descrição / Fornecedor</th>
-                        <th className="py-3 px-3 min-w-[140px]">Categoria Sugerida</th>
-                        <th className="py-3 px-3 text-right w-28">Valor (R$)</th>
-                        <th className="py-3 px-3 min-w-[220px]">Status no Plano de Contas</th>
-                        <th className="py-3 px-3 min-w-[150px]">Origem / Sugestão</th>
-                        <th className="py-3 px-3 text-right w-20">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {despesasFiltradas.map((item) => {
-                        const isEditing = editingItemId === item.id
-
-                        return (
-                          <tr
-                            key={item.id}
-                            className={`transition-colors align-top ${
-                              !item.selecionada ? 'opacity-50 bg-slate-50/40' : ''
-                            } ${!item.isCadastrada ? 'bg-amber-50/20' : ''} ${
-                              item.matchConfidence === 'memoria' ? 'bg-purple-50/20' : ''
-                            } ${
-                              item.matchConfidence === 'baixa' || item.matchConfidence === 'nenhuma'
-                                ? 'bg-amber-100/60 border-l-4 border-amber-400'
-                                : ''
-                            } ${item.matchConfidence === 'baixa' || item.matchConfidence === 'nenhuma' ? 'hover:bg-amber-100' : 'hover:bg-slate-50/80'}`}
-                          >
-                            {/* Checkbox de seleção */}
-                            <td className="py-3 px-3 text-center">
-                              <input
-                                type="checkbox"
-                                checked={item.selecionada}
-                                onChange={() => handleToggleSelectItem(item.id)}
-                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                              />
-                            </td>
-
-                            {/* Data */}
-                            <td className="py-3 px-3 whitespace-nowrap">
-                              {isEditing ? (
-                                <Input
-                                  type="date"
-                                  value={editData}
-                                  onChange={(e) => setEditData(e.target.value)}
-                                  className="h-7 text-xs p-1"
-                                />
-                              ) : (
-                                <span className="text-slate-700 font-medium font-mono">
-                                  {item.data.split('-').reverse().join('/')}
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Descrição */}
-                            <td className="py-3 px-3">
-                              {isEditing ? (
-                                <Input
-                                  value={editDescricao}
-                                  onChange={(e) => setEditDescricao(e.target.value)}
-                                  className="h-7 text-xs p-1"
-                                />
-                              ) : (
-                                <div>
-                                  <p
-                                    className="font-semibold text-slate-900"
-                                    title={item.descricao}
-                                  >
-                                    {item.descricao}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">
-                                    Origem: {item.sourceFile} · {item.pageOrRowInfo}
-                                  </p>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Categoria Sugerida */}
-                            <td className="py-3 px-3">
-                              <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                {item.categoriaSugerida}
-                              </span>
-                            </td>
-
-                            {/* Valor */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
-                              {isEditing ? (
-                                <Input
-                                  type="number"
-                                  step="0.01"
-                                  value={editValor}
-                                  onChange={(e) => setEditValor(parseFloat(e.target.value) || 0)}
-                                  className="h-7 text-xs text-right p-1 font-mono font-bold"
-                                />
-                              ) : (
-                                <span className="font-bold text-slate-900 font-mono">
-                                  {formatMoeda(item.valor)}
-                                </span>
-                              )}
-                            </td>
-
-                            {/* Status no Plano de Contas */}
-                            <td className="py-3 px-3">
-                              {isEditing ? (
-                                <Select value={editPlanoId} onValueChange={setEditPlanoId}>
-                                  <SelectTrigger className="h-7 text-xs bg-white">
-                                    <SelectValue placeholder="Vincular Plano de Contas" />
-                                  </SelectTrigger>
-                                  <SelectContent className="max-h-60 max-w-[360px]">
-                                    {planoContas.map((pc) => (
-                                      <SelectItem key={pc.id} value={pc.id} className="text-xs">
-                                        {pc.codigo} | {pc.expand?.conta?.nome} (
-                                        {pc.expand?.centro?.nome})
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              ) : item.isCadastrada ? (
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-[10px] font-bold px-1.5 py-0">
-                                      <Check className="w-2.5 h-2.5 mr-1" />
-                                      Encontrada no Plano
-                                    </Badge>
-                                    <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
-                                      {item.planoContaCodigo || 'PC-???'}
-                                    </span>
-                                  </div>
-                                  <p
-                                    className="text-[11px] text-slate-700 font-medium truncate max-w-[220px]"
-                                    title={item.planoContaNome}
-                                  >
-                                    {item.planoContaNome}
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300 text-[10px] font-bold px-1.5 py-0">
-                                    <AlertCircle className="w-2.5 h-2.5 mr-1 text-amber-600" />
-                                    Não cadastrada
-                                  </Badge>
-                                  <div>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleOpenCadastro(item)}
-                                      className="h-6 text-[10px] px-2 bg-white text-amber-800 border-amber-300 hover:bg-amber-50 font-semibold gap-1"
-                                    >
-                                      <Plus className="w-2.5 h-2.5" />
-                                      Cadastrar no Plano
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
-                            </td>
-
-                            {/* Origem da Sugestão / Memória */}
-                            <td className="py-3 px-3">
-                              {item.matchConfidence === 'codigo_empresa' ? (
-                                <div className="space-y-0.5">
-                                  <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-100 text-[9px] font-bold gap-1">
-                                    <Check className="w-2.5 h-2.5 text-emerald-700" />
-                                    Código da Empresa
-                                  </Badge>
-                                  <p className="text-[10px] text-emerald-700 leading-tight">
-                                    {item.origemSugestao || 'casado por código da empresa'}
-                                  </p>
-                                </div>
-                              ) : item.matchConfidence === 'memoria' ? (
-                                <div className="space-y-0.5">
-                                  <Badge className="bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-100 text-[9px] font-bold gap-1">
-                                    <History className="w-2.5 h-2.5 text-purple-700" />
-                                    Memória Recorrente
-                                  </Badge>
-                                  <p className="text-[10px] text-purple-700 leading-tight">
-                                    Baseado em importações anteriores
-                                  </p>
-                                </div>
-                              ) : item.matchConfidence === 'baixa' ||
-                                item.matchConfidence === 'nenhuma' ? (
-                                <div className="space-y-0.5">
-                                  <Badge className="bg-amber-200 text-amber-900 border-amber-400 hover:bg-amber-200 text-[9px] font-bold gap-1">
-                                    <AlertCircle className="w-2.5 h-2.5 text-amber-700" />
-                                    Confiança baixa — revisar
-                                  </Badge>
-                                  <p className="text-[10px] text-amber-800 leading-tight">
-                                    {item.origemSugestao ||
-                                      'Vínculo incerto: confirme ou ajuste manualmente'}
-                                  </p>
-                                </div>
-                              ) : item.origemSugestao ? (
-                                <span className="text-[10px] text-slate-500 leading-tight block">
-                                  {item.origemSugestao}
-                                </span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">Classificação IA</span>
-                              )}
-                            </td>
-
-                            {/* Ações */}
-                            <td className="py-3 px-3 text-right whitespace-nowrap">
-                              {isEditing ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleSaveEdit(item.id)}
-                                    className="h-7 w-7 p-0 text-emerald-600 hover:bg-emerald-50"
-                                    title="Salvar alterações"
-                                  >
-                                    <Check className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={handleCancelEdit}
-                                    className="h-7 w-7 p-0 text-slate-500 hover:bg-slate-100"
-                                    title="Cancelar"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center justify-end gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleStartEdit(item)}
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                    title="Editar despesa"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleRemoveItem(item.id)}
-                                    className="h-7 w-7 p-0 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
-                                    title="Remover da lista"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </Button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-
-                    {/* Rodapé Totalizador */}
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
-                        <td colSpan={4} className="py-3 px-3 text-xs">
-                          Total Selecionado para Lançamento ({selecionadasCount} despesa
-                          {selecionadasCount !== 1 ? 's' : ''})
-                        </td>
-                        <td className="py-3 px-3 text-right text-xs font-mono text-emerald-700">
-                          {formatMoeda(selecionadasValor)}
-                        </td>
-                        <td colSpan={3} className="py-3 px-3 text-slate-500 text-[11px]">
-                          {memoriaCount > 0 && (
-                            <span className="text-purple-700 mr-2">
-                              🧠 {memoriaCount} lembrada(s)
-                            </span>
-                          )}
-                          {naoCadastradasCount > 0 && (
-                            <span className="text-amber-700">
-                              ⚠️ {naoCadastradasCount} pendente(s)
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-
-            {/* Rodapé com Botão Principal de Geração de Lançamentos e Relatório */}
-            <div className="p-4 bg-slate-50/90 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setStep('upload')}
-                  className="text-xs bg-white"
+                {/* Despesa atualmente selecionada na tabela */}
+                <div
+                  className={`mt-2 p-2 rounded-lg border text-xs ${
+                    despesaSelecionada
+                      ? 'bg-blue-50 border-blue-200'
+                      : 'bg-slate-50 border-slate-200 flex items-center gap-1.5 text-slate-500'
+                  }`}
                 >
-                  ← Carregar Outros Arquivos
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setModalRelatorioOpen(true)}
-                  className="text-xs bg-white text-slate-700 border-slate-300 gap-1.5"
-                >
-                  <FileText className="w-3.5 h-3.5 text-blue-600" />
-                  Visualizar Relatório de Conferência (PDF)
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="text-right hidden sm:block">
-                  <p className="text-xs font-semibold text-slate-700">
-                    {selecionadasCount} lançamento(s) prontos para{' '}
-                    <strong>{empresaSelecionada?.nome || 'Empresa'}</strong>
-                  </p>
-                  <p className="text-[11px] text-emerald-700 font-bold">
-                    Total: {formatMoeda(selecionadasValor)}
-                  </p>
-                </div>
-
-                <Button
-                  onClick={handleGerarLancamentos}
-                  disabled={isGeneratingLancamentos || selecionadasCount === 0}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-5 shadow-sm gap-2"
-                >
-                  {isGeneratingLancamentos ? (
+                  {despesaSelecionada ? (
                     <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Gravando lançamentos...
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">
+                        Despesa selecionada:
+                      </span>
+                      <p
+                        className="font-semibold text-blue-950 truncate"
+                        title={despesaSelecionada.descricao}
+                      >
+                        {despesaSelecionada.descricao}
+                      </p>
+                      <p className="text-[10px] text-blue-700 mt-0.5">
+                        {despesaSelecionada.isCadastrada
+                          ? `Vinculada a: ${despesaSelecionada.planoContaCodigo || '—'} ${
+                              despesaSelecionada.planoContaNome || ''
+                            }`
+                          : 'Sem vínculo no Plano de Contas'}
+                      </p>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4" />
-                      Gerar Lançamentos em Lançamentos Rápidos
+                      <MousePointerClick className="w-3.5 h-3.5 shrink-0" />
+                      Clique na descrição de uma linha da tabela para selecionar a despesa.
                     </>
                   )}
-                </Button>
-              </div>
-            </div>
-          </Card>
+                </div>
+
+                {/* Campo de digitação da conta (busca ignora acentos) */}
+                <div className="relative mt-2">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Input
+                    placeholder="Digitar código ou nome da conta..."
+                    value={buscaContaPainel}
+                    onChange={(e) => setBuscaContaPainel(e.target.value)}
+                    className="pl-8 h-8 text-xs bg-slate-50 pr-8"
+                  />
+                  {buscaContaPainel && (
+                    <button
+                      type="button"
+                      onClick={() => setBuscaContaPainel('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      title="Limpar busca"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-2">
+                {planoContasPainelFiltrado.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs">
+                    Nenhuma conta localizada para "{buscaContaPainel}".
+                  </div>
+                ) : (
+                  <div className="max-h-[420px] overflow-y-auto pr-1 divide-y divide-slate-100">
+                    {planoContasPainelFiltrado.map((pc) => {
+                      const nomeConta = pc.expand?.conta?.nome || 'Conta'
+                      const codEmp = pc.codigo_empresa ? `[${pc.codigo_empresa}]` : ''
+                      const centroNome = pc.expand?.centro?.nome || ''
+                      const isVinculadaAtual = despesaSelecionada?.planoContaId === pc.id
+
+                      return (
+                        <button
+                          key={pc.id}
+                          type="button"
+                          onClick={() => handleVincularContaDigitada(pc)}
+                          className={`w-full text-left px-2.5 py-2 flex items-center justify-between gap-2 text-xs transition-colors ${
+                            isVinculadaAtual ? 'bg-emerald-50' : 'hover:bg-blue-50'
+                          }`}
+                          title={`Vincular ${pc.codigo || ''} ${nomeConta} à despesa selecionada`}
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-[11px] text-slate-500 shrink-0">
+                              {pc.codigo || '—'} {codEmp}
+                            </span>
+                            <span className="truncate font-medium text-slate-700" title={nomeConta}>
+                              {nomeConta}
+                            </span>
+                          </span>
+                          <span className="flex items-center gap-1 shrink-0">
+                            {centroNome && (
+                              <span className="text-[9px] text-slate-400 truncate max-w-[90px]">
+                                {centroNome}
+                              </span>
+                            )}
+                            {isVinculadaAtual ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <ArrowRight className="w-3.5 h-3.5 text-slate-300" />
+                            )}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       )}
 
