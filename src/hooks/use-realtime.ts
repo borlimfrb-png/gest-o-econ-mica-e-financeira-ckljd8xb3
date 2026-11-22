@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -50,13 +50,8 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Versão com debounce (trailing) do useRealtime: quando uma rajada de
- * eventos chega (importação em lote gravando em várias coleções de uma
- * vez), os callbacks são coalescidos numa única execução por coleção,
- * evitando estourar o rate limit do backend (429) e telas piscando.
- *
- * Mantém a MESMA assinatura do useRealtime (coleção + callback + enabled)
- * para que os consumidores possam alternar entre os dois sem mudanças.
+ * Same as useRealtime but debounces bursts of events (trailing default 1.5s)
+ * so a flurry of writes triggers a single callback.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
@@ -64,38 +59,29 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   enabled: boolean = true,
   delayMs: number = 1500,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastEventRef = useRef<RecordSubscription<TRecord> | null>(null)
   const callbackRef = useRef(callback)
   callbackRef.current = callback
 
-  useEffect(() => {
-    if (!enabled) return
+  const timerRef = useRef<number | undefined>(undefined)
 
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
-    }
-  }, [enabled])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      lastEventRef.current = data
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        const evt = lastEventRef.current
-        lastEventRef.current = null
-        if (evt) callbackRef.current(evt)
+  const debounced = useCallback(
+    (data: RecordSubscription<TRecord>) => {
+      if (timerRef.current !== undefined) window.clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = undefined
+        callbackRef.current(data)
       }, delayMs)
     },
-    enabled,
+    [delayMs],
   )
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== undefined) window.clearTimeout(timerRef.current)
+    }
+  }, [])
+
+  return useRealtime<TRecord>(collectionName, debounced, enabled)
 }
 
 export default useRealtime

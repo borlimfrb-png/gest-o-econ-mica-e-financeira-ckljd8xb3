@@ -27,6 +27,7 @@ import {
   SlidersHorizontal,
   History,
   Printer,
+  Lock,
   FileCheck2,
   Search,
   MousePointerClick,
@@ -84,6 +85,21 @@ import type {
   ContaRecord,
   MemoriaFornecedorRecord,
 } from '@/types/finance'
+
+const MESES_PTBR = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+]
 
 interface ImportarDespesasIAProps {
   empresas: EmpresaRecord[]
@@ -182,6 +198,13 @@ export function ImportarDespesasIA({
   const [despesas, setDespesas] = useState<DespesaExtraidaItem[]>([])
   const [step, setStep] = useState<'upload' | 'revisao' | 'sucesso'>('upload')
 
+  // Data global do lançamento (mês/competência escolhida uma vez, travada para todas as linhas)
+  const [dataLancamentoGlobal, setDataLancamentoGlobal] = useState('')
+  const [mesLancamentoSelecionado, setMesLancamentoSelecionado] = useState('')
+  const [dataGlobalAplicada, setDataGlobalAplicada] = useState<string | null>(null)
+  // Linhas editadas individualmente com data diferente da global (preservam a própria data)
+  const [datasIndividuaisIds, setDatasIndividuaisIds] = useState<Set<string>>(new Set())
+
   // Histórico de contas novas criadas nesta sessão de importação
   const [novasContasCriadas, setNovasContasCriadas] = useState<
     Array<{
@@ -246,6 +269,104 @@ export function ImportarDespesasIA({
   // Drag & drop
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Barra de rolagem horizontal sincronizada no topo da tabela de revisão
+  const scrollBarraTopoRef = useRef<HTMLDivElement>(null)
+  const tabelaScrollContainerRef = useRef<HTMLDivElement>(null)
+  const tabelaElRef = useRef<HTMLTableElement>(null)
+  const [tabelaScrollWidth, setTabelaScrollWidth] = useState(0)
+
+  const handleScrollBarraParaTabela = () => {
+    const barra = scrollBarraTopoRef.current
+    const container = tabelaScrollContainerRef.current
+    if (!barra || !container) return
+    if (container.scrollLeft !== barra.scrollLeft) {
+      container.scrollLeft = barra.scrollLeft
+    }
+  }
+
+  const handleScrollTabelaParaBarra = () => {
+    const barra = scrollBarraTopoRef.current
+    const container = tabelaScrollContainerRef.current
+    if (!barra || !container) return
+    if (barra.scrollLeft !== container.scrollLeft) {
+      barra.scrollLeft = container.scrollLeft
+    }
+  }
+
+  // ----------------------------------------------------
+  // Data global do lançamento: mês/competência + data aplicada a todas as linhas
+  // ----------------------------------------------------
+  const handleMesGlobalChange = (mes: string) => {
+    setMesLancamentoSelecionado(mes)
+    const diaAtual =
+      dataLancamentoGlobal && /^\d{4}-\d{2}-\d{2}$/.test(dataLancamentoGlobal)
+        ? dataLancamentoGlobal.slice(8, 10)
+        : '01'
+    setDataLancamentoGlobal(`${mes}-${diaAtual}`)
+  }
+
+  const handleDataGlobalChange = (valor: string) => {
+    setDataLancamentoGlobal(valor)
+    if (/^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+      setMesLancamentoSelecionado(valor.slice(0, 7))
+      // Data alterada mas ainda não reaplicada: destrava até o usuário aplicar de novo
+      if (dataGlobalAplicada && valor !== dataGlobalAplicada) {
+        setDataGlobalAplicada(null)
+      }
+    }
+  }
+
+  const aplicarDataGlobalLinhas = () => {
+    const data = dataLancamentoGlobal
+
+    if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+      toast({
+        title: 'Data inválida',
+        description: 'Selecione o mês/competência e a data do lançamento antes de aplicar.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const [ano, mes, dia] = data.split('-').map(Number)
+    const dataObj = new Date(ano, mes - 1, dia)
+    const dataCoerente =
+      dataObj.getFullYear() === ano && dataObj.getMonth() === mes - 1 && dataObj.getDate() === dia
+
+    if (!dataCoerente || ano < 2000 || ano > 2100) {
+      toast({
+        title: 'Data inválida',
+        description: 'Verifique o dia, o mês e o ano da data do lançamento.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setDespesas((prev) => prev.map((item) => ({ ...item, data })))
+    setDatasIndividuaisIds(new Set())
+    setDataGlobalAplicada(data)
+
+    const dataPtBr = `${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano}`
+    toast({
+      title: 'Data aplicada a todas as linhas 🔒',
+      description: `As ${despesas.length} linha(s) extraída(s) ficarão com a data ${dataPtBr} nos lançamentos gravados. Ajustes individuais por linha continuam possíveis pela edição.`,
+    })
+  }
+
+  const removerDataGlobal = () => {
+    setDataGlobalAplicada(null)
+    setDatasIndividuaisIds(new Set())
+    toast({
+      title: 'Data destravada',
+      description:
+        'Cada linha volta a usar a data extraída do documento (mantendo a última aplicada).',
+    })
+  }
+
+  // Data efetiva que vai no lançamento gerado (global travada vence a extraída)
+  const dataEfetivaLancamento = (item: DespesaExtraidaItem): string =>
+    dataGlobalAplicada && !datasIndividuaisIds.has(item.id) ? dataGlobalAplicada : item.data
 
   const empresaSelecionada = useMemo(() => {
     return empresas.find((e) => e.id === selectedEmpresaId) || null
@@ -329,6 +450,26 @@ export function ImportarDespesasIA({
 
       setDespesas(todasDespesas)
       setStep('revisao')
+
+      // Pré-seleciona a data mais comum das linhas extraídas como sugestão global
+      const contagemDatas = new Map<string, number>()
+      todasDespesas.forEach((d) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(d.data)) {
+          contagemDatas.set(d.data, (contagemDatas.get(d.data) || 0) + 1)
+        }
+      })
+      let dataMaisComum = ''
+      let maiorContagem = 0
+      contagemDatas.forEach((n, data) => {
+        if (n > maiorContagem) {
+          maiorContagem = n
+          dataMaisComum = data
+        }
+      })
+      setDataLancamentoGlobal(dataMaisComum)
+      setMesLancamentoSelecionado(dataMaisComum ? dataMaisComum.slice(0, 7) : '')
+      setDataGlobalAplicada(null)
+      setDatasIndividuaisIds(new Set())
 
       const lembradasCount = todasDespesas.filter((d) => d.matchConfidence === 'memoria').length
 
@@ -529,6 +670,16 @@ export function ImportarDespesasIA({
       } catch (err) {
         console.warn('Erro ao salvar vínculo na memória:', err)
       }
+    }
+
+    // Se a data global está travada e o usuário editou a data desta linha individualmente,
+    // preservamos a data da linha (ela deixa de seguir a trava global)
+    if (dataGlobalAplicada && editData && editData !== dataGlobalAplicada) {
+      setDatasIndividuaisIds((prev) => {
+        const novo = new Set(prev)
+        novo.add(id)
+        return novo
+      })
     }
 
     setEditingItemId(null)
@@ -889,7 +1040,7 @@ export function ImportarDespesasIA({
     try {
       const loteParaGravar = itensParaLancamento.map((item) => ({
         plano_conta: item.planoContaId!,
-        data: item.data,
+        data: dataEfetivaLancamento(item),
         valor: item.valor,
         historico: `Importado via IA - ${item.sourceFile} (${item.categoriaSugerida}): ${item.descricao}`,
       }))
@@ -1022,6 +1173,43 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
       return true
     })
   }, [despesas, filtroStatus, filtroCategoria, searchTerm])
+
+  // Opções de mês/competência (últimos 24 meses + meses presentes nas linhas extraídas)
+  const opcoesMesGlobal = useMemo(() => {
+    const meses = new Set<string>()
+    const agora = new Date()
+    for (let i = 0; i < 24; i++) {
+      const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1)
+      meses.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+    }
+    despesas.forEach((d) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d.data)) meses.add(d.data.slice(0, 7))
+    })
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dataLancamentoGlobal)) {
+      meses.add(dataLancamentoGlobal.slice(0, 7))
+    }
+    return Array.from(meses).sort().reverse()
+  }, [despesas, dataLancamentoGlobal])
+
+  // Mantém a largura do espaçador da barra de rolagem superior em sync com a tabela
+  useEffect(() => {
+    const tabelaEl = tabelaElRef.current
+    if (!tabelaEl) {
+      setTabelaScrollWidth(0)
+      return
+    }
+    const atualizar = () => {
+      setTabelaScrollWidth(Math.max(tabelaEl.scrollWidth, tabelaEl.offsetWidth))
+      const container = tabelaScrollContainerRef.current
+      if (container && scrollBarraTopoRef.current) {
+        scrollBarraTopoRef.current.scrollLeft = container.scrollLeft
+      }
+    }
+    atualizar()
+    const observer = new ResizeObserver(atualizar)
+    observer.observe(tabelaEl)
+    return () => observer.disconnect()
+  }, [step, despesasFiltradas])
 
   // Painel direito: filtro do Plano de Contas por digitação (ignora acentos,
   // mesma normalização do SeletorPlanoContaCombobox)
@@ -1491,6 +1679,74 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
             </Accordion>
           </Card>
 
+          {/* Controle global de Mês/Data do Lançamento (aplicado a todas as linhas) */}
+          <Card className="bg-white border-blue-200 shadow-xs">
+            <CardContent className="py-3 px-4 flex flex-col lg:flex-row lg:items-center gap-3">
+              <div className="flex items-center gap-2.5 min-w-[230px]">
+                <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">Mês / Data do Lançamento</p>
+                  <p className="text-[10px] text-slate-500">
+                    Escolha uma vez e aplique a todas as linhas extraídas.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                <Select value={mesLancamentoSelecionado} onValueChange={handleMesGlobalChange}>
+                  <SelectTrigger className="h-8 text-xs bg-white w-40">
+                    <SelectValue placeholder="Mês/competência" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {opcoesMesGlobal.map((mes) => {
+                      const [ano, m] = mes.split('-')
+                      return (
+                        <SelectItem key={mes} value={mes} className="text-xs">
+                          {MESES_PTBR[Number(m) - 1]}/{ano} · competência
+                        </SelectItem>
+                      )
+                    })}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  type="date"
+                  value={dataLancamentoGlobal}
+                  onChange={(e) => handleDataGlobalChange(e.target.value)}
+                  className="h-8 text-xs bg-white w-40"
+                />
+
+                <Button
+                  size="sm"
+                  onClick={aplicarDataGlobalLinhas}
+                  disabled={despesas.length === 0}
+                  className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-1.5"
+                  title="Aplica a data escolhida a todas as linhas extraídas (os lançamentos serão gravados com ela)"
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  Aplicar a todas as linhas
+                </Button>
+
+                {dataGlobalAplicada && (
+                  <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 text-[10px] font-bold gap-1 h-6">
+                    <Lock className="w-3 h-3 text-emerald-700" />
+                    Data travada: {dataGlobalAplicada.split('-').reverse().join('/')}
+                    <button
+                      type="button"
+                      onClick={removerDataGlobal}
+                      className="ml-0.5 text-emerald-700 hover:text-emerald-900"
+                      title="Destravar data (linhas voltam a seguir a data extraída)"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Tabela (esquerda) + Painel do Plano de Contas com digitação (direita) */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 items-start">
             {/* Card Principal da Tabela de Despesas */}
@@ -1668,314 +1924,336 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                     </p>
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 font-semibold">
-                          <th className="py-3 px-3 w-10 text-center">
-                            <input
-                              type="checkbox"
-                              checked={
-                                despesasFiltradas.length > 0 &&
-                                despesasFiltradas.every((d) => d.selecionada)
-                              }
-                              onChange={(e) => handleToggleSelectAll(e.target.checked)}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                            />
-                          </th>
-                          <th className="py-3 px-3 w-24">Data</th>
-                          <th className="py-3 px-3 min-w-[200px]">Descrição / Fornecedor</th>
-                          <th className="py-3 px-3 min-w-[140px]">Categoria Sugerida</th>
-                          <th className="py-3 px-3 text-right w-28">Valor (R$)</th>
-                          <th className="py-3 px-3 min-w-[220px]">Status no Plano de Contas</th>
-                          <th className="py-3 px-3 min-w-[150px]">Origem / Sugestão</th>
-                          <th className="py-3 px-3 text-right w-20">Ações</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {despesasFiltradas.map((item) => {
-                          const isEditing = editingItemId === item.id
-
-                          return (
-                            <tr
-                              key={item.id}
-                              className={`transition-colors align-top ${
-                                !item.selecionada ? 'opacity-50 bg-slate-50/40' : ''
-                              } ${!item.isCadastrada ? 'bg-amber-50/20' : ''} ${
-                                item.matchConfidence === 'memoria' ? 'bg-purple-50/20' : ''
-                              } ${
-                                item.matchConfidence === 'baixa' ||
-                                item.matchConfidence === 'nenhuma'
-                                  ? 'bg-amber-100/60 border-l-4 border-amber-400'
-                                  : ''
-                              } ${
-                                item.matchConfidence === 'baixa' ||
-                                item.matchConfidence === 'nenhuma'
-                                  ? 'hover:bg-amber-100'
-                                  : 'hover:bg-slate-50/80'
-                              } ${
-                                despesaSelecionadaId === item.id
-                                  ? 'ring-1 ring-inset ring-blue-500 bg-blue-50/70'
-                                  : ''
-                              }`}
-                            >
-                              {/* Checkbox de seleção */}
-                              <td className="py-3 px-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={item.selecionada}
-                                  onChange={() => handleToggleSelectItem(item.id)}
-                                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                />
-                              </td>
-
-                              {/* Data */}
-                              <td className="py-3 px-3 whitespace-nowrap">
-                                {isEditing ? (
-                                  <Input
-                                    type="date"
-                                    value={editData}
-                                    onChange={(e) => setEditData(e.target.value)}
-                                    className="h-7 text-xs p-1"
-                                  />
-                                ) : (
-                                  <span className="text-slate-700 font-medium font-mono">
-                                    {item.data.split('-').reverse().join('/')}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Descrição (clique seleciona a linha para vínculo no painel direito) */}
-                              <td
-                                className="py-3 px-3 cursor-pointer"
-                                onClick={() =>
-                                  setDespesaSelecionadaId(
-                                    despesaSelecionadaId === item.id ? null : item.id,
-                                  )
+                  <div>
+                    {/* Barra de rolagem horizontal sincronizada no topo da tabela */}
+                    <div
+                      ref={scrollBarraTopoRef}
+                      onScroll={handleScrollBarraParaTabela}
+                      className="overflow-x-scroll overflow-y-hidden h-3 cursor-pointer border-b border-slate-200 bg-slate-50/80 [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full"
+                      title="Barra de rolagem horizontal sincronizada com a tabela"
+                    >
+                      <div
+                        style={{
+                          width: tabelaScrollWidth ? `${tabelaScrollWidth}px` : '100%',
+                          height: '1px',
+                        }}
+                      />
+                    </div>
+                    <div
+                      ref={tabelaScrollContainerRef}
+                      onScroll={handleScrollTabelaParaBarra}
+                      className="overflow-x-auto"
+                    >
+                      <table ref={tabelaElRef} className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-slate-50/80 text-slate-600 font-semibold">
+                            <th className="py-3 px-3 w-10 text-center">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  despesasFiltradas.length > 0 &&
+                                  despesasFiltradas.every((d) => d.selecionada)
                                 }
-                                title="Clique para selecionar esta despesa e vincular uma conta pelo painel do Plano de Contas"
+                                onChange={(e) => handleToggleSelectAll(e.target.checked)}
+                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              />
+                            </th>
+                            <th className="py-3 px-3 w-24">Data</th>
+                            <th className="py-3 px-3 min-w-[200px]">Descrição / Fornecedor</th>
+                            <th className="py-3 px-3 min-w-[140px]">Categoria Sugerida</th>
+                            <th className="py-3 px-3 text-right w-28">Valor (R$)</th>
+                            <th className="py-3 px-3 min-w-[220px]">Status no Plano de Contas</th>
+                            <th className="py-3 px-3 min-w-[150px]">Origem / Sugestão</th>
+                            <th className="py-3 px-3 text-right w-20">Ações</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {despesasFiltradas.map((item) => {
+                            const isEditing = editingItemId === item.id
+
+                            return (
+                              <tr
+                                key={item.id}
+                                className={`transition-colors align-top ${
+                                  !item.selecionada ? 'opacity-50 bg-slate-50/40' : ''
+                                } ${!item.isCadastrada ? 'bg-amber-50/20' : ''} ${
+                                  item.matchConfidence === 'memoria' ? 'bg-purple-50/20' : ''
+                                } ${
+                                  item.matchConfidence === 'baixa' ||
+                                  item.matchConfidence === 'nenhuma'
+                                    ? 'bg-amber-100/60 border-l-4 border-amber-400'
+                                    : ''
+                                } ${
+                                  item.matchConfidence === 'baixa' ||
+                                  item.matchConfidence === 'nenhuma'
+                                    ? 'hover:bg-amber-100'
+                                    : 'hover:bg-slate-50/80'
+                                } ${
+                                  despesaSelecionadaId === item.id
+                                    ? 'ring-1 ring-inset ring-blue-500 bg-blue-50/70'
+                                    : ''
+                                }`}
                               >
-                                {isEditing ? (
-                                  <Input
-                                    value={editDescricao}
-                                    onChange={(e) => setEditDescricao(e.target.value)}
-                                    className="h-7 text-xs p-1"
+                                {/* Checkbox de seleção */}
+                                <td className="py-3 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={item.selecionada}
+                                    onChange={() => handleToggleSelectItem(item.id)}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                                   />
-                                ) : (
-                                  <div>
-                                    <p
-                                      className="font-semibold text-slate-900"
-                                      title={item.descricao}
-                                    >
-                                      {item.descricao}
-                                    </p>
-                                    <p className="text-[10px] text-slate-400 mt-0.5">
-                                      Origem: {item.sourceFile} · {item.pageOrRowInfo}
-                                    </p>
-                                  </div>
-                                )}
-                              </td>
+                                </td>
 
-                              {/* Categoria Sugerida */}
-                              <td className="py-3 px-3">
-                                <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                  {item.categoriaSugerida}
-                                </span>
-                              </td>
+                                {/* Data */}
+                                <td className="py-3 px-3 whitespace-nowrap">
+                                  {isEditing ? (
+                                    <Input
+                                      type="date"
+                                      value={editData}
+                                      onChange={(e) => setEditData(e.target.value)}
+                                      className="h-7 text-xs p-1"
+                                    />
+                                  ) : (
+                                    <span className="text-slate-700 font-medium font-mono">
+                                      {item.data.split('-').reverse().join('/')}
+                                    </span>
+                                  )}
+                                </td>
 
-                              {/* Valor */}
-                              <td className="py-3 px-3 text-right whitespace-nowrap">
-                                {isEditing ? (
-                                  <Input
-                                    type="number"
-                                    step="0.01"
-                                    value={editValor}
-                                    onChange={(e) => setEditValor(parseFloat(e.target.value) || 0)}
-                                    className="h-7 text-xs text-right p-1 font-mono font-bold"
-                                  />
-                                ) : (
-                                  <span className="font-bold text-slate-900 font-mono">
-                                    {formatMoeda(item.valor)}
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Status no Plano de Contas */}
-                              <td className="py-3 px-3">
-                                {isEditing ? (
-                                  <Select value={editPlanoId} onValueChange={setEditPlanoId}>
-                                    <SelectTrigger className="h-7 text-xs bg-white">
-                                      <SelectValue placeholder="Vincular Plano de Contas" />
-                                    </SelectTrigger>
-                                    <SelectContent className="max-h-60 max-w-[360px]">
-                                      {planoContas.map((pc) => (
-                                        <SelectItem key={pc.id} value={pc.id} className="text-xs">
-                                          {pc.codigo} | {pc.expand?.conta?.nome} (
-                                          {pc.expand?.centro?.nome})
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : item.isCadastrada ? (
-                                  <div className="space-y-0.5">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-[10px] font-bold px-1.5 py-0">
-                                        <Check className="w-2.5 h-2.5 mr-1" />
-                                        Encontrada no Plano
-                                      </Badge>
-                                      <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
-                                        {item.planoContaCodigo || 'PC-???'}
-                                      </span>
-                                    </div>
-                                    <p
-                                      className="text-[11px] text-slate-700 font-medium truncate max-w-[220px]"
-                                      title={item.planoContaNome}
-                                    >
-                                      {item.planoContaNome}
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-1">
-                                    <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300 text-[10px] font-bold px-1.5 py-0">
-                                      <AlertCircle className="w-2.5 h-2.5 mr-1 text-amber-600" />
-                                      Não cadastrada
-                                    </Badge>
+                                {/* Descrição (clique seleciona a linha para vínculo no painel direito) */}
+                                <td
+                                  className="py-3 px-3 cursor-pointer"
+                                  onClick={() =>
+                                    setDespesaSelecionadaId(
+                                      despesaSelecionadaId === item.id ? null : item.id,
+                                    )
+                                  }
+                                  title="Clique para selecionar esta despesa e vincular uma conta pelo painel do Plano de Contas"
+                                >
+                                  {isEditing ? (
+                                    <Input
+                                      value={editDescricao}
+                                      onChange={(e) => setEditDescricao(e.target.value)}
+                                      className="h-7 text-xs p-1"
+                                    />
+                                  ) : (
                                     <div>
+                                      <p
+                                        className="font-semibold text-slate-900"
+                                        title={item.descricao}
+                                      >
+                                        {item.descricao}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 mt-0.5">
+                                        Origem: {item.sourceFile} · {item.pageOrRowInfo}
+                                      </p>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Categoria Sugerida */}
+                                <td className="py-3 px-3">
+                                  <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    {item.categoriaSugerida}
+                                  </span>
+                                </td>
+
+                                {/* Valor */}
+                                <td className="py-3 px-3 text-right whitespace-nowrap">
+                                  {isEditing ? (
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={editValor}
+                                      onChange={(e) =>
+                                        setEditValor(parseFloat(e.target.value) || 0)
+                                      }
+                                      className="h-7 text-xs text-right p-1 font-mono font-bold"
+                                    />
+                                  ) : (
+                                    <span className="font-bold text-slate-900 font-mono">
+                                      {formatMoeda(item.valor)}
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Status no Plano de Contas */}
+                                <td className="py-3 px-3">
+                                  {isEditing ? (
+                                    <Select value={editPlanoId} onValueChange={setEditPlanoId}>
+                                      <SelectTrigger className="h-7 text-xs bg-white">
+                                        <SelectValue placeholder="Vincular Plano de Contas" />
+                                      </SelectTrigger>
+                                      <SelectContent className="max-h-60 max-w-[360px]">
+                                        {planoContas.map((pc) => (
+                                          <SelectItem key={pc.id} value={pc.id} className="text-xs">
+                                            {pc.codigo} | {pc.expand?.conta?.nome} (
+                                            {pc.expand?.centro?.nome})
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  ) : item.isCadastrada ? (
+                                    <div className="space-y-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-300 text-[10px] font-bold px-1.5 py-0">
+                                          <Check className="w-2.5 h-2.5 mr-1" />
+                                          Encontrada no Plano
+                                        </Badge>
+                                        <span className="font-mono text-[10px] text-blue-700 font-bold bg-blue-50 px-1 py-0.2 rounded border border-blue-200">
+                                          {item.planoContaCodigo || 'PC-???'}
+                                        </span>
+                                      </div>
+                                      <p
+                                        className="text-[11px] text-slate-700 font-medium truncate max-w-[220px]"
+                                        title={item.planoContaNome}
+                                      >
+                                        {item.planoContaNome}
+                                      </p>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-300 text-[10px] font-bold px-1.5 py-0">
+                                        <AlertCircle className="w-2.5 h-2.5 mr-1 text-amber-600" />
+                                        Não cadastrada
+                                      </Badge>
+                                      <div>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => handleOpenCadastro(item)}
+                                          className="h-6 text-[10px] px-2 bg-white text-amber-800 border-amber-300 hover:bg-amber-50 font-semibold gap-1"
+                                        >
+                                          <Plus className="w-2.5 h-2.5" />
+                                          Cadastrar no Plano
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* Origem da Sugestão / Memória */}
+                                <td className="py-3 px-3">
+                                  {item.matchConfidence === 'codigo_empresa' ? (
+                                    <div className="space-y-0.5">
+                                      <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-100 text-[9px] font-bold gap-1">
+                                        <Check className="w-2.5 h-2.5 text-emerald-700" />
+                                        Código da Empresa
+                                      </Badge>
+                                      <p className="text-[10px] text-emerald-700 leading-tight">
+                                        {item.origemSugestao || 'casado por código da empresa'}
+                                      </p>
+                                    </div>
+                                  ) : item.matchConfidence === 'memoria' ? (
+                                    <div className="space-y-0.5">
+                                      <Badge className="bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-100 text-[9px] font-bold gap-1">
+                                        <History className="w-2.5 h-2.5 text-purple-700" />
+                                        Memória Recorrente
+                                      </Badge>
+                                      <p className="text-[10px] text-purple-700 leading-tight">
+                                        Baseado em importações anteriores
+                                      </p>
+                                    </div>
+                                  ) : item.matchConfidence === 'baixa' ||
+                                    item.matchConfidence === 'nenhuma' ? (
+                                    <div className="space-y-0.5">
+                                      <Badge className="bg-amber-200 text-amber-900 border-amber-400 hover:bg-amber-200 text-[9px] font-bold gap-1">
+                                        <AlertCircle className="w-2.5 h-2.5 text-amber-700" />
+                                        Confiança baixa — revisar
+                                      </Badge>
+                                      <p className="text-[10px] text-amber-800 leading-tight">
+                                        {item.origemSugestao ||
+                                          'Vínculo incerto: confirme ou ajuste manualmente'}
+                                      </p>
+                                    </div>
+                                  ) : item.origemSugestao ? (
+                                    <span className="text-[10px] text-slate-500 leading-tight block">
+                                      {item.origemSugestao}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400">
+                                      Classificação IA
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Ações */}
+                                <td className="py-3 px-3 text-right whitespace-nowrap">
+                                  {isEditing ? (
+                                    <div className="flex items-center justify-end gap-1">
                                       <Button
                                         size="sm"
-                                        variant="outline"
-                                        onClick={() => handleOpenCadastro(item)}
-                                        className="h-6 text-[10px] px-2 bg-white text-amber-800 border-amber-300 hover:bg-amber-50 font-semibold gap-1"
+                                        variant="ghost"
+                                        onClick={() => handleSaveEdit(item.id)}
+                                        className="h-7 w-7 p-0 text-emerald-600 hover:bg-emerald-50"
+                                        title="Salvar alterações"
                                       >
-                                        <Plus className="w-2.5 h-2.5" />
-                                        Cadastrar no Plano
+                                        <Check className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={handleCancelEdit}
+                                        className="h-7 w-7 p-0 text-slate-500 hover:bg-slate-100"
+                                        title="Cancelar"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
                                       </Button>
                                     </div>
-                                  </div>
-                                )}
-                              </td>
+                                  ) : (
+                                    <div className="flex items-center justify-end gap-1">
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleStartEdit(item)}
+                                        className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
+                                        title="Editar despesa"
+                                      >
+                                        <Edit2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleRemoveItem(item.id)}
+                                        className="h-7 w-7 p-0 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
+                                        title="Remover da lista"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </Button>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
 
-                              {/* Origem da Sugestão / Memória */}
-                              <td className="py-3 px-3">
-                                {item.matchConfidence === 'codigo_empresa' ? (
-                                  <div className="space-y-0.5">
-                                    <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 hover:bg-emerald-100 text-[9px] font-bold gap-1">
-                                      <Check className="w-2.5 h-2.5 text-emerald-700" />
-                                      Código da Empresa
-                                    </Badge>
-                                    <p className="text-[10px] text-emerald-700 leading-tight">
-                                      {item.origemSugestao || 'casado por código da empresa'}
-                                    </p>
-                                  </div>
-                                ) : item.matchConfidence === 'memoria' ? (
-                                  <div className="space-y-0.5">
-                                    <Badge className="bg-purple-100 text-purple-900 border-purple-300 hover:bg-purple-100 text-[9px] font-bold gap-1">
-                                      <History className="w-2.5 h-2.5 text-purple-700" />
-                                      Memória Recorrente
-                                    </Badge>
-                                    <p className="text-[10px] text-purple-700 leading-tight">
-                                      Baseado em importações anteriores
-                                    </p>
-                                  </div>
-                                ) : item.matchConfidence === 'baixa' ||
-                                  item.matchConfidence === 'nenhuma' ? (
-                                  <div className="space-y-0.5">
-                                    <Badge className="bg-amber-200 text-amber-900 border-amber-400 hover:bg-amber-200 text-[9px] font-bold gap-1">
-                                      <AlertCircle className="w-2.5 h-2.5 text-amber-700" />
-                                      Confiança baixa — revisar
-                                    </Badge>
-                                    <p className="text-[10px] text-amber-800 leading-tight">
-                                      {item.origemSugestao ||
-                                        'Vínculo incerto: confirme ou ajuste manualmente'}
-                                    </p>
-                                  </div>
-                                ) : item.origemSugestao ? (
-                                  <span className="text-[10px] text-slate-500 leading-tight block">
-                                    {item.origemSugestao}
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] text-slate-400">
-                                    Classificação IA
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Ações */}
-                              <td className="py-3 px-3 text-right whitespace-nowrap">
-                                {isEditing ? (
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleSaveEdit(item.id)}
-                                      className="h-7 w-7 p-0 text-emerald-600 hover:bg-emerald-50"
-                                      title="Salvar alterações"
-                                    >
-                                      <Check className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={handleCancelEdit}
-                                      className="h-7 w-7 p-0 text-slate-500 hover:bg-slate-100"
-                                      title="Cancelar"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <div className="flex items-center justify-end gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleStartEdit(item)}
-                                      className="h-7 w-7 p-0 text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-                                      title="Editar despesa"
-                                    >
-                                      <Edit2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleRemoveItem(item.id)}
-                                      className="h-7 w-7 p-0 text-slate-500 hover:text-rose-600 hover:bg-rose-50"
-                                      title="Remover da lista"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </div>
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-
-                      {/* Rodapé Totalizador */}
-                      <tfoot>
-                        <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
-                          <td colSpan={4} className="py-3 px-3 text-xs">
-                            Total Selecionado para Lançamento ({selecionadasCount} despesa
-                            {selecionadasCount !== 1 ? 's' : ''})
-                          </td>
-                          <td className="py-3 px-3 text-right text-xs font-mono text-emerald-700">
-                            {formatMoeda(selecionadasValor)}
-                          </td>
-                          <td colSpan={3} className="py-3 px-3 text-slate-500 text-[11px]">
-                            {memoriaCount > 0 && (
-                              <span className="text-purple-700 mr-2">
-                                🧠 {memoriaCount} lembrada(s)
-                              </span>
-                            )}
-                            {naoCadastradasCount > 0 && (
-                              <span className="text-amber-700">
-                                ⚠️ {naoCadastradasCount} pendente(s)
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      </tfoot>
-                    </table>
+                        {/* Rodapé Totalizador */}
+                        <tfoot>
+                          <tr className="border-t-2 border-slate-200 bg-slate-50 font-bold text-slate-800">
+                            <td colSpan={4} className="py-3 px-3 text-xs">
+                              Total Selecionado para Lançamento ({selecionadasCount} despesa
+                              {selecionadasCount !== 1 ? 's' : ''})
+                            </td>
+                            <td className="py-3 px-3 text-right text-xs font-mono text-emerald-700">
+                              {formatMoeda(selecionadasValor)}
+                            </td>
+                            <td colSpan={3} className="py-3 px-3 text-slate-500 text-[11px]">
+                              {memoriaCount > 0 && (
+                                <span className="text-purple-700 mr-2">
+                                  🧠 {memoriaCount} lembrada(s)
+                                </span>
+                              )}
+                              {naoCadastradasCount > 0 && (
+                                <span className="text-amber-700">
+                                  ⚠️ {naoCadastradasCount} pendente(s)
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
                   </div>
                 )}
               </CardContent>
