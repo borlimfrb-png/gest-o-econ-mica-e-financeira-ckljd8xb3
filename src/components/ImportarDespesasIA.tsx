@@ -191,7 +191,7 @@ export function ImportarDespesasIA({
 
   // Filtros na tela de revisão
   const [filtroStatus, setFiltroStatus] = useState<
-    'todos' | 'cadastradas' | 'nao_cadastradas' | 'memoria'
+    'todos' | 'cadastradas' | 'nao_cadastradas' | 'memoria' | 'baixa'
   >('todos')
   const [filtroCategoria, setFiltroCategoria] = useState<string>('todas')
   const [searchTerm, setSearchTerm] = useState('')
@@ -933,6 +933,12 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
       if (filtroStatus === 'cadastradas' && !d.isCadastrada) return false
       if (filtroStatus === 'nao_cadastradas' && d.isCadastrada) return false
       if (filtroStatus === 'memoria' && d.matchConfidence !== 'memoria') return false
+      if (
+        filtroStatus === 'baixa' &&
+        d.matchConfidence !== 'baixa' &&
+        d.matchConfidence !== 'nenhuma'
+      )
+        return false
 
       // Filtro categoria
       if (filtroCategoria !== 'todas' && d.categoriaSugerida !== filtroCategoria) return false
@@ -966,6 +972,9 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
   const cadastradasCount = despesas.filter((d) => d.isCadastrada).length
   const naoCadastradasCount = totalDespesasCount - cadastradasCount
   const memoriaCount = despesas.filter((d) => d.matchConfidence === 'memoria').length
+  const baixaConfiancaCount = despesas.filter(
+    (d) => d.matchConfidence === 'baixa' || d.matchConfidence === 'nenhuma',
+  ).length
   const selecionadasCount = despesas.filter((d) => d.selecionada).length
   const selecionadasValor = despesas
     .filter((d) => d.selecionada)
@@ -1272,6 +1281,33 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
             </div>
           )}
 
+          {/* Banner de Baixa Confiança: vínculos incertos que merecem revisão manual */}
+          {baixaConfiancaCount > 0 && (
+            <div className="p-4 bg-amber-100/70 border border-amber-300 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-amber-950">
+                    {baixaConfiancaCount} despesa(s) com vínculo de baixa confiança
+                  </p>
+                  <p className="text-[11px] text-amber-800 mt-0.5">
+                    A IA não encontrou correspondência sólida (histórico, código ou similaridade).
+                    Revise estas linhas antes de importar — elas estão destacadas em âmbar na
+                    tabela.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFiltroStatus(filtroStatus === 'baixa' ? 'todos' : 'baixa')}
+                className="h-7 text-[11px] bg-white border-amber-400 text-amber-900 hover:bg-amber-200 font-semibold shrink-0"
+              >
+                {filtroStatus === 'baixa' ? 'Mostrar Todas' : 'Filtrar Baixa Confiança'}
+              </Button>
+            </div>
+          )}
+
           {/* Banner de Ação se houver contas NÃO CADASTRADAS + Botão de Reprocessar */}
           {naoCadastradasCount > 0 && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1418,6 +1454,9 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                       </SelectItem>
                       <SelectItem value="memoria" className="text-xs text-purple-700 font-medium">
                         Memória Recorrente
+                      </SelectItem>
+                      <SelectItem value="baixa" className="text-xs text-amber-700 font-medium">
+                        Baixa Confiança
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -1568,11 +1607,15 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                         return (
                           <tr
                             key={item.id}
-                            className={`hover:bg-slate-50/80 transition-colors align-top ${
+                            className={`transition-colors align-top ${
                               !item.selecionada ? 'opacity-50 bg-slate-50/40' : ''
                             } ${!item.isCadastrada ? 'bg-amber-50/20' : ''} ${
                               item.matchConfidence === 'memoria' ? 'bg-purple-50/20' : ''
-                            }`}
+                            } ${
+                              item.matchConfidence === 'baixa' || item.matchConfidence === 'nenhuma'
+                                ? 'bg-amber-100/60 border-l-4 border-amber-400'
+                                : ''
+                            } ${item.matchConfidence === 'baixa' || item.matchConfidence === 'nenhuma' ? 'hover:bg-amber-100' : 'hover:bg-slate-50/80'}`}
                           >
                             {/* Checkbox de seleção */}
                             <td className="py-3 px-3 text-center">
@@ -1722,6 +1765,18 @@ Por favor, responda de forma objetiva, com recomendações de classificação co
                                   </Badge>
                                   <p className="text-[10px] text-purple-700 leading-tight">
                                     Baseado em importações anteriores
+                                  </p>
+                                </div>
+                              ) : item.matchConfidence === 'baixa' ||
+                                item.matchConfidence === 'nenhuma' ? (
+                                <div className="space-y-0.5">
+                                  <Badge className="bg-amber-200 text-amber-900 border-amber-400 hover:bg-amber-200 text-[9px] font-bold gap-1">
+                                    <AlertCircle className="w-2.5 h-2.5 text-amber-700" />
+                                    Confiança baixa — revisar
+                                  </Badge>
+                                  <p className="text-[10px] text-amber-800 leading-tight">
+                                    {item.origemSugestao ||
+                                      'Vínculo incerto: confirme ou ajuste manualmente'}
                                   </p>
                                 </div>
                               ) : item.origemSugestao ? (

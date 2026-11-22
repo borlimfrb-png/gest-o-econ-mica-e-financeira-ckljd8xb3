@@ -145,20 +145,13 @@ export function sugerirVinculoParaDespesa(
   planoConta?: PlanoContaRecord
   origem: 'ia' | 'memoria' | 'codigo_empresa' | 'similaridade' | 'manual'
 } {
-  // 1. Se o Agente de IA já sugeriu um ID válido existente no plano da empresa
-  if (sugestaoIaId) {
-    const pc = planoContas.find((p) => p.id === sugestaoIaId)
-    if (pc) {
-      return { planoConta: pc, origem: 'ia' }
-    }
-  }
-
   const descNorm = normalizeStr(descricao)
   if (!descNorm || planoContas.length === 0) {
     return { origem: 'manual' }
   }
 
-  // 2. Prioridade máxima: Memória de Fornecedores anteriores (vínculos confirmados)
+  // 1. PRIORIDADE MÁXIMA: Memória de Fornecedores (mapeamentos JÁ CONFIRMADOS pelo usuário
+  // em importações anteriores). O histórico real do usuário vence sobre a opinião da IA.
   for (const mem of memorias) {
     const termoNorm = normalizeStr(mem.termo_busca || mem.fornecedor_padrao || '')
     if (!termoNorm || termoNorm.length < 3) continue
@@ -173,6 +166,14 @@ export function sugerirVinculoParaDespesa(
       if (pc) {
         return { planoConta: pc, origem: 'memoria' }
       }
+    }
+  }
+
+  // 2. Sugestão do Agente de IA — só vale quando NÃO há memória confirmada para a linha
+  if (sugestaoIaId) {
+    const pc = planoContas.find((p) => p.id === sugestaoIaId)
+    if (pc) {
+      return { planoConta: pc, origem: 'ia' }
     }
   }
 
@@ -246,6 +247,28 @@ export const importacaoAssistidaIaService = {
     formData.append('empresaNome', input.empresaNome || 'Empresa')
     formData.append('periodoInicio', input.periodoInicio)
     formData.append('periodoFim', input.periodoFim || input.periodoInicio)
+
+    // Plano de contas da empresa ativa: dá ao Agente a lista viva de contas para sugerir
+    // o vínculo por linha (fonte mais confiável que a consulta tardia no banco)
+    if (input.planoContas && input.planoContas.length > 0) {
+      try {
+        formData.append(
+          'planoContas',
+          JSON.stringify(
+            input.planoContas.slice(0, 200).map((p) => ({
+              id: p.id,
+              codigo: p.codigo || '',
+              codigo_empresa: p.codigo_empresa || '',
+              nome: p.expand?.conta?.nome || '',
+              centro: p.expand?.centro?.nome || '',
+              tipo_despesa: p.expand?.tipo_despesa?.nome || '',
+            })),
+          ),
+        )
+      } catch {
+        /* plano de contas é opcional: segue sem ele */
+      }
+    }
 
     const res = await fetch(`${backendUrl}/backend/v1/agent-despesas/analisar-pdf`, {
       method: 'POST',

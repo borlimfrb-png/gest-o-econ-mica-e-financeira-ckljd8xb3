@@ -49,40 +49,4 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-/**
- * Wrapper de useRealtime com debounce (trailing) de 1,5s.
- * NUNCA remover este export: 30+ usos (Dashboard, DashboardBi, PontoEquilibrio)
- * e o build quebra com MISSING_EXPORT quando ele some.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-      }
-    }
-  }, [])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        callback(data)
-      }, 1500)
-    },
-    enabled,
-  )
-}
-
 export default useRealtime

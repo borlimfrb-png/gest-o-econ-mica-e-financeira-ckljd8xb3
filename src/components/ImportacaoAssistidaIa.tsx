@@ -1621,6 +1621,11 @@ export const ImportacaoAssistidaIa: React.FC<ImportacaoAssistidaIaProps> = ({
                                                 🧠 Aprendido
                                               </Badge>
                                             )}
+                                            {!isVinculada && item.origemSugestao !== 'manual' && (
+                                              <Badge className="bg-amber-200 text-amber-900 border-amber-400 text-[10px] px-1 py-0 h-4 font-bold">
+                                                ⚠ Revisar vínculo
+                                              </Badge>
+                                            )}
                                           </div>
                                         </div>
 

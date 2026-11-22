@@ -128,6 +128,20 @@ describe('importacaoAssistidaIaService - Vínculos e Sugestão Automática', () 
     expect(res.planoConta?.expand?.conta?.nome).toBe('Energia Elétrica')
   })
 
+  it('deve dar prioridade à Memória do usuário quando ela e a IA divergem (memória > IA)', () => {
+    // IA sugeriu pc_2 (TI), mas o histórico confirmado do fornecedor diz pc_1 (Energia)
+    const res = sugerirVinculoParaDespesa(
+      'Pagamento Enel Distribuição ref mês 03',
+      planoContasMock,
+      memoriasMock,
+      'pc_2',
+    )
+
+    expect(res.origem).toBe('memoria')
+    expect(res.planoConta?.id).toBe('pc_1')
+    expect(res.planoConta?.expand?.conta?.nome).toBe('Energia Elétrica')
+  })
+
   it('deve sugerir por similaridade com o nome da conta quando não houver memória', () => {
     const res = sugerirVinculoParaDespesa(
       'Licenças de TI e Softwares do setor',

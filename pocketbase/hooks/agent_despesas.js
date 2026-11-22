@@ -49,7 +49,7 @@ routerAdd(
           } catch (_) {}
           let tipoNome = ''
           try {
-            const t = $app.findRecordById('tipos_despesas', r.getString('tipo_despesa'))
+            const t = $app.findRecordById('tipos_despesa', r.getString('tipo_despesa'))
             tipoNome = t.getString('nome')
           } catch (_) {}
           let grupoDespesa = ''
@@ -209,7 +209,7 @@ routerAdd(
           } catch (_) {}
           let tipoNome = ''
           try {
-            const t = $app.findRecordById('tipos_despesas', r.getString('tipo_despesa'))
+            const t = $app.findRecordById('tipos_despesa', r.getString('tipo_despesa'))
             tipoNome = t.getString('nome')
           } catch (_) {}
           let grupoDespesa = ''
@@ -334,6 +334,28 @@ routerAdd(
       const periodoInicio = body.periodoInicio || ''
       const periodoFim = body.periodoFim || periodoInicio
 
+      // 0. Plano de contas enviado pelo frontend (lista viva já filtrada pela empresa ativa)
+      // Formato esperado: [{ id, codigo, codigo_empresa, nome, centro, tipo_despesa }]
+      let planoFrontend = []
+      try {
+        const rawPlano = body.planoContas
+        if (rawPlano) {
+          const arr = typeof rawPlano === 'string' ? JSON.parse(rawPlano) : rawPlano
+          if (Array.isArray(arr)) {
+            planoFrontend = arr
+              .map((p) => ({
+                id: String(p.id || ''),
+                codigo: String(p.codigo || ''),
+                codigo_empresa: String(p.codigo_empresa || ''),
+                conta_nome: String(p.nome || p.conta_nome || ''),
+                centro_nome: String(p.centro || p.centro_nome || ''),
+                tipo: String(p.tipo_despesa || p.tipo || ''),
+              }))
+              .filter((p) => p.id)
+          }
+        }
+      } catch (_) {}
+
       // 1. Extração do texto e tabelas do PDF usando $documents.toMarkdown
       let markdownText = ''
       let isDocTruncated = false
@@ -369,9 +391,12 @@ routerAdd(
         })
       }
 
-      // 2. Consulta o catálogo de contas do plano de contas da empresa para passar de contexto ao agente
+      // 2. Catálogo de contas do plano de contas: usa a lista enviada pelo frontend quando houver
+      // (fonte viva, já recarregada após cadastros), com fallback para a consulta no banco
       let planoResumo = []
-      if (empresaId) {
+      if (planoFrontend.length > 0) {
+        planoResumo = planoFrontend.slice(0, 120)
+      } else if (empresaId) {
         try {
           const safeEmpresaId = empresaId.replace(/'/g, "\\'")
           const planos = $app.findRecordsByFilter(
@@ -409,6 +434,25 @@ routerAdd(
           })
         } catch (_) {}
       }
+
+      // 2.0.1 Memória de fornecedores (mapeamentos já confirmados pelo usuário) —
+      // instruímos o agente a seguir SEMPRE a memória antes da própria opinião
+      let memoriasResumo = []
+      try {
+        const safeEmpresaIdMem = empresaId.replace(/'/g, "\\'")
+        const mems = $app.findRecordsByFilter(
+          'memoria_fornecedores_despesas',
+          `user = '${userId}' && (empresa = '${safeEmpresaIdMem}' || empresa = null || empresa = '')`,
+          '-total_utilizacoes',
+          40,
+          0,
+        )
+        memoriasResumo = mems.map((m) => ({
+          fornecedor: m.getString('fornecedor_padrao'),
+          termo: m.getString('termo_busca'),
+          plano_conta_id: m.getString('plano_conta') || '',
+        }))
+      } catch (_) {}
 
       // 2.1 Heurística de estimativa do total de despesas e páginas no documento
       const totalCaractereExtraido = markdownText.length
@@ -526,6 +570,7 @@ routerAdd(
       // Processa cada Chunk e consolida a árvore de despesas
       const resultadosPartes = []
       let isAiResponseTruncated = false
+      let ultimaRespostaAgente = ''
       let isTextTruncated = false
 
       for (let i = 0; i < chunks.length; i++) {
@@ -538,6 +583,21 @@ O usuário anexou um arquivo PDF contendo um relatório de despesas, faturas ou 
 
 PERÍODO ESCOLHIDO PELO USUÁRIO: ${periodoInicio}${periodoFim && periodoFim !== periodoInicio ? ' até ' + periodoFim : ''}
 EMPRESA ATIVA: ${empresaNome} (ID: ${empresaId || 'Geral'})
+
+MEMÓRIA DE FORNECEDORES — MAPEAMENTOS JÁ CONFIRMADOS PELO USUÁRIO EM IMPORTAÇÕES ANTERIORES
+(PRIORIDADE MÁXIMA: quando a descrição de uma linha corresponder a um destes fornecedores, use a
+conta indicada sem reavaliar — o histórico do usuário VENCE sobre a sua opinião):
+${
+  memoriasResumo.length > 0
+    ? memoriasResumo
+        .slice(0, 40)
+        .map(
+          (m) =>
+            `  * Fornecedor: "${m.fornecedor}" | termo: "${m.termo}" -> sugestao_plano_conta_id: "${m.plano_conta_id}"`,
+        )
+        .join('\n')
+    : '  (Nenhum fornecedor registrado ainda)'
+}
 
 PLANO DE CONTAS DISPONÍVEL NESTA EMPRESA (${planoResumo.length} contas cadastradas):
 ${
@@ -560,6 +620,9 @@ ${chunkContent}
 SUA TAREFA - EXTRAÇÃO HIERÁRQUICA COMPLETA DE TODAS AS LINHAS DESTA PARTE:
 ATENÇÃO: Extraia TODAS as despesas encontradas no texto acima, SEM LIMITAR nem resumir os itens. Não omita linhas com valores!
 Analise detalhadamente a estrutura do documento e organize os gastos na hierarquia CONTA → SUBCONTA → DESPESAS conforme vier no documento:
+REGRAS DE RUÍDO (NUNCA virem despesa): cabeçalhos e títulos do relatório, numeração de página ("Página 1 de 5"), rodapés, CNPJ/CPF/inscrições estaduais isolados, endereços, linhas de TOTAL/SUBTOTAL/SOMATÓRIO/TRANSPORTE/SALDO/CONTINUA/DIFERENÇA/ACUMULADO, séries de tracinhos ou pontinhos, e valores de quantidade/unidade sem cara de dinheiro (ex.: "2 un", "10 h").
+REGRAS DE DATA: normalize TODA data para "YYYY-MM-DD" (ou "YYYY-MM" quando só houver mês/ano de competência). Aceite 15/01/2025, 15-01-2025, 2025-01-15, 20250115, 15/01/25, "15 jan 2025", "janeiro/2025". Não inverta dia e mês: se houver valor maior que 12 no segundo componente, o formato é DD/MM. Se a linha não tiver data, use o período do documento informado acima.
+REGRAS DE VALOR: devolva número cru com ponto decimal (ex.: 1540.50), SEM "R$", sem separadores de milhar. "1.234,56" vira 1234.56; "1,234.56" vira 1234.56; "(1.234,56)" ou "-1.234,56" indicam despesa de 1234.56 (registre sempre POSITIVO). Nunca descarte a linha por causa da formatação do valor.
 1. "conta_principal": a grande conta agregadora macro no topo (ex.: "Despesas Administrativas", "Custos Operacionais", "Despesas Comerciais", "Despesas com Pessoal", "Despesas Financeiras").
 2. "contas": lista de contas/grupos contábeis encontrados. Cada "conta" possui:
    - "nome": nome do grupo (ex: "Despesas Administrativas", "Custos das Instalações")
@@ -574,6 +637,7 @@ Analise detalhadamente a estrutura do documento e organize os gastos na hierarqu
    - "competencia": mês/ano ou data do gasto no formato "YYYY-MM" ou "YYYY-MM-DD" (se não especificado, use "${periodoInicio.slice(0, 7) || '2025-01'}")
    - "categoria": categoria/subconta correspondente
    - "sugestao_plano_conta_id": se alguma conta da lista do plano acima casar claramente com a despesa, preencha o ID exato dela; caso contrário, use null.
+  - "confianca": "alta", "media" ou "baixa" POR LINHA. "alta" apenas quando descrição, data, valor e conta estiverem todos claros e inequívocos. "media" quando algum campo vier inferido. "baixa" quando o texto vier truncado/ambíguo/ilegível, o valor estiver duvidoso ou a conta for um chute — estas linhas serão revisadas PRIMEIRO pelo usuário.
 
 REGRAS DE RESPOSTA (OBRIGATÓRIO):
 - Retorne EXCLUSIVAMENTE um objeto JSON válido (sem tags markdown, sem blocos de texto extras).
@@ -593,7 +657,8 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
               "valor": 1250.80,
               "competencia": "YYYY-MM",
               "categoria": "Energia e Utilidades",
-              "sugestao_plano_conta_id": "id_da_conta_se_houver_ou_null"
+             "sugestao_plano_conta_id": "id_da_conta_se_houver_ou_null",
+             "confianca": "alta"
             }
           ]
         }
@@ -608,6 +673,10 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
 
         const rawReply = executarChamadaAgente(promptAgente)
         let parsed = parsearJsonComRecuperacao(rawReply)
+
+        if (rawReply) {
+          ultimaRespostaAgente = rawReply
+        }
 
         // Se falhou parse por possível resposta incompleta, tenta uma segunda vez com pedido de recuperação
         if (!parsed && rawReply.includes('"contas"')) {
@@ -731,6 +800,14 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
           conta_hierarquia: nomeConta,
           subconta_hierarquia: nomeSubconta,
           sugestao_plano_conta_id: rawItem.sugestao_plano_conta_id || null,
+          confianca:
+            ['alta', 'media', 'baixa'].indexOf(
+              String(rawItem.confianca || '')
+                .toLowerCase()
+                .trim(),
+            ) >= 0
+              ? String(rawItem.confianca).toLowerCase().trim()
+              : 'media',
         }
         return itemObj
       }
@@ -863,7 +940,7 @@ REGRAS DE RESPOSTA (OBRIGATÓRIO):
         return e.json(422, {
           error:
             'Nenhuma despesa com valor numérico positivo foi encontrada pelo Agente no PDF anexado.',
-          rawContent: agentResponseContent.slice(0, 500),
+          rawContent: (ultimaRespostaAgente || '').slice(0, 500),
         })
       }
 
