@@ -49,41 +49,4 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
-/**
- * NÃO REMOVER ESTE EXPORT — o build quebra com MISSING_EXPORT se ele sair
- * (já aconteceu 10+ vezes; ~30 telas importam useRealtimeDebounced,
- * inclusive src/pages/Dashboard.tsx). É um wrapper de useRealtime com
- * debounce trailing de 1,5s para não recarregar dados a cada evento
- * em rajada do realtime.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-) {
-  const debounceMs = 1500
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
-    }
-  }, [])
-
-  return useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
-      timerRef.current = setTimeout(() => {
-        callback(data)
-      }, debounceMs)
-    },
-    enabled,
-  )
-}
-
 export default useRealtime

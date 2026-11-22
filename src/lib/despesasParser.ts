@@ -621,7 +621,9 @@ const LINHAS_RUIDO = [
   'acumulado',
   'transporte',
   'pagina',
-  'folha',
+  // 'folha' genérico removido: descartava linhas válidas como "Folha de Pagamento"
+  'folha 1',
+  'folha do',
   'página',
   'balancete',
   'balanco',
@@ -826,7 +828,7 @@ export async function parsePdfDespesas(
       // Procura valores monetários
       const valMatches = Array.from(
         lineTrim.matchAll(
-          /(?:R\$\s*)?(?:(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}|\b\d+\.\d{2}\b|\(\s*(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}\s*\))/gi,
+          /(?:R\$\s*)?(?:(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}|\b\d+\.\d{2}\b|R\$\s*\d{1,3}(?:\.\d{3})+(?![\d,])|R\$\s*\d+(?![\d,.])|\(\s*(?:R\$\s*)?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}\s*\))/gi,
         ),
       )
 
@@ -842,6 +844,10 @@ export async function parsePdfDespesas(
         // Remove a data da descrição
         descPart = descPart.replace(dateMatch[0], ' ')
       }
+      // Fallback: valor ANTES da descrição na linha (ex: "1.250,00 - ENERGIA ELÉTRICA")
+      if (descPart.length < 3) {
+        descPart = lineTrim.slice((lastMatch.index ?? 0) + lastMatch[0].length).trim()
+      }
 
       // Limpeza da descrição
       const cleanDesc = descPart
@@ -851,7 +857,7 @@ export async function parsePdfDespesas(
         .replace(/\s+/g, ' ')
         .trim()
 
-      if (cleanDesc.length < 3 || cleanDesc.length > 150) continue
+      if (cleanDesc.length < 3 || cleanDesc.length > 400) continue
 
       // Descarta cabeçalhos, totais, saldos e outras linhas de ruído
       if (isLinhaRuido(cleanDesc)) continue
