@@ -47,7 +47,20 @@ routerAdd(
             const cc = $app.findRecordById('centros', r.getString('centro'))
             centroNome = cc.getString('nome')
           } catch (_) {}
-          return `${r.getString('codigo')} - ${contaNome} (Centro: ${centroNome})`
+          let tipoNome = ''
+          try {
+            const t = $app.findRecordById('tipos_despesas', r.getString('tipo_despesa'))
+            tipoNome = t.getString('nome')
+          } catch (_) {}
+          let grupoDespesa = ''
+          try {
+            grupoDespesa = r.getString('grupo_despesa')
+          } catch (_) {}
+          let classificacaoDre = ''
+          try {
+            classificacaoDre = r.getString('classificacao_dre')
+          } catch (_) {}
+          return `${r.getString('codigo')} - ${contaNome} | Grupo: ${grupoDespesa || tipoNome || 'n/d'} | DRE: ${classificacaoDre || 'n/d'} | Centro: ${centroNome}`
         })
       } catch (_) {}
 
@@ -84,6 +97,24 @@ ${
     .map((m) => `  * ${m}`)
     .join('\n') || '  (Nenhum fornecedor registrado ainda)'
 }
+
+[REGRAS DE EXTRAÇÃO E CLASSIFICAÇÃO DE DESPESAS]
+Você analisa trechos de documentos VARIADOS (nota fiscal, fatura de energia/água/telefonia/cartão, extrato bancário, planilha, balancete, relatório). Para cada linha de despesa extraia:
+1. descricao: nome limpo do lançamento/fornecedor. IGNORE cabeçalhos, rodapés, numeração de página, CNPJ/CPF cru, endereços e qualquer linha de TOTAL/SUBTOTAL/SALDO/TRANSPORTE/CONTINUAÇÃO/SOMATÓRIO (essas nunca viram despesa).
+2. data: normalizada em ISO (YYYY-MM-DD). Aceite e converta formatos variados: 15/01/2025, 15-01-2025, 2025-01-15, 20250115, 15/01/25, "15 jan 2025". Prefira a data de emissão/vencimento/pagamento presente no documento; se o documento só indicar mês/ano de competência, use o primeiro dia desse mês.
+3. valor: número cru com ponto decimal (ex.: 1234.56), sem "R$", sem separadores de milhar. Parênteses ou sinal negativo indicam valor negativo (registre o módulo como despesa). Ignore quantidades sem casa decimal que não sejam valores monetários.
+4. conta_sugerida: escolha UMA conta do Plano de Contas listado acima, identificada pelo SEU CÓDIGO. PRIORIDADE OBRIGATÓRIA: (a) mapeamentos aprendidos na Memória de Fornecedores — histórico já confirmado pelo usuário em importações anteriores e que VENCE sobre a sua opinião; (b) similaridade com código, nome, grupo, centro e classificação DRE do plano. Se nenhuma conta for adequada, não force: devolva conta_sugerida nula e proponha conta_nova com nome claro.
+5. confianca: "alta", "media" ou "baixa" POR LINHA. Alta apenas quando descrição, data, valor e conta estiverem todos claros e inequívocos. Baixa quando o texto vier truncado, ambíguo, ilegível ou quando o valor/conta tiverem sido inferidos — essas linhas serão revisadas primeiro pelo usuário.
+Nunca invente lançamentos. Se o trecho não contiver despesas, declare isso explicitamente.
+
+[REGRAS DE EXTRAÇÃO E CLASSIFICAÇÃO DE DESPESAS]
+Você analisa trechos de documentos VARIADOS (nota fiscal, fatura de energia/água/telefonia/cartão, extrato bancário, planilha, balancete, relatório). Para cada linha de despesa extraia:
+1. descricao: nome limpo do lançamento/fornecedor. IGNORE cabeçalhos, rodapés, numeração de página, CNPJ/CPF cru, endereços e qualquer linha de TOTAL/SUBTOTAL/SALDO/TRANSPORTE/CONTINUAÇÃO/SOMATÓRIO (essas nunca viram despesa).
+2. data: normalizada em ISO (YYYY-MM-DD). Aceite e converta formatos variados: 15/01/2025, 15-01-2025, 2025-01-15, 20250115, 15/01/25, "15 jan 2025". Prefira a data de emissão/vencimento/pagamento presente no documento; se o documento só indicar mês/ano de competência, use o primeiro dia desse mês.
+3. valor: número cru com ponto decimal (ex.: 1234.56), sem "R$", sem separadores de milhar. Parênteses ou sinal negativo indicam valor negativo (registre o módulo como despesa). Ignore quantidades sem casa decimal que não sejam valores monetários.
+4. conta_sugerida: escolha UMA conta do Plano de Contas listado acima, identificada pelo SEU CÓDIGO. PRIORIDADE OBRIGATÓRIA: (a) mapeamentos aprendidos na Memória de Fornecedores — histórico já confirmado pelo usuário em importações anteriores e que VENCE sobre a sua opinião; (b) similaridade com código, nome, grupo, centro e classificação DRE do plano. Se nenhuma conta for adequada, não force: devolva conta_sugerida nula e proponha conta_nova com nome claro.
+5. confianca: "alta", "media" ou "baixa" POR LINHA. Alta apenas quando descrição, data, valor e conta estiverem todos claros e inequívocos. Baixa quando o texto vier truncado, ambíguo, ilegível ou quando o valor/conta tiverem sido inferidos — essas linhas serão revisadas primeiro pelo usuário.
+Nunca invente lançamentos. Se o trecho não contiver despesas, declare isso explicitamente.
 
 [SOLICITAÇÃO DO USUÁRIO]:
 ${message}`
@@ -176,7 +207,20 @@ routerAdd(
             const cc = $app.findRecordById('centros', r.getString('centro'))
             centroNome = cc.getString('nome')
           } catch (_) {}
-          return `${r.getString('codigo')} - ${contaNome} (Centro: ${centroNome})`
+          let tipoNome = ''
+          try {
+            const t = $app.findRecordById('tipos_despesas', r.getString('tipo_despesa'))
+            tipoNome = t.getString('nome')
+          } catch (_) {}
+          let grupoDespesa = ''
+          try {
+            grupoDespesa = r.getString('grupo_despesa')
+          } catch (_) {}
+          let classificacaoDre = ''
+          try {
+            classificacaoDre = r.getString('classificacao_dre')
+          } catch (_) {}
+          return `${r.getString('codigo')} - ${contaNome} | Grupo: ${grupoDespesa || tipoNome || 'n/d'} | DRE: ${classificacaoDre || 'n/d'} | Centro: ${centroNome}`
         })
       } catch (_) {}
 

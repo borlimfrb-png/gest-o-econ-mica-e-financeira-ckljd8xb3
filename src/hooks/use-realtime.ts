@@ -50,38 +50,3 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 export default useRealtime
-
-/**
- * Variant with trailing debounce (1.5s) on top of useRealtime:
- * bursts of events trigger the callback only once, 1.5s after the last one.
- * NÃO REMOVER: export usado por Dashboard, DashboardBi e PontoEquilibrio.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-  delayMs: number = 1500,
-) {
-  const callbackRef = useRef(callback)
-  callbackRef.current = callback
-
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        timerRef.current = undefined
-        callbackRef.current(data)
-      }, delayMs)
-    },
-    enabled,
-  )
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [])
-}
