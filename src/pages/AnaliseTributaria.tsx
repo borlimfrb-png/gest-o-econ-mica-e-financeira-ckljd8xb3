@@ -72,6 +72,7 @@ import type {
   TipoLancamentoTributario,
 } from '@/types/finance'
 import { ShoppingCart } from 'lucide-react'
+import { SecaoComparativoRegimes } from '@/components/tributario/SecaoComparativoRegimes'
 
 export default function AnaliseTributaria() {
   const {
@@ -1016,6 +1017,16 @@ export default function AnaliseTributaria() {
               {lancamentosSaidas.length}
             </Badge>
           </TabsTrigger>
+          <TabsTrigger
+            value="simulador-regimes"
+            className="rounded-lg text-xs font-bold py-2 px-3.5 data-[state=active]:bg-white data-[state=active]:text-[#0B1F3A] data-[state=active]:shadow-xs"
+          >
+            <Scale className="w-3.5 h-3.5 mr-1.5 text-indigo-600" />
+            Simulador de Regimes
+            <Badge className="ml-1.5 text-[10px] py-0 px-1 bg-indigo-100 text-indigo-800 border-indigo-300">
+              Reforma 2026
+            </Badge>
+          </TabsTrigger>
         </TabsList>
 
         {/* ABA 1: COMPARATIVO DOS REGIMES */}
@@ -1251,6 +1262,11 @@ export default function AnaliseTributaria() {
             onExcluir={handleExcluirLancamento}
             onRecarregar={carregarLancamentos}
           />
+        </TabsContent>
+
+        {/* ABA 5: SIMULADOR DE REGIMES — comparativo de carga com créditos do CC-098 */}
+        <TabsContent value="simulador-regimes" className="space-y-6 m-0">
+          <SecaoComparativoRegimes />
         </TabsContent>
       </Tabs>
 

@@ -98,6 +98,8 @@ export interface SimuladorRegimesResultado {
   totalLancamentosCompras: number
   centroCustoEncontrado: boolean
   centroCustoNome?: string
+  centroCustoCodigo: string // código do centro de compras usado
+  observacoes: string[] // avisos do motor (centro ausente, período vazio, teto Simples...)
   regimes: {
     simples: RegimeCargaItem
     presumido: RegimeCargaItem
@@ -235,6 +237,7 @@ export function calcularSimuladorRegimes(
     codigoCentroCompras = CODIGO_CENTRO_COMPRAS,
   } = opcoes
 
+  const observacoes: string[] = []
   const folha = folhaPagamento > 0 ? folhaPagamento : receitaBruta * 0.25
   const rb = Math.max(receitaBruta, 0)
 
@@ -257,6 +260,26 @@ export function calcularSimuladorRegimes(
   //    - Lucro Presumido: regime cumulativo — sem crédito de PIS/COFINS.
   //    - Lucro Real: crédito integral de PIS (1,65%) e COFINS (7,6%) sobre as compras CC-098.
   const creditoReal = arred(compras.total * (0.0165 + 0.076))
+  if (!compras.encontrado) {
+    observacoes.push(
+      `Centro de Custo ${centroCustoCodigo} não encontrado no cadastro — créditos de compras apurados sem entradas.`,
+    )
+  } else if (compras.quantidade === 0) {
+    observacoes.push(
+      `Nenhum lançamento de entrada no Centro de Custo ${compras.nome ? `${centroCustoCodigo} - ${compras.nome}` : centroCustoCodigo} no exercício ${ano} — créditos zerados.`,
+    )
+  }
+  if (rb <= 0) {
+    observacoes.push(
+      `Receita Bruta da DRE igual a zero no exercício ${ano} — apuração dos regimes sem base de débito.`,
+    )
+  }
+  if (lucroLiquido < 0) {
+    observacoes.push(
+      'Lucro Líquido negativo no período — Lucro Real assume prejuízo fiscal (sem IRPJ/CSLL).',
+    )
+  }
+
   const itemSimples = paraRegimeCarga(simplesBruto, {
     creditoCompras: 0,
     isRegimeAtual: regimeAtualId === 'simples',
@@ -291,6 +314,11 @@ export function calcularSimuladorRegimes(
   const lista = [itemSimples, itemPresumido, itemReal]
   // Simples vedado acima do teto de R$ 4,8M
   const simplesPermitido = rb <= 4800000
+  if (!simplesPermitido) {
+    observacoes.push(
+      'Simples Nacional vedado: Receita Bruta acima do teto de R$ 4.800.000,00 — regime excluído do comparativo.',
+    )
+  }
   const candidatos = simplesPermitido ? lista : lista.filter((r) => r.id !== 'simples')
   const menor = candidatos.reduce(
     (min, r) => (r.impostoTotal < min ? r.impostoTotal : min),
@@ -392,6 +420,8 @@ export function calcularSimuladorRegimes(
     totalLancamentosCompras: compras.quantidade,
     centroCustoEncontrado: compras.encontrado,
     centroCustoNome: compras.nome,
+    centroCustoCodigo,
+    observacoes,
     regimes: { simples: itemSimples, presumido: itemPresumido, real: itemReal },
     menorRegimeId,
     economiaMaxima,
