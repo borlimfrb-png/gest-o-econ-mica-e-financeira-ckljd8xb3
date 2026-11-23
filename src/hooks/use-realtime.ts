@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -51,69 +51,36 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 
 export default useRealtime
 
+// NÃO REMOVER
 /**
- * Wrapper fino de useRealtime com debounce (trailing) das notificações.
- * Evita recarregar listas pesadas a cada evento em rajada do PocketBase.
- * Genérico em TRecord, repassado ao useRealtime.
+ * Variante com debounce (trailing 1,5s) do useRealtime: útil para telas que
+ * recarregam dados a cada evento (evita rajada de reload em imports em lote).
+ * Este hook já sumiu do working tree outras vezes e quebrou o build — mantê-lo.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
-  debounceMs: number = 1500,
   enabled: boolean = true,
+  delayMs: number = 1500,
 ) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const [pending, setPending] = useState(false)
-
-  const executar = useCallback(
-    (data: RecordSubscription<TRecord>) => {
-      setPending(false)
-      callbackRefHolder.current?.(data)
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
-
-  // Guarda o callback mais recente sem recriar a assinatura
-  const callbackRefHolder = useRef(callback)
-  callbackRefHolder.current = callback
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    if (!enabled) return
-
-    let unsubscribeFn: (() => Promise<void>) | undefined
-    let cancelled = false
-
-    pb.collection<TRecord>(collectionName)
-      .subscribe('*', (e) => {
-        setPending(true)
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        timeoutRef.current = setTimeout(() => executar(e), debounceMs)
-      })
-      .then((fn) => {
-        if (cancelled) {
-          fn().catch(() => {})
-        } else {
-          unsubscribeFn = fn
-        }
-      })
-      .catch(() => {})
-
     return () => {
-      cancelled = true
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      if (unsubscribeFn) {
-        unsubscribeFn().catch(() => {})
-      }
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [collectionName, enabled, debounceMs, executar])
+  }, [])
 
-  useEffect(
-    () => () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+  useRealtime<TRecord>(
+    collectionName,
+    (data) => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        callbackRef.current(data)
+      }, delayMs)
     },
-    [],
+    enabled,
   )
-
-  return pending
 }

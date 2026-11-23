@@ -51,6 +51,7 @@ import { BorlimLogo } from '@/components/BorlimLogo'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PainelIndicadoresHub } from '@/components/PainelIndicadoresHub'
+import { SecaoLiquidezHub } from '@/components/hub/SecaoLiquidezHub'
 import {
   Select,
   SelectContent,
@@ -943,6 +944,24 @@ export default function AnaliseEconomicaFinanceira() {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* SEÇÃO 1.1: INDICADORES DE LIQUIDEZ (do balanço da empresa/ano ativo) */}
+            {verificandoDados ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-2xl" />
+              </div>
+            ) : (
+              <SecaoLiquidezHub
+                balancosAno={balancosAno}
+                anoAtivo={anoAtivo}
+                empresaId={empresaAtivaId}
+                segmento={selectedEmpresa?.segmento ?? null}
+                isCliente={isCliente}
+              />
             )}
           </div>
 
