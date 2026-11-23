@@ -154,6 +154,7 @@ function arred(v: number): number {
 function somarComprasCentroCusto(opcoes: {
   ano: number
   lancamentos: LancamentoRecord[]
+  contas?: ContaRecord[]
   planoContas: PlanoContaRecord[]
   centros: Array<{ id: string; codigo?: string; nome?: string }>
   codigoCentro: string
@@ -167,11 +168,24 @@ function somarComprasCentroCusto(opcoes: {
     return cod === codigoAlvo || cod.includes(codigoAlvo)
   })
   const idsAlvo = new Set(centrosAlvo.map((c) => c.id))
+  let nomeCentro: string | undefined = centrosAlvo[0]?.nome
+
+  // Mapa id -> código do centro: permite casar plano_contas.centro mesmo quando
+  // os registros do plano de contas vêm SEM expand (sem expand.centro populado).
+  const codigoCentroPorId = new Map<string, string>()
+  for (const c of opcoes.centros) {
+    codigoCentroPorId.set(c.id, (c.codigo || '').trim().toUpperCase())
+  }
 
   const planoMap = new Map<string, PlanoContaRecord>()
   for (const p of opcoes.planoContas) {
     planoMap.set(p.id, p)
-    if (p.centro && (p.expand?.centro as any)?.codigo?.trim().toUpperCase() === codigoAlvo) {
+    const codigoCentroPlano =
+      (p.expand?.centro as any)?.codigo?.trim().toUpperCase() ||
+      (p.centro ? codigoCentroPorId.get(p.centro) : undefined) ||
+      ''
+    if (p.centro && codigoCentroPlano.includes(codigoAlvo)) {
+      if (!nomeCentro) nomeCentro = (p.expand?.centro as any)?.nome
       idsAlvo.add(p.centro)
     }
   }
@@ -187,11 +201,39 @@ function somarComprasCentroCusto(opcoes: {
     }
   }
 
+  // Fallback: agrega pelas CONTAS da DRE Gerencial (mesma resolução de centro
+  // usada pela tela DRE Gerencial, via calcularDreGerencialMatriz) — cobre
+  // lançamentos sem plano_conta que apontam direto para a conta, e contas cujo
+  // vínculo de centro está registrado no plano de contas.
+  if (total === 0) {
+    const matriz = calcularDreGerencialMatriz(
+      opcoes.lancamentos,
+      opcoes.contas || [],
+      meses,
+      opcoes.planoContas,
+    )
+    let totalFallback = 0
+    for (const grupo of matriz.grupos) {
+      for (const conta of grupo.contas) {
+        const codigoConta = (conta.centroCodigo || '').trim().toUpperCase()
+        const pertence =
+          Boolean(conta.centroId && idsAlvo.has(conta.centroId)) ||
+          (codigoConta !== '' && codigoConta.includes(codigoAlvo))
+        if (pertence) {
+          totalFallback += Number(conta.totalPeriodo) || 0
+        }
+      }
+    }
+    if (totalFallback > 0) {
+      total = totalFallback
+    }
+  }
+
   return {
     total: arred(total),
     quantidade,
-    encontrado: centrosAlvo.length > 0,
-    nome: centrosAlvo[0]?.nome,
+    encontrado: idsAlvo.size > 0,
+    nome: nomeCentro,
   }
 }
 
@@ -261,6 +303,7 @@ export function calcularSimuladorRegimes(
   const compras = somarComprasCentroCusto({
     ano,
     lancamentos,
+    contas,
     planoContas,
     centros,
     codigoCentro: codigoCentroCompras,
