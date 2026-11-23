@@ -8,7 +8,13 @@ import {
   type AnaliseTributariaResultado,
   type RegimeResultado,
 } from '@/lib/taxCalculations'
-import { formatCurrency, formatPercent, formatCnpj, calcularDre } from '@/lib/financeCalculations'
+import {
+  formatCurrency,
+  formatPercent,
+  formatCnpj,
+  calcularDre,
+  consolidarDreAnual,
+} from '@/lib/financeCalculations'
 import { useRealtime } from '@/hooks/use-realtime'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -176,9 +182,11 @@ export default function AnaliseTributaria() {
     if (selectedEmpresaId) carregarLancamentos()
   })
 
-  // DRE e Balanço do ano selecionado (Atual)
+  // DRE do ano selecionado (Atual) — consolidada: a coleção `dre` é mensal
+  // (12 registros/ano), e o sort -ano,-mes fazia o find() pegar o mês 12,
+  // que vem zerado em anos em andamento (ex.: 2026) — origem dos "tudo zerado".
   const dreAtual = useMemo(() => {
-    return dres.find((d) => d.ano === selectedAno) || null
+    return consolidarDreAnual(dres, selectedAno)
   }, [dres, selectedAno])
 
   const dreCalculadoAtual = useMemo(() => {
@@ -189,9 +197,9 @@ export default function AnaliseTributaria() {
   const lucroLiquidoAtual = dreCalculadoAtual.lucroLiquido || 0
   const folhaEstimadaAtual = receitaBrutaAtual * (folhaPercentual / 100)
 
-  // DRE e Balanço do ano anterior (Comparativo)
+  // DRE do ano anterior (Comparativo) — mesma consolidação anual
   const dreAnterior = useMemo(() => {
-    return dres.find((d) => d.ano === anoAnterior) || null
+    return consolidarDreAnual(dres, anoAnterior)
   }, [dres, anoAnterior])
 
   const dreCalculadoAnterior = useMemo(() => {
@@ -599,7 +607,7 @@ export default function AnaliseTributaria() {
                     : 'text-slate-800'
                 }`}
               >
-                {temDadosAno ? formatPercent(regime.aliquotaEfetiva, 2) : '0,00%'}
+                {temDadosAno ? formatPercent(regime.aliquotaEfetiva, 2) : '—'}
               </span>
               {isRec && (
                 <Badge
@@ -630,12 +638,12 @@ export default function AnaliseTributaria() {
                   : 'text-[#0B1F3A]'
               }`}
             >
-              {temDadosAno ? formatCurrency(regime.impostoTotal) : 'R$ 0,00'}
+              {temDadosAno ? formatCurrency(regime.impostoTotal) : '—'}
             </div>
             <div className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
               <span>Mensal Estimado:</span>
               <span className="font-semibold text-slate-700">
-                {temDadosAno ? formatCurrency(regime.impostoTotal / 12) : 'R$ 0,00'}
+                {temDadosAno ? formatCurrency(regime.impostoTotal / 12) : '—'}
               </span>
             </div>
           </div>
@@ -701,10 +709,10 @@ export default function AnaliseTributaria() {
                   </div>
                   <div className="text-right">
                     <span className="font-semibold text-slate-900 block">
-                      {temDadosAno ? formatCurrency(item.valor) : 'R$ 0,00'}
+                      {temDadosAno ? formatCurrency(item.valor) : '—'}
                     </span>
                     <span className="text-[10px] text-slate-400">
-                      {temDadosAno ? formatPercent(item.aliquotaNominal, 2) : '0%'}
+                      {temDadosAno ? formatPercent(item.aliquotaNominal, 2) : '—'}
                     </span>
                   </div>
                 </div>
@@ -726,7 +734,7 @@ export default function AnaliseTributaria() {
               ):
             </span>
             <span className="font-semibold text-slate-700">
-              {temDadosAno ? formatCurrency(regime.baseCalculoPrincipal) : 'R$ 0,00'}
+              {temDadosAno ? formatCurrency(regime.baseCalculoPrincipal) : '—'}
             </span>
           </div>
           {regime.detalhesCalculo.faixaSimples && (
@@ -924,7 +932,7 @@ export default function AnaliseTributaria() {
             <Sparkles className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-xl font-extrabold text-emerald-700">
-            {temDadosAno ? formatCurrency(analiseReal.economiaMaximaAnual) : 'R$ 0,00'}
+            {temDadosAno ? formatCurrency(analiseReal.economiaMaximaAnual) : '—'}
           </div>
           <div className="text-[11px] text-emerald-700 mt-1">
             {temDadosAno && analiseReal.regimeRecomendado

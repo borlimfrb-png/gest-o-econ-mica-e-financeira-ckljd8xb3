@@ -262,11 +262,11 @@ export function calcularSimuladorRegimes(
   const creditoReal = arred(compras.total * (0.0165 + 0.076))
   if (!compras.encontrado) {
     observacoes.push(
-      `Centro de Custo ${centroCustoCodigo} não encontrado no cadastro — créditos de compras apurados sem entradas.`,
+      `Centro de Custo ${codigoCentroCompras} não encontrado no cadastro — créditos de compras apurados sem entradas.`,
     )
   } else if (compras.quantidade === 0) {
     observacoes.push(
-      `Nenhum lançamento de entrada no Centro de Custo ${compras.nome ? `${centroCustoCodigo} - ${compras.nome}` : centroCustoCodigo} no exercício ${ano} — créditos zerados.`,
+      `Nenhum lançamento de entrada no Centro de Custo ${compras.nome ? `${codigoCentroCompras} - ${compras.nome}` : codigoCentroCompras} no exercício ${ano} — créditos zerados.`,
     )
   }
   if (rb <= 0) {
@@ -420,7 +420,7 @@ export function calcularSimuladorRegimes(
     totalLancamentosCompras: compras.quantidade,
     centroCustoEncontrado: compras.encontrado,
     centroCustoNome: compras.nome,
-    centroCustoCodigo,
+    centroCustoCodigo: codigoCentroCompras,
     observacoes,
     regimes: { simples: itemSimples, presumido: itemPresumido, real: itemReal },
     menorRegimeId,

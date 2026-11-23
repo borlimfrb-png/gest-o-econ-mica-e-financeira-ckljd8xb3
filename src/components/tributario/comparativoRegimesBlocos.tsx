@@ -312,7 +312,7 @@ export function GraficoCargaRegimes({ resultado }: { resultado: SimuladorRegimes
                     tickLine={false}
                   />
                   <RechartsTooltip
-                    content={({ active, payload }: { active?: boolean; payload?: any[] }) => {
+                    content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const d = payload[0].payload
                         return (

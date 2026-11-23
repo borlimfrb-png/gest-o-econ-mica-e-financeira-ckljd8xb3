@@ -50,10 +50,10 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Versão com DEBOUNCE de useRealtime: agrupa rajadas de eventos de realtime
- * (importações em lote, uploads) numa única recarga, com debounce "trailing"
- * de 1,5s após o último evento. Wrapper fino — chama useRealtime no topo.
- * Genérico sobre o tipo do registro, igual ao useRealtime.
+ * Versão com debounce (trailing 1,5s) do useRealtime — agrupa rajadas de
+ * eventos de realtime (imports em lote, múltiplos updates) em um único
+ * recarregamento. Contrato usado por Dashboard.tsx, DashboardBi.tsx e
+ * PontoEquilibrio.tsx.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
@@ -61,27 +61,21 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   enabled: boolean = true,
   delayMs: number = 1500,
 ) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
 
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
   }, [])
 
   useRealtime<TRecord>(
     collectionName,
     (data) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
-      timeoutRef.current = setTimeout(() => {
-        timeoutRef.current = null
-        callback(data)
-      }, delayMs)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => callbackRef.current(data), delayMs)
     },
     enabled,
   )
