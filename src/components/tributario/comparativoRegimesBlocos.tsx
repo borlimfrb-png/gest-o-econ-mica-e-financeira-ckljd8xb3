@@ -100,7 +100,7 @@ export function CardsRegimes({ resultado }: { resultado: SimuladorRegimesResulta
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Crédito s/ compras:</span>
+                  <span className="text-slate-500">Créditos s/ compras:</span>
                   <span className="font-semibold text-emerald-700">
                     {resultado.temDados
                       ? r.creditoCompras > 0
@@ -109,6 +109,20 @@ export function CardsRegimes({ resultado }: { resultado: SimuladorRegimesResulta
                       : '—'}
                   </span>
                 </div>
+                {r.creditos && resultado.temDados && r.creditoCompras > 0 && (
+                  <div className="flex justify-between text-[10px] text-slate-500">
+                    <span className="pl-2">
+                      PIS/COFINS · ICMS {resultado.aliquotaIcms.toFixed(0)}% · IPI{' '}
+                      {resultado.aliquotaIpi.toFixed(0)}%
+                    </span>
+                    <span className="font-medium text-slate-600">
+                      {[r.creditos.pis + r.creditos.cofins, r.creditos.icms, r.creditos.ipi]
+                        .filter((v) => v > 0)
+                        .map((v) => formatBrl(v))
+                        .join(' + ') || '—'}
+                    </span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Diferença vs menor:</span>
                   <span
@@ -166,8 +180,9 @@ export function MatrizComparativa({ resultado }: { resultado: SimuladorRegimesRe
           Matriz Comparativa dos Regimes — Exercício {ano}
         </CardTitle>
         <CardDescription className="text-xs text-slate-500 mt-0.5">
-          Débitos sobre a receita da DRE e créditos sobre as compras do{' '}
-          {resultado.centroCustoCodigo}
+          Débitos sobre a receita da DRE e créditos (PIS/COFINS, ICMS{' '}
+          {resultado.aliquotaIcms.toFixed(0)}% e IPI {resultado.aliquotaIpi.toFixed(0)}%) sobre as
+          compras do {resultado.centroCustoCodigo} — Matéria Prima
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0">

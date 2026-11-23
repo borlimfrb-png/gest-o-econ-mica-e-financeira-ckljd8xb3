@@ -23,6 +23,10 @@ import {
 // Centro de custo das entradas de compras (Matéria Prima) — fonte dos créditos
 export const CODIGO_CENTRO_COMPRAS = 'CC-098'
 
+// Alíquotas estaduais/federais configuráveis (em %) — padrões editáveis na tela
+export const ALIQUOTA_ICMS_PADRAO = 18
+export const ALIQUOTA_IPI_PADRAO = 10
+
 // Alíquotas de referência da Reforma Tributária (em %)
 export const ALIQUOTA_CBS_PADRAO = 8.8
 export const ALIQUOTA_IBS_PADRAO = 17.68
@@ -70,6 +74,12 @@ export interface RegimeCargaItem {
   diferencaPercentual: number // %
   breakdown: RegimeResultado['breakdown']
   faixaSimples?: string
+  creditos?: {
+    pis: number // R$ crédito de PIS (1,65% s/ compras)
+    cofins: number // R$ crédito de COFINS (7,6% s/ compras)
+    icms: number // R$ crédito de ICMS (alíquota estadual s/ compras)
+    ipi: number // R$ crédito de IPI (alíquota configurada s/ compras)
+  }
 }
 
 export interface CenarioReformaItem {
@@ -94,6 +104,8 @@ export interface SimuladorRegimesResultado {
   lucroLiquido: number
   folhaPagamento: number
   aliquotaIss: number
+  aliquotaIcms: number // % ICMS estadual usado no crédito
+  aliquotaIpi: number // % IPI usado no crédito
   comprasEntradas: number // R$ total das entradas CC-098 no período
   totalLancamentosCompras: number
   centroCustoEncontrado: boolean
@@ -126,6 +138,8 @@ export interface OpcoesSimuladorRegimes {
   planoContas?: PlanoContaRecord[]
   centros?: Array<{ id: string; codigo?: string; nome?: string }>
   codigoCentroCompras?: string
+  aliquotaIcmsPercent?: number // % ICMS estadual (padrão 18) — crédito sobre compras
+  aliquotaIpiPercent?: number // % IPI (padrão 10) — crédito sobre compras
 }
 
 function arred(v: number): number {
@@ -230,6 +244,8 @@ export function calcularSimuladorRegimes(
     regimeAtualId,
     anoTransicao = 2026,
     aliquotaReferenciaPercent = ALIQUOTA_REFERENCIA_PADRAO,
+    aliquotaIcmsPercent = ALIQUOTA_ICMS_PADRAO,
+    aliquotaIpiPercent = ALIQUOTA_IPI_PADRAO,
     lancamentos,
     contas,
     planoContas = [],
@@ -255,11 +271,17 @@ export function calcularSimuladorRegimes(
   const presumido = calcularLucroPresumido(rb, folha, aliquotaIssPercent)
   const realBruto = calcularLucroReal(rb, lucroLiquido, folha, aliquotaIssPercent)
 
-  // 3. Créditos sobre compras:
+  // 3. Créditos sobre as compras (CC-098 Matéria Prima):
   //    - Simples Nacional: nenhum crédito (DAS unificado) — compras servem só de rastreio.
-  //    - Lucro Presumido: regime cumulativo — sem crédito de PIS/COFINS.
-  //    - Lucro Real: crédito integral de PIS (1,65%) e COFINS (7,6%) sobre as compras CC-098.
-  const creditoReal = arred(compras.total * (0.0165 + 0.076))
+  //    - Lucro Presumido: regime cumulativo — sem crédito de PIS/COFINS; ICMS e IPI
+  //      geram crédito integral (destaque na nota de entrada).
+  //    - Lucro Real: crédito integral de PIS (1,65%), COFINS (7,6%), ICMS (alíquota
+  //      estadual configurada) e IPI (alíquota configurada) sobre as compras.
+  const aliqIcms = Math.max(Number(aliquotaIcmsPercent) || 0, 0)
+  const aliqIpi = Math.max(Number(aliquotaIpiPercent) || 0, 0)
+  const creditoIcmsCompra = arred(compras.total * (aliqIcms / 100))
+  const creditoIpiCompra = arred(compras.total * (aliqIpi / 100))
+  const creditoReal = arred(compras.total * (0.0165 + 0.076) + creditoIcmsCompra + creditoIpiCompra)
   if (!compras.encontrado) {
     observacoes.push(
       `Centro de Custo ${codigoCentroCompras} não encontrado no cadastro — créditos de compras apurados sem entradas.`,
@@ -286,7 +308,7 @@ export function calcularSimuladorRegimes(
     menor: Number.POSITIVE_INFINITY,
   })
   const itemPresumido = paraRegimeCarga(presumido, {
-    creditoCompras: 0,
+    creditoCompras: arred(creditoIcmsCompra + creditoIpiCompra),
     isRegimeAtual: regimeAtualId === 'presumido',
     menor: Number.POSITIVE_INFINITY,
   })
@@ -296,7 +318,43 @@ export function calcularSimuladorRegimes(
     menor: Number.POSITIVE_INFINITY,
   })
 
-  // 4. Detalha os créditos de PIS/COFINS no breakdown do Lucro Real
+  // Detalhamento dos créditos por tributo em cada regime (UI + exportação)
+  itemSimples.creditos = { pis: 0, cofins: 0, icms: 0, ipi: 0 }
+  itemPresumido.creditos = { pis: 0, cofins: 0, icms: creditoIcmsCompra, ipi: creditoIpiCompra }
+  itemReal.creditos = {
+    pis: arred(compras.total * 0.0165),
+    cofins: arred(compras.total * 0.076),
+    icms: creditoIcmsCompra,
+    ipi: creditoIpiCompra,
+  }
+
+  // 4. Detalha os créditos no breakdown de Presumido e Real
+  if (creditoIcmsCompra > 0) {
+    itemPresumido.breakdown = [
+      ...itemPresumido.breakdown,
+      {
+        nome: 'Crédito de ICMS s/ Compras (Matéria Prima)',
+        sigla: 'Créd. ICMS',
+        baseCalculo: compras.total,
+        aliquotaNominal: aliqIcms,
+        valor: -creditoIcmsCompra,
+        descricao: `Crédito integral do ICMS estadual (${aliqIcms.toFixed(2).replace('.', ',')}%) sobre as entradas do Centro de Custo ${codigoCentroCompras}`,
+      },
+    ]
+  }
+  if (creditoIpiCompra > 0) {
+    itemPresumido.breakdown = [
+      ...itemPresumido.breakdown,
+      {
+        nome: 'Crédito de IPI s/ Compras (Matéria Prima)',
+        sigla: 'Créd. IPI',
+        baseCalculo: compras.total,
+        aliquotaNominal: aliqIpi,
+        valor: -creditoIpiCompra,
+        descricao: `Crédito do IPI (${aliqIpi.toFixed(2).replace('.', ',')}%) sobre as entradas do Centro de Custo ${codigoCentroCompras}`,
+      },
+    ]
+  }
   if (creditoReal > 0) {
     itemReal.breakdown = [
       ...itemReal.breakdown,
@@ -304,9 +362,32 @@ export function calcularSimuladorRegimes(
         nome: 'Crédito PIS/COFINS s/ Compras (Matéria Prima)',
         sigla: 'Créd. PIS/COFINS',
         baseCalculo: compras.total,
-        aliquotaNominal: compras.total > 0 ? arred((creditoReal / compras.total) * 100) : 0,
-        valor: -creditoReal,
-        descricao: `Crédito não-cumulativo sobre entradas do Centro de Custo ${codigoCentroCompras} (1,65% + 7,6%)`,
+        aliquotaNominal:
+          compras.total > 0 ? arred((0.0925 * compras.total * 100) / compras.total) : 0,
+        valor: -arred(compras.total * 0.0925),
+        descricao: `Crédito não-cumulativo sobre entradas do Centro de Custo ${codigoCentroCompras} (PIS 1,65% + COFINS 7,6%)`,
+      },
+    ]
+    itemReal.breakdown = [
+      ...itemReal.breakdown,
+      {
+        nome: 'Crédito de ICMS s/ Compras (Matéria Prima)',
+        sigla: 'Créd. ICMS',
+        baseCalculo: compras.total,
+        aliquotaNominal: aliqIcms,
+        valor: -creditoIcmsCompra,
+        descricao: `Crédito integral do ICMS estadual (${aliqIcms.toFixed(2).replace('.', ',')}%) sobre as entradas do Centro de Custo ${codigoCentroCompras}`,
+      },
+    ]
+    itemReal.breakdown = [
+      ...itemReal.breakdown,
+      {
+        nome: 'Crédito de IPI s/ Compras (Matéria Prima)',
+        sigla: 'Créd. IPI',
+        baseCalculo: compras.total,
+        aliquotaNominal: aliqIpi,
+        valor: -creditoIpiCompra,
+        descricao: `Crédito do IPI (${aliqIpi.toFixed(2).replace('.', ',')}%) sobre as entradas do Centro de Custo ${codigoCentroCompras}`,
       },
     ]
   }
@@ -416,6 +497,8 @@ export function calcularSimuladorRegimes(
     lucroLiquido,
     folhaPagamento: folha,
     aliquotaIss: aliquotaIssPercent,
+    aliquotaIcms: aliqIcms,
+    aliquotaIpi: aliqIpi,
     comprasEntradas: compras.total,
     totalLancamentosCompras: compras.quantidade,
     centroCustoEncontrado: compras.encontrado,

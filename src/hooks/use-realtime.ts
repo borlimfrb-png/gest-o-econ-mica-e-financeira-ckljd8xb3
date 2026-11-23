@@ -49,36 +49,51 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
+export default useRealtime
+
 /**
- * Versão com debounce (trailing 1,5s) do useRealtime — agrupa rajadas de
- * eventos de realtime (imports em lote, múltiplos updates) em um único
- * recarregamento. Contrato usado por Dashboard.tsx, DashboardBi.tsx e
- * PontoEquilibrio.tsx.
+ * Versão com debounce (trailing) de useRealtime — evita recarregar os dados
+ * várias vezes seguidas quando vários registros mudam no mesmo instante.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
+  callback: () => void,
   enabled: boolean = true,
   delayMs: number = 1500,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const callbackRef = useRef(callback)
-  callbackRef.current = callback
+  const cbRef = useRef(callback)
+  cbRef.current = callback
 
   useEffect(() => {
+    if (!enabled) return
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let unsubscribeFn: (() => Promise<void>) | undefined
+    let cancelled = false
+
+    pb.collection<TRecord>(collectionName)
+      .subscribe('*', () => {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          timer = undefined
+          if (!cancelled) cbRef.current()
+        }, delayMs)
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn().catch(() => {})
+        } else {
+          unsubscribeFn = fn
+        }
+      })
+      .catch(() => {})
+
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      if (unsubscribeFn) {
+        unsubscribeFn().catch(() => {})
+      }
     }
-  }, [])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => callbackRef.current(data), delayMs)
-    },
-    enabled,
-  )
+  }, [collectionName, enabled, delayMs])
 }
-
-export default useRealtime

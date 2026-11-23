@@ -47,7 +47,10 @@ import {
   calcularSimuladorRegimes,
   resolverRegimeAtualId,
   FASES_TRANSICAO,
+  ALIQUOTA_ICMS_PADRAO,
+  ALIQUOTA_IPI_PADRAO,
 } from '@/lib/simuladorRegimesCalculo'
+import { AliquotasEstaduaisCard } from './AliquotasEstaduaisCard'
 import {
   exportarSimuladorRegimesExcel,
   exportarSimuladorRegimesCsv,
@@ -84,6 +87,9 @@ export function SecaoComparativoRegimes() {
   const [anoTransicao, setAnoTransicao] = useState<number>(
     Math.max(selectedAno, FASES_TRANSICAO[0].ano),
   )
+  // Alíquotas estaduais/federais configuráveis (ICMS / IPI), editáveis na tela
+  const [aliquotaIcms, setAliquotaIcms] = useState<number>(ALIQUOTA_ICMS_PADRAO)
+  const [aliquotaIpi, setAliquotaIpi] = useState<number>(ALIQUOTA_IPI_PADRAO)
 
   // Carregar dados no padrão de ReformaTributaria.tsx (empresa ativa ou grupo)
   const carregarDados = async () => {
@@ -172,6 +178,8 @@ export function SecaoComparativoRegimes() {
       lucroLiquido: baseDre.lucro,
       regimeAtualId,
       anoTransicao,
+      aliquotaIcmsPercent: aliquotaIcms,
+      aliquotaIpiPercent: aliquotaIpi,
       lancamentos,
       contas,
       planoContas,
@@ -183,6 +191,8 @@ export function SecaoComparativoRegimes() {
     baseDre.lucro,
     regimeAtualId,
     anoTransicao,
+    aliquotaIcms,
+    aliquotaIpi,
     lancamentos,
     contas,
     planoContas,
@@ -404,6 +414,15 @@ export function SecaoComparativoRegimes() {
           </ul>
         </div>
       )}
+
+      {/* Alíquotas estaduais (ICMS) e IPI — editáveis, alimentam os créditos */}
+      <AliquotasEstaduaisCard
+        resultado={resultado}
+        aliquotaIcms={aliquotaIcms}
+        aliquotaIpi={aliquotaIpi}
+        onChangeAliquotaIcms={setAliquotaIcms}
+        onChangeAliquotaIpi={setAliquotaIpi}
+      />
 
       {/* Cards por regime com badge "Menor carga" */}
       <CardsRegimes resultado={resultado} />

@@ -45,6 +45,9 @@ export function exportarSimuladorRegimesExcel(
     `Centro de Custo de Entradas (Créditos): ${resultado.centroCustoCodigo}${resultado.centroCustoNome ? ` - ${resultado.centroCustoNome}` : ''}`,
   )
   linha(`Compras (Entradas) no Período: R$ ${fmtBrl(resultado.comprasEntradas)}`)
+  linha(
+    `Alíquotas Configuradas: ICMS ${fmtPct(resultado.aliquotaIcms)}% (estadual) · IPI ${fmtPct(resultado.aliquotaIpi)}% · PIS 1,65% · COFINS 7,6%`,
+  )
   linha(`Receita Bruta (DRE): R$ ${fmtBrl(resultado.receitaBruta)}`)
   linha(`Lucro Líquido (DRE): R$ ${fmtBrl(resultado.lucroLiquido)}`)
   linha(
@@ -57,7 +60,7 @@ export function exportarSimuladorRegimesExcel(
     'Regime',
     'Base de Cálculo Principal (R$)',
     'Imposto Bruto (R$)',
-    'Crédito s/ Compras CC-098 (R$)',
+    'Créditos s/ Compras CC-098 (R$)',
     'Carga Tributária Final (R$)',
     '% da Receita',
     'Situação',
@@ -77,6 +80,29 @@ export function exportarSimuladorRegimesExcel(
       reg.isMenorCarga ? 'MENOR CARGA' : `+${fmtPct(reg.diferencaPercentual)}% vs menor`,
     )
   }
+  linha('')
+
+  linha('CRÉDITOS SOBRE AS COMPRAS (CC-098) POR TRIBUTO')
+  linha('Regime', 'PIS 1,65% (R$)', 'COFINS 7,6% (R$)', 'ICMS (R$)', 'IPI (R$)', 'Total (R$)', '')
+  for (const reg of [
+    resultado.regimes.simples,
+    resultado.regimes.presumido,
+    resultado.regimes.real,
+  ]) {
+    const cr = reg.creditos
+    const totalReg = cr ? cr.pis + cr.cofins + cr.icms + cr.ipi : 0
+    linha(
+      reg.nome,
+      cr && cr.pis > 0 ? fmtBrl(cr.pis) : '—',
+      cr && cr.cofins > 0 ? fmtBrl(cr.cofins) : '—',
+      cr && cr.icms > 0 ? `${fmtBrl(cr.icms)} (${fmtPct(resultado.aliquotaIcms)}%)` : '—',
+      cr && cr.ipi > 0 ? `${fmtBrl(cr.ipi)} (${fmtPct(resultado.aliquotaIpi)}%)` : '—',
+      totalReg > 0 ? fmtBrl(totalReg) : '—',
+    )
+  }
+  linha(
+    `Base de compras: DRE Gerencial do Centro de Custo CC-098 (Matéria Prima) — R$ ${fmtBrl(resultado.comprasEntradas)} no exercício ${resultado.ano}`,
+  )
   linha('')
   linha(
     `Regime com MENOR carga: ${resultado.regimes[resultado.menorRegimeId].nome} (R$ ${fmtBrl(resultado.regimes[resultado.menorRegimeId].impostoTotal)})`,
@@ -173,13 +199,16 @@ export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado
     `Centro de Custo de Entradas (Créditos);${resultado.centroCustoCodigo}${resultado.centroCustoNome ? ` - ${resultado.centroCustoNome}` : ''}`,
   )
   lines.push(`Compras (Entradas) no Período;R$ ${dec(resultado.comprasEntradas)}`)
+  lines.push(
+    `Alíquotas Configuradas;ICMS ${fmtPct(resultado.aliquotaIcms)}% (estadual);IPI ${fmtPct(resultado.aliquotaIpi)}%;PIS 1,65%;COFINS 7,6%`,
+  )
   lines.push(`Receita Bruta (DRE);R$ ${dec(resultado.receitaBruta)}`)
   lines.push(`Lucro Líquido (DRE);R$ ${dec(resultado.lucroLiquido)}`)
   lines.push('')
 
   lines.push('RESUMO COMPARATIVO DOS REGIMES')
   lines.push(
-    'Regime;Base de Cálculo Principal (R$);Imposto Bruto (R$);Crédito s/ Compras CC-098 (R$);Carga Tributária Final (R$);% da Receita;Situação',
+    'Regime;Base de Cálculo Principal (R$);Imposto Bruto (R$);Créditos s/ Compras CC-098 (R$);Carga Tributária Final (R$);% da Receita;Situação',
   )
   for (const reg of [
     resultado.regimes.simples,
@@ -198,6 +227,31 @@ export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado
       ].join(sep),
     )
   }
+  lines.push('')
+
+  lines.push('CRÉDITOS SOBRE AS COMPRAS (CC-098) POR TRIBUTO')
+  lines.push('Regime;PIS 1,65% (R$);COFINS 7,6% (R$);ICMS (R$);IPI (R$);Total (R$)')
+  for (const reg of [
+    resultado.regimes.simples,
+    resultado.regimes.presumido,
+    resultado.regimes.real,
+  ]) {
+    const cr = reg.creditos
+    const totalReg = cr ? cr.pis + cr.cofins + cr.icms + cr.ipi : 0
+    lines.push(
+      [
+        reg.nome,
+        cr && cr.pis > 0 ? dec(cr.pis) : '-',
+        cr && cr.cofins > 0 ? dec(cr.cofins) : '-',
+        cr && cr.icms > 0 ? `${dec(cr.icms)} (${fmtPct(resultado.aliquotaIcms)}%)` : '-',
+        cr && cr.ipi > 0 ? `${dec(cr.ipi)} (${fmtPct(resultado.aliquotaIpi)}%)` : '-',
+        totalReg > 0 ? dec(totalReg) : '-',
+      ].join(sep),
+    )
+  }
+  lines.push(
+    `Base de compras;DRE Gerencial do Centro de Custo CC-098 (Matéria Prima);R$ ${dec(resultado.comprasEntradas)} no exercício ${resultado.ano}`,
+  )
   lines.push('')
   lines.push(
     `Regime com MENOR carga;${resultado.regimes[resultado.menorRegimeId].nome};R$ ${dec(resultado.regimes[resultado.menorRegimeId].impostoTotal)}`,
