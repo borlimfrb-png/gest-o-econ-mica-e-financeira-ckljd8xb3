@@ -52,6 +52,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { PainelIndicadoresHub } from '@/components/PainelIndicadoresHub'
 import { SecaoLiquidezHub } from '@/components/hub/SecaoLiquidezHub'
+import { SecaoRentabilidadeHub } from '@/components/hub/SecaoRentabilidadeHub'
 import {
   Select,
   SelectContent,
@@ -209,7 +210,7 @@ export default function AnaliseEconomicaFinanceira() {
   }, [empresaAtivaId, anoAtivo, isCliente])
 
   // Consolidação DRE e Balanço do exercício ativo (com fallback sintético por lançamentos idêntico ao Dashboard BI)
-  const { ebitdaAtivo, valuationAtivo } = useMemo(() => {
+  const { ebitdaAtivo, valuationAtivo, dreConsolidadaAtivo } = useMemo(() => {
     let dAtivo = consolidarDreAnual(dresAno, anoAtivo)
     const bAtivo = consolidarBalancoAnual(balancosAno, anoAtivo)
 
@@ -284,6 +285,8 @@ export default function AnaliseEconomicaFinanceira() {
     return {
       ebitdaAtivo: ebitda,
       valuationAtivo: valFcd,
+      // DRE consolidada do ano (com fallback sintético) — reutilizada pela seção de Rentabilidade do HUB
+      dreConsolidadaAtivo: dAtivo,
     }
   }, [dresAno, balancosAno, lancamentosAno, contasCad, planoCad, anoAtivo, empresaAtivaId])
 
@@ -957,6 +960,24 @@ export default function AnaliseEconomicaFinanceira() {
             ) : (
               <SecaoLiquidezHub
                 balancosAno={balancosAno}
+                anoAtivo={anoAtivo}
+                empresaId={empresaAtivaId}
+                segmento={selectedEmpresa?.segmento ?? null}
+                isCliente={isCliente}
+              />
+            )}
+
+            {/* SEÇÃO 1.2: INDICADORES DE RENTABILIDADE (DRE + Balanço do exercício ativo) */}
+            {verificandoDados ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-2xl" />
+                <Skeleton className="h-28 rounded-2xl" />
+              </div>
+            ) : (
+              <SecaoRentabilidadeHub
+                balancosAno={balancosAno}
+                dreAno={dreConsolidadaAtivo}
                 anoAtivo={anoAtivo}
                 empresaId={empresaAtivaId}
                 segmento={selectedEmpresa?.segmento ?? null}

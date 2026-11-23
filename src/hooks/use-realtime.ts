@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -51,12 +51,9 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 
 export default useRealtime
 
-// NÃO REMOVER
-/**
- * Variante com debounce (trailing 1,5s) do useRealtime: útil para telas que
- * recarregam dados a cada evento (evita rajada de reload em imports em lote).
- * Este hook já sumiu do working tree outras vezes e quebrou o build — mantê-lo.
- */
+// NÃO REMOVER — wrapper fino de useRealtime com debounce trailing de 1,5s.
+// Consumers: Dashboard.tsx, DashboardBi.tsx, PontoEquilibrio.tsx. Já foi apagado
+// acidentalmente várias vezes e quebra o build.
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
@@ -65,22 +62,26 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
 ) {
   const callbackRef = useRef(callback)
   callbackRef.current = callback
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const delayRef = useRef(delayMs)
+  delayRef.current = delayMs
+
+  // useRealtime é chamado no TOPO (regra dos hooks); o debounce é feito no
+  // callback intermediário, sempre estável entre renders.
+  useRealtime<TRecord>(
+    collectionName,
+    useCallback(() => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => {
+        callbackRef.current({} as RecordSubscription<TRecord>)
+      }, delayRef.current)
+    }, []),
+    enabled,
+  )
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        callbackRef.current(data)
-      }, delayMs)
-    },
-    enabled,
-  )
 }
