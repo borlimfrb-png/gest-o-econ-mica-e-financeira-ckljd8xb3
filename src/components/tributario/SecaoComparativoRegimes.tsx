@@ -37,10 +37,12 @@ import { useRealtime } from '@/hooks/use-realtime'
 import {
   centrosService,
   contasService,
+  dreService,
   lancamentosService,
   planoContasService,
 } from '@/services/financeService'
-import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import type { ContaRecord, DreRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import { calcularDre, consolidarDreAnual } from '@/lib/financeCalculations'
 import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import {
@@ -82,6 +84,7 @@ export function SecaoComparativoRegimes() {
   const [lancamentos, setLancamentos] = useState<LancamentoRecord[]>([])
   const [contas, setContas] = useState<ContaRecord[]>([])
   const [planoContas, setPlanoContas] = useState<PlanoContaRecord[]>([])
+  const [dres, setDres] = useState<DreRecord[]>([])
   const [centros, setCentros] = useState<Array<{ id: string; codigo?: string; nome?: string }>>([])
   const [loading, setLoading] = useState<boolean>(false)
   const [anoTransicao, setAnoTransicao] = useState<number>(
@@ -99,6 +102,7 @@ export function SecaoComparativoRegimes() {
       let contasPromise: Promise<ContaRecord[]>
       let planosPromise: Promise<PlanoContaRecord[]>
       let centrosPromise: Promise<any[]>
+      let dresPromise: Promise<DreRecord[]>
 
       if (isGrupoAtivo && grupoAtivo && grupoAtivo.empresas && grupoAtivo.empresas.length > 0) {
         const empIds = new Set(grupoAtivo.empresas)
@@ -109,6 +113,9 @@ export function SecaoComparativoRegimes() {
         contasPromise = contasService.getAll(opts)
         planosPromise = planoContasService.getAll(opts)
         centrosPromise = centrosService.getAll()
+        dresPromise = Promise.all(
+          grupoAtivo.empresas.map((id) => dreService.getByEmpresa(id)),
+        ).then((listas) => listas.flat())
       } else if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
         lancsPromise = lancamentosService.getAll({
           empresaId: selectedEmpresaId,
@@ -117,6 +124,7 @@ export function SecaoComparativoRegimes() {
         contasPromise = contasService.getAll({ empresaId: selectedEmpresaId })
         planosPromise = planoContasService.getAll({ empresaId: selectedEmpresaId })
         centrosPromise = centrosService.getAll({ empresaId: selectedEmpresaId })
+        dresPromise = dreService.getByEmpresa(selectedEmpresaId)
       } else {
         const empOpts =
           empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
@@ -124,19 +132,31 @@ export function SecaoComparativoRegimes() {
         contasPromise = contasService.getAll(empOpts)
         planosPromise = planoContasService.getAll(empOpts)
         centrosPromise = centrosService.getAll()
+        // Mesmo escopo de empresas dos lançamentos — a consolidação anual soma
+        // todos os registros do ano; sem o filtro, empresas distintas se
+        // misturariam na receita/lucro consolidados.
+        dresPromise = dreService
+          .getAll()
+          .then((list) =>
+            empresasIdsAtivas.length > 0
+              ? list.filter((d) => empresasIdsAtivas.includes(d.empresa))
+              : list,
+          )
       }
 
-      const [contasList, lancamentosList, planosList, centrosList] = await Promise.all([
+      const [contasList, lancamentosList, planosList, centrosList, dresList] = await Promise.all([
         contasPromise,
         lancsPromise,
         planosPromise,
         centrosPromise,
+        dresPromise,
       ])
 
       setContas(Array.from(new Map(contasList.map((i) => [i.id, i])).values()))
       setLancamentos(lancamentosList)
       setPlanoContas(Array.from(new Map(planosList.map((i) => [i.id, i])).values()))
       setCentros(centrosList.map((c: any) => ({ id: c.id, codigo: c.codigo, nome: c.nome })))
+      setDres(dresList)
     } catch (err: any) {
       console.error('Erro ao carregar dados do Simulador de Regimes:', err)
       toast({
@@ -158,16 +178,30 @@ export function SecaoComparativoRegimes() {
   useRealtime<LancamentoRecord>('lancamentos', () => carregarDados())
   useRealtime<ContaRecord>('contas', () => carregarDados())
   useRealtime<PlanoContaRecord>('plano_contas', () => carregarDados())
+  useRealtime<DreRecord>('dre', () => carregarDados())
 
-  // Receita e lucro pela DRE Gerencial (mesma fonte da Reforma Tributária)
+  // Receita e lucro pela COLEÇÃO `dre` do ano/empresa (mesma fonte mensal da
+  // tela DRE Gerencial que o usuário enxerga) — consolidação anual via
+  // consolidarDreAnual + calcularDre (mesmo mecanismo do comparativo 0.0.428).
+  // Fallback: recalcular pela matriz gerencial só quando a coleção não tiver
+  // registro do ano (empresa sem importação de DRE).
+  const dreAnual = useMemo(() => consolidarDreAnual(dres, selectedAno), [dres, selectedAno])
+
   const baseDre = useMemo(() => {
+    if (dreAnual) {
+      const calc = calcularDre(dreAnual)
+      const receita = dreAnual.receita_bruta || 0
+      const lucro = calc.lucroLiquido
+      if (receita > 0 || lucro !== 0) return { receita, lucro, fonte: 'dre' as const }
+    }
     const meses = gerarListaMeses(selectedAno, 1, 12)
     const matriz = calcularDreGerencialMatriz(lancamentos, contas, meses, planoContas)
     return {
       receita: matriz.totalReceitasPeriodo,
       lucro: matriz.lucroPrejuizo.totalPeriodo,
+      fonte: 'matriz' as const,
     }
-  }, [lancamentos, contas, planoContas, selectedAno])
+  }, [dreAnual, lancamentos, contas, planoContas, selectedAno])
 
   const regimeAtualId = resolverRegimeAtualId(selectedEmpresa?.forma_tributacao)
 
