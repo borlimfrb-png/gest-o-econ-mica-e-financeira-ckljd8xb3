@@ -1,12 +1,12 @@
 /**
  * Utilitários de exportação (Excel/CSV) do Simulador de Regimes Tributários — pt-BR.
- * Mesmo padrão da exportação da Reforma Tributária (xlsx + CSV com BOM).
- * Formatação de número SEMPRE no FRONTEND (Intl permitido aqui, nunca em pocketbase/hooks).
+ * Mesmo padrão da exportação da Reforma Tributária (xlsx + CSV com BOM, separador ";").
+ * Formatação de número SEMPRE no FRONTEND (Intl permitido aqui — nunca em pocketbase/hooks).
  */
 
 import * as XLSX from 'xlsx'
 import type { EmpresaRecord } from '@/types/finance'
-import type { ComparativoRegimesResultado, RegimeComCredito } from './simuladorRegimesCalculo'
+import type { SimuladorRegimesResultado } from './simuladorRegimesCalculo'
 
 function fmtBrl(v: number): string {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -22,7 +22,7 @@ export interface OpcoesExportSimulador {
 }
 
 export function exportarSimuladorRegimesExcel(
-  resultado: ComparativoRegimesResultado,
+  resultado: SimuladorRegimesResultado,
   opcoes?: OpcoesExportSimulador,
 ): void {
   const nomeEmpresa = opcoes?.isGrupo
@@ -40,11 +40,13 @@ export function exportarSimuladorRegimesExcel(
   if (opcoes?.empresa?.forma_tributacao) {
     linha(`Regime Tributário Atual: ${opcoes.empresa.forma_tributacao}`)
   }
-  linha(`Período da Apuração: ${resultado.descricaoPeriodo}`)
+  linha(`Exercício da Apuração: ${resultado.ano}`)
   linha(
     `Centro de Custo de Entradas (Créditos): ${resultado.centroCustoCodigo}${resultado.centroCustoNome ? ` - ${resultado.centroCustoNome}` : ''}`,
   )
-  linha(`Compras de Matéria-Prima no Período: R$ ${fmtBrl(resultado.entradasTotal)}`)
+  linha(`Compras (Entradas) no Período: R$ ${fmtBrl(resultado.comprasEntradas)}`)
+  linha(`Receita Bruta (DRE): R$ ${fmtBrl(resultado.receitaBruta)}`)
+  linha(`Lucro Líquido (DRE): R$ ${fmtBrl(resultado.lucroLiquido)}`)
   linha(
     `Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
   )
@@ -53,46 +55,50 @@ export function exportarSimuladorRegimesExcel(
   linha('RESUMO COMPARATIVO DOS REGIMES')
   linha(
     'Regime',
-    'Carga Tributária (R$)',
+    'Base de Cálculo Principal (R$)',
+    'Imposto Bruto (R$)',
+    'Crédito s/ Compras CC-098 (R$)',
+    'Carga Tributária Final (R$)',
     '% da Receita',
-    'PIS/COFINS Bruto',
-    'Crédito CC-098',
-    'PIS/COFINS Líquido',
-    'Recomendado',
+    'Situação',
   )
-  for (const reg of resultado.regimes) {
+  for (const reg of [
+    resultado.regimes.simples,
+    resultado.regimes.presumido,
+    resultado.regimes.real,
+  ]) {
     linha(
       reg.nome,
+      fmtBrl(reg.baseCalculoPrincipal),
+      fmtBrl(reg.impostoBruto),
+      reg.creditoCompras > 0 ? fmtBrl(reg.creditoCompras) : 'Sem crédito neste regime',
       fmtBrl(reg.impostoTotal),
       `${fmtPct(reg.aliquotaEfetiva)}%`,
-      reg.creditoCompras.aplicado
-        ? fmtBrl(reg.creditoCompras.debitoBruto)
-        : 'Não cumulativo — sem crédito',
-      reg.creditoCompras.aplicado ? fmtBrl(reg.creditoCompras.credito) : '—',
-      reg.creditoCompras.aplicado
-        ? fmtBrl(reg.creditoCompras.liquido)
-        : fmtBrl(reg.creditoCompras.debitoBruto),
-      reg.isRecomendado ? 'MENOR CARGA' : '',
+      reg.isMenorCarga ? 'MENOR CARGA' : `+${fmtPct(reg.diferencaPercentual)}% vs menor`,
     )
   }
   linha('')
   linha(
-    `Regime com MENOR carga: ${resultado.regimeRecomendado.nome} (${fmtBrl(resultado.regimeRecomendado.impostoTotal)})`,
+    `Regime com MENOR carga: ${resultado.regimes[resultado.menorRegimeId].nome} (R$ ${fmtBrl(resultado.regimes[resultado.menorRegimeId].impostoTotal)})`,
   )
   linha(
-    `Economia do recomendado vs. pior regime (${resultado.maiorCustoRegime.nome}): R$ ${fmtBrl(resultado.economiaMaximaAnual)}`,
+    `Economia do menor vs. pior regime: R$ ${fmtBrl(resultado.economiaMaxima)} (${fmtPct(resultado.reforma.fase.percentualCbs)}% CBS / ${fmtPct(resultado.reforma.fase.percentualIbs)}% IBS na fase ${resultado.reforma.fase.ano})`,
   )
   linha('')
 
   linha('DETALHAMENTO POR TRIBUTO')
-  linha('Regime', 'Tributo', 'Base de Cálculo', 'Alíquota', 'Valor (R$)', 'Observação', '')
-  for (const reg of resultado.regimes) {
+  linha('Regime', 'Tributo', 'Base de Cálculo', 'Alíquota (%)', 'Valor (R$)', 'Observação', '')
+  for (const reg of [
+    resultado.regimes.simples,
+    resultado.regimes.presumido,
+    resultado.regimes.real,
+  ]) {
     for (const item of reg.breakdown) {
       linha(
         reg.nome,
         item.sigla,
         fmtBrl(item.baseCalculo),
-        `${fmtPct(item.aliquotaNominal)}%`,
+        `${fmtPct(item.aliquotaNominal)}`,
         fmtBrl(item.valor),
         item.descricao || '',
       )
@@ -103,62 +109,47 @@ export function exportarSimuladorRegimesExcel(
   linha('CENÁRIO PÓS-REFORMA TRIBUTÁRIA (EC 132/2023 - CBS/IBS - LC 214/2025)')
   linha(`Ano da Transição: ${resultado.reforma.anoTransicao}`)
   linha(
-    `Fase da Transição: ${resultado.reforma.faseTransicao} — ${resultado.reforma.percentualTransicaoPercent}% da alíquota de referência aplicada por CBS/IBS; ${resultado.reforma.percentualTributosAntigosPercent}% permanece nos tributos atuais`,
+    `Fase: ${resultado.reforma.fase.descricao} — CBS ${fmtPct(resultado.reforma.fase.percentualCbs)}% / IBS ${fmtPct(resultado.reforma.fase.percentualIbs)}% em vigor (alíquotas ref.: CBS ${fmtPct(resultado.reforma.aliquotaCbs)}% + IBS ${fmtPct(resultado.reforma.aliquotaIbs)}%)`,
   )
   linha('')
   linha(
-    'Regime',
-    'Tributos Atuais (R$)',
-    'CBS/IBS - Nova (R$)',
-    'Tributos Antigos Remanescentes (R$)',
-    'Carga Total Transição (R$)',
-    '% da Receita',
+    'Tributo',
+    'Débito s/ Receita (R$)',
+    'Crédito s/ Compras CC-098 (R$)',
+    'Saldo a Recolher (R$)',
+    '',
+    '',
     '',
   )
-  for (const reg of resultado.reforma.regimesPosReforma) {
-    linha(
-      reg.nome,
-      fmtBrl(reg.tributosAtuais),
-      fmtBrl(reg.cbsIbsNovo),
-      fmtBrl(reg.tributosAntigosRemanescentes),
-      fmtBrl(reg.cargaTotal),
-      `${fmtPct(reg.aliquotaEfetivaPos)}%`,
-    )
-  }
-  linha('')
-  linha(`Receita Bruta (base): R$ ${fmtBrl(resultado.receitaBruta)}`)
   linha(
-    `Compras CC-098 Matéria Prima (crédito pleno CBS/IBS): R$ ${fmtBrl(resultado.reforma.entradas)}`,
+    'CBS',
+    fmtBrl(resultado.reforma.cbs.debito),
+    fmtBrl(resultado.reforma.cbs.credito),
+    fmtBrl(resultado.reforma.cbs.saldo),
   )
   linha(
-    `Crédito CBS: R$ ${fmtBrl(resultado.reforma.creditoCbs)} | Crédito IBS: R$ ${fmtBrl(resultado.reforma.creditoIbs)}`,
+    'IBS',
+    fmtBrl(resultado.reforma.ibs.debito),
+    fmtBrl(resultado.reforma.ibs.credito),
+    fmtBrl(resultado.reforma.ibs.saldo),
   )
   linha(
-    `Carga CBS+IBS (débito - crédito): R$ ${fmtBrl(resultado.reforma.cargaCbsIbs)} (${fmtPct(resultado.reforma.cargaPercent)} da receita)`,
+    `PIS/COFINS antigos remanescentes na fase: R$ ${fmtBrl(resultado.reforma.pisCofinsRemanescente)}`,
   )
+  linha(`ISS antigo remanescente na fase: R$ ${fmtBrl(resultado.reforma.issRemanescente)}`)
   linha('')
-  linha('COMPARAÇÃO ATUAL x PÓS-REFORMA')
-  linha('Regime', 'Carga Atual (R$)', 'Carga na Transição (R$)', 'Diferença (R$)', '', '', '')
-  for (const c of resultado.reforma.comparacao) {
-    linha(
-      c.nome,
-      fmtBrl(c.cargaAtual),
-      fmtBrl(c.cargaPosReforma),
-      fmtBrl(c.diferenca),
-      c.diferenca > 0.005 ? 'ECONOMIA' : c.diferenca < -0.005 ? 'AUMENTO' : 'NEUTRO',
-    )
-  }
-  linha('')
-  if (resultado.reforma.melhorPosReforma) {
-    linha(
-      `Menor carga na transição: ${resultado.reforma.melhorPosReforma.nome} (${fmtBrl(resultado.reforma.melhorPosReforma.cargaTotal)})`,
-    )
-    if (resultado.reforma.economiaPosReforma) {
-      linha(
-        `Economia pós-reforma vs. carga atual do mesmo regime: R$ ${fmtBrl(resultado.reforma.economiaPosReforma)}`,
-      )
-    }
-  }
+  linha(
+    `Carga do regime atual (${resultado.regimes[resultado.reforma.regimeAtualId].nome}): R$ ${fmtBrl(resultado.reforma.cargaRegimeAtual)}`,
+  )
+  linha(
+    `Carga pós-reforma (na fase ${resultado.reforma.anoTransicao}): R$ ${fmtBrl(resultado.reforma.cargaPosReforma)}`,
+  )
+  linha(
+    resultado.reforma.economia >= 0
+      ? `ECONOMIA na transição: R$ ${fmtBrl(resultado.reforma.economia)} (${fmtPct(resultado.reforma.economiaPercentual)}%)`
+      : `AUMENTO de carga na transição: R$ ${fmtBrl(Math.abs(resultado.reforma.economia))} (${fmtPct(Math.abs(resultado.reforma.economiaPercentual))}%)`,
+  )
+
   if (resultado.observacoes.length > 0) {
     linha('')
     linha('OBSERVAÇÕES')
@@ -171,59 +162,63 @@ export function exportarSimuladorRegimesExcel(
   XLSX.writeFile(wb, `simulador-regimes-${resultado.ano}.xlsx`)
 }
 
-export function exportarSimuladorRegimesCsv(resultado: ComparativoRegimesResultado): void {
+export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado): void {
   const sep = ';'
   const dec = (v: number) => fmtBrl(v)
   const lines: string[] = []
 
   lines.push('SIMULADOR DE REGIMES TRIBUTARIOS - COMPARATIVO DE CARGA TRIBUTARIA')
-  lines.push(`Período;${resultado.descricaoPeriodo}`)
+  lines.push(`Exercício;${resultado.ano}`)
   lines.push(
     `Centro de Custo de Entradas (Créditos);${resultado.centroCustoCodigo}${resultado.centroCustoNome ? ` - ${resultado.centroCustoNome}` : ''}`,
   )
-  lines.push(`Compras de Matéria-Prima no Período;R$ ${dec(resultado.entradasTotal)}`)
+  lines.push(`Compras (Entradas) no Período;R$ ${dec(resultado.comprasEntradas)}`)
+  lines.push(`Receita Bruta (DRE);R$ ${dec(resultado.receitaBruta)}`)
+  lines.push(`Lucro Líquido (DRE);R$ ${dec(resultado.lucroLiquido)}`)
   lines.push('')
 
   lines.push('RESUMO COMPARATIVO DOS REGIMES')
   lines.push(
-    'Regime;Carga Tributária (R$);% da Receita;PIS/COFINS Bruto;Crédito CC-098;PIS/COFINS Líquido;Recomendado',
+    'Regime;Base de Cálculo Principal (R$);Imposto Bruto (R$);Crédito s/ Compras CC-098 (R$);Carga Tributária Final (R$);% da Receita;Situação',
   )
-  for (const reg of resultado.regimes) {
+  for (const reg of [
+    resultado.regimes.simples,
+    resultado.regimes.presumido,
+    resultado.regimes.real,
+  ]) {
     lines.push(
       [
         reg.nome,
+        dec(reg.baseCalculoPrincipal),
+        dec(reg.impostoBruto),
+        reg.creditoCompras > 0 ? dec(reg.creditoCompras) : 'Sem credito neste regime',
         dec(reg.impostoTotal),
         `${fmtPct(reg.aliquotaEfetiva)}%`,
-        reg.creditoCompras.aplicado
-          ? dec(reg.creditoCompras.debitoBruto)
-          : 'Nao cumulativo - sem credito',
-        reg.creditoCompras.aplicado ? dec(reg.creditoCompras.credito) : '-',
-        reg.creditoCompras.aplicado
-          ? dec(reg.creditoCompras.liquido)
-          : dec(reg.creditoCompras.debitoBruto),
-        reg.isRecomendado ? 'MENOR CARGA' : '',
+        reg.isMenorCarga ? 'MENOR CARGA' : `+${fmtPct(reg.diferencaPercentual)}% vs menor`,
       ].join(sep),
     )
   }
   lines.push('')
   lines.push(
-    `Regime com MENOR carga;${resultado.regimeRecomendado.nome};R$ ${dec(resultado.regimeRecomendado.impostoTotal)}`,
+    `Regime com MENOR carga;${resultado.regimes[resultado.menorRegimeId].nome};R$ ${dec(resultado.regimes[resultado.menorRegimeId].impostoTotal)}`,
   )
-  lines.push(
-    `Economia vs. pior regime (${resultado.maiorCustoRegime.nome});R$ ${dec(resultado.economiaMaximaAnual)}`,
-  )
+  lines.push(`Economia do menor vs. pior regime;R$ ${dec(resultado.economiaMaxima)}`)
   lines.push('')
 
   lines.push('DETALHAMENTO POR TRIBUTO')
-  lines.push('Regime;Tributo;Base de Cálculo;Alíquota;Valor (R$);Observação')
-  for (const reg of resultado.regimes) {
+  lines.push('Regime;Tributo;Base de Cálculo;Alíquota (%);Valor (R$);Observação')
+  for (const reg of [
+    resultado.regimes.simples,
+    resultado.regimes.presumido,
+    resultado.regimes.real,
+  ]) {
     for (const item of reg.breakdown) {
       lines.push(
         [
           reg.nome,
           item.sigla,
           dec(item.baseCalculo),
-          `${fmtPct(item.aliquotaNominal)}%`,
+          fmtPct(item.aliquotaNominal),
           dec(item.valor),
           (item.descricao || '').replace(/;/g, ','),
         ].join(sep),
@@ -232,48 +227,33 @@ export function exportarSimuladorRegimesCsv(resultado: ComparativoRegimesResulta
   }
   lines.push('')
 
-  lines.push('CENÁRIO PÓS-REFORMA TRIBUTÁRIA (CBS/IBS)')
+  lines.push('CENÁRIO PÓS-REFORMA TRIBUTÁRIA (CBS/IBS - TRANSIÇÃO)')
   lines.push(`Ano da Transição;${resultado.reforma.anoTransicao}`)
   lines.push(
-    `Fase;${resultado.reforma.faseTransicao};${resultado.reforma.percentualTransicaoPercent}% CBS/IBS;${resultado.reforma.percentualTributosAntigosPercent}% tributos atuais`,
+    `Fase;${resultado.reforma.fase.descricao};CBS ${fmtPct(resultado.reforma.fase.percentualCbs)}%;IBS ${fmtPct(resultado.reforma.fase.percentualIbs)}%`,
+  )
+  lines.push('Tributo;Débito s/ Receita (R$);Crédito s/ Compras CC-098 (R$);Saldo a Recolher (R$)')
+  lines.push(
+    `CBS;${dec(resultado.reforma.cbs.debito)};${dec(resultado.reforma.cbs.credito)};${dec(resultado.reforma.cbs.saldo)}`,
   )
   lines.push(
-    'Regime;Tributos Atuais (R$);CBS/IBS - Nova (R$);Tributos Antigos Remanescentes (R$);Carga Total Transição (R$);% da Receita',
+    `IBS;${dec(resultado.reforma.ibs.debito)};${dec(resultado.reforma.ibs.credito)};${dec(resultado.reforma.ibs.saldo)}`,
   )
-  for (const reg of resultado.reforma.regimesPosReforma) {
-    lines.push(
-      [
-        reg.nome,
-        dec(reg.tributosAtuais),
-        dec(reg.cbsIbsNovo),
-        dec(reg.tributosAntigosRemanescentes),
-        dec(reg.cargaTotal),
-        `${fmtPct(reg.aliquotaEfetivaPos)}%`,
-      ].join(sep),
-    )
-  }
+  lines.push(`PIS/COFINS antigos remanescentes;R$ ${dec(resultado.reforma.pisCofinsRemanescente)}`)
+  lines.push(`ISS antigo remanescente;R$ ${dec(resultado.reforma.issRemanescente)}`)
   lines.push('')
-  lines.push(`Receita Bruta (base);R$ ${dec(resultado.receitaBruta)}`)
-  lines.push(`Compras CC-098 Matéria Prima;R$ ${dec(resultado.reforma.entradas)}`)
-  lines.push(`Crédito CBS;R$ ${dec(resultado.reforma.creditoCbs)}`)
-  lines.push(`Crédito IBS;R$ ${dec(resultado.reforma.creditoIbs)}`)
   lines.push(
-    `Carga CBS+IBS (débito - crédito);R$ ${dec(resultado.reforma.cargaCbsIbs)};${fmtPct(resultado.reforma.cargaPercent)}% da receita`,
+    `Carga do regime atual;R$ ${dec(resultado.reforma.cargaRegimeAtual)};(${resultado.regimes[resultado.reforma.regimeAtualId].nome})`,
   )
-  lines.push('')
-  lines.push('COMPARAÇÃO ATUAL x PÓS-REFORMA')
-  lines.push('Regime;Carga Atual (R$);Carga na Transição (R$);Diferença (R$);Situação')
-  for (const c of resultado.reforma.comparacao) {
-    lines.push(
-      [
-        c.nome,
-        dec(c.cargaAtual),
-        dec(c.cargaPosReforma),
-        dec(c.diferenca),
-        c.diferenca > 0.005 ? 'ECONOMIA' : c.diferenca < -0.005 ? 'AUMENTO' : 'NEUTRO',
-      ].join(sep),
-    )
-  }
+  lines.push(
+    `Carga pós-reforma na fase ${resultado.reforma.anoTransicao};R$ ${dec(resultado.reforma.cargaPosReforma)}`,
+  )
+  lines.push(
+    resultado.reforma.economia >= 0
+      ? `Situação na transição;ECONOMIA de R$ ${dec(resultado.reforma.economia)} (${fmtPct(resultado.reforma.economiaPercentual)}%)`
+      : `Situação na transição;AUMENTO de R$ ${dec(Math.abs(resultado.reforma.economia))} (${fmtPct(Math.abs(resultado.reforma.economiaPercentual))}%)`,
+  )
+
   if (resultado.observacoes.length > 0) {
     lines.push('')
     for (const o of resultado.observacoes) lines.push(`- ${o.replace(/;/g, ',')}`)
