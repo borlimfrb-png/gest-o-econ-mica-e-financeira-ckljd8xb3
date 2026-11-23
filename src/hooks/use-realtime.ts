@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -47,6 +47,49 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
       }
     }
   }, [collectionName, enabled])
+}
+
+// NÃO REMOVER: hook usado por ~30 telas — remoção acidental já quebrou o build repetidas vezes
+export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
+  collectionName: string,
+  callback: (registro: RecordSubscription<TRecord>) => void,
+  enabled: boolean = true,
+  delayMs: number = 1500,
+) {
+  // debounce tipo trailing: aguarda delayMs após o último evento antes de disparar
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingRef = useRef<any>(null)
+
+  const flush = useCallback(() => {
+    timerRef.current = null
+    if (pendingRef.current !== null) {
+      const data = pendingRef.current
+      pendingRef.current = null
+      callbackRef.current(data)
+    }
+  }, [])
+
+  useRealtime(
+    collectionName,
+    (data) => {
+      if (!enabled) return
+      pendingRef.current = data
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(flush, delayMs)
+    },
+    enabled,
+  )
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+    }
+  }, [])
 }
 
 export default useRealtime
