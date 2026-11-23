@@ -6,6 +6,13 @@ import type {
 import type { EmpresaRecord } from '@/types/finance'
 import { sanitizeNomeArquivo } from './exportacaoPlanoContas'
 import type { SubtotalCentroExport } from './lancamentosVariaveisHelper'
+import { anoTemMovimento, mesTemMovimento } from './analiseRentabilidadeCalculo'
+
+/** Variação % entre dois valores; qualquer lado sem movimento (null) → null (vira "—" na planilha) */
+function calcularVariacaoMes(atual: number | null, anterior: number | null): number | null {
+  if (atual === null || anterior === null || anterior === 0) return null
+  return ((atual - anterior) / Math.abs(anterior)) * 100
+}
 
 export function formatarPercentualExport(val: number | null | undefined): string {
   if (val === null || val === undefined || !Number.isFinite(val)) {
@@ -231,30 +238,30 @@ export function exportarAnaliseRentabilidadeExcel(
       const linha: Record<string, any> = { Mês: mes.rotuloCurto }
       for (const item of comparativo) {
         const dado = item.resultado.itensPorMes[idx]
-        if (!dado) return
+        if (!dado || !mesTemMovimento(dado)) {
+          // Mês sem movimento: "—" honesto, nunca zero enganoso
+          linha[`Fat. ${item.ano} (R$)`] = '—'
+          linha[`Lucro ${item.ano} (R$)`] = '—'
+          linha[`Margem ${item.ano} (%)`] = '—'
+          continue
+        }
         linha[`Fat. ${item.ano} (R$)`] = dado.faturamento
         linha[`Lucro ${item.ano} (R$)`] = dado.lucroApurado
         linha[`Margem ${item.ano} (%)`] = formatarPercentualExport(dado.margemSobreFaturamento)
       }
       for (let i = 1; i < comparativo.length; i++) {
-        const variacoes = comparativo[i].variacoes
-        if (!variacoes) continue
-        const fatAnt = comparativo[i - 1].resultado.itensPorMes[idx]?.faturamento || 0
-        const fatAtual = comparativo[i].resultado.itensPorMes[idx]?.faturamento || 0
-        const lucAnt = comparativo[i - 1].resultado.itensPorMes[idx]?.lucroApurado || 0
-        const lucAtual = comparativo[i].resultado.itensPorMes[idx]?.lucroApurado || 0
-        const pctFat =
-          fatAnt === 0
-            ? fatAtual === 0
-              ? 0
-              : null
-            : ((fatAtual - fatAnt) / Math.abs(fatAnt)) * 100
-        const pctLuc =
-          lucAnt === 0
-            ? lucAtual === 0
-              ? 0
-              : null
-            : ((lucAtual - lucAnt) / Math.abs(lucAnt)) * 100
+        const dadoAnt = comparativo[i - 1].resultado.itensPorMes[idx]
+        const dadoAtu = comparativo[i].resultado.itensPorMes[idx]
+        const movAnt = dadoAnt ? mesTemMovimento(dadoAnt) : false
+        const movAtu = dadoAtu ? mesTemMovimento(dadoAtu) : false
+        const pctFat = calcularVariacaoMes(
+          movAnt ? dadoAnt!.faturamento : null,
+          movAtu ? dadoAtu!.faturamento : null,
+        )
+        const pctLuc = calcularVariacaoMes(
+          movAnt ? dadoAnt!.lucroApurado : null,
+          movAtu ? dadoAtu!.lucroApurado : null,
+        )
         linha[`Δ Fat. ${comparativo[i - 1].ano}→${comparativo[i].ano} (%)`] =
           formatVariacaoCsv(pctFat)
         linha[`Δ Lucro ${comparativo[i - 1].ano}→${comparativo[i].ano} (%)`] =
@@ -266,11 +273,15 @@ export function exportarAnaliseRentabilidadeExcel(
     // Total do período lado a lado
     const linhaTotal: Record<string, any> = { Mês: 'TOTAL DO PERÍODO' }
     for (const item of comparativo) {
-      linhaTotal[`Fat. ${item.ano} (R$)`] = item.resultado.faturamentoTotal
-      linhaTotal[`Lucro ${item.ano} (R$)`] = item.resultado.lucroTotal
-      linhaTotal[`Margem ${item.ano} (%)`] = formatarPercentualExport(
-        item.resultado.margemSobreFaturamentoTotal,
-      )
+      linhaTotal[`Fat. ${item.ano} (R$)`] = anoTemMovimento(item.resultado)
+        ? item.resultado.faturamentoTotal
+        : '—'
+      linhaTotal[`Lucro ${item.ano} (R$)`] = anoTemMovimento(item.resultado)
+        ? item.resultado.lucroTotal
+        : '—'
+      linhaTotal[`Margem ${item.ano} (%)`] = anoTemMovimento(item.resultado)
+        ? formatarPercentualExport(item.resultado.margemSobreFaturamentoTotal)
+        : '—'
     }
     for (let i = 1; i < comparativo.length; i++) {
       const variacoes = comparativo[i].variacoes
@@ -347,7 +358,11 @@ export function exportarAnaliseRentabilidadeCsv(
       const linha: string[] = [comparativo[0].resultado.itensPorMes[idx]?.rotuloCurto || '']
       for (const item of comparativo) {
         const dado = item.resultado.itensPorMes[idx]
-        if (!dado) return
+        if (!dado || !mesTemMovimento(dado)) {
+          // Mês sem movimento: "—" honesto, nunca zero enganoso
+          linha.push('—', '—', '—')
+          continue
+        }
         linha.push(
           formatMoedaCsv(dado.faturamento),
           formatMoedaCsv(dado.lucroApurado),
@@ -380,11 +395,16 @@ export function exportarAnaliseRentabilidadeCsv(
 
     const linhaTotal: string[] = ['TOTAL DO PERÍODO']
     for (const item of comparativo) {
-      linhaTotal.push(
-        formatMoedaCsv(item.resultado.faturamentoTotal),
-        formatMoedaCsv(item.resultado.lucroTotal),
-        formatarPercentualExport(item.resultado.margemSobreFaturamentoTotal),
-      )
+      if (anoTemMovimento(item.resultado)) {
+        linhaTotal.push(
+          formatMoedaCsv(item.resultado.faturamentoTotal),
+          formatMoedaCsv(item.resultado.lucroTotal),
+          formatarPercentualExport(item.resultado.margemSobreFaturamentoTotal),
+        )
+      } else {
+        // Ano sem movimento: "—" honesto, nunca zero enganoso
+        linhaTotal.push('—', '—', '—')
+      }
     }
     for (let i = 1; i < comparativo.length; i++) {
       const variacoes = comparativo[i].variacoes

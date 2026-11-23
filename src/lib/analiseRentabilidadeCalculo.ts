@@ -307,6 +307,37 @@ export function calcularVariacoesEntreAnos(
 }
 
 /**
+ * Um mês "tem movimento" quando qualquer linha da DRE apurou valor no período.
+ * Meses sem movimento devem exibir "—" (nunca zero enganoso) na tela e na exportação.
+ */
+export function mesTemMovimento(item: ItemRentabilidadeMes | undefined): boolean {
+  if (!item) return false
+  const fat = item.faturamento ?? 0
+  const lucro = item.lucroApurado ?? 0
+  const despVar = item.despesasVariaveis ?? 0
+  const despFix = item.despesasFixas ?? 0
+  const despFin = item.despesasFinanceiras ?? 0
+  const recFin = item.receitasFinanceiras ?? 0
+  return fat !== 0 || lucro !== 0 || despVar !== 0 || despFix !== 0 || despFin !== 0 || recFin !== 0
+}
+
+/** Um exercício inteiro "tem movimento" quando qualquer mês apurou valor. */
+export function anoTemMovimento(resultado: AnaliseRentabilidadeResultado | undefined): boolean {
+  if (!resultado) return false
+  return (
+    resultado.faturamentoTotal !== 0 ||
+    resultado.lucroTotal !== 0 ||
+    resultado.despesasVariaveisTotal !== 0 ||
+    resultado.despesasFixasTotal !== 0 ||
+    resultado.despesasFinanceirasTotal !== 0 ||
+    resultado.receitasFinanceirasTotal !== 0
+  )
+}
+
+/** Limite de exercícios no comparativo multi-ano (padrão das telas irmãs). */
+export const MAX_ANOS_RENTABILIDADE = 6
+
+/**
  * Compara a rentabilidade do exercício base contra anos anteriores, sempre sobre
  * o MESMO intervalo de meses (mesInicial + quantidade). Cada ano é recalculado
  * pelo motor oficial da DRE Gerencial (calcularAnaliseRentabilidade).

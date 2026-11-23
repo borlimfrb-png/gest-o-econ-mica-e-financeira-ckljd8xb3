@@ -20,6 +20,9 @@ import { gerarListaMeses } from '@/lib/dreGerencialTypes'
 import {
   calcularAnaliseRentabilidade,
   calcularComparativoRentabilidadeAnos,
+  anoTemMovimento,
+  mesTemMovimento,
+  MAX_ANOS_RENTABILIDADE,
   type AnaliseRentabilidadeResultado,
   type AnoRentabilidadeComparado,
 } from '@/lib/analiseRentabilidadeCalculo'
@@ -65,6 +68,7 @@ import {
 import {
   ResponsiveContainer,
   ComposedChart,
+  BarChart,
   Bar,
   Line,
   XAxis,
@@ -557,9 +561,12 @@ export default function AnaliseRentabilidade() {
       for (const comp of comparativoAnos) {
         const itemAno = comp.resultado.itensPorMes[idx]
         if (itemAno) {
-          ponto[`fat_${comp.ano}`] = itemAno.faturamento
-          ponto[`lucro_${comp.ano}`] = itemAno.lucroApurado
-          ponto[`margem_${comp.ano}`] = itemAno.margemSobreFaturamento ?? 0
+          // Movimento honesto: mês sem lançamentos fica fora dos eixos (null → recharts não plota)
+          const mov = mesTemMovimento(itemAno)
+          ponto[`fat_${comp.ano}`] = mov ? itemAno.faturamento : null
+          ponto[`lucro_${comp.ano}`] = mov ? itemAno.lucroApurado : null
+          ponto[`margem_${comp.ano}`] = mov ? (itemAno.margemSobreFaturamento ?? 0) : null
+          ponto[`fatMov_${comp.ano}`] = mov
         }
       }
       return ponto
@@ -827,12 +834,19 @@ export default function AnaliseRentabilidade() {
                       : [anoInicial - 1, anoInicial - 2].filter((a) => a > 2000)
                   return listaFinal.map((ano) => {
                     const ativo = anosComparados.includes(ano)
+                    const bloq = !ativo && anosComparados.length >= MAX_ANOS_RENTABILIDADE
                     return (
                       <Button
                         key={ano}
                         type="button"
                         size="sm"
                         variant={ativo ? 'default' : 'outline'}
+                        disabled={bloq}
+                        title={
+                          bloq
+                            ? `Limite de ${MAX_ANOS_RENTABILIDADE} anos no comparativo`
+                            : undefined
+                        }
                         onClick={() => toggleAnoComparado(ano)}
                         className={`h-7 px-2.5 text-xs font-semibold cursor-pointer ${
                           ativo
@@ -848,6 +862,11 @@ export default function AnaliseRentabilidade() {
                 {anosComparados.length === 0 && (
                   <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
                     Selecione ao menos um ano para comparar
+                  </span>
+                )}
+                {anosComparados.length >= MAX_ANOS_RENTABILIDADE && (
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                    Limite de {MAX_ANOS_RENTABILIDADE} anos atingido
                   </span>
                 )}
               </div>
@@ -1184,7 +1203,7 @@ export default function AnaliseRentabilidade() {
                                 Faturamento:
                               </span>
                               <strong className="font-semibold tabular-nums text-white">
-                                {formatBrl(d.faturamento)}
+                                {mesTemMovimento(d) ? formatBrl(d.faturamento) : '—'}
                               </strong>
                             </div>
                             <div className="flex items-center justify-between gap-3">
@@ -1197,7 +1216,7 @@ export default function AnaliseRentabilidade() {
                                   d.lucroApurado >= 0 ? 'text-emerald-300' : 'text-red-300'
                                 }`}
                               >
-                                {formatBrl(d.lucroApurado)}
+                                {mesTemMovimento(d) ? formatBrl(d.lucroApurado) : '—'}
                               </strong>
                             </div>
                             <div className="flex items-center justify-between gap-3 pt-1 border-t border-white/10">
@@ -1206,7 +1225,7 @@ export default function AnaliseRentabilidade() {
                                 Margem s/ Fat:
                               </span>
                               <strong className="font-bold tabular-nums text-amber-300">
-                                {formatPercent(d.margemSobreFaturamento)}
+                                {mesTemMovimento(d) ? formatPercent(d.margemSobreFaturamento) : '—'}
                               </strong>
                             </div>
                           </div>
@@ -1278,9 +1297,9 @@ export default function AnaliseRentabilidade() {
                           </p>
                           <div className="space-y-1.5 mt-2">
                             <div className="flex items-center justify-between gap-3">
-                              <span className="text-purple-300">Margem Bruta:</span>
-                              <strong className="font-semibold tabular-nums text-purple-300">
-                                {formatPercent(d.margemBruta)}
+                              <span className="text-amber-300">Margem Líquida:</span>
+                              <strong className="font-bold tabular-nums text-amber-300">
+                                {mesTemMovimento(d) ? formatPercent(d.margemSobreFaturamento) : '—'}
                               </strong>
                             </div>
                             <div className="flex items-center justify-between gap-3">
@@ -1411,7 +1430,7 @@ export default function AnaliseRentabilidade() {
                                   <div className="flex justify-between gap-3 text-[11px]">
                                     <span className="text-blue-300">Faturamento:</span>
                                     <strong className="text-white">
-                                      {formatBrl(d[`fat_${c.ano}`] || 0)}
+                                      {d[`fatMov_${c.ano}`] ? formatBrl(d[`fat_${c.ano}`]) : '—'}
                                     </strong>
                                   </div>
                                   <div className="flex justify-between gap-3 text-[11px]">
@@ -1423,13 +1442,15 @@ export default function AnaliseRentabilidade() {
                                           : 'text-red-300'
                                       }
                                     >
-                                      {formatBrl(d[`lucro_${c.ano}`] || 0)}
+                                      {d[`fatMov_${c.ano}`] ? formatBrl(d[`lucro_${c.ano}`]) : '—'}
                                     </strong>
                                   </div>
                                   <div className="flex justify-between gap-3 text-[11px]">
                                     <span className="text-amber-300">Margem:</span>
                                     <strong className="text-amber-300">
-                                      {formatPercent(d[`margem_${c.ano}`] ?? null)}
+                                      {d[`fatMov_${c.ano}`]
+                                        ? formatPercent(d[`margem_${c.ano}`] ?? null)
+                                        : '—'}
                                     </strong>
                                   </div>
                                 </div>
@@ -1490,6 +1511,7 @@ export default function AnaliseRentabilidade() {
             {comparativoAnos.map((comp, idx) => {
               const res = comp.resultado
               const varAnt = comp.variacoes
+              const anoComMov = anoTemMovimento(res)
               return (
                 <Card
                   key={comp.ano}
@@ -1527,9 +1549,9 @@ export default function AnaliseRentabilidade() {
                       <span className="text-slate-500">Faturamento:</span>
                       <div className="text-right">
                         <span className="font-bold text-[#0B1F3A] dark:text-slate-100 tabular-nums">
-                          {formatBrl(res.faturamentoTotal)}
+                          {anoComMov ? formatBrl(res.faturamentoTotal) : '—'}
                         </span>
-                        {varAnt && (
+                        {varAnt && anoComMov && (
                           <div
                             className={`text-[10px] font-semibold tabular-nums ${
                               varAnt.faturamento.favoravel ? 'text-emerald-600' : 'text-red-500'
@@ -1548,12 +1570,16 @@ export default function AnaliseRentabilidade() {
                       <div className="text-right">
                         <span
                           className={`font-bold tabular-nums ${
-                            res.lucroTotal >= 0 ? 'text-emerald-600' : 'text-red-600'
+                            !anoComMov
+                              ? 'text-slate-400 dark:text-slate-600'
+                              : res.lucroTotal >= 0
+                                ? 'text-emerald-600'
+                                : 'text-red-600'
                           }`}
                         >
-                          {formatBrl(res.lucroTotal)}
+                          {anoComMov ? formatBrl(res.lucroTotal) : '—'}
                         </span>
-                        {varAnt && (
+                        {varAnt && anoComMov && (
                           <div
                             className={`text-[10px] font-semibold tabular-nums ${
                               varAnt.lucroApurado.favoravel ? 'text-emerald-600' : 'text-red-500'
@@ -1570,7 +1596,7 @@ export default function AnaliseRentabilidade() {
                     <div className="flex justify-between items-center">
                       <span className="text-slate-500">Despesas Financeiras:</span>
                       <span className="font-semibold text-amber-800 dark:text-amber-300 tabular-nums">
-                        {formatBrl(res.despesasFinanceirasTotal)}
+                        {anoComMov ? formatBrl(res.despesasFinanceirasTotal) : '—'}
                       </span>
                     </div>
 
@@ -1579,24 +1605,26 @@ export default function AnaliseRentabilidade() {
                       <div className="text-right">
                         <span
                           className={`font-extrabold px-2 py-0.5 rounded text-[11px] ${getMargemBadgeColor(
-                            res.margemSobreFaturamentoTotal,
+                            anoComMov ? res.margemSobreFaturamentoTotal : null,
                           )}`}
                         >
-                          {formatPercent(res.margemSobreFaturamentoTotal)}
+                          {anoComMov ? formatPercent(res.margemSobreFaturamentoTotal) : '—'}
                         </span>
-                        {varAnt && varAnt.margemSobreFaturamento.deltaPontos !== null && (
-                          <div
-                            className={`text-[10px] font-semibold mt-0.5 tabular-nums ${
-                              varAnt.margemSobreFaturamento.favoravel
-                                ? 'text-emerald-600'
-                                : 'text-red-500'
-                            }`}
-                          >
-                            {varAnt.margemSobreFaturamento.deltaPontos >= 0 ? '+' : ''}
-                            {varAnt.margemSobreFaturamento.deltaPontos.toFixed(1)} p.p. vs{' '}
-                            {varAnt.margemSobreFaturamento.anoAnterior}
-                          </div>
-                        )}
+                        {varAnt &&
+                          anoComMov &&
+                          varAnt.margemSobreFaturamento.deltaPontos !== null && (
+                            <div
+                              className={`text-[10px] font-semibold mt-0.5 tabular-nums ${
+                                varAnt.margemSobreFaturamento.favoravel
+                                  ? 'text-emerald-600'
+                                  : 'text-red-500'
+                              }`}
+                            >
+                              {varAnt.margemSobreFaturamento.deltaPontos >= 0 ? '+' : ''}
+                              {varAnt.margemSobreFaturamento.deltaPontos.toFixed(1)} p.p. vs{' '}
+                              {varAnt.margemSobreFaturamento.anoAnterior}
+                            </div>
+                          )}
                       </div>
                     </div>
                   </CardContent>
@@ -1650,41 +1678,59 @@ export default function AnaliseRentabilidade() {
                           <td className="py-2.5 px-4 font-semibold text-[#0B1F3A] dark:text-slate-100">
                             {mes.rotuloCompleto}
                           </td>
-                          {comparativoAnos.map((c) => (
-                            <td
-                              key={`v_fat_${c.ano}_${idx}`}
-                              className="py-2.5 px-3 text-right tabular-nums text-slate-800 dark:text-slate-200 font-medium"
-                            >
-                              {formatBrl(c.resultado.itensPorMes[idx]?.faturamento || 0)}
-                            </td>
-                          ))}
                           {comparativoAnos.map((c) => {
-                            const valLucro = c.resultado.itensPorMes[idx]?.lucroApurado || 0
+                            const dado = c.resultado.itensPorMes[idx]
+                            const mov = mesTemMovimento(dado)
                             return (
                               <td
-                                key={`v_luc_${c.ano}_${idx}`}
-                                className={`py-2.5 px-3 text-right tabular-nums font-bold ${
-                                  valLucro >= 0
-                                    ? 'text-emerald-700 dark:text-emerald-400'
-                                    : 'text-red-600 dark:text-red-400'
+                                key={`v_fat_${c.ano}_${idx}`}
+                                className={`py-2.5 px-3 text-right tabular-nums font-medium ${
+                                  mov
+                                    ? 'text-slate-800 dark:text-slate-200'
+                                    : 'text-slate-400 dark:text-slate-600'
                                 }`}
                               >
-                                {formatBrl(valLucro)}
+                                {mov ? formatBrl(dado!.faturamento) : '—'}
                               </td>
                             )
                           })}
                           {comparativoAnos.map((c) => {
-                            const mg = c.resultado.itensPorMes[idx]?.margemSobreFaturamento
+                            const dado = c.resultado.itensPorMes[idx]
+                            const mov = mesTemMovimento(dado)
+                            const valLucro = dado?.lucroApurado ?? 0
+                            return (
+                              <td
+                                key={`v_luc_${c.ano}_${idx}`}
+                                className={`py-2.5 px-3 text-right tabular-nums font-bold ${
+                                  !mov
+                                    ? 'text-slate-400 dark:text-slate-600'
+                                    : valLucro >= 0
+                                      ? 'text-emerald-700 dark:text-emerald-400'
+                                      : 'text-red-600 dark:text-red-400'
+                                }`}
+                              >
+                                {mov ? formatBrl(valLucro) : '—'}
+                              </td>
+                            )
+                          })}
+                          {comparativoAnos.map((c) => {
+                            const dado = c.resultado.itensPorMes[idx]
+                            const mov = mesTemMovimento(dado)
+                            const mg = dado?.margemSobreFaturamento
                             return (
                               <td
                                 key={`v_mg_${c.ano}_${idx}`}
                                 className="py-2.5 px-3 text-right tabular-nums"
                               >
-                                <span
-                                  className={`inline-block font-bold px-2 py-0.5 rounded-full text-[10.5px] ${getMargemBadgeColor(mg ?? null)}`}
-                                >
-                                  {formatPercent(mg ?? null)}
-                                </span>
+                                {mov ? (
+                                  <span
+                                    className={`inline-block font-bold px-2 py-0.5 rounded-full text-[10.5px] ${getMargemBadgeColor(mg ?? null)}`}
+                                  >
+                                    {formatPercent(mg ?? null)}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 dark:text-slate-600">—</span>
+                                )}
                               </td>
                             )
                           })}
@@ -1694,38 +1740,53 @@ export default function AnaliseRentabilidade() {
                     <tfoot>
                       <tr className="bg-slate-100/90 dark:bg-slate-800/90 border-t-2 border-slate-300 dark:border-slate-700 font-bold text-[11.5px] text-[#0B1F3A] dark:text-slate-100">
                         <td className="py-3 px-4 uppercase tracking-wider">TOTAL DO PERÍODO</td>
-                        {comparativoAnos.map((c) => (
-                          <td
-                            key={`tot_fat_${c.ano}`}
-                            className="py-3 px-3 text-right tabular-nums font-extrabold text-blue-700 dark:text-blue-300"
-                          >
-                            {formatBrl(c.resultado.faturamentoTotal)}
-                          </td>
-                        ))}
-                        {comparativoAnos.map((c) => (
-                          <td
-                            key={`tot_luc_${c.ano}`}
-                            className={`py-3 px-3 text-right tabular-nums font-extrabold ${
-                              c.resultado.lucroTotal >= 0
-                                ? 'text-emerald-700 dark:text-emerald-400'
-                                : 'text-red-600 dark:text-red-400'
-                            }`}
-                          >
-                            {formatBrl(c.resultado.lucroTotal)}
-                          </td>
-                        ))}
-                        {comparativoAnos.map((c) => (
-                          <td
-                            key={`tot_mg_${c.ano}`}
-                            className="py-3 px-3 text-right tabular-nums font-extrabold"
-                          >
-                            <span
-                              className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${getMargemBadgeColor(c.resultado.margemSobreFaturamentoTotal)}`}
+                        {comparativoAnos.map((c) => {
+                          const movAno = anoTemMovimento(c.resultado)
+                          return (
+                            <td
+                              key={`tot_fat_${c.ano}`}
+                              className="py-3 px-3 text-right tabular-nums font-extrabold text-blue-700 dark:text-blue-300"
                             >
-                              {formatPercent(c.resultado.margemSobreFaturamentoTotal)}
-                            </span>
-                          </td>
-                        ))}
+                              {movAno ? formatBrl(c.resultado.faturamentoTotal) : '—'}
+                            </td>
+                          )
+                        })}
+                        {comparativoAnos.map((c) => {
+                          const movAno = anoTemMovimento(c.resultado)
+                          return (
+                            <td
+                              key={`tot_luc_${c.ano}`}
+                              className={`py-3 px-3 text-right tabular-nums font-extrabold ${
+                                !movAno
+                                  ? 'text-slate-400 dark:text-slate-600'
+                                  : c.resultado.lucroTotal >= 0
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-red-600 dark:text-red-400'
+                              }`}
+                            >
+                              {movAno ? formatBrl(c.resultado.lucroTotal) : '—'}
+                            </td>
+                          )
+                        })}
+                        {comparativoAnos.map((c) => {
+                          const movAno = anoTemMovimento(c.resultado)
+                          return (
+                            <td
+                              key={`tot_mg_${c.ano}`}
+                              className="py-3 px-3 text-right tabular-nums font-extrabold"
+                            >
+                              {movAno ? (
+                                <span
+                                  className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] ${getMargemBadgeColor(c.resultado.margemSobreFaturamentoTotal)}`}
+                                >
+                                  {formatPercent(c.resultado.margemSobreFaturamentoTotal)}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 dark:text-slate-600">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
                       </tr>
                     </tfoot>
                   </table>
