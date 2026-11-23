@@ -170,24 +170,53 @@ function somarComprasCentroCusto(opcoes: {
   const idsAlvo = new Set(centrosAlvo.map((c) => c.id))
   let nomeCentro: string | undefined = centrosAlvo[0]?.nome
 
-  // Mapa id -> código do centro: permite casar plano_contas.centro mesmo quando
-  // os registros do plano de contas vêm SEM expand (sem expand.centro populado).
-  const codigoCentroPorId = new Map<string, string>()
-  for (const c of opcoes.centros) {
-    codigoCentroPorId.set(c.id, (c.codigo || '').trim().toUpperCase())
-  }
-
   const planoMap = new Map<string, PlanoContaRecord>()
+  // Mapa id -> código do centro. FONTE PRIMÁRIA: plano_contas.centro (com o
+  // código vindo do expand do plano quando existir). A coleção `centros` é só
+  // complemento — idsAlvo vazio (centros não carregados/sem código populado)
+  // NÃO pode zerar as compras.
+  const codigoCentroPorId = new Map<string, string>()
   for (const p of opcoes.planoContas) {
     planoMap.set(p.id, p)
-    const codigoCentroPlano =
-      (p.expand?.centro as any)?.codigo?.trim().toUpperCase() ||
-      (p.centro ? codigoCentroPorId.get(p.centro) : undefined) ||
+    if (!p.centro) continue
+    const codCentro =
+      ((p.expand?.centro as any)?.codigo || '').trim().toUpperCase() ||
+      codigoCentroPorId.get(p.centro) ||
       ''
-    if (p.centro && codigoCentroPlano.includes(codigoAlvo)) {
+    if (codCentro) codigoCentroPorId.set(p.centro, codCentro)
+    if (codCentro.includes(codigoAlvo)) {
       if (!nomeCentro) nomeCentro = (p.expand?.centro as any)?.nome
       idsAlvo.add(p.centro)
     }
+  }
+  for (const c of opcoes.centros) {
+    if (!codigoCentroPorId.has(c.id) || !codigoCentroPorId.get(c.id)) {
+      codigoCentroPorId.set(c.id, (c.codigo || '').trim().toUpperCase())
+    }
+  }
+
+  // Matcher blindado: resolve o centro do lançamento pelo plano de contas
+  // (mapa acima) e pelo expand do próprio lançamento (plano_conta.centro),
+  // sem depender da coleção `centros` ter vindo carregada.
+  const lancPertenceAoCentroCompras = (lanc: LancamentoRecord): boolean => {
+    const plano = lanc.plano_conta && planoMap.size > 0 ? planoMap.get(lanc.plano_conta) : undefined
+    const centroPlanoId =
+      (lanc.expand?.plano_conta as any)?.centro || plano?.centro || (lanc as any).centro
+    if (centroPlanoId) {
+      const codCentro = codigoCentroPorId.get(centroPlanoId) || ''
+      if (codCentro && codCentro.includes(codigoAlvo)) return true
+      if (idsAlvo.has(centroPlanoId)) return true
+    }
+    const codExpandLanc = (((lanc.expand?.plano_conta as any)?.expand?.centro as any)?.codigo || '')
+      .trim()
+      .toUpperCase()
+    if (codExpandLanc && codExpandLanc.includes(codigoAlvo)) return true
+    const codPlanoExpand = (((plano?.expand?.centro as any)?.codigo || '') as string)
+      .trim()
+      .toUpperCase()
+    if (codPlanoExpand && codPlanoExpand.includes(codigoAlvo)) return true
+    // Fallback: identificador da Reforma Tributária (histórico citando o código)
+    return lancamentoPertenceAoCentroCusto(lanc, idsAlvo, planoMap, codigoAlvo)
   }
 
   let total = 0
@@ -195,7 +224,7 @@ function somarComprasCentroCusto(opcoes: {
   for (const lanc of opcoes.lancamentos) {
     if (lanc.estornado || !lanc.data) continue
     if (!chaves.has(lanc.data.slice(0, 7))) continue
-    if (lancamentoPertenceAoCentroCusto(lanc, idsAlvo, planoMap, codigoAlvo)) {
+    if (lancPertenceAoCentroCompras(lanc)) {
       total += Number(lanc.valor) || 0
       quantidade++
     }
