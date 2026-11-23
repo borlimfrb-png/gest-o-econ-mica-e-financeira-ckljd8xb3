@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -44,6 +44,7 @@ import {
   Wallet,
   ArrowDownRight,
   ArrowUpRight,
+  ArrowLeft,
   Layers,
 } from 'lucide-react'
 
@@ -74,6 +75,7 @@ function formatBrl(val: number | undefined | null): string {
 
 export default function FluxoCaixaDre() {
   const { toast } = useToast()
+  const navigate = useNavigate()
   const { selectedEmpresaId, selectedEmpresa, selectedAno, isGrupoAtivo, grupoAtivo } = useFilter()
 
   // Estados de dados
@@ -281,6 +283,18 @@ export default function FluxoCaixaDre() {
               <Layers className="w-4.5 h-4.5" />
             </span>
             <div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/analise-economica-financeira')}
+                  className="h-6 px-2 text-[11px] font-semibold text-blue-700 hover:text-blue-800 hover:bg-blue-50 gap-1 cursor-pointer print:hidden"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  Voltar ao Hub
+                </Button>
+              </div>
               <h1 className="text-lg font-bold text-[#0B1F3A] tracking-tight">
                 Fluxo de Caixa (DRE Gerencial)
               </h1>

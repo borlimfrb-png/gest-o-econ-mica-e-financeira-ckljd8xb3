@@ -20,6 +20,7 @@ import {
   Coins,
   Cpu,
   LineChart,
+  Wallet,
 } from 'lucide-react'
 import { useFilter } from '@/contexts/FilterContext'
 import { useAuth } from '@/contexts/AuthContext'
@@ -536,7 +537,7 @@ export default function AnaliseEconomicaFinanceira() {
         borderGlow: 'hover:border-emerald-400/70 hover:shadow-emerald-500/15',
         iconBg:
           'bg-gradient-to-tr from-emerald-500/25 to-teal-600/20 text-emerald-300 border-emerald-400/40',
-        rota: () => '/gerencial/dashboard-bi',
+        rota: () => '/indicadores/ebitda',
         metricasTexto: 'Lucro Líquido + IR/CSLL + Despesas Financeiras Líquidas',
         valorDestaque: formatCurrency(ebitdaAtivo),
         rotuloDestaque: `EBITDA ${anoAtivo}`,
@@ -611,6 +612,24 @@ export default function AnaliseEconomicaFinanceira() {
         iconBg: 'bg-gradient-to-tr from-teal-500/25 to-sky-600/20 text-sky-300 border-sky-400/40',
         rota: () => '/gerencial/comparativo-mensal',
         metricasTexto: 'Receita, Lucro, Ativo, Passivo, PL, Liquidez e ROE mês a mês',
+      })
+
+      // 6. Fluxo de Caixa (DRE) — tela gerencial existente (/gerencial/fluxo-caixa)
+      lista.push({
+        id: 'fluxo-caixa',
+        titulo: 'Fluxo de Caixa (DRE)',
+        subtitulo: 'Entradas, Saídas & Saldo Acumulado',
+        descricao:
+          'Demonstração mensal da movimentação de caixa a partir dos lançamentos: entradas e saídas operacionais e financeiras, saldo do período e acumulado, com matriz por conta DRE e exportação.',
+        badge: 'Caixa',
+        badgeVariant: 'cyan',
+        icon: Wallet,
+        gradient: 'from-[#0B1F3A] via-[#0B2C46] to-[#0F4A55]',
+        borderGlow: 'hover:border-teal-400/70 hover:shadow-teal-500/15',
+        iconBg:
+          'bg-gradient-to-tr from-teal-500/25 to-cyan-600/20 text-teal-300 border-teal-400/40',
+        rota: () => '/gerencial/fluxo-caixa',
+        metricasTexto: 'Entradas/Saídas Operacionais e Financeiras, Saldo do Período e Acumulado',
       })
     }
 
@@ -823,7 +842,7 @@ export default function AnaliseEconomicaFinanceira() {
                 {/* KPI 2: EBITDA (LAJIDA) Operacional */}
                 <div
                   onClick={() =>
-                    navigate(isCliente ? '/cliente/dashboard-bi' : '/gerencial/dashboard-bi')
+                    navigate(isCliente ? '/cliente/dashboard-bi' : '/indicadores/ebitda')
                   }
                   className="group cursor-pointer rounded-2xl p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-500 transition-all duration-200 relative overflow-hidden"
                 >
@@ -855,7 +874,7 @@ export default function AnaliseEconomicaFinanceira() {
                   <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                     <span>Geração Caixa Op.</span>
                     <span className="text-emerald-600 dark:text-emerald-400 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
-                      Dashboard BI →
+                      {isCliente ? 'Dashboard BI →' : 'EBITDA (LAJIDA) →'}
                     </span>
                   </div>
                 </div>

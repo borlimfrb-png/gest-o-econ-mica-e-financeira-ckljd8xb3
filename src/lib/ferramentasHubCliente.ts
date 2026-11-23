@@ -20,6 +20,7 @@ export const FERRAMENTAS_HUB_CLIENTE: Record<string, ModuloSistema> = {
   'dashboard-bi': 'cliente_dashboard_bi',
   indicadores: 'cliente_indicadores',
   'agente-ia': 'cliente_agente_ia',
+  'fluxo-caixa': 'gerencial_fluxo_caixa',
 }
 
 /** Retorna true quando o card do hub pode ser exibido para o usuário. */

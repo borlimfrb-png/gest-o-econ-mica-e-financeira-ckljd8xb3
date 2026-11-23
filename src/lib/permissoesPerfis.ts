@@ -247,6 +247,8 @@ export const PERFIS_ACESSO: Record<UserRole, PerfilConfig> = {
       'gerencial_despesas_fixas',
       'gerencial_despesas_variaveis',
       'gerencial_analise_faturamento',
+      // Fluxo de Caixa (DRE): novo módulo do hub (card "fluxo-caixa") também para clientes
+      'gerencial_fluxo_caixa',
       // Drill-down somente-leitura: destino dos links de código de conta do DRE
       // Gerencial e das telas de Despesas Fixas/Variáveis do hub. Sem ele, o clique
       // no código da conta navega e o ModuloRoute redireciona de volta ao hub
