@@ -485,6 +485,25 @@ export interface MetaDespesaMensalRecord extends RecordModel {
   updated?: string
 }
 
+/** Item de ajuste fiscal (conciliação IFRS → Lucro Fiscal) do Simulador de Regimes. */
+export type TipoAjusteFiscal = 'Aditivo' | 'Exclusivo'
+
+export interface ItemAjusteFiscal {
+  descricao: string
+  tipo: TipoAjusteFiscal
+  valor: number // R$, sempre positivo — o tipo define o sinal
+}
+
+/** Registro dos ajustes fiscais IFRS de um exercício (coleção `ajustes_fiscais_ifrs`, migração 0119). */
+export interface AjustesFiscaisIfrsRecord extends RecordModel {
+  empresa: string
+  ano: number
+  ajustes?: ItemAjusteFiscal[] | null
+  user: string
+  created?: string
+  updated?: string
+}
+
 export interface MetaLancamentoRecord extends RecordModel {
   empresa: string
   tipo: TipoMetaLancamento

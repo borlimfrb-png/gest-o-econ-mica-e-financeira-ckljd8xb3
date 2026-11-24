@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-24T13:14:13.084Z",
+  "generatedAt": "2026-11-24T14:33:56.714Z",
   "collections": [
     {
       "name": "users",
@@ -6440,6 +6440,63 @@
         "CREATE UNIQUE INDEX idx_meta_despesa_emp_ano_mes ON metas_despesa_mensal (empresa, ano, mes)",
         "CREATE INDEX idx_meta_despesa_empresa ON metas_despesa_mensal (empresa)",
         "CREATE INDEX idx_meta_despesa_ano_mes ON metas_despesa_mensal (ano, mes)"
+      ]
+    },
+    {
+      "name": "ajustes_fiscais_ifrs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && (empresa = @request.auth.empresa || empresa ?= @request.auth.empresas:each))",
+        "view": "@request.auth.id != '' && @request.auth.role != 'cliente' && (@request.auth.role = 'admin' || (@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && (empresa = @request.auth.empresa || empresa ?= @request.auth.empresas:each))",
+        "create": "@request.auth.id != '' && @request.auth.role != 'cliente' && ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && @request.body.empresa = @request.auth.empresa || @request.body.empresa ?= @request.auth.empresas:each || @request.auth.role = 'admin')",
+        "update": "@request.auth.id != '' && @request.auth.role != 'cliente' && ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && @request.body.empresa = @request.auth.empresa || @request.body.empresa ?= @request.auth.empresas:each || @request.auth.role = 'admin')",
+        "delete": "@request.auth.id != '' && @request.auth.role != 'cliente' && ((@request.auth.role = 'empresa' || @request.auth.role = 'financeiro') && @request.body.empresa = @request.auth.empresa || @request.body.empresa ?= @request.auth.empresas:each || @request.auth.role = 'admin')"
+      },
+      "fields": [
+        {
+          "name": "empresa",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "empresas"
+        },
+        {
+          "name": "ano",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "ajustes",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "user",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_ajustes_ifrs_emp_ano ON ajustes_fiscais_ifrs (empresa, ano)",
+        "CREATE INDEX idx_ajustes_ifrs_empresa ON ajustes_fiscais_ifrs (empresa)"
       ]
     }
   ]
