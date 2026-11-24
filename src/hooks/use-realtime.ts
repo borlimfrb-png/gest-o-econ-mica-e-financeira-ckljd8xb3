@@ -50,60 +50,54 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Igual ao useRealtime, mas com debounce (trailing 1,5s): quando vários
- * registros mudam em sequência, o callback só dispara 1,5s depois do último
- * evento — evita recarregar a tela inteira a cada gravação.
+ * Versão com debounce (trailing 1,5s) do useRealtime: um evento em qualquer
+ * registro da coleção agenda o callback, mas rajadas (importações em lote,
+ * vários registros de uma vez) são coalescidas numa única execução — evita
+ * estourar o rate limit do backend (429) e estados intermediários vazios.
+ *
+ * Assinatura idêntica ao useRealtime (coleção, callback, enabled?).
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
-  delayMs: number = 1500,
 ) {
   const callbackRef = useRef(callback)
   callbackRef.current = callback
 
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const lastEventRef = useRef<RecordSubscription<TRecord> | undefined>(undefined)
-
   useEffect(() => {
     if (!enabled) return
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let unsubscribeFn: (() => Promise<void>) | undefined
     let cancelled = false
 
-    const fire = () => {
-      timeoutRef.current = undefined
-      const event = lastEventRef.current
-      lastEventRef.current = undefined
-      if (event) callbackRef.current(event)
-    }
-
-    const schedule = (data: RecordSubscription<TRecord>) => {
-      lastEventRef.current = data
-      if (timeoutRef.current) clearTimeout(timeoutRef.current)
-      timeoutRef.current = setTimeout(fire, delayMs)
-    }
-
-    const unsubscribePromise = pb
-      .collection<TRecord>(collectionName)
-      .subscribe('*', schedule)
+    pb.collection<TRecord>(collectionName)
+      .subscribe('*', (e) => {
+        if (cancelled) return
+        if (timeoutId) clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => {
+          timeoutId = undefined
+          callbackRef.current(e)
+        }, 1500)
+      })
       .then((fn) => {
         if (cancelled) {
           fn().catch(() => {})
+        } else {
+          unsubscribeFn = fn
         }
-        return fn
       })
-      .catch(() => undefined)
+      .catch(() => {})
 
     return () => {
       cancelled = true
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = undefined
+      if (timeoutId) clearTimeout(timeoutId)
+      if (unsubscribeFn) {
+        unsubscribeFn().catch(() => {})
       }
-      unsubscribePromise.then((fn) => fn?.().catch(() => {})).catch(() => {})
     }
-  }, [collectionName, enabled, delayMs])
+  }, [collectionName, enabled])
 }
 
 export default useRealtime
