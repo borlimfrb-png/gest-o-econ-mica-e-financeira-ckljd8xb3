@@ -209,7 +209,7 @@ export function SecaoComparativoRegimes() {
     if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
       carregarAjustes()
     } else {
-      setRegistroAjustes(null)
+      setItensAjustesSalvos(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmpresaId, selectedAno])

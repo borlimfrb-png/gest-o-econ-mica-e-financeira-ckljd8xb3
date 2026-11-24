@@ -20,7 +20,7 @@ import {
 import { useFerramentas } from '@/contexts/FerramentasContext'
 import { ShieldAlert } from 'lucide-react'
 
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useRef } from 'react'
 
 import Index from './pages/Index'
 import Layout from './components/Layout'
@@ -130,12 +130,46 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 // Componente para rotas com verificação de perfil
+//
+// HISTERESE (corrige "HUB sai da tela após processar"): ao processar no HUB, os
+// registros gravados disparam refetches realtime (FilterContext assina
+// dre/balancos/empresas/grupos_empresariais); PermissoesDinamicasContext e
+// FerramentasContext reavaliam e, num estado intermediário, o spinner volta a
+// aparecer (desmontando os filhos e descartando o estado do usuário) ou
+// perfilTemAcessoDinamico pisca falso — o <Navigate replace> expulsa o usuário
+// logo depois do resultado renderizar. Para evitar isso, memorizamos a PRIMEIRA
+// autorização bem-sucedida por módulo: depois de autorizado uma vez, transições
+// transitórias de isCarregando/permissões não bloqueiam mais. O bloqueio volta
+// quando a SESSÃO muda (logout/login de outro usuário), pois a chave de
+// autorização inclui o id do usuário.
 function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: React.ReactNode }) {
   const { user, isAuthenticated, isLoading, isAdmin } = useAuth()
   const { desabilitadas, isCarregando: isCarregandoFerramentas } = useFerramentas()
   const { perfilTemAcessoDinamico, isCarregando: isCarregandoPermissoes } = usePermissoesDinamicas()
 
-  if (isLoading || (isCarregandoFerramentas && !isAdmin) || (isCarregandoPermissoes && !isAdmin)) {
+  // Chave de sessão: se outro usuário logar (logout/login), a histerese zera e
+  // a verificação real de acesso roda de novo do zero.
+  const chaveSessao = `${user?.id || 'anon'}`
+  const autorizadoRef = useRef<string | null>(null)
+
+  if (isAuthenticated && !isLoading && !isAdmin) {
+    const carregando = isCarregandoFerramentas || isCarregandoPermissoes
+    const temAcesso = perfilTemAcessoDinamico(user?.role, modulo)
+    // Guarda a autorização válida (com ferramentas já carregadas) deste usuário+modulo.
+    if (!carregando && temAcesso) {
+      autorizadoRef.current = chaveSessao
+    }
+  }
+
+  const autorizadoNestaSessao = autorizadoRef.current === chaveSessao
+
+  // Spinner apenas na CARGA INICIAL (antes da primeira autorização): durante
+  // refetches de fundo os contexts NÃO voltam isCarregando=true, e a histerese
+  // garante que nem aqui nem no Navigate abaixo o usuário é expulso.
+  if (
+    isLoading ||
+    (!autorizadoNestaSessao && !isAdmin && (isCarregandoFerramentas || isCarregandoPermissoes))
+  ) {
     return (
       <div className="min-h-screen bg-[#F5F7FA] flex items-center justify-center">
         <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -147,7 +181,7 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
     return <Navigate to="/" replace />
   }
 
-  if (!perfilTemAcessoDinamico(user?.role, modulo)) {
+  if (!autorizadoNestaSessao && !perfilTemAcessoDinamico(user?.role, modulo)) {
     const destino = getRotaInicialPorPerfil(user?.role)
     return <Navigate to={destino} replace />
   }
@@ -156,7 +190,9 @@ function ModuloRoute({ modulo, children }: { modulo: ModuloSistema; children: Re
   // Perfil cliente AGORA também é bloqueado quando a ferramenta foi desabilitada para ele
   // (inclui os módulos cliente_* do hub dele). Administrador NUNCA é bloqueado
   // (acesso irrestrito de gestão).
-  if (!isAdmin && desabilitadas.has(modulo as string)) {
+  // Com a histerese ativa (já autorizado nesta sessão), o estado de ferramentas
+  // também não derruba a tela em transição transitória.
+  if (!autorizadoNestaSessao && !isAdmin && desabilitadas.has(modulo as string)) {
     return <FerramentaBloqueada />
   }
 

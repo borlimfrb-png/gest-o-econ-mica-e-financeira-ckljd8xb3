@@ -23,13 +23,17 @@ export const ajustesFiscaisService = {
     return Array.isArray(rec.ajustes) ? rec.ajustes : null
   },
 
-  /** Salva (upsert) a lista completa de ajustes da empresa + ano. Lista vazia remove o registro. */
+  /**
+   * Salva (upsert) a lista completa de ajustes da empresa + ano. Lista vazia remove o registro.
+   * Devolve a LISTA de itens efetivamente persistida (normalizada) — os chamadores
+   * (AjustesFiscaisCard.onSalvo) sincronizam o estado com ela.
+   */
   async salvar(
     empresaId: string,
     ano: number,
     ajustes: ItemAjusteFiscal[],
-  ): Promise<AjustesFiscaisIfrsRecord | null> {
-    if (!empresaId) return null
+  ): Promise<ItemAjusteFiscal[]> {
+    if (!empresaId) return []
     const existente = await pb
       .collection('ajustes_fiscais_ifrs')
       .getFirstListItem<AjustesFiscaisIfrsRecord>(`empresa = '${empresaId}' && ano = ${ano}`)
@@ -46,18 +50,20 @@ export const ajustesFiscaisService = {
     // Lista vazia: remove o registro (ano volta ao estado "sem ajustes").
     if (normalizados.length === 0) {
       if (existente) await pb.collection('ajustes_fiscais_ifrs').delete(existente.id)
-      return null
+      return []
     }
 
     const user = pb.authStore.record?.id || ''
     if (existente) {
-      return await pb
+      const rec = await pb
         .collection('ajustes_fiscais_ifrs')
         .update<AjustesFiscaisIfrsRecord>(existente.id, { ajustes: normalizados })
+      return Array.isArray(rec?.ajustes) ? (rec.ajustes as ItemAjusteFiscal[]) : normalizados
     }
-    return await pb
+    const rec = await pb
       .collection('ajustes_fiscais_ifrs')
       .create<AjustesFiscaisIfrsRecord>({ empresa: empresaId, ano, ajustes: normalizados, user })
+    return Array.isArray(rec?.ajustes) ? (rec.ajustes as ItemAjusteFiscal[]) : normalizados
   },
 }
 

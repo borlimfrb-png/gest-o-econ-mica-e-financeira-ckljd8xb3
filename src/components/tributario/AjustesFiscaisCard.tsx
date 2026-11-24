@@ -141,7 +141,7 @@ export function AjustesFiscaisCard({
     setSalvando(true)
     try {
       const lista = await ajustesFiscaisService.salvar(empresaId, ano, ajustes)
-      onSalvo?.(lista || [])
+      onSalvo?.(Array.isArray(lista) ? lista : [])
       toast({
         title: 'Ajustes fiscais salvos',
         description: `Conciliação fiscal do exercício ${ano} persistida para a empresa ativa.`,

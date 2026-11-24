@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   createContext,
   useContext,
@@ -49,16 +50,26 @@ function overridesParaMapa(registros: PermissaoPerfilRecord[]): Record<string, M
 }
 
 export function PermissoesDinamicasProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading: isLoadingAuth } = useAuth()
+  const { isAuthenticated, isLoading: isLoadingAuth, user } = useAuth()
   const [registros, setRegistros] = useState<PermissaoPerfilRecord[]>([])
   const [isCarregando, setIsCarregando] = useState(true)
 
+  // HISTERESE: isCarregando só volta a true quando o USUÁRIO da sessão muda
+  // (login/logout) — refetches de fundo do MESMO usuário (ex.: admin salvou
+  // permissões) não setam isCarregando, para o ModuloRoute nunca desmontar
+  // os filhos (spinner) nem reavaliar permissões em estado intermediário.
+  const usuarioCarregadoRef = useRef<string | null>(null)
+
   const carregar = useCallback(async () => {
-    setIsCarregando(true)
+    const usuarioAtual = user?.id || null
+    if (usuarioCarregadoRef.current !== usuarioAtual) {
+      setIsCarregando(true)
+    }
     const lista = await permissoesPerfisService.listarTodos()
+    usuarioCarregadoRef.current = usuarioAtual
     setRegistros(lista)
     setIsCarregando(false)
-  }, [])
+  }, [user?.id])
 
   useEffect(() => {
     // Espera a sessão resolver antes de ler a coleção (evita leitura desautenticada).
