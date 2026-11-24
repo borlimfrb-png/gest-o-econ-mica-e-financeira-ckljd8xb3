@@ -43,6 +43,8 @@ interface LimiarFaixa {
  * Margem Bruta 🟢 ≥40% 🟠 20–40% 🔴 <20% · Margem Líquida 🟢 ≥10% 🟠 5–10% 🔴 <5% ·
  * Giro do Ativo 🟢 ≥1,0x 🟠 0,5–1,0x 🔴 <0,5x · Margem EBITDA 🟢 ≥10% 🟠 0–10% 🔴 <0%.
  */
+// Chaves em kebab-case, alinhadas aos ids dos cards renderizados abaixo
+// ('margem-bruta', 'margem-liquida', 'giro-ativo', 'margem-ebitda').
 const LIMIARES: Record<string, LimiarFaixa> = {
   roe: {
     verde: 15,
@@ -58,28 +60,28 @@ const LIMIARES: Record<string, LimiarFaixa> = {
     rotuloAmbar: 'Adequado (3 – 8%)',
     rotuloVermelho: 'Alerta (< 3%)',
   },
-  margemBruta: {
+  'margem-bruta': {
     verde: 40,
     ambar: 20,
     rotuloVerde: 'Excelente (≥ 40%)',
     rotuloAmbar: 'Média (20 – 40%)',
     rotuloVermelho: 'Baixa (< 20%)',
   },
-  margemLiquida: {
+  'margem-liquida': {
     verde: 10,
     ambar: 5,
     rotuloVerde: 'Excelente (≥ 10%)',
     rotuloAmbar: 'Adequado (5 – 10%)',
     rotuloVermelho: 'Alerta (< 5%)',
   },
-  giroAtivo: {
+  'giro-ativo': {
     verde: 1.0,
     ambar: 0.5,
     rotuloVerde: 'Excelente (≥ 1,0x)',
     rotuloAmbar: 'Adequado (0,5 – 1,0x)',
     rotuloVermelho: 'Alerta (< 0,5x)',
   },
-  margemEbitda: {
+  'margem-ebitda': {
     verde: 10,
     ambar: 0,
     rotuloVerde: 'Forte (≥ 10%)',
@@ -88,8 +90,8 @@ const LIMIARES: Record<string, LimiarFaixa> = {
   },
 }
 
-function getStatus(val: number | null, lim: LimiarFaixa): Faixa {
-  if (val === null || !Number.isFinite(val)) return 'indefinido'
+function getStatus(val: number | null, lim: LimiarFaixa | undefined): Faixa {
+  if (val === null || !Number.isFinite(val) || !lim) return 'indefinido'
   if (val >= lim.verde) return 'verde'
   if (val >= lim.ambar) return 'ambar'
   return 'vermelho'
@@ -263,13 +265,14 @@ export function SecaoRentabilidadeHub({
             const lim = LIMIARES[card.id]
             const faixa = getStatus(card.valor, lim)
             const cores = CORES_FAIXA[faixa]
+            // Indicador sem faixa mapeada nos limiares: estado neutro, nunca quebra
             const rotuloFaixa =
               faixa === 'verde'
-                ? lim.rotuloVerde
+                ? (lim?.rotuloVerde ?? ROTULO_SEM_DADOS)
                 : faixa === 'ambar'
-                  ? lim.rotuloAmbar
+                  ? (lim?.rotuloAmbar ?? ROTULO_SEM_DADOS)
                   : faixa === 'vermelho'
-                    ? lim.rotuloVermelho
+                    ? (lim?.rotuloVermelho ?? ROTULO_SEM_DADOS)
                     : ROTULO_SEM_DADOS
             return (
               <div
