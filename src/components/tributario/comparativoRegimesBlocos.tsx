@@ -140,17 +140,28 @@ export function CardsRegimes({ resultado }: { resultado: SimuladorRegimesResulta
               </div>
 
               <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
-                {r.breakdown.map((b, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-[11px] py-0.5">
-                    <span className="text-slate-600">
-                      <span className="font-semibold text-slate-800">{b.sigla}</span>
-                      <span className="text-slate-400"> · {b.nome}</span>
-                    </span>
-                    <span className="font-semibold text-slate-900">
-                      {resultado.temDados ? formatBrl(b.valor) : '—'}
-                    </span>
+                {r.breakdown.map((b, idx) => {
+                  // Prejuízo apurado na DRE: IRPJ/CSLL do Lucro Real não têm base
+                  // tributável — "—" em vez de R$ 0,00 (estado honesto).
+                  const semLucroTributavel =
+                    resultado.prejuizoFiscal && r.id === 'real' && /IRPJ|CSLL/i.test(b.sigla)
+                  return (
+                    <div key={idx} className="flex items-center justify-between text-[11px] py-0.5">
+                      <span className="text-slate-600">
+                        <span className="font-semibold text-slate-800">{b.sigla}</span>
+                        <span className="text-slate-400"> · {b.nome}</span>
+                      </span>
+                      <span className="font-semibold text-slate-900">
+                        {semLucroTributavel ? '—' : resultado.temDados ? formatBrl(b.valor) : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+                {resultado.prejuizoFiscal && r.id === 'real' && (
+                  <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1">
+                    Prejuízo apurado na DRE Gerencial — sem IRPJ/CSLL a recolher.
                   </div>
-                ))}
+                )}
                 {r.faixaSimples && (
                   <div className="text-[10px] text-slate-400 pt-1">Faixa: {r.faixaSimples}</div>
                 )}

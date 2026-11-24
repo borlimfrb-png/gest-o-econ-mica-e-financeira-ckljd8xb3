@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -49,9 +49,12 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
+export default useRealtime
+
 /**
- * Versão com debounce (trailing 1,5s) do useRealtime — evita recarregar os
- * dados a cada evento em rajada (importações, salvamentos em lote).
+ * Variante com DEBOUNCE — reação a rajadas de eventos realtime (importações,
+ * edições em lote) recarregando os dados uma única vez, 1,5s após o último
+ * evento (trailing). Wrapper direto do useRealtime acima.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
@@ -59,44 +62,28 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   enabled: boolean = true,
   delayMs: number = 1500,
 ) {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guarda a callback mais recente sem recriar a subscription a cada render
   const callbackRef = useRef(callback)
   callbackRef.current = callback
 
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleEvent = useCallback(
+    (data: RecordSubscription<TRecord>) => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        callbackRef.current(data)
+      }, delayMs)
+    },
+    [delayMs],
+  )
+
+  useRealtime<TRecord>(collectionName, handleEvent, enabled)
+
   useEffect(() => {
-    if (!enabled) return
-
-    let unsubscribeFn: (() => Promise<void>) | undefined
-    let cancelled = false
-
-    pb.collection<TRecord>(collectionName)
-      .subscribe('*', () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current)
-        timeoutRef.current = setTimeout(() => {
-          timeoutRef.current = null
-          callbackRef.current(undefined as any)
-        }, delayMs)
-      })
-      .then((fn) => {
-        if (cancelled) {
-          fn().catch(() => {})
-        } else {
-          unsubscribeFn = fn
-        }
-      })
-      .catch(() => {})
-
     return () => {
-      cancelled = true
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      if (unsubscribeFn) {
-        unsubscribeFn().catch(() => {})
-      }
+      if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [collectionName, enabled, delayMs])
+  }, [])
 }
-
-export default useRealtime

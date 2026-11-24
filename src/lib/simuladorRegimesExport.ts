@@ -49,7 +49,9 @@ export function exportarSimuladorRegimesExcel(
     `Alíquotas Configuradas: ICMS ${fmtPct(resultado.aliquotaIcms)}% (estadual) · IPI ${fmtPct(resultado.aliquotaIpi)}% · PIS 1,65% · COFINS 7,6%`,
   )
   linha(`Receita Bruta (DRE): R$ ${fmtBrl(resultado.receitaBruta)}`)
-  linha(`Lucro Líquido (DRE): R$ ${fmtBrl(resultado.lucroLiquido)}`)
+  linha(
+    `Lucro/Prejuízo Apurado (DRE Gerencial): ${resultado.prejuizoFiscal ? `Prejuízo de R$ ${fmtBrl(Math.abs(resultado.lucroLiquido))} — sem IRPJ/CSLL a recolher` : `R$ ${fmtBrl(resultado.lucroLiquido)}`}`,
+  )
   linha(
     `Data de Emissão: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`,
   )
@@ -80,6 +82,9 @@ export function exportarSimuladorRegimesExcel(
       reg.isMenorCarga ? 'MENOR CARGA' : `+${fmtPct(reg.diferencaPercentual)}% vs menor`,
     )
   }
+  linha(
+    'Base do Lucro Real: Lucro/Prejuízo apurado na DRE Gerencial (coleção dre, consolidação anual) — IRPJ 15% + adicional 10% acima de R$ 240.000; CSLL 9%.',
+  )
   linha('')
 
   linha('CRÉDITOS SOBRE AS COMPRAS (CC-098) POR TRIBUTO')
@@ -120,12 +125,14 @@ export function exportarSimuladorRegimesExcel(
     resultado.regimes.real,
   ]) {
     for (const item of reg.breakdown) {
+      const semLucroTributavel =
+        resultado.prejuizoFiscal && reg.id === 'real' && /IRPJ|CSLL/i.test(item.sigla)
       linha(
         reg.nome,
         item.sigla,
-        fmtBrl(item.baseCalculo),
+        semLucroTributavel && item.valor === 0 ? '—' : fmtBrl(item.baseCalculo),
         `${fmtPct(item.aliquotaNominal)}`,
-        fmtBrl(item.valor),
+        semLucroTributavel && item.valor === 0 ? '—' : fmtBrl(item.valor),
         item.descricao || '',
       )
     }
@@ -203,12 +210,17 @@ export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado
     `Alíquotas Configuradas;ICMS ${fmtPct(resultado.aliquotaIcms)}% (estadual);IPI ${fmtPct(resultado.aliquotaIpi)}%;PIS 1,65%;COFINS 7,6%`,
   )
   lines.push(`Receita Bruta (DRE);R$ ${dec(resultado.receitaBruta)}`)
-  lines.push(`Lucro Líquido (DRE);R$ ${dec(resultado.lucroLiquido)}`)
+  lines.push(
+    `Lucro/Prejuízo Apurado (DRE Gerencial);${resultado.prejuizoFiscal ? `Prejuízo de R$ ${dec(Math.abs(resultado.lucroLiquido))} - sem IRPJ/CSLL a recolher` : `R$ ${dec(resultado.lucroLiquido)}`}`,
+  )
   lines.push('')
 
   lines.push('RESUMO COMPARATIVO DOS REGIMES')
   lines.push(
     'Regime;Base de Cálculo Principal (R$);Imposto Bruto (R$);Créditos s/ Compras CC-098 (R$);Carga Tributária Final (R$);% da Receita;Situação',
+  )
+  lines.push(
+    'Base do Lucro Real;Lucro/Prejuízo apurado na DRE Gerencial (coleção dre, consolidação anual);IRPJ 15% + adicional 10% acima de R$ 240.000;CSLL 9%',
   )
   for (const reg of [
     resultado.regimes.simples,
@@ -271,9 +283,19 @@ export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado
         [
           reg.nome,
           item.sigla,
-          dec(item.baseCalculo),
+          resultado.prejuizoFiscal &&
+          reg.id === 'real' &&
+          /IRPJ|CSLL/i.test(item.sigla) &&
+          item.valor === 0
+            ? '-'
+            : dec(item.baseCalculo),
           fmtPct(item.aliquotaNominal),
-          dec(item.valor),
+          resultado.prejuizoFiscal &&
+          reg.id === 'real' &&
+          /IRPJ|CSLL/i.test(item.sigla) &&
+          item.valor === 0
+            ? '-'
+            : dec(item.valor),
           (item.descricao || '').replace(/;/g, ','),
         ].join(sep),
       )

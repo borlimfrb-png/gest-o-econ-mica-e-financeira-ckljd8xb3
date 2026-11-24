@@ -121,6 +121,7 @@ export interface SimuladorRegimesResultado {
   economiaMaxima: number // R$ entre o maior e o menor
   reforma: CenarioReformaItem
   temDados: boolean
+  prejuizoFiscal: boolean // DRE apurou prejuízo — IRPJ/CSLL "—" (sem imposto a recolher)
 }
 
 export interface OpcoesSimuladorRegimes {
@@ -368,10 +369,9 @@ export function calcularSimuladorRegimes(
       `Receita Bruta da DRE igual a zero no exercício ${ano} — apuração dos regimes sem base de débito.`,
     )
   }
-  if (lucroLiquido < 0) {
-    observacoes.push(
-      'Lucro Líquido negativo no período — Lucro Real assume prejuízo fiscal (sem IRPJ/CSLL).',
-    )
+  const prejuizoFiscal = lucroLiquido < 0
+  if (prejuizoFiscal) {
+    observacoes.push('Prejuízo apurado na DRE Gerencial — sem IRPJ/CSLL a recolher no Lucro Real.')
   }
 
   const itemSimples = paraRegimeCarga(simplesBruto, {
@@ -582,6 +582,7 @@ export function calcularSimuladorRegimes(
     economiaMaxima,
     reforma,
     temDados: rb > 0 || compras.total > 0,
+    prejuizoFiscal,
   }
 }
 
