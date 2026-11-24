@@ -34,6 +34,7 @@ import {
 import { useFilter } from '@/contexts/FilterContext'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { ajustesFiscaisService } from '@/services/ajustesFiscaisService'
 import {
   centrosService,
   contasService,
@@ -41,7 +42,13 @@ import {
   lancamentosService,
   planoContasService,
 } from '@/services/financeService'
-import type { ContaRecord, DreRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import type {
+  ContaRecord,
+  DreRecord,
+  ItemAjusteFiscal,
+  LancamentoRecord,
+  PlanoContaRecord,
+} from '@/types/finance'
 import { calcularDre, consolidarDreAnual } from '@/lib/financeCalculations'
 import { calcularDreGerencialMatriz } from '@/lib/dreGerencialCalculo'
 import { gerarListaMeses } from '@/lib/dreGerencialTypes'
@@ -53,6 +60,7 @@ import {
   ALIQUOTA_IPI_PADRAO,
 } from '@/lib/simuladorRegimesCalculo'
 import { AliquotasEstaduaisCard } from './AliquotasEstaduaisCard'
+import { AjustesFiscaisCard } from './AjustesFiscaisCard'
 import {
   exportarSimuladorRegimesExcel,
   exportarSimuladorRegimesCsv,
@@ -93,6 +101,19 @@ export function SecaoComparativoRegimes() {
   // Alíquotas estaduais/federais configuráveis (ICMS / IPI), editáveis na tela
   const [aliquotaIcms, setAliquotaIcms] = useState<number>(ALIQUOTA_ICMS_PADRAO)
   const [aliquotaIpi, setAliquotaIpi] = useState<number>(ALIQUOTA_IPI_PADRAO)
+  // Ajustes fiscais IFRS (aditivos/exclusões) salvos da empresa + ano ativo
+  const [itensAjustesSalvos, setItensAjustesSalvos] = useState<ItemAjusteFiscal[] | null>(null)
+
+  const carregarAjustes = async () => {
+    try {
+      setItensAjustesSalvos(
+        await ajustesFiscaisService.getByEmpresaAno(selectedEmpresaId, selectedAno),
+      )
+    } catch (err) {
+      console.error('Erro ao carregar ajustes fiscais IFRS:', err)
+      setItensAjustesSalvos(null)
+    }
+  }
 
   // Carregar dados no padrão de ReformaTributaria.tsx (empresa ativa ou grupo)
   const carregarDados = async () => {
@@ -183,6 +204,16 @@ export function SecaoComparativoRegimes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedEmpresaId, isGrupoAtivo, grupoAtivo, selectedAno])
 
+  // Ajustes fiscais são por empresa + ano — recarregam quando um dos dois muda
+  useEffect(() => {
+    if (selectedEmpresaId && !selectedEmpresaId.startsWith('grupo-')) {
+      carregarAjustes()
+    } else {
+      setRegistroAjustes(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedEmpresaId, selectedAno])
+
   useRealtime<LancamentoRecord>('lancamentos', () => carregarDados())
   useRealtime<ContaRecord>('contas', () => carregarDados())
   useRealtime<PlanoContaRecord>('plano_contas', () => carregarDados())
@@ -226,6 +257,7 @@ export function SecaoComparativoRegimes() {
       contas,
       planoContas,
       centros,
+      ajustesFiscais: itensAjustesSalvos,
     })
   }, [
     selectedAno,
@@ -239,6 +271,7 @@ export function SecaoComparativoRegimes() {
     contas,
     planoContas,
     centros,
+    itensAjustesSalvos,
   ])
 
   const nomeEntidade = isGrupoAtivo
@@ -251,6 +284,7 @@ export function SecaoComparativoRegimes() {
         empresa: selectedEmpresa,
         isGrupo: Boolean(isGrupoAtivo),
         nomeGrupo: grupoAtivo?.nome,
+        ajustes: itensAjustesSalvos,
       })
       toast({
         title: 'Planilha Excel gerada',
@@ -267,7 +301,7 @@ export function SecaoComparativoRegimes() {
 
   const handleExportarCsv = () => {
     try {
-      exportarSimuladorRegimesCsv(resultado)
+      exportarSimuladorRegimesCsv(resultado, { ajustes: itensAjustesSalvos })
       toast({ title: 'Arquivo CSV gerado', description: 'CSV gerado no padrão brasileiro (;).' })
     } catch (err: any) {
       toast({
@@ -464,6 +498,21 @@ export function SecaoComparativoRegimes() {
         aliquotaIpi={aliquotaIpi}
         onChangeAliquotaIcms={setAliquotaIcms}
         onChangeAliquotaIpi={setAliquotaIpi}
+      />
+
+      {/* Conciliação IFRS → Lucro Fiscal (aditivos/exclusões) — editável e persistida
+          (o próprio card salva via ajustesFiscaisService por empresa + ano) */}
+      <AjustesFiscaisCard
+        empresaId={selectedEmpresaId}
+        ano={selectedAno}
+        ajustes={itensAjustesSalvos || []}
+        onChangeAjustes={(lista) => setItensAjustesSalvos(lista)}
+        lucroContabil={resultado.conciliacaoFiscal.lucroContabil}
+        lucroFiscal={resultado.conciliacaoFiscal.lucroFiscal}
+        totalAditivos={resultado.conciliacaoFiscal.totalAditivos}
+        totalExclusoes={resultado.conciliacaoFiscal.totalExclusoes}
+        disabled={Boolean(isGrupoAtivo) || !selectedEmpresaId}
+        onSalvo={(lista) => setItensAjustesSalvos(lista)}
       />
 
       {/* Cards por regime com badge "Menor carga" */}

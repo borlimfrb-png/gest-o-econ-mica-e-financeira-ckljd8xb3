@@ -5,7 +5,7 @@
  */
 
 import * as XLSX from 'xlsx'
-import type { EmpresaRecord } from '@/types/finance'
+import type { EmpresaRecord, ItemAjusteFiscal } from '@/types/finance'
 import type { SimuladorRegimesResultado } from './simuladorRegimesCalculo'
 
 function fmtBrl(v: number): string {
@@ -19,6 +19,13 @@ export interface OpcoesExportSimulador {
   empresa?: EmpresaRecord | null
   isGrupo?: boolean
   nomeGrupo?: string
+  /** Itens de ajuste fiscal IFRS salvos (aditivos/exclusões) — bloco Conciliação. */
+  ajustes?: ItemAjusteFiscal[] | null
+}
+
+/** Lista de ajustes para o bloco Conciliação (aceita grupo sem ajustes). */
+function listarAjustes(opcoes?: OpcoesExportSimulador): ItemAjusteFiscal[] {
+  return Array.isArray(opcoes?.ajustes) ? (opcoes!.ajustes as ItemAjusteFiscal[]) : []
 }
 
 export function exportarSimuladorRegimesExcel(
@@ -109,6 +116,26 @@ export function exportarSimuladorRegimesExcel(
     `Base de compras: DRE Gerencial do Centro de Custo CC-098 (Matéria Prima) — R$ ${fmtBrl(resultado.comprasEntradas)} no exercício ${resultado.ano}`,
   )
   linha('')
+
+  // Conciliação Fiscal (IFRS → Fiscal): ajustes do Lucro Real
+  const c = resultado.conciliacaoFiscal
+  linha('CONCILIAÇÃO FISCAL (IFRS → FISCAL) — BASE DO IRPJ/CSLL NO LUCRO REAL')
+  linha('Lucro Contábil (IFRS - DRE Gerencial)', `R$ ${fmtBrl(c.lucroContabil)}`)
+  for (const item of listarAjustes(opcoes)) {
+    linha(
+      `Ajuste (${item.tipo}): ${item.descricao || 'Sem descrição'}`,
+      `${item.tipo === 'Exclusivo' ? '−' : '+'} R$ ${fmtBrl(Math.abs(Number(item.valor) || 0))}`,
+    )
+  }
+  linha(`Total de Aditivos`, `R$ ${fmtBrl(c.totalAditivos)}`)
+  linha(`Total de Exclusões`, `R$ ${fmtBrl(c.totalExclusoes)}`)
+  linha(
+    'LUCRO FISCAL RESULTANTE',
+    c.lucroFiscal <= 0
+      ? `Prejuízo fiscal de R$ ${fmtBrl(Math.abs(c.lucroFiscal))} — IRPJ/CSLL "—" (sem imposto a recolher)`
+      : `R$ ${fmtBrl(c.lucroFiscal)}`,
+  )
+  linha('')
   linha(
     `Regime com MENOR carga: ${resultado.regimes[resultado.menorRegimeId].nome} (R$ ${fmtBrl(resultado.regimes[resultado.menorRegimeId].impostoTotal)})`,
   )
@@ -195,7 +222,10 @@ export function exportarSimuladorRegimesExcel(
   XLSX.writeFile(wb, `simulador-regimes-${resultado.ano}.xlsx`)
 }
 
-export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado): void {
+export function exportarSimuladorRegimesCsv(
+  resultado: SimuladorRegimesResultado,
+  opcoes?: OpcoesExportSimulador,
+): void {
   const sep = ';'
   const dec = (v: number) => fmtBrl(v)
   const lines: string[] = []
@@ -263,6 +293,28 @@ export function exportarSimuladorRegimesCsv(resultado: SimuladorRegimesResultado
   }
   lines.push(
     `Base de compras;DRE Gerencial do Centro de Custo CC-098 (Matéria Prima);R$ ${dec(resultado.comprasEntradas)} no exercício ${resultado.ano}`,
+  )
+  lines.push('')
+
+  // Conciliação Fiscal (IFRS → Fiscal): ajustes do Lucro Real
+  const c = resultado.conciliacaoFiscal
+  lines.push('CONCILIAÇÃO FISCAL (IFRS → FISCAL) - BASE DO IRPJ/CSLL NO LUCRO REAL')
+  lines.push(`Lucro Contábil (IFRS - DRE Gerencial);R$ ${dec(c.lucroContabil)}`)
+  for (const item of listarAjustes(opcoes)) {
+    lines.push(
+      [
+        `Ajuste (${item.tipo}): ${(item.descricao || 'Sem descrição').replace(/;/g, ',')}`,
+        `${item.tipo === 'Exclusivo' ? '-' : '+'} R$ ${dec(Math.abs(Number(item.valor) || 0))}`,
+      ].join(sep),
+    )
+  }
+  lines.push(`Total de Aditivos;R$ ${dec(c.totalAditivos)}`)
+  lines.push(`Total de Exclusões;R$ ${dec(c.totalExclusoes)}`)
+  lines.push(
+    'LUCRO FISCAL RESULTANTE;' +
+      (c.lucroFiscal <= 0
+        ? `Prejuízo fiscal de R$ ${dec(Math.abs(c.lucroFiscal))} - IRPJ/CSLL "—" (sem imposto a recolher)`
+        : `R$ ${dec(c.lucroFiscal)}`),
   )
   lines.push('')
   lines.push(

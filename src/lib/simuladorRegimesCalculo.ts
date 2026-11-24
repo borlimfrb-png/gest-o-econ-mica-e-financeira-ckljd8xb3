@@ -9,7 +9,12 @@
  * formatação pt-BR só na UI e na exportação.
  */
 
-import type { ContaRecord, LancamentoRecord, PlanoContaRecord } from '@/types/finance'
+import type {
+  ContaRecord,
+  ItemAjusteFiscal,
+  LancamentoRecord,
+  PlanoContaRecord,
+} from '@/types/finance'
 import { calcularDreGerencialMatriz } from './dreGerencialCalculo'
 import { gerarListaMeses } from './dreGerencialTypes'
 import { lancamentoPertenceAoCentroCusto } from './reformaTributariaCalculo'
@@ -122,12 +127,48 @@ export interface SimuladorRegimesResultado {
   reforma: CenarioReformaItem
   temDados: boolean
   prejuizoFiscal: boolean // DRE apurou prejuízo — IRPJ/CSLL "—" (sem imposto a recolher)
+  /** Conciliação IFRS → Lucro Fiscal aplicada no Lucro Real (aditivos/exclusões). */
+  conciliacaoFiscal: {
+    lucroContabil: number // lucro apurado na DRE Gerencial (base IFRS)
+    totalAditivos: number // R$ soma dos ajustes aditivos
+    totalExclusoes: number // R$ soma dos ajustes de exclusão
+    lucroFiscal: number // lucro contábil + aditivos − exclusões (base IRPJ/CSLL)
+    temAjustes: boolean
+  }
+}
+
+/**
+ * Conciliação IFRS → Lucro Fiscal: soma o impacto assinado dos ajustes
+ * (aditivos somam, exclusões subtraem) ao lucro contábil da DRE.
+ */
+export function somarImpactoAjustes(ajustes: ItemAjusteFiscal[] | null | undefined): {
+  totalAditivos: number
+  totalExclusoes: number
+  impactoLiquido: number
+} {
+  const lista = Array.isArray(ajustes) ? ajustes : []
+  let totalAditivos = 0
+  let totalExclusoes = 0
+  for (const a of lista) {
+    const valor = Math.abs(Number(a?.valor) || 0)
+    if (valor === 0) continue
+    if (a.tipo === 'Exclusivo') {
+      totalExclusoes += valor
+    } else {
+      totalAditivos += valor
+    }
+  }
+  totalAditivos = arred(totalAditivos)
+  totalExclusoes = arred(totalExclusoes)
+  return { totalAditivos, totalExclusoes, impactoLiquido: arred(totalAditivos - totalExclusoes) }
 }
 
 export interface OpcoesSimuladorRegimes {
   ano: number
   receitaBruta: number
   lucroLiquido: number
+  /** Ajustes fiscais IFRS (aditivos/exclusões) da empresa + ano — conciliação fiscal. */
+  ajustesFiscais?: ItemAjusteFiscal[] | null
   folhaPagamento?: number
   aliquotaIssPercent?: number
   anexoSimples?: string
@@ -323,6 +364,7 @@ export function calcularSimuladorRegimes(
     planoContas = [],
     centros = [],
     codigoCentroCompras = CODIGO_CENTRO_COMPRAS,
+    ajustesFiscais = null,
   } = opcoes
 
   const observacoes: string[] = []
@@ -339,10 +381,19 @@ export function calcularSimuladorRegimes(
     codigoCentro: codigoCentroCompras,
   })
 
-  // 2. Apuração dos 3 regimes (motor oficial existente)
+  // 2. Conciliação IFRS → Lucro Fiscal: o IRPJ/CSLL do Lucro Real incidem sobre
+  //    o lucro FISCAL (lucro contábil da DRE + aditivos − exclusões), não sobre
+  //    o lucro contábil. O mecanismo de prejuízo existente é reusado: lucro
+  //    fiscal <= 0 ⇒ IRPJ/CSLL "—" com observação (nunca crédito enganoso).
+  const conciliacao = somarImpactoAjustes(ajustesFiscais)
+  const lucroContabil = lucroLiquido
+  const lucroFiscal = arred(lucroContabil + conciliacao.impactoLiquido)
+  const temAjustes = conciliacao.totalAditivos > 0 || conciliacao.totalExclusoes > 0
+
+  // 3. Apuração dos 3 regimes (motor oficial existente)
   const simplesBruto = calcularSimplesNacional(rb, folha, anexoSimples)
   const presumido = calcularLucroPresumido(rb, folha, aliquotaIssPercent)
-  const realBruto = calcularLucroReal(rb, lucroLiquido, folha, aliquotaIssPercent)
+  const realBruto = calcularLucroReal(rb, lucroFiscal, folha, aliquotaIssPercent)
 
   // 3. Créditos sobre as compras (CC-098 Matéria Prima):
   //    - Simples Nacional: nenhum crédito (DAS unificado) — compras servem só de rastreio.
@@ -369,9 +420,22 @@ export function calcularSimuladorRegimes(
       `Receita Bruta da DRE igual a zero no exercício ${ano} — apuração dos regimes sem base de débito.`,
     )
   }
-  const prejuizoFiscal = lucroLiquido < 0
-  if (prejuizoFiscal) {
-    observacoes.push('Prejuízo apurado na DRE Gerencial — sem IRPJ/CSLL a recolher no Lucro Real.')
+  const prejuizoFiscal = lucroFiscal <= 0
+  if (lucroContabil < 0 && lucroFiscal > 0) {
+    observacoes.push(
+      `Prejuízo contábil da DRE convertido em lucro fiscal positivo pelos ajustes (aditivos R$ ${conciliacao.totalAditivos.toFixed(2).replace('.', ',')} / exclusões R$ ${conciliacao.totalExclusoes.toFixed(2).replace('.', ',')}) — IRPJ/CSLL incidem sobre o lucro fiscal.`,
+    )
+  } else if (prejuizoFiscal) {
+    observacoes.push(
+      lucroContabil < 0
+        ? 'Prejuízo fiscal apurado (lucro contábil + ajustes) — sem IRPJ/CSLL a recolher no Lucro Real.'
+        : 'Lucro fiscal igual a zero — sem IRPJ/CSLL a recolher no Lucro Real.',
+    )
+  }
+  if (temAjustes && lucroContabil >= 0) {
+    observacoes.push(
+      `Conciliação fiscal aplicada: lucro contábil + R$ ${conciliacao.totalAditivos.toFixed(2).replace('.', ',')} (aditivos) − R$ ${conciliacao.totalExclusoes.toFixed(2).replace('.', ',')} (exclusões) = lucro fiscal R$ ${Math.max(lucroFiscal, 0).toFixed(2).replace('.', ',')}.`,
+    )
   }
 
   const itemSimples = paraRegimeCarga(simplesBruto, {
@@ -583,6 +647,13 @@ export function calcularSimuladorRegimes(
     reforma,
     temDados: rb > 0 || compras.total > 0,
     prejuizoFiscal,
+    conciliacaoFiscal: {
+      lucroContabil: arred(lucroContabil),
+      totalAditivos: conciliacao.totalAditivos,
+      totalExclusoes: conciliacao.totalExclusoes,
+      lucroFiscal,
+      temAjustes,
+    },
   }
 }
 

@@ -141,8 +141,8 @@ export function CardsRegimes({ resultado }: { resultado: SimuladorRegimesResulta
 
               <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
                 {r.breakdown.map((b, idx) => {
-                  // Prejuízo apurado na DRE: IRPJ/CSLL do Lucro Real não têm base
-                  // tributável — "—" em vez de R$ 0,00 (estado honesto).
+                  // Lucro fiscal conciliado ≤ 0: IRPJ/CSLL do Lucro Real não têm
+                  // base tributável — "—" em vez de R$ 0,00 (estado honesto).
                   const semLucroTributavel =
                     resultado.prejuizoFiscal && r.id === 'real' && /IRPJ|CSLL/i.test(b.sigla)
                   return (
@@ -159,7 +159,9 @@ export function CardsRegimes({ resultado }: { resultado: SimuladorRegimesResulta
                 })}
                 {resultado.prejuizoFiscal && r.id === 'real' && (
                   <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 mt-1">
-                    Prejuízo apurado na DRE Gerencial — sem IRPJ/CSLL a recolher.
+                    Lucro fiscal ≤ 0 (DRE Gerencial{' '}
+                    {resultado.conciliacaoFiscal.temAjustes ? '+ ajustes IFRS' : ''}) — sem
+                    IRPJ/CSLL a recolher.
                   </div>
                 )}
                 {r.faixaSimples && (
