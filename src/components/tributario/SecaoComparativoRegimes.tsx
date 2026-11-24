@@ -128,7 +128,15 @@ export function SecaoComparativoRegimes() {
       } else {
         const empOpts =
           empresasIdsAtivas.length > 0 ? { empresasIds: empresasIdsAtivas } : undefined
-        lancsPromise = lancamentosService.getAll({ expandRelations: true })
+        // Mesmo escopo de empresas das demais coleções — sem o filtro, lançamentos
+        // de outras empresas entrariam na base de compras do simulador.
+        lancsPromise = lancamentosService
+          .getAll({ expandRelations: true })
+          .then((list) =>
+            empresasIdsAtivas.length > 0
+              ? list.filter((l) => empresasIdsAtivas.includes(l.empresa))
+              : list,
+          )
         contasPromise = contasService.getAll(empOpts)
         planosPromise = planoContasService.getAll(empOpts)
         centrosPromise = centrosService.getAll()
