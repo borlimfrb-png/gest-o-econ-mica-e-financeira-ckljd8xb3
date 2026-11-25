@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -4066,15 +4067,15 @@ export default function CadastroFichaTecnica() {
 
                         {/* Custo Unitário */}
                         <div className="w-full sm:w-28">
-                          <Input
-                            type="number"
-                            inputMode="decimal"
-                            step="0.01"
-                            min="0"
+                          <InputValorBrl
                             placeholder="Custo un."
-                            value={item.custo_unitario}
-                            onChange={(e) =>
-                              handleItemChange(idx, 'custo_unitario', e.target.value)
+                            value={custo}
+                            onValueChange={(v) =>
+                              handleItemChange(
+                                idx,
+                                'custo_unitario',
+                                v === undefined ? '' : String(v),
+                              )
                             }
                             className="h-8 text-xs bg-white"
                             title="Custo unitário do insumo"
@@ -4123,16 +4124,19 @@ export default function CadastroFichaTecnica() {
                   <Label htmlFor="ficha-outros" className="text-xs font-semibold text-slate-700">
                     Outros Custos / MOD (R$)
                   </Label>
-                  <Input
+                  <InputValorBrl
                     id="ficha-outros"
-                    type="number"
-                    inputMode="decimal"
-                    step="0.01"
-                    min="0"
-                    placeholder="0.00"
-                    value={formData.outros_custos}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, outros_custos: e.target.value }))
+                    placeholder="0,00"
+                    value={
+                      formData.outros_custos === '' || formData.outros_custos == null
+                        ? undefined
+                        : Number(String(formData.outros_custos).replace(',', '.'))
+                    }
+                    onValueChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        outros_custos: v === undefined ? '' : String(v),
+                      }))
                     }
                     className="h-9 text-xs"
                   />
@@ -4143,26 +4147,24 @@ export default function CadastroFichaTecnica() {
                   <Label htmlFor="ficha-margem" className="text-xs font-semibold text-slate-700">
                     Margem Desejada (%) *
                   </Label>
-                  <Input
+                  <InputValorBrl
                     id="ficha-margem"
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    min="0"
-                    max="99.9"
-                    placeholder="Ex: 40.0"
-                    value={formData.margem_desejada}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      const m = Number(val.replace(',', '.'))
+                    placeholder="Ex: 40,0"
+                    value={
+                      formData.margem_desejada === '' || formData.margem_desejada == null
+                        ? undefined
+                        : Number(String(formData.margem_desejada).replace(',', '.'))
+                    }
+                    onValueChange={(v) => {
+                      const m = v
                       // Se usuário altera margem, auto-atualiza markup equivalente para conveniência
                       let mkEquivalent = formData.markup_desejado
-                      if (!isNaN(m) && m >= 0 && m < 100) {
+                      if (m !== undefined && m >= 0 && m < 100) {
                         mkEquivalent = ((m / (100 - m)) * 100).toFixed(2)
                       }
                       setFormData((prev) => ({
                         ...prev,
-                        margem_desejada: val,
+                        margem_desejada: v === undefined ? '' : String(v),
                         markup_desejado: mkEquivalent,
                       }))
                     }}
@@ -4179,18 +4181,20 @@ export default function CadastroFichaTecnica() {
                   <Label htmlFor="ficha-markup" className="text-xs font-semibold text-slate-700">
                     Markup sobre Custo Total (%) *
                   </Label>
-                  <Input
+                  <InputValorBrl
                     id="ficha-markup"
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    min="0"
-                    placeholder="Ex: 66.7"
-                    value={formData.markup_desejado}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setFormData((prev) => ({ ...prev, markup_desejado: val }))
-                    }}
+                    placeholder="Ex: 66,7"
+                    value={
+                      formData.markup_desejado === '' || formData.markup_desejado == null
+                        ? undefined
+                        : Number(String(formData.markup_desejado).replace(',', '.'))
+                    }
+                    onValueChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        markup_desejado: v === undefined ? '' : String(v),
+                      }))
+                    }
                     className={`h-9 text-xs ${errors.markup_desejado ? 'border-red-500' : ''}`}
                   />
                   {errors.markup_desejado ? (
@@ -4433,13 +4437,15 @@ export default function CadastroFichaTecnica() {
                       : `${cloneAjustePercentual}%`}
                   </span>
                 </div>
-                <Input
+                <InputValorBrl
                   id="clone-ajuste"
-                  type="number"
-                  step="0.5"
                   placeholder="0 (Manter custos iguais)"
-                  value={cloneAjustePercentual}
-                  onChange={(e) => setCloneAjustePercentual(e.target.value)}
+                  value={
+                    cloneAjustePercentual === '' || cloneAjustePercentual == null
+                      ? undefined
+                      : Number(String(cloneAjustePercentual).replace(',', '.'))
+                  }
+                  onValueChange={(v) => setCloneAjustePercentual(v === undefined ? '' : String(v))}
                   className="h-8 text-xs bg-white"
                 />
                 <p className="text-[10px] text-emerald-800">

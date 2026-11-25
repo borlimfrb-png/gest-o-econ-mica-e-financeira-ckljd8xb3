@@ -325,6 +325,7 @@ export default function FormacaoPrecoServicos() {
 
         <TabsContent value="parametros" className="mt-4">
           <AbaParametrosServicos
+            key={parametros?.id ?? 'vazio'}
             parametros={parametros ?? PARAMETROS_PLACEHOLDER}
             empresaId={selectedEmpresaId}
             recalculo={resultadoParametros}

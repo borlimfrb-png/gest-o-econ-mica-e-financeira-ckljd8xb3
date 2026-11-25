@@ -60,6 +60,7 @@ import { Button } from '@/components/ui/button'
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { GraficoContribuicaoProdutos } from '@/components/GraficoContribuicaoProdutos'
 import { Input } from '@/components/ui/input'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -1502,15 +1503,13 @@ export default function SimuladorPrecos() {
                         Prazo de Venda (dias)
                       </Label>
                       <div className="relative mt-1">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="1"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.prazoDias}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              prazoDias: Math.max(0, Number(e.target.value) || 0),
+                              prazoDias: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-8 text-xs font-semibold pr-12"
@@ -1526,15 +1525,13 @@ export default function SimuladorPrecos() {
                         Juros ao Mês (%)
                       </Label>
                       <div className="relative mt-1">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.jurosMesPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              jurosMesPct: Math.max(0, Number(e.target.value) || 0),
+                              jurosMesPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-8 text-xs font-semibold pr-7"
@@ -1563,15 +1560,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">ICMS (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.icmsPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              icmsPct: Math.max(0, Number(e.target.value) || 0),
+                              icmsPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1585,15 +1580,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">IRPJ (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.irpjPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              irpjPct: Math.max(0, Number(e.target.value) || 0),
+                              irpjPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1607,15 +1600,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">CSLL (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.csllPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              csllPct: Math.max(0, Number(e.target.value) || 0),
+                              csllPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1629,15 +1620,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">PIS (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.pisPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              pisPct: Math.max(0, Number(e.target.value) || 0),
+                              pisPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1651,15 +1640,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">COFINS (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.cofinsPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              cofinsPct: Math.max(0, Number(e.target.value) || 0),
+                              cofinsPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1673,15 +1660,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">Simples (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.simplesPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              simplesPct: Math.max(0, Number(e.target.value) || 0),
+                              simplesPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1710,15 +1695,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">Comissão (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.comissaoPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              comissaoPct: Math.max(0, Number(e.target.value) || 0),
+                              comissaoPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1732,15 +1715,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">Frete (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.fretePct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              fretePct: Math.max(0, Number(e.target.value) || 0),
+                              fretePct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1754,15 +1735,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">Assistência (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.assistenciaPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              assistenciaPct: Math.max(0, Number(e.target.value) || 0),
+                              assistenciaPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1776,15 +1755,13 @@ export default function SimuladorPrecos() {
                     <div>
                       <Label className="text-[11px] text-slate-600">Outros (%)</Label>
                       <div className="relative mt-0.5">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
+                        <InputValorBrl
+                          placeholder="0"
                           value={params.outrosPct}
-                          onChange={(e) =>
+                          onValueChange={(v) =>
                             setParams({
                               ...params,
-                              outrosPct: Math.max(0, Number(e.target.value) || 0),
+                              outrosPct: Math.max(0, v ?? 0),
                             })
                           }
                           className="h-7 text-xs font-medium pr-6"
@@ -1809,16 +1786,13 @@ export default function SimuladorPrecos() {
                     </span>
                   </div>
                   <div className="relative">
-                    <Input
-                      type="number"
-                      min="0"
-                      max="99"
-                      step="0.1"
+                    <InputValorBrl
+                      placeholder="0"
                       value={params.margemLucroPct}
-                      onChange={(e) =>
+                      onValueChange={(v) =>
                         setParams({
                           ...params,
-                          margemLucroPct: Math.max(0, Number(e.target.value) || 0),
+                          margemLucroPct: Math.max(0, v ?? 0),
                         })
                       }
                       className="h-8 text-xs font-bold bg-white border-amber-300 focus-visible:ring-amber-500 pr-7"
@@ -2135,13 +2109,9 @@ export default function SimuladorPrecos() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <div className="inline-flex items-center gap-1">
-                                    <input
-                                      type="number"
-                                      step="0.01"
+                                    <InputValorBrl
                                       value={it.custo}
-                                      onChange={(e) =>
-                                        handleEditarCustoManual(it.id, Number(e.target.value) || 0)
-                                      }
+                                      onValueChange={(v) => handleEditarCustoManual(it.id, v ?? 0)}
                                       className="w-18 text-right font-semibold text-slate-800 border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded px-1 py-0.5 text-xs bg-slate-50"
                                     />
                                   </div>
@@ -2172,18 +2142,13 @@ export default function SimuladorPrecos() {
                                   <span className="absolute left-1.5 top-1.5 text-[10px] font-semibold text-slate-400">
                                     R$
                                   </span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
+                                  <InputValorBrl
                                     value={
                                       it.precoInformado !== undefined
                                         ? it.precoInformado
                                         : it.precoSugerido
                                     }
-                                    onChange={(e) =>
-                                      handleEditarPrecoInformado(it.id, Number(e.target.value) || 0)
-                                    }
+                                    onValueChange={(v) => handleEditarPrecoInformado(it.id, v ?? 0)}
                                     placeholder={it.precoSugerido.toFixed(2)}
                                     className="w-24 pl-6 pr-1.5 py-1 text-right font-bold text-blue-950 bg-white border border-blue-300 focus:border-blue-600 focus:ring-1 focus:ring-blue-500 rounded text-xs shadow-2xs"
                                     title="Inserir preço de venda sugerido/praticado"

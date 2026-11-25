@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 import {
   FileSpreadsheet,
   FileText,
@@ -587,14 +588,11 @@ function CampoPercentual({
     <div className="flex flex-col gap-1">
       <Label htmlFor={id}>{label}</Label>
       <div className="flex items-center gap-2">
-        <Input
+        <InputValorBrl
           id={id}
-          type="number"
-          step="0.1"
-          min={0}
-          max={200}
+          placeholder="0"
           value={valor}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          onValueChange={(v) => onChange(v ?? 0)}
         />
         <Badge variant="outline" className="shrink-0 whitespace-nowrap">
           base {base}%
@@ -619,14 +617,11 @@ function CampoFator({
     <div className="flex flex-col gap-1">
       <Label htmlFor={id}>{label}</Label>
       <div className="flex items-center gap-2">
-        <Input
+        <InputValorBrl
           id={id}
-          type="number"
-          step="0.05"
-          min={0}
-          max={5}
+          placeholder="0"
           value={valor}
-          onChange={(e) => onChange(Number(e.target.value) || 0)}
+          onValueChange={(v) => onChange(v ?? 0)}
         />
         <Badge variant="outline" className="shrink-0 whitespace-nowrap">
           {formatarFator(valor)}
