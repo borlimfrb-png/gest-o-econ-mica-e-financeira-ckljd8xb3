@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Target, Loader2 } from 'lucide-react'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
 import { formatBrlPontoEquilibrio, formatPercentualPontoEquilibrio } from './pontoEquilibrioFormat'
 import {
   getClassesPercentualMetaDespesa,
@@ -32,11 +33,7 @@ export function EditorMetasDespesaMensais({
 }) {
   const meses = ano.meses
   const totalRascunho = useMemo(
-    () =>
-      Object.values(rascunho).reduce(
-        (acc, v) => acc + (parseFloat(String(v).replace(/\./g, '').replace(',', '.')) || 0),
-        0,
-      ),
+    () => Object.values(rascunho).reduce((acc, v) => acc + (parseNumeroBrl(String(v)) ?? 0), 0),
     [rascunho],
   )
 
@@ -69,16 +66,15 @@ export function EditorMetasDespesaMensais({
                   </span>
                 )}
               </label>
-              <Input
+              <InputValorBrl
                 id={`meta-desp-${m.chave}`}
-                inputMode="decimal"
                 className="h-8 text-xs tabular-nums"
                 placeholder={
                   m.metaDespesa !== null ? formatBrlPontoEquilibrio(m.metaDespesa) : 'Sem meta'
                 }
-                value={rascunho[m.mes] ?? ''}
+                value={parseNumeroBrl(rascunho[m.mes] ?? '')}
                 disabled={!habilitado || salvando}
-                onChange={(e) => onRascunho(m.mes, e.target.value)}
+                onValueChange={(v) => onRascunho(m.mes, v === undefined ? '' : String(v))}
               />
             </div>
           ))}

@@ -11,6 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Plus, Save, Trash2 } from 'lucide-react'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
 
 interface Props {
   parametros: FormacaoServicoParametrosRecord
@@ -29,15 +31,7 @@ interface CustosFixosState {
 
 const fmtBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const fmtNum = (v: number, casas = 2) => v.toLocaleString('pt-BR', { maximumFractionDigits: casas })
-const toNumberBR = (v: string): number => {
-  if (!v) return 0
-  const normalized = v
-    .replace(/\s|R\$/g, '')
-    .replace(/\./g, '')
-    .replace(',', '.')
-  const n = Number(normalized)
-  return Number.isFinite(n) ? n : Number(v) || 0
-}
+const toNumberBR = (v: string): number => parseNumeroBrl(v) ?? 0
 
 export default function AbaParametrosServicos({ parametros, empresaId, recalculo }: Props) {
   const { toast } = useToast()
@@ -132,14 +126,15 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
                     )
                   }}
                 />
-                <Input
+                <InputValorBrl
                   placeholder="Valor (R$)"
+                  aria-label="Valor do custo fixo (R$)"
                   className="max-w-[180px]"
-                  value={item.valor}
-                  onChange={(e) => {
-                    const v = e.target.value
+                  value={parseNumeroBrl(item.valor)}
+                  onValueChange={(v) => {
+                    const nv = v === undefined ? '' : String(v)
                     setCustosFixos((prev) =>
-                      prev.map((c, idx) => (idx === i ? { ...c, valor: v } : c)),
+                      prev.map((c, idx) => (idx === i ? { ...c, valor: nv } : c)),
                     )
                   }}
                 />
@@ -174,36 +169,31 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
           <CardContent className="grid gap-4 md:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="qtd-profissionais">Quantidade de profissionais</Label>
-              <Input
+              <InputValorBrl
                 id="qtd-profissionais"
-                type="number"
-                step="1"
-                min="0"
-                value={quantidadeProfissionais}
-                onChange={(e) => setQuantidadeProfissionais(e.target.value)}
+                placeholder="0"
+                value={parseNumeroBrl(quantidadeProfissionais)}
+                onValueChange={(v) => setQuantidadeProfissionais(v === undefined ? '' : String(v))}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="horas-produtivas">Horas produtivas/profissional (mês)</Label>
-              <Input
+              <InputValorBrl
                 id="horas-produtivas"
-                type="number"
-                step="0.5"
-                min="0"
-                value={horasProdutivasProfissional}
-                onChange={(e) => setHorasProdutivasProfissional(e.target.value)}
+                placeholder="0"
+                value={parseNumeroBrl(horasProdutivasProfissional)}
+                onValueChange={(v) =>
+                  setHorasProdutivasProfissional(v === undefined ? '' : String(v))
+                }
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="fator-ociosidade">Fator de ociosidade (%)</Label>
-              <Input
+              <InputValorBrl
                 id="fator-ociosidade"
-                type="number"
-                step="0.5"
-                min="0"
-                max="100"
-                value={fatorOciosidade}
-                onChange={(e) => setFatorOciosidade(e.target.value)}
+                placeholder="0"
+                value={parseNumeroBrl(fatorOciosidade)}
+                onValueChange={(v) => setFatorOciosidade(v === undefined ? '' : String(v))}
               />
             </div>
           </CardContent>
@@ -221,38 +211,29 @@ export default function AbaParametrosServicos({ parametros, empresaId, recalculo
           <CardContent className="grid gap-4 md:grid-cols-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="impostos">Impostos sobre serviço (%)</Label>
-              <Input
+              <InputValorBrl
                 id="impostos"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={impostos}
-                onChange={(e) => setImpostos(e.target.value)}
+                placeholder="0"
+                value={parseNumeroBrl(impostos)}
+                onValueChange={(v) => setImpostos(v === undefined ? '' : String(v))}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="comissao">Comissão (%)</Label>
-              <Input
+              <InputValorBrl
                 id="comissao"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={comissao}
-                onChange={(e) => setComissao(e.target.value)}
+                placeholder="0"
+                value={parseNumeroBrl(comissao)}
+                onValueChange={(v) => setComissao(v === undefined ? '' : String(v))}
               />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="margem">Margem de lucro alvo (%)</Label>
-              <Input
+              <InputValorBrl
                 id="margem"
-                type="number"
-                step="0.01"
-                min="0"
-                max="100"
-                value={margem}
-                onChange={(e) => setMargem(e.target.value)}
+                placeholder="0"
+                value={parseNumeroBrl(margem)}
+                onValueChange={(v) => setMargem(v === undefined ? '' : String(v))}
               />
             </div>
           </CardContent>

@@ -78,6 +78,7 @@ import {
   CreditCard,
 } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import InputValorBrl from '@/components/ui/input-valor-brl'
 
 // Modelos das 6 cláusulas padrão
 export interface ClausulasContrato {
@@ -146,9 +147,7 @@ function formatarMoeda(val: number | null | undefined): string {
 }
 
 function parseValorMonetario(input: string): number {
-  const limpo = input.replace(/[^\d]/g, '')
-  if (!limpo) return 0
-  return Number(limpo) / 100
+  return parseNumeroBrl(input) ?? 0
 }
 
 function formatarInputMoeda(val: number): string {
@@ -157,6 +156,12 @@ function formatarInputMoeda(val: number): string {
     style: 'currency',
     currency: 'BRL',
   }).format(val)
+}
+
+// Formata um valor para edição no InputValorBrl (sem "R$" e sem milhar fixo)
+function formatarValorEdicao(val: number): string {
+  if (!val || val <= 0) return ''
+  return String(Number(val.toFixed(2))).replace('.', ',')
 }
 
 function dataHojeIso(): string {
@@ -1748,13 +1753,12 @@ export default function Contratos() {
                         </Label>
                         <div className="relative">
                           <DollarSign className="w-4 h-4 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                          <Input
+                          <InputValorBrl
                             id="contrato-valor"
-                            type="text"
-                            placeholder="R$ 0,00"
+                            placeholder="0,00"
                             value={valorInput}
-                            onChange={handleValorChange}
-                            className="h-9 text-xs pl-8 font-mono font-bold text-slate-900"
+                            onChange={setValorInput}
+                            className="h-9 text-xs font-mono font-bold text-slate-900"
                           />
                         </div>
                         {formErrors.valor && (
@@ -1884,11 +1888,10 @@ export default function Contratos() {
                             <Label className="text-[10px] font-semibold text-slate-600">
                               Valor Mensal (R$) *
                             </Label>
-                            <Input
-                              type="text"
-                              placeholder="Ex.: R$ 1.500,00"
+                            <InputValorBrl
+                              placeholder="1.500,00"
                               value={periodo1ValorInput || valorInput}
-                              onChange={handlePeriodo1ValorChange}
+                              onChange={setPeriodo1ValorInput}
                               className="h-8 text-xs font-mono font-bold"
                             />
                           </div>
@@ -2035,11 +2038,10 @@ export default function Contratos() {
                                 <Label className="text-[10px] font-semibold text-slate-600">
                                   Valor Mensal (R$) *
                                 </Label>
-                                <Input
-                                  type="text"
-                                  placeholder="Ex.: R$ 2.000,00"
+                                <InputValorBrl
+                                  placeholder="2.000,00"
                                   value={periodo2ValorInput}
-                                  onChange={handlePeriodo2ValorChange}
+                                  onChange={setPeriodo2ValorInput}
                                   className="h-8 text-xs font-mono font-bold"
                                 />
                               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -50,40 +50,51 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Variante com debounce do useRealtime: agrupa rajadas de eventos de tempo
- * real (sincronizações em lote, imports) em uma única chamada do callback,
- * com debounce "trailing" de 1,5s após o último evento.
- *
- * Assinatura idêntica à do useRealtime (mais um delay opcional em ms).
+ * Same contract as `useRealtime`, but coalesces bursts of realtime
+ * events into a single trailing callback after `delay` ms, so a
+ * save storm does not hammer expensive reloads.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
-  delayMs: number = 1500,
+  delay: number = 1500,
 ) {
-  const [evento, setEvento] = useState<RecordSubscription<TRecord> | null>(null)
-  const eventoRef = useRef(evento)
-  eventoRef.current = evento
-
-  const debouncedCallbackRef = useRef(callback)
-  debouncedCallbackRef.current = callback
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      setEvento(data)
-    },
-    enabled,
-  )
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
 
   useEffect(() => {
-    if (!evento) return
-    const timer = setTimeout(() => {
-      debouncedCallbackRef.current(eventoRef.current as RecordSubscription<TRecord>)
-    }, delayMs)
-    return () => clearTimeout(timer)
-  }, [evento, delayMs])
+    if (!enabled) return
+
+    let unsubscribeFn: (() => Promise<void>) | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let cancelled = false
+
+    pb.collection<TRecord>(collectionName)
+      .subscribe('*', (e) => {
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          timer = undefined
+          if (!cancelled) callbackRef.current(e)
+        }, delay)
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn().catch(() => {})
+        } else {
+          unsubscribeFn = fn
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+      if (unsubscribeFn) {
+        unsubscribeFn().catch(() => {})
+      }
+    }
+  }, [collectionName, enabled, delay])
 }
 
 export default useRealtime

@@ -29,6 +29,8 @@ import type {
   CentroRecord,
 } from '@/types/finance'
 import { formatBrlMil, formatPercent } from '@/lib/financeCalculations'
+import { parseNumeroBrl, formatarNumeroBrl } from '@/lib/inputValorBrl'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 import { useToast } from '@/hooks/use-toast'
 import {
   Target,
@@ -114,7 +116,7 @@ export function ModalGerenciarMetas({
     }
     setFormTipo(meta.tipo)
     setFormCentro(meta.centro || 'all')
-    setFormValor(String(meta.valor))
+    setFormValor(formatarNumeroBrl(meta.valor))
     setFormMes(String(meta.mes || new Date().getMonth() + 1))
     setFormAno(String(meta.ano || selectedAno || new Date().getFullYear()))
   }
@@ -128,7 +130,7 @@ export function ModalGerenciarMetas({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const valorNum = parseFloat(formValor.replace(',', '.'))
+    const valorNum = parseNumeroBrl(formValor) ?? NaN
     if (!formEmpresa || isNaN(valorNum) || valorNum < 0) {
       toast({
         title: 'Dados inválidos',
@@ -353,15 +355,11 @@ export function ModalGerenciarMetas({
                     : 'Mensal'}{' '}
                 (R$) *
               </Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
+              <InputValorBrl
                 placeholder="Ex: 50000"
-                value={formValor}
-                onChange={(e) => setFormValor(e.target.value)}
+                value={parseNumeroBrl(formValor)}
+                onValueChange={(v) => setFormValor(v === undefined ? '' : formatarNumeroBrl(v))}
                 className="h-8 text-xs bg-white font-semibold"
-                required
               />
             </div>
 

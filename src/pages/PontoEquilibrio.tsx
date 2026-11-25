@@ -34,7 +34,8 @@ import {
 } from '@/lib/pontoEquilibrioMetaDespesaComparativo'
 import { metasReceitaService } from '@/services/metasReceitaService'
 import { metasDespesaService } from '@/services/metasDespesaService'
-import { parseValorMoeda, formatarValorParaEdicao } from '@/lib/moedaInput'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
+import { formatarValorParaEdicao } from '@/lib/moedaInput'
 import type { PontoGraficoData } from '@/components/pontoEquilibrio/PontoEquilibrioGraficos'
 import {
   formatBrlPontoEquilibrio,
@@ -270,7 +271,7 @@ export default function PontoEquilibrio() {
         empresa: selectedEmpresaId,
         ano: exercicioAno,
         mes: i + 1,
-        valor: parseValorMoeda(rascunho[i + 1] ?? ''),
+        valor: parseNumeroBrl(rascunho[i + 1] ?? '') ?? 0,
       }))
       const { ok, falhas } = await metasReceitaService.salvarLote(itens)
       if (falhas > 0) {
@@ -312,7 +313,7 @@ export default function PontoEquilibrio() {
         empresa: selectedEmpresaId,
         ano: exercicioAno,
         mes: i + 1,
-        valor: parseValorMoeda(rascunhoDespesa[i + 1] ?? ''),
+        valor: parseNumeroBrl(rascunhoDespesa[i + 1] ?? '') ?? 0,
       }))
       const { ok, falhas } = await metasDespesaService.salvarLote(itens)
       if (falhas > 0) {

@@ -28,6 +28,8 @@ import type {
   TributoLancamentoRecord,
 } from '@/types/finance'
 import { formatCurrency } from '@/lib/financeCalculations'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 
 interface ModalLancamentoTributarioProps {
   open: boolean
@@ -165,56 +167,55 @@ export function ModalLancamentoTributario({
 
   // Recalcular impostos quando valor da mercadoria ou alíquotas mudarem
   const aplicarCalculoAutomatico = (vMerc?: number) => {
-    const v = vMerc !== undefined ? vMerc : Number(valorMercadoria) || 0
+    const v = vMerc !== undefined ? vMerc : (parseNumeroBrl(valorMercadoria) ?? 0)
     if (v > 0) {
       // Base padrão = valor mercadoria se vazia
-      const bIcms = baseIcms !== '' ? Number(baseIcms) || 0 : v
-      const aIcms = Number(aliquotaIcms) || 0
+      const bIcms = baseIcms !== '' ? (parseNumeroBrl(baseIcms) ?? 0) : v
+      const aIcms = parseNumeroBrl(aliquotaIcms) ?? 0
       setBaseIcms(String(bIcms))
       setValorIcms((Math.round(((bIcms * aIcms) / 100) * 100) / 100).toFixed(2))
 
-      const bIpi = baseIpi !== '' ? Number(baseIpi) || 0 : v
-      const aIpi = Number(aliquotaIpi) || 0
+      const bIpi = baseIpi !== '' ? (parseNumeroBrl(baseIpi) ?? 0) : v
+      const aIpi = parseNumeroBrl(aliquotaIpi) ?? 0
       setBaseIpi(String(bIpi))
       setValorIpi((Math.round(((bIpi * aIpi) / 100) * 100) / 100).toFixed(2))
 
-      const bPis = basePis !== '' ? Number(basePis) || 0 : v
-      const aPis = Number(aliquotaPis) || 0
+      const bPis = basePis !== '' ? (parseNumeroBrl(basePis) ?? 0) : v
+      const aPis = parseNumeroBrl(aliquotaPis) ?? 0
       setBasePis(String(bPis))
       setValorPis((Math.round(((bPis * aPis) / 100) * 100) / 100).toFixed(2))
 
-      const bCofins = baseCofins !== '' ? Number(baseCofins) || 0 : v
-      const aCofins = Number(aliquotaCofins) || 0
+      const bCofins = baseCofins !== '' ? (parseNumeroBrl(baseCofins) ?? 0) : v
+      const aCofins = parseNumeroBrl(aliquotaCofins) ?? 0
       setBaseCofins(String(bCofins))
       setValorCofins((Math.round(((bCofins * aCofins) / 100) * 100) / 100).toFixed(2))
     }
   }
 
-  const handleValorMercadoriaChange = (val: string) => {
-    setValorMercadoria(val)
-    const num = Number(val)
-    if (!isNaN(num) && num > 0) {
-      aplicarCalculoAutomatico(num)
+  const handleValorMercadoriaChange = (val: number | undefined) => {
+    setValorMercadoria(val === undefined ? '' : String(val))
+    if (val !== undefined && val > 0) {
+      aplicarCalculoAutomatico(val)
     }
   }
 
   const handleRecalcularImposto = (tributo: 'icms' | 'ipi' | 'pis' | 'cofins') => {
-    const v = Number(valorMercadoria) || 0
+    const v = parseNumeroBrl(valorMercadoria) ?? 0
     if (tributo === 'icms') {
-      const b = baseIcms !== '' ? Number(baseIcms) || 0 : v
-      const a = Number(aliquotaIcms) || 0
+      const b = baseIcms !== '' ? (parseNumeroBrl(baseIcms) ?? 0) : v
+      const a = parseNumeroBrl(aliquotaIcms) ?? 0
       setValorIcms((Math.round(((b * a) / 100) * 100) / 100).toFixed(2))
     } else if (tributo === 'ipi') {
-      const b = baseIpi !== '' ? Number(baseIpi) || 0 : v
-      const a = Number(aliquotaIpi) || 0
+      const b = baseIpi !== '' ? (parseNumeroBrl(baseIpi) ?? 0) : v
+      const a = parseNumeroBrl(aliquotaIpi) ?? 0
       setValorIpi((Math.round(((b * a) / 100) * 100) / 100).toFixed(2))
     } else if (tributo === 'pis') {
-      const b = basePis !== '' ? Number(basePis) || 0 : v
-      const a = Number(aliquotaPis) || 0
+      const b = basePis !== '' ? (parseNumeroBrl(basePis) ?? 0) : v
+      const a = parseNumeroBrl(aliquotaPis) ?? 0
       setValorPis((Math.round(((b * a) / 100) * 100) / 100).toFixed(2))
     } else if (tributo === 'cofins') {
-      const b = baseCofins !== '' ? Number(baseCofins) || 0 : v
-      const a = Number(aliquotaCofins) || 0
+      const b = baseCofins !== '' ? (parseNumeroBrl(baseCofins) ?? 0) : v
+      const a = parseNumeroBrl(aliquotaCofins) ?? 0
       setValorCofins((Math.round(((b * a) / 100) * 100) / 100).toFixed(2))
     }
   }
@@ -228,8 +229,8 @@ export function ModalLancamentoTributario({
       return
     }
 
-    const valMerc = Number(valorMercadoria)
-    if (isNaN(valMerc) || valMerc <= 0) {
+    const valMerc = parseNumeroBrl(valorMercadoria)
+    if (valMerc === undefined || valMerc <= 0) {
       setErro('Informe um valor de mercadoria válido maior que zero.')
       return
     }
@@ -251,21 +252,21 @@ export function ModalLancamentoTributario({
         data: `${data} 12:00:00`,
         valor_mercadoria: valMerc,
         // ICMS
-        base_icms: baseIcms !== '' ? Number(baseIcms) : valMerc,
-        aliquota_icms: aliquotaIcms !== '' ? Number(aliquotaIcms) : 0,
-        valor_icms: valorIcms !== '' ? Number(valorIcms) : 0,
+        base_icms: baseIcms !== '' ? (parseNumeroBrl(baseIcms) ?? 0) : valMerc,
+        aliquota_icms: aliquotaIcms !== '' ? (parseNumeroBrl(aliquotaIcms) ?? 0) : 0,
+        valor_icms: valorIcms !== '' ? (parseNumeroBrl(valorIcms) ?? 0) : 0,
         // IPI
-        base_ipi: baseIpi !== '' ? Number(baseIpi) : valMerc,
-        aliquota_ipi: aliquotaIpi !== '' ? Number(aliquotaIpi) : 0,
-        valor_ipi: valorIpi !== '' ? Number(valorIpi) : 0,
+        base_ipi: baseIpi !== '' ? (parseNumeroBrl(baseIpi) ?? 0) : valMerc,
+        aliquota_ipi: aliquotaIpi !== '' ? (parseNumeroBrl(aliquotaIpi) ?? 0) : 0,
+        valor_ipi: valorIpi !== '' ? (parseNumeroBrl(valorIpi) ?? 0) : 0,
         // PIS
-        base_pis: basePis !== '' ? Number(basePis) : valMerc,
-        aliquota_pis: aliquotaPis !== '' ? Number(aliquotaPis) : 0,
-        valor_pis: valorPis !== '' ? Number(valorPis) : 0,
+        base_pis: basePis !== '' ? (parseNumeroBrl(basePis) ?? 0) : valMerc,
+        aliquota_pis: aliquotaPis !== '' ? (parseNumeroBrl(aliquotaPis) ?? 0) : 0,
+        valor_pis: valorPis !== '' ? (parseNumeroBrl(valorPis) ?? 0) : 0,
         // COFINS
-        base_cofins: baseCofins !== '' ? Number(baseCofins) : valMerc,
-        aliquota_cofins: aliquotaCofins !== '' ? Number(aliquotaCofins) : 0,
-        valor_cofins: valorCofins !== '' ? Number(valorCofins) : 0,
+        base_cofins: baseCofins !== '' ? (parseNumeroBrl(baseCofins) ?? 0) : valMerc,
+        aliquota_cofins: aliquotaCofins !== '' ? (parseNumeroBrl(aliquotaCofins) ?? 0) : 0,
+        valor_cofins: valorCofins !== '' ? (parseNumeroBrl(valorCofins) ?? 0) : 0,
         observacoes: observacoes.trim() || undefined,
       }
 
@@ -286,10 +287,10 @@ export function ModalLancamentoTributario({
 
   // Totais de impostos calculados no formulário
   const somaImpostos =
-    (Number(valorIcms) || 0) +
-    (Number(valorIpi) || 0) +
-    (Number(valorPis) || 0) +
-    (Number(valorCofins) || 0)
+    (parseNumeroBrl(valorIcms) ?? 0) +
+    (parseNumeroBrl(valorIpi) ?? 0) +
+    (parseNumeroBrl(valorPis) ?? 0) +
+    (parseNumeroBrl(valorCofins) ?? 0)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -428,16 +429,12 @@ export function ModalLancamentoTributario({
                   Recalcular Bases
                 </Button>
               </div>
-              <Input
+              <InputValorBrl
                 id="valor_mercadoria"
-                type="number"
-                step="0.01"
-                min="0.01"
                 placeholder="0,00"
-                value={valorMercadoria}
-                onChange={(e) => handleValorMercadoriaChange(e.target.value)}
+                value={parseNumeroBrl(valorMercadoria)}
+                onValueChange={handleValorMercadoriaChange}
                 className="text-sm font-bold text-slate-900 bg-white"
-                required
               />
             </div>
           </div>
@@ -464,26 +461,18 @@ export function ModalLancamentoTributario({
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-[10px] text-slate-500">Base (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={baseIcms}
-                      onChange={(e) => {
-                        setBaseIcms(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(baseIcms)}
+                      onValueChange={(v) => setBaseIcms(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('icms')}
                       className="h-8 text-xs font-medium"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px] text-slate-500">Alíquota (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={aliquotaIcms}
-                      onChange={(e) => {
-                        setAliquotaIcms(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(aliquotaIcms)}
+                      onValueChange={(v) => setAliquotaIcms(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('icms')}
                       className="h-8 text-xs font-medium"
                     />
@@ -492,11 +481,9 @@ export function ModalLancamentoTributario({
                     <Label className="text-[10px] text-slate-500 font-semibold text-blue-700">
                       Valor (R$)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={valorIcms}
-                      onChange={(e) => setValorIcms(e.target.value)}
+                    <InputValorBrl
+                      value={parseNumeroBrl(valorIcms)}
+                      onValueChange={(v) => setValorIcms(v === undefined ? '' : String(v))}
                       className="h-8 text-xs font-bold text-blue-800 bg-blue-50/50"
                     />
                   </div>
@@ -512,26 +499,18 @@ export function ModalLancamentoTributario({
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-[10px] text-slate-500">Base (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={baseIpi}
-                      onChange={(e) => {
-                        setBaseIpi(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(baseIpi)}
+                      onValueChange={(v) => setBaseIpi(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('ipi')}
                       className="h-8 text-xs font-medium"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px] text-slate-500">Alíquota (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={aliquotaIpi}
-                      onChange={(e) => {
-                        setAliquotaIpi(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(aliquotaIpi)}
+                      onValueChange={(v) => setAliquotaIpi(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('ipi')}
                       className="h-8 text-xs font-medium"
                     />
@@ -540,11 +519,9 @@ export function ModalLancamentoTributario({
                     <Label className="text-[10px] text-slate-500 font-semibold text-purple-700">
                       Valor (R$)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={valorIpi}
-                      onChange={(e) => setValorIpi(e.target.value)}
+                    <InputValorBrl
+                      value={parseNumeroBrl(valorIpi)}
+                      onValueChange={(v) => setValorIpi(v === undefined ? '' : String(v))}
                       className="h-8 text-xs font-bold text-purple-800 bg-purple-50/50"
                     />
                   </div>
@@ -560,26 +537,18 @@ export function ModalLancamentoTributario({
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-[10px] text-slate-500">Base (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={basePis}
-                      onChange={(e) => {
-                        setBasePis(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(basePis)}
+                      onValueChange={(v) => setBasePis(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('pis')}
                       className="h-8 text-xs font-medium"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px] text-slate-500">Alíquota (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={aliquotaPis}
-                      onChange={(e) => {
-                        setAliquotaPis(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(aliquotaPis)}
+                      onValueChange={(v) => setAliquotaPis(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('pis')}
                       className="h-8 text-xs font-medium"
                     />
@@ -588,11 +557,9 @@ export function ModalLancamentoTributario({
                     <Label className="text-[10px] text-slate-500 font-semibold text-emerald-700">
                       Valor (R$)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={valorPis}
-                      onChange={(e) => setValorPis(e.target.value)}
+                    <InputValorBrl
+                      value={parseNumeroBrl(valorPis)}
+                      onValueChange={(v) => setValorPis(v === undefined ? '' : String(v))}
                       className="h-8 text-xs font-bold text-emerald-800 bg-emerald-50/50"
                     />
                   </div>
@@ -608,26 +575,18 @@ export function ModalLancamentoTributario({
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <Label className="text-[10px] text-slate-500">Base (R$)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={baseCofins}
-                      onChange={(e) => {
-                        setBaseCofins(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(baseCofins)}
+                      onValueChange={(v) => setBaseCofins(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('cofins')}
                       className="h-8 text-xs font-medium"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px] text-slate-500">Alíquota (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={aliquotaCofins}
-                      onChange={(e) => {
-                        setAliquotaCofins(e.target.value)
-                      }}
+                    <InputValorBrl
+                      value={parseNumeroBrl(aliquotaCofins)}
+                      onValueChange={(v) => setAliquotaCofins(v === undefined ? '' : String(v))}
                       onBlur={() => handleRecalcularImposto('cofins')}
                       className="h-8 text-xs font-medium"
                     />
@@ -636,11 +595,9 @@ export function ModalLancamentoTributario({
                     <Label className="text-[10px] text-slate-500 font-semibold text-indigo-700">
                       Valor (R$)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={valorCofins}
-                      onChange={(e) => setValorCofins(e.target.value)}
+                    <InputValorBrl
+                      value={parseNumeroBrl(valorCofins)}
+                      onValueChange={(v) => setValorCofins(v === undefined ? '' : String(v))}
                       className="h-8 text-xs font-bold text-indigo-800 bg-indigo-50/50"
                     />
                   </div>
