@@ -1,7 +1,5 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
-
-const DEBOUNCE_MS = 1500
 
 import pb from '@/lib/pocketbase/client'
 
@@ -52,39 +50,37 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 /**
- * Versão com debounce (trailing 1,5s) do useRealtime: em rajadas de eventos
- * (importações em lote, salvamentos múltiplos), dispara o callback uma única
- * vez após a pausa. Mesma assinatura do useRealtime.
+ * Variante com debounce do useRealtime: agrupa rajadas de eventos de tempo
+ * real (sincronizações em lote, imports) em uma única chamada do callback,
+ * com debounce "trailing" de 1,5s após o último evento.
+ *
+ * Assinatura idêntica à do useRealtime (mais um delay opcional em ms).
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
   callback: (data: RecordSubscription<TRecord>) => void,
   enabled: boolean = true,
+  delayMs: number = 1500,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendenteRef = useRef<RecordSubscription<TRecord> | null>(null)
+  const [evento, setEvento] = useState<RecordSubscription<TRecord> | null>(null)
+  const eventoRef = useRef(evento)
+  eventoRef.current = evento
 
-  useEffect(
-    () => () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    },
-    [],
-  )
-
-  return useRealtime<TRecord>(
+  useRealtime<TRecord>(
     collectionName,
     (data) => {
-      pendenteRef.current = data
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        const pendente = pendenteRef.current
-        pendenteRef.current = null
-        if (pendente) callback(pendente)
-      }, DEBOUNCE_MS)
+      setEvento(data)
     },
     enabled,
   )
+
+  useEffect(() => {
+    if (!evento) return
+    const timer = setTimeout(() => {
+      callbackRef.current(eventoRef.current as RecordSubscription<TRecord>)
+    }, delayMs)
+    return () => clearTimeout(timer)
+  }, [evento, delayMs])
 }
 
 export default useRealtime
