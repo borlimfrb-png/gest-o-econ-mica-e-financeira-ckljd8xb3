@@ -46,6 +46,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -2695,84 +2696,58 @@ export default function AnaliseEmpresa() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div>
                     <Label className="text-[11px]">Caixa e Equivalentes (R$ mil)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.caixa_equivalentes ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          caixa_equivalentes: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.caixa_equivalentes}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, caixa_equivalentes: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Aplicações Financeiras (R$ mil)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.aplicacoes_financeiras ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          aplicacoes_financeiras: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.aplicacoes_financeiras}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, aplicacoes_financeiras: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Contas a Receber (R$ mil)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.contas_receber ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, contas_receber: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.contas_receber}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, contas_receber: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Estoques (R$ mil)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.estoques ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, estoques: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.estoques}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, estoques: v ?? 0 }))}
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Impostos a Recuperar (R$ mil)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.impostos_recuperar ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          impostos_recuperar: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.impostos_recuperar}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, impostos_recuperar: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Outros Ativos Circulantes (R$ mil)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.outros_ativo_circulante ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          outros_ativo_circulante: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.outros_ativo_circulante}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, outros_ativo_circulante: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
@@ -2791,52 +2766,37 @@ export default function AnaliseEmpresa() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
                     <Label className="text-[11px]">Realizável a Longo Prazo</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.realizavel_longo_prazo ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          realizavel_longo_prazo: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.realizavel_longo_prazo}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, realizavel_longo_prazo: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Investimentos</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.investimentos ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, investimentos: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.investimentos}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, investimentos: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Imobilizado</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.imobilizado ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, imobilizado: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.imobilizado}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, imobilizado: v ?? 0 }))}
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Intangível</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.intangivel ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, intangivel: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.intangivel}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, intangivel: v ?? 0 }))}
                       className="h-8 text-xs bg-white"
                     />
                   </div>
@@ -2854,72 +2814,48 @@ export default function AnaliseEmpresa() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div>
                     <Label className="text-[11px]">Fornecedores</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.fornecedores ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, fornecedores: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.fornecedores}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, fornecedores: v ?? 0 }))}
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Empréstimos Curto Prazo</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.emprestimos_curto_prazo ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          emprestimos_curto_prazo: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.emprestimos_curto_prazo}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, emprestimos_curto_prazo: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Obrigações Trabalhistas</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.obrigacoes_trabalhistas ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          obrigacoes_trabalhistas: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.obrigacoes_trabalhistas}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, obrigacoes_trabalhistas: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Obrigações Tributárias</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.obrigacoes_tributarias ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          obrigacoes_tributarias: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.obrigacoes_tributarias}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, obrigacoes_tributarias: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[11px]">Outros Passivos Circulantes</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.outros_passivo_circulante ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          outros_passivo_circulante: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.outros_passivo_circulante}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, outros_passivo_circulante: v ?? 0 }))
                       }
                       className="h-8 text-xs bg-white"
                     />
@@ -2939,30 +2875,20 @@ export default function AnaliseEmpresa() {
                   <div className="space-y-2">
                     <div>
                       <Label className="text-[11px]">Empréstimos Longo Prazo</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formBalanco.emprestimos_longo_prazo ?? ''}
-                        onChange={(e) =>
-                          setFormBalanco((p) => ({
-                            ...p,
-                            emprestimos_longo_prazo: Number(e.target.value),
-                          }))
+                      <InputValorBrl
+                        value={formBalanco.emprestimos_longo_prazo}
+                        onValueChange={(v) =>
+                          setFormBalanco((p) => ({ ...p, emprestimos_longo_prazo: v ?? 0 }))
                         }
                         className="h-8 text-xs bg-white"
                       />
                     </div>
                     <div>
                       <Label className="text-[11px]">Outras Obrigações LP</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formBalanco.outras_obrigacoes_longo_prazo ?? ''}
-                        onChange={(e) =>
-                          setFormBalanco((p) => ({
-                            ...p,
-                            outras_obrigacoes_longo_prazo: Number(e.target.value),
-                          }))
+                      <InputValorBrl
+                        value={formBalanco.outras_obrigacoes_longo_prazo}
+                        onValueChange={(v) =>
+                          setFormBalanco((p) => ({ ...p, outras_obrigacoes_longo_prazo: v ?? 0 }))
                         }
                         className="h-8 text-xs bg-white"
                       />
@@ -2980,39 +2906,30 @@ export default function AnaliseEmpresa() {
                   <div className="space-y-2">
                     <div>
                       <Label className="text-[11px]">Capital Social</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formBalanco.capital_social ?? ''}
-                        onChange={(e) =>
-                          setFormBalanco((p) => ({ ...p, capital_social: Number(e.target.value) }))
+                      <InputValorBrl
+                        value={formBalanco.capital_social}
+                        onValueChange={(v) =>
+                          setFormBalanco((p) => ({ ...p, capital_social: v ?? 0 }))
                         }
                         className="h-8 text-xs bg-white"
                       />
                     </div>
                     <div>
                       <Label className="text-[11px]">Reservas de Lucros</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formBalanco.reservas_lucros ?? ''}
-                        onChange={(e) =>
-                          setFormBalanco((p) => ({ ...p, reservas_lucros: Number(e.target.value) }))
+                      <InputValorBrl
+                        value={formBalanco.reservas_lucros}
+                        onValueChange={(v) =>
+                          setFormBalanco((p) => ({ ...p, reservas_lucros: v ?? 0 }))
                         }
                         className="h-8 text-xs bg-white"
                       />
                     </div>
                     <div>
                       <Label className="text-[11px]">Lucros/Prejuízos Acumulados</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={formBalanco.lucros_acumulados ?? ''}
-                        onChange={(e) =>
-                          setFormBalanco((p) => ({
-                            ...p,
-                            lucros_acumulados: Number(e.target.value),
-                          }))
+                      <InputValorBrl
+                        value={formBalanco.lucros_acumulados}
+                        onValueChange={(v) =>
+                          setFormBalanco((p) => ({ ...p, lucros_acumulados: v ?? 0 }))
                         }
                         className="h-8 text-xs bg-white"
                       />
@@ -3149,13 +3066,9 @@ export default function AnaliseEmpresa() {
             <div className="py-4 space-y-3 text-xs">
               <div>
                 <Label className="text-[11px]">Receita Operacional Bruta (R$ mil)</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.receita_bruta ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, receita_bruta: Number(e.target.value) }))
-                  }
+                <InputValorBrl
+                  value={formDre.receita_bruta}
+                  onValueChange={(v) => setFormDre((p) => ({ ...p, receita_bruta: v ?? 0 }))}
                   className="h-8 text-xs"
                 />
               </div>
@@ -3163,13 +3076,9 @@ export default function AnaliseEmpresa() {
                 <Label className="text-[11px]">
                   Deduções da Receita / Impostos sobre Vendas (R$ mil)
                 </Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.deducoes_receita ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, deducoes_receita: Number(e.target.value) }))
-                  }
+                <InputValorBrl
+                  value={formDre.deducoes_receita}
+                  onValueChange={(v) => setFormDre((p) => ({ ...p, deducoes_receita: v ?? 0 }))}
                   className="h-8 text-xs"
                 />
               </div>
@@ -3177,13 +3086,9 @@ export default function AnaliseEmpresa() {
                 <Label className="text-[11px]">
                   Custo dos Produtos/Serviços Vendidos - CMV (R$ mil)
                 </Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.custo_mercadorias ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, custo_mercadorias: Number(e.target.value) }))
-                  }
+                <InputValorBrl
+                  value={formDre.custo_mercadorias}
+                  onValueChange={(v) => setFormDre((p) => ({ ...p, custo_mercadorias: v ?? 0 }))}
                   className="h-8 text-xs"
                 />
               </div>
@@ -3191,49 +3096,37 @@ export default function AnaliseEmpresa() {
                 <Label className="text-[11px]">
                   Despesas Operacionais (Vendas, Administrativas) (R$ mil)
                 </Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.despesas_operacionais ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, despesas_operacionais: Number(e.target.value) }))
+                <InputValorBrl
+                  value={formDre.despesas_operacionais}
+                  onValueChange={(v) =>
+                    setFormDre((p) => ({ ...p, despesas_operacionais: v ?? 0 }))
                   }
                   className="h-8 text-xs"
                 />
               </div>
               <div>
                 <Label className="text-[11px]">Despesas Financeiras Líquidas (R$ mil)</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.despesas_financeiras ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, despesas_financeiras: Number(e.target.value) }))
-                  }
+                <InputValorBrl
+                  value={formDre.despesas_financeiras}
+                  onValueChange={(v) => setFormDre((p) => ({ ...p, despesas_financeiras: v ?? 0 }))}
                   className="h-8 text-xs"
                 />
               </div>
               <div>
                 <Label className="text-[11px]">Outras Receitas / Despesas (R$ mil)</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.outras_receitas_despesas ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, outras_receitas_despesas: Number(e.target.value) }))
+                <InputValorBrl
+                  value={formDre.outras_receitas_despesas}
+                  onValueChange={(v) =>
+                    setFormDre((p) => ({ ...p, outras_receitas_despesas: v ?? 0 }))
                   }
                   className="h-8 text-xs"
                 />
               </div>
               <div>
                 <Label className="text-[11px]">Imposto de Renda e CSLL (R$ mil)</Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={formDre.imposto_renda ?? ''}
-                  onChange={(e) =>
-                    setFormDre((p) => ({ ...p, imposto_renda: Number(e.target.value) }))
-                  }
+                <InputValorBrl
+                  value={formDre.imposto_renda}
+                  onValueChange={(v) => setFormDre((p) => ({ ...p, imposto_renda: v ?? 0 }))}
                   className="h-8 text-xs"
                 />
               </div>
@@ -3301,7 +3194,7 @@ export default function AnaliseEmpresa() {
                     min={2000}
                     max={2100}
                     value={novoAno}
-                    onChange={(e) => setNovoAno(Number(e.target.value))}
+                    onChange={(e) => setNovoAno(Number(e.target.value || 0))}
                     className="h-8 text-xs bg-white w-24 font-bold"
                     required
                   />
@@ -3333,106 +3226,75 @@ export default function AnaliseEmpresa() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div>
                     <Label className="text-[10px]">Caixa e Equiv.</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.caixa_equivalentes ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          caixa_equivalentes: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.caixa_equivalentes}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, caixa_equivalentes: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Aplicações Fin.</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.aplicacoes_financeiras ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          aplicacoes_financeiras: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.aplicacoes_financeiras}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, aplicacoes_financeiras: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Contas a Receber</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.contas_receber ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, contas_receber: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.contas_receber}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, contas_receber: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Estoques</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.estoques ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, estoques: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.estoques}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, estoques: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Imobilizado</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.imobilizado ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, imobilizado: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.imobilizado}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, imobilizado: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Realizável LP</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.realizavel_longo_prazo ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          realizavel_longo_prazo: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.realizavel_longo_prazo}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, realizavel_longo_prazo: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Investimentos</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.investimentos ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, investimentos: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.investimentos}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, investimentos: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Intangível</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.intangivel ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, intangivel: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.intangivel}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, intangivel: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
@@ -3447,93 +3309,68 @@ export default function AnaliseEmpresa() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div>
                     <Label className="text-[10px]">Fornecedores</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.fornecedores ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, fornecedores: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formBalanco.fornecedores}
+                      onValueChange={(v) => setFormBalanco((p) => ({ ...p, fornecedores: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Empréstimos CP</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.emprestimos_curto_prazo ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          emprestimos_curto_prazo: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.emprestimos_curto_prazo}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, emprestimos_curto_prazo: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Empréstimos LP</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.emprestimos_longo_prazo ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          emprestimos_longo_prazo: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.emprestimos_longo_prazo}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, emprestimos_longo_prazo: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Obrigações Trab./Trib.</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.obrigacoes_trabalhistas ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({
-                          ...p,
-                          obrigacoes_trabalhistas: Number(e.target.value),
-                        }))
+                    <InputValorBrl
+                      value={formBalanco.obrigacoes_trabalhistas}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, obrigacoes_trabalhistas: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Capital Social</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.capital_social ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, capital_social: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.capital_social}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, capital_social: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Reservas de Lucros</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.reservas_lucros ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, reservas_lucros: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.reservas_lucros}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, reservas_lucros: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Lucros Acumulados</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formBalanco.lucros_acumulados ?? ''}
-                      onChange={(e) =>
-                        setFormBalanco((p) => ({ ...p, lucros_acumulados: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formBalanco.lucros_acumulados}
+                      onValueChange={(v) =>
+                        setFormBalanco((p) => ({ ...p, lucros_acumulados: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
@@ -3549,73 +3386,55 @@ export default function AnaliseEmpresa() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div>
                     <Label className="text-[10px]">Receita Bruta</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formDre.receita_bruta ?? ''}
-                      onChange={(e) =>
-                        setFormDre((p) => ({ ...p, receita_bruta: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formDre.receita_bruta}
+                      onValueChange={(v) => setFormDre((p) => ({ ...p, receita_bruta: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Deduções Receita</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formDre.deducoes_receita ?? ''}
-                      onChange={(e) =>
-                        setFormDre((p) => ({ ...p, deducoes_receita: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formDre.deducoes_receita}
+                      onValueChange={(v) => setFormDre((p) => ({ ...p, deducoes_receita: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Custo Mercadorias</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formDre.custo_mercadorias ?? ''}
-                      onChange={(e) =>
-                        setFormDre((p) => ({ ...p, custo_mercadorias: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formDre.custo_mercadorias}
+                      onValueChange={(v) =>
+                        setFormDre((p) => ({ ...p, custo_mercadorias: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Despesas Operac.</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formDre.despesas_operacionais ?? ''}
-                      onChange={(e) =>
-                        setFormDre((p) => ({ ...p, despesas_operacionais: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formDre.despesas_operacionais}
+                      onValueChange={(v) =>
+                        setFormDre((p) => ({ ...p, despesas_operacionais: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Despesas Financeiras</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formDre.despesas_financeiras ?? ''}
-                      onChange={(e) =>
-                        setFormDre((p) => ({ ...p, despesas_financeiras: Number(e.target.value) }))
+                    <InputValorBrl
+                      value={formDre.despesas_financeiras}
+                      onValueChange={(v) =>
+                        setFormDre((p) => ({ ...p, despesas_financeiras: v ?? 0 }))
                       }
                       className="h-7 text-xs bg-white"
                     />
                   </div>
                   <div>
                     <Label className="text-[10px]">Imposto de Renda</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={formDre.imposto_renda ?? ''}
-                      onChange={(e) =>
-                        setFormDre((p) => ({ ...p, imposto_renda: Number(e.target.value) }))
-                      }
+                    <InputValorBrl
+                      value={formDre.imposto_renda}
+                      onValueChange={(v) => setFormDre((p) => ({ ...p, imposto_renda: v ?? 0 }))}
                       className="h-7 text-xs bg-white"
                     />
                   </div>
