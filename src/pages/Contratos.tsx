@@ -146,24 +146,6 @@ function formatarMoeda(val: number | null | undefined): string {
   }).format(val)
 }
 
-function parseValorMonetario(input: string): number {
-  return parseNumeroBrl(input) ?? 0
-}
-
-function formatarInputMoeda(val: number): string {
-  if (val === 0) return ''
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(val)
-}
-
-// Formata um valor para edição no InputValorBrl (sem "R$" e sem milhar fixo)
-function formatarValorEdicao(val: number): string {
-  if (!val || val <= 0) return ''
-  return String(Number(val.toFixed(2))).replace('.', ',')
-}
-
 function dataHojeIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -260,7 +242,8 @@ export default function Contratos() {
   const [dataInicio, setDataInicio] = useState<string>(dataHojeIso())
   const [prazoInicial, setPrazoInicial] = useState<number>(1)
   const [quantidadeMeses, setQuantidadeMeses] = useState<number>(12)
-  const [valorInput, setValorInput] = useState<string>('')
+  // Valor mensal/base: estado numérico (undefined = campo vazio), contrato do InputValorBrl
+  const [valorInput, setValorInput] = useState<number | undefined>(undefined)
   const [diaVencimento, setDiaVencimento] = useState<number>(10)
   const [enviarLembretesContrato, setEnviarLembretesContrato] = useState<boolean>(true)
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
@@ -270,13 +253,13 @@ export default function Contratos() {
   // Período 2: 16/02/2027 a 16/10/2027 a R$ 2.000/mês (9 meses)
   const [periodo1Inicio, setPeriodo1Inicio] = useState<string>('')
   const [periodo1Final, setPeriodo1Final] = useState<string>('')
-  const [periodo1ValorInput, setPeriodo1ValorInput] = useState<string>('')
+  const [periodo1ValorInput, setPeriodo1ValorInput] = useState<number | undefined>(undefined)
   const [periodo1Forma, setPeriodo1Forma] = useState<string>('Pix')
 
   const [habilitarPeriodo2, setHabilitarPeriodo2] = useState<boolean>(false)
   const [periodo2Inicio, setPeriodo2Inicio] = useState<string>('')
   const [periodo2Final, setPeriodo2Final] = useState<string>('')
-  const [periodo2ValorInput, setPeriodo2ValorInput] = useState<string>('')
+  const [periodo2ValorInput, setPeriodo2ValorInput] = useState<number | undefined>(undefined)
   const [periodo2Forma, setPeriodo2Forma] = useState<string>('Boleto Bancário')
 
   const [observacoesPagamento, setObservacoesPagamento] = useState<string>('')
@@ -538,34 +521,11 @@ export default function Contratos() {
     filtroHistoricoDataInicio,
   ])
 
-  // Manipulador de valor com máscara
-  const handleValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value
-    const parsed = parseValorMonetario(raw)
-    setValorInput(parsed > 0 ? formatarInputMoeda(parsed) : '')
-    if (formErrors.valor) {
-      setFormErrors((prev) => ({ ...prev, valor: '' }))
-    }
-  }
-
-  const handlePeriodo1ValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value
-    const parsed = parseValorMonetario(raw)
-    setPeriodo1ValorInput(parsed > 0 ? formatarInputMoeda(parsed) : '')
-  }
-
-  const handlePeriodo2ValorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const raw = e.target.value
-    const parsed = parseValorMonetario(raw)
-    setPeriodo2ValorInput(parsed > 0 ? formatarInputMoeda(parsed) : '')
-  }
-
   // Cálculos de datas e mensalidades por período
   const periodo1DataIniEfetiva = periodo1Inicio || dataInicio
   const periodo1DataFimEfetiva =
     periodo1Final || calcularDataFinal(periodo1DataIniEfetiva, quantidadeMeses)
-  const periodo1ValorMensalNum =
-    parseValorMonetario(periodo1ValorInput) || parseValorMonetario(valorInput)
+  const periodo1ValorMensalNum = periodo1ValorInput ?? valorInput ?? 0
   const periodo1MesesCalculados = useMemo(() => {
     return calcularMensalidadesPeriodo(periodo1DataIniEfetiva, periodo1DataFimEfetiva)
   }, [periodo1DataIniEfetiva, periodo1DataFimEfetiva])
@@ -573,7 +533,7 @@ export default function Contratos() {
     return periodo1MesesCalculados * periodo1ValorMensalNum
   }, [periodo1MesesCalculados, periodo1ValorMensalNum])
 
-  const periodo2ValorMensalNum = habilitarPeriodo2 ? parseValorMonetario(periodo2ValorInput) : 0
+  const periodo2ValorMensalNum = habilitarPeriodo2 ? (periodo2ValorInput ?? 0) : 0
   const periodo2MesesCalculados = useMemo(() => {
     if (!habilitarPeriodo2 || !periodo2Inicio || !periodo2Final) return 0
     return calcularMensalidadesPeriodo(periodo2Inicio, periodo2Final)
@@ -661,8 +621,8 @@ export default function Contratos() {
   const parcelasEmTempoReal = useMemo(() => {
     if (listaPeriodosAtual.length === 0) {
       // Fallback para caso sem períodos preenchidos ainda
-      const v = parseValorMonetario(valorInput)
-      if (v > 0 && contratanteSelecionada) {
+      const v = valorInput
+      if (v !== undefined && v > 0 && contratanteSelecionada) {
         return recebiveisService.calcularPreviewParcelas({
           empresa: contratanteSelecionada.id,
           data_inicio_servicos: dataInicio,
@@ -710,8 +670,7 @@ export default function Contratos() {
       errs.quantidadeMeses = 'A quantidade de parcelas deve estar entre 1 e 120.'
     }
 
-    const val =
-      periodo1ValorMensalNum > 0 ? periodo1ValorMensalNum : parseValorMonetario(valorInput)
+    const val = periodo1ValorMensalNum > 0 ? periodo1ValorMensalNum : (valorInput ?? 0)
     if (!val || val <= 0) {
       errs.valor = 'Informe o valor mensal do Período 1 (maior que R$ 0,00).'
     }
@@ -739,19 +698,19 @@ export default function Contratos() {
     setPrazoInicial(1)
     setQuantidadeMeses(12) // Contrato de 12 parcelas
     setDiaVencimento(16)
-    setValorInput(formatarInputMoeda(1500))
+    setValorInput(1500)
 
     // Período 1: 16/10/2026 a 16/01/2027 a R$ 1.500/mês
     setPeriodo1Inicio('2026-10-16')
     setPeriodo1Final('2027-01-16')
-    setPeriodo1ValorInput(formatarInputMoeda(1500))
+    setPeriodo1ValorInput(1500)
     setPeriodo1Forma('Pix')
 
     // Período 2: 16/02/2027 a 16/10/2027 a R$ 2.000/mês
     setHabilitarPeriodo2(true)
     setPeriodo2Inicio('2027-02-16')
     setPeriodo2Final('2027-10-16')
-    setPeriodo2ValorInput(formatarInputMoeda(2000))
+    setPeriodo2ValorInput(2000)
     setPeriodo2Forma('Boleto Bancário')
 
     toast({
@@ -775,8 +734,7 @@ export default function Contratos() {
       return
     }
 
-    const valorBaseParcela =
-      periodo1ValorMensalNum > 0 ? periodo1ValorMensalNum : parseValorMonetario(valorInput)
+    const valorBaseParcela = periodo1ValorMensalNum > 0 ? periodo1ValorMensalNum : (valorInput ?? 0)
     const dataFimCalculada =
       (habilitarPeriodo2 && periodo2Final) ||
       periodo1DataFimEfetiva ||
@@ -1051,7 +1009,7 @@ export default function Contratos() {
     setDataInicio(dataInicioRenovacao)
     setPrazoInicial(c.prazo_inicial || 1)
     setQuantidadeMeses(c.quantidade_meses || 12)
-    setValorInput(formatarInputMoeda(Number(c.valor_parcela) || 0))
+    setValorInput(Number(c.valor_parcela) || undefined)
     setDiaVencimento(c.dia_vencimento || 10)
 
     setContratoSalvoId(null)
@@ -1099,7 +1057,7 @@ export default function Contratos() {
     setDataInicio(dataInicioStr)
     setPrazoInicial(c.prazo_inicial)
     setQuantidadeMeses(c.quantidade_meses)
-    setValorInput(formatarInputMoeda(valorNum))
+    setValorInput(valorNum || undefined)
     setDiaVencimento(c.dia_vencimento)
 
     // Períodos de cobrança salvos
@@ -1107,7 +1065,7 @@ export default function Contratos() {
       const p1 = periodosSalvos[0]
       setPeriodo1Inicio(p1.data_inicio ? p1.data_inicio.slice(0, 10) : dataInicioStr)
       setPeriodo1Final(p1.data_final ? p1.data_final.slice(0, 10) : dataFimCalculada)
-      setPeriodo1ValorInput(formatarInputMoeda(Number(p1.valor_mensal) || valorNum))
+      setPeriodo1ValorInput(Number(p1.valor_mensal) || valorNum || undefined)
       setPeriodo1Forma(p1.forma_pagamento || 'Pix')
 
       if (periodosSalvos.length > 1) {
@@ -1115,27 +1073,27 @@ export default function Contratos() {
         setHabilitarPeriodo2(true)
         setPeriodo2Inicio(p2.data_inicio ? p2.data_inicio.slice(0, 10) : '')
         setPeriodo2Final(p2.data_final ? p2.data_final.slice(0, 10) : '')
-        setPeriodo2ValorInput(formatarInputMoeda(Number(p2.valor_mensal) || 0))
+        setPeriodo2ValorInput(Number(p2.valor_mensal) || undefined)
         setPeriodo2Forma(p2.forma_pagamento || 'Boleto Bancário')
       } else {
         setHabilitarPeriodo2(false)
         setPeriodo2Inicio('')
         setPeriodo2Final('')
-        setPeriodo2ValorInput('')
+        setPeriodo2ValorInput(undefined)
         setPeriodo2Forma('Boleto Bancário')
       }
     } else {
       // Fallback para campos pontuais legados
       setPeriodo1Inicio(dataInicioStr)
       setPeriodo1Final(dataFimCalculada)
-      setPeriodo1ValorInput(formatarInputMoeda(valorNum))
+      setPeriodo1ValorInput(valorNum || undefined)
       setPeriodo1Forma(c.forma_pagamento_1 || 'Pix')
 
       const temP2 = Boolean(c.forma_pagamento_2 || (c.valor_2 && c.valor_2 > 0))
       setHabilitarPeriodo2(temP2)
       setPeriodo2Inicio(c.vencimento_2 ? c.vencimento_2.slice(0, 10) : '')
       setPeriodo2Final('')
-      setPeriodo2ValorInput(c.valor_2 ? formatarInputMoeda(c.valor_2) : '')
+      setPeriodo2ValorInput(c.valor_2 ? Number(c.valor_2) : undefined)
       setPeriodo2Forma(c.forma_pagamento_2 || 'Boleto Bancário')
     }
 
@@ -1757,8 +1715,13 @@ export default function Contratos() {
                             id="contrato-valor"
                             placeholder="0,00"
                             value={valorInput}
-                            onChange={setValorInput}
-                            className="h-9 text-xs font-mono font-bold text-slate-900"
+                            onValueChange={(v) => {
+                              setValorInput(v)
+                              if (formErrors.valor) {
+                                setFormErrors((prev) => ({ ...prev, valor: '' }))
+                              }
+                            }}
+                            className="h-9 pl-8 text-xs font-mono font-bold text-slate-900"
                           />
                         </div>
                         {formErrors.valor && (
@@ -1890,8 +1853,8 @@ export default function Contratos() {
                             </Label>
                             <InputValorBrl
                               placeholder="1.500,00"
-                              value={periodo1ValorInput || valorInput}
-                              onChange={setPeriodo1ValorInput}
+                              value={periodo1ValorInput ?? valorInput}
+                              onValueChange={setPeriodo1ValorInput}
                               className="h-8 text-xs font-mono font-bold"
                             />
                           </div>
@@ -2041,7 +2004,7 @@ export default function Contratos() {
                                 <InputValorBrl
                                   placeholder="2.000,00"
                                   value={periodo2ValorInput}
-                                  onChange={setPeriodo2ValorInput}
+                                  onValueChange={setPeriodo2ValorInput}
                                   className="h-8 text-xs font-mono font-bold"
                                 />
                               </div>
