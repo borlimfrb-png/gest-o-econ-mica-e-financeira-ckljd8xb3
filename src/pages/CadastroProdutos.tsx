@@ -53,6 +53,8 @@ import {
   ArrowRightLeft,
 } from 'lucide-react'
 import { ModalHistoricoPrecos } from '@/components/ModalHistoricoPrecos'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
 import { ModalPdfCapacidadeA4 } from '@/components/ModalPdfCapacidadeA4'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 
@@ -277,22 +279,23 @@ export default function CadastroProdutos() {
     if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }))
   }
 
+  // Converte o texto do estado (sempre String(number) ou '') em número.
+  const parseCampoNum = (s: string): number => {
+    if (s.trim() === '') return NaN
+    const n = parseNumeroBrl(s)
+    return n === undefined ? NaN : n
+  }
+
   // Auto-cálculo da margem quando altera preço ou custo (ou vice-versa)
   const handleCustoOrPrecoChange = (
     tipo: 'custo' | 'preco_venda' | 'margem_desejada',
-    val: string,
+    val: number | undefined,
   ) => {
-    setField(tipo, val)
-    const c =
-      tipo === 'custo' ? Number(val.replace(',', '.')) : Number(formData.custo.replace(',', '.'))
-    const p =
-      tipo === 'preco_venda'
-        ? Number(val.replace(',', '.'))
-        : Number(formData.preco_venda.replace(',', '.'))
-    const m =
-      tipo === 'margem_desejada'
-        ? Number(val.replace(',', '.'))
-        : Number(formData.margem_desejada.replace(',', '.'))
+    const texto = val === undefined ? '' : String(val)
+    setField(tipo, texto)
+    const c = tipo === 'custo' ? (val ?? NaN) : parseCampoNum(formData.custo)
+    const p = tipo === 'preco_venda' ? (val ?? NaN) : parseCampoNum(formData.preco_venda)
+    const m = tipo === 'margem_desejada' ? (val ?? NaN) : parseCampoNum(formData.margem_desejada)
 
     if (tipo === 'margem_desejada' && !isNaN(m) && m < 100 && !isNaN(c) && c > 0) {
       // Sugere Preço de venda = Custo / (1 - margem/100)
@@ -300,7 +303,7 @@ export default function CadastroProdutos() {
       if (novoPreco > 0) {
         setFormData((prev) => ({
           ...prev,
-          margem_desejada: val,
+          margem_desejada: texto,
           preco_venda: novoPreco.toFixed(2),
         }))
       }
@@ -315,7 +318,7 @@ export default function CadastroProdutos() {
       const novaMargem = ((p - c) / p) * 100
       setFormData((prev) => ({
         ...prev,
-        [tipo]: val,
+        [tipo]: texto,
         margem_desejada: novaMargem > 0 ? novaMargem.toFixed(1) : '0',
       }))
     }
@@ -333,29 +336,29 @@ export default function CadastroProdutos() {
       errs.unidade = 'Informe a unidade de medida (ex: UN, KG, CX)'
     }
     if (form.capacidade_producao.trim() !== '') {
-      const cap = Number(form.capacidade_producao.replace(',', '.'))
+      const cap = parseCampoNum(form.capacidade_producao)
       if (isNaN(cap) || cap < 0) {
         errs.capacidade_producao =
           'Informe um número válido para a capacidade de produção (maior ou igual a zero)'
       }
     }
     if (form.quantidade_vendida.trim() !== '') {
-      const qtd = Number(form.quantidade_vendida.replace(',', '.'))
+      const qtd = parseCampoNum(form.quantidade_vendida)
       if (isNaN(qtd) || qtd < 0) {
         errs.quantidade_vendida =
           'Informe um número válido para a quantidade vendida (maior ou igual a zero)'
       }
     }
     if (form.custo.trim() !== '') {
-      const c = Number(form.custo.replace(',', '.'))
+      const c = parseCampoNum(form.custo)
       if (isNaN(c) || c < 0) errs.custo = 'Informe um custo válido'
     }
     if (form.preco_venda.trim() !== '') {
-      const p = Number(form.preco_venda.replace(',', '.'))
+      const p = parseCampoNum(form.preco_venda)
       if (isNaN(p) || p < 0) errs.preco_venda = 'Informe um preço válido'
     }
     if (form.margem_desejada.trim() !== '') {
-      const m = Number(form.margem_desejada.replace(',', '.'))
+      const m = parseCampoNum(form.margem_desejada)
       if (isNaN(m) || m < 0 || m >= 100) errs.margem_desejada = 'Margem deve estar entre 0% e 99.9%'
     }
 
@@ -410,21 +413,21 @@ export default function CadastroProdutos() {
     try {
       const capNum =
         formData.capacidade_producao.trim() !== ''
-          ? Number(formData.capacidade_producao.replace(',', '.'))
+          ? parseCampoNum(formData.capacidade_producao) || null
           : null
       const qtdVendidaNum =
         formData.quantidade_vendida.trim() !== ''
-          ? Number(formData.quantidade_vendida.replace(',', '.'))
+          ? parseCampoNum(formData.quantidade_vendida) || null
           : null
       const custoNum =
-        formData.custo.trim() !== '' ? Number(formData.custo.replace(',', '.')) : undefined
+        formData.custo.trim() !== '' ? parseCampoNum(formData.custo) || undefined : undefined
       const precoNum =
         formData.preco_venda.trim() !== ''
-          ? Number(formData.preco_venda.replace(',', '.'))
+          ? parseCampoNum(formData.preco_venda) || undefined
           : undefined
       const margemNum =
         formData.margem_desejada.trim() !== ''
-          ? Number(formData.margem_desejada.replace(',', '.'))
+          ? parseCampoNum(formData.margem_desejada) || undefined
           : undefined
 
       const payload = {
@@ -1355,15 +1358,17 @@ export default function CadastroProdutos() {
                     </Label>
                     <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
                   </div>
-                  <Input
+                  <InputValorBrl
                     id="prod-capacidade"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
                     placeholder="Ex: 5000"
-                    value={formData.capacidade_producao}
-                    onChange={(e) => setField('capacidade_producao', e.target.value)}
+                    value={
+                      formData.capacidade_producao === ''
+                        ? undefined
+                        : Number(formData.capacidade_producao)
+                    }
+                    onValueChange={(v) =>
+                      setField('capacidade_producao', v === undefined ? '' : String(v))
+                    }
                     className={`h-9 text-xs bg-white ${errors.capacidade_producao ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                   />
                   {errors.capacidade_producao ? (
@@ -1388,15 +1393,17 @@ export default function CadastroProdutos() {
                     </Label>
                     <span className="text-[10px] text-slate-400 font-normal">Opcional</span>
                   </div>
-                  <Input
+                  <InputValorBrl
                     id="prod-quantidade-vendida"
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="any"
                     placeholder="Ex: 3800"
-                    value={formData.quantidade_vendida}
-                    onChange={(e) => setField('quantidade_vendida', e.target.value)}
+                    value={
+                      formData.quantidade_vendida === ''
+                        ? undefined
+                        : Number(formData.quantidade_vendida)
+                    }
+                    onValueChange={(v) =>
+                      setField('quantidade_vendida', v === undefined ? '' : String(v))
+                    }
                     className={`h-9 text-xs bg-white ${errors.quantidade_vendida ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
                   />
                   {errors.quantidade_vendida ? (
@@ -1423,15 +1430,11 @@ export default function CadastroProdutos() {
                     <Label htmlFor="prod-custo" className="text-xs font-semibold text-slate-700">
                       Custo Unitário (R$)
                     </Label>
-                    <Input
+                    <InputValorBrl
                       id="prod-custo"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={formData.custo}
-                      onChange={(e) => handleCustoOrPrecoChange('custo', e.target.value)}
+                      placeholder="0,00"
+                      value={formData.custo === '' ? undefined : Number(formData.custo)}
+                      onValueChange={(v) => handleCustoOrPrecoChange('custo', v)}
                       className="h-9 text-xs bg-white"
                     />
                   </div>
@@ -1440,16 +1443,15 @@ export default function CadastroProdutos() {
                     <Label htmlFor="prod-margem" className="text-xs font-semibold text-slate-700">
                       Margem Desejada (%)
                     </Label>
-                    <Input
+                    <InputValorBrl
                       id="prod-margem"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      max="99.9"
-                      step="0.1"
-                      placeholder="Ex: 40.0"
-                      value={formData.margem_desejada}
-                      onChange={(e) => handleCustoOrPrecoChange('margem_desejada', e.target.value)}
+                      placeholder="Ex: 40,0"
+                      value={
+                        formData.margem_desejada === ''
+                          ? undefined
+                          : Number(formData.margem_desejada)
+                      }
+                      onValueChange={(v) => handleCustoOrPrecoChange('margem_desejada', v)}
                       className="h-9 text-xs bg-white"
                     />
                   </div>
@@ -1458,15 +1460,11 @@ export default function CadastroProdutos() {
                     <Label htmlFor="prod-preco" className="text-xs font-semibold text-slate-700">
                       Preço de Venda (R$)
                     </Label>
-                    <Input
+                    <InputValorBrl
                       id="prod-preco"
-                      type="number"
-                      inputMode="decimal"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={formData.preco_venda}
-                      onChange={(e) => handleCustoOrPrecoChange('preco_venda', e.target.value)}
+                      placeholder="0,00"
+                      value={formData.preco_venda === '' ? undefined : Number(formData.preco_venda)}
+                      onValueChange={(v) => handleCustoOrPrecoChange('preco_venda', v)}
                       className="h-9 text-xs bg-white font-bold text-blue-900"
                     />
                   </div>

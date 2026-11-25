@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { BENCHMARKS_SETORIAIS, type BenchmarkSetorValores } from '@/lib/benchmarks'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
 import { benchmarksService } from '@/services/benchmarksService'
 import { useToast } from '@/hooks/use-toast'
 import type { EmpresaRecord, BenchmarkEmpresaRecord } from '@/types/finance'
@@ -197,11 +199,16 @@ export function ModalEditarBenchmarks({
     }
   }, [open, empresaSelecionadaInicial, setorInicial])
 
-  const handleChange = (field: keyof BenchmarkSetorValores, value: string | number) => {
+  const handleChange = (field: keyof BenchmarkSetorValores, value: number | undefined) => {
     setFormData((prev) => ({
       ...prev,
-      [field]: typeof value === 'string' ? (value === '' ? 0 : Number(value)) : value,
+      [field]: value ?? 0,
     }))
+  }
+
+  const parseCampoNum = (s: string): number | undefined => {
+    if (s.trim() === '') return undefined
+    return parseNumeroBrl(s)
   }
 
   const handleTextChange = (field: keyof BenchmarkSetorValores, value: string) => {
@@ -836,12 +843,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">AC / PC</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    value={formData.liquidezCorrente ?? ''}
-                    onChange={(e) => handleChange('liquidezCorrente', e.target.value)}
+                  <InputValorBrl
+                    value={formData.liquidezCorrente ?? undefined}
+                    onValueChange={(v) => handleChange('liquidezCorrente', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -856,12 +860,9 @@ export function ModalEditarBenchmarks({
                       (AC − Estoques) / PC
                     </span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    value={formData.liquidezSeca ?? ''}
-                    onChange={(e) => handleChange('liquidezSeca', e.target.value)}
+                  <InputValorBrl
+                    value={formData.liquidezSeca ?? undefined}
+                    onValueChange={(v) => handleChange('liquidezSeca', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -876,12 +877,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Caixa / PC</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    value={formData.liquidezImediata ?? ''}
-                    onChange={(e) => handleChange('liquidezImediata', e.target.value)}
+                  <InputValorBrl
+                    value={formData.liquidezImediata ?? undefined}
+                    onValueChange={(v) => handleChange('liquidezImediata', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -896,12 +894,9 @@ export function ModalEditarBenchmarks({
                       (AC + RLP) / (PC + PNC)
                     </span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    value={formData.liquidezGeral ?? ''}
-                    onChange={(e) => handleChange('liquidezGeral', e.target.value)}
+                  <InputValorBrl
+                    value={formData.liquidezGeral ?? undefined}
+                    onValueChange={(v) => handleChange('liquidezGeral', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -921,13 +916,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Passivo / Ativo</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="100"
-                    value={formData.endividamentoGeral ?? ''}
-                    onChange={(e) => handleChange('endividamentoGeral', e.target.value)}
+                  <InputValorBrl
+                    value={formData.endividamentoGeral ?? undefined}
+                    onValueChange={(v) => handleChange('endividamentoGeral', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -942,13 +933,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">PC / Passivo Total</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="100"
-                    value={formData.composicaoEndividamento ?? ''}
-                    onChange={(e) => handleChange('composicaoEndividamento', e.target.value)}
+                  <InputValorBrl
+                    value={formData.composicaoEndividamento ?? undefined}
+                    onValueChange={(v) => handleChange('composicaoEndividamento', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -963,12 +950,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Passivo / PL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={formData.participacaoCapitalTerceiros ?? ''}
-                    onChange={(e) => handleChange('participacaoCapitalTerceiros', e.target.value)}
+                  <InputValorBrl
+                    value={formData.participacaoCapitalTerceiros ?? undefined}
+                    onValueChange={(v) => handleChange('participacaoCapitalTerceiros', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -983,12 +967,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Imobilizado / PL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={formData.imobilizacaoPL ?? ''}
-                    onChange={(e) => handleChange('imobilizacaoPL', e.target.value)}
+                  <InputValorBrl
+                    value={formData.imobilizacaoPL ?? undefined}
+                    onValueChange={(v) => handleChange('imobilizacaoPL', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1006,12 +987,9 @@ export function ModalEditarBenchmarks({
                     <Label className="text-xs font-bold text-slate-800">Margem Bruta (%)</Label>
                     <span className="text-[10px] font-mono text-slate-400">LB / RL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    value={formData.margemBruta ?? ''}
-                    onChange={(e) => handleChange('margemBruta', e.target.value)}
+                  <InputValorBrl
+                    value={formData.margemBruta ?? undefined}
+                    onValueChange={(v) => handleChange('margemBruta', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">Lucro bruto sobre vendas (ex: 35%).</p>
@@ -1024,11 +1002,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">EBIT / RL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.margemOperacional ?? ''}
-                    onChange={(e) => handleChange('margemOperacional', e.target.value)}
+                  <InputValorBrl
+                    value={formData.margemOperacional ?? undefined}
+                    onValueChange={(v) => handleChange('margemOperacional', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">Eficiência das operações (ex: 12%).</p>
@@ -1039,11 +1015,9 @@ export function ModalEditarBenchmarks({
                     <Label className="text-xs font-bold text-slate-800">Margem Líquida (%)</Label>
                     <span className="text-[10px] font-mono text-slate-400">LL / RL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.margemLiquida ?? ''}
-                    onChange={(e) => handleChange('margemLiquida', e.target.value)}
+                  <InputValorBrl
+                    value={formData.margemLiquida ?? undefined}
+                    onValueChange={(v) => handleChange('margemLiquida', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1056,11 +1030,9 @@ export function ModalEditarBenchmarks({
                     <Label className="text-xs font-bold text-slate-800">ROE (Retorno PL %)</Label>
                     <span className="text-[10px] font-mono text-slate-400">LL / PL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.roe ?? ''}
-                    onChange={(e) => handleChange('roe', e.target.value)}
+                  <InputValorBrl
+                    value={formData.roe ?? undefined}
+                    onValueChange={(v) => handleChange('roe', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1075,11 +1047,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">LL / Ativo</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.roa ?? ''}
-                    onChange={(e) => handleChange('roa', e.target.value)}
+                  <InputValorBrl
+                    value={formData.roa ?? undefined}
+                    onValueChange={(v) => handleChange('roa', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1092,12 +1062,9 @@ export function ModalEditarBenchmarks({
                     <Label className="text-xs font-bold text-slate-800">Giro do Ativo (x)</Label>
                     <span className="text-[10px] font-mono text-slate-400">RL / Ativo</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    value={formData.giroAtivo ?? ''}
-                    onChange={(e) => handleChange('giroAtivo', e.target.value)}
+                  <InputValorBrl
+                    value={formData.giroAtivo ?? undefined}
+                    onValueChange={(v) => handleChange('giroAtivo', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1117,13 +1084,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">PL / Ativo</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="100"
-                    value={formData.autonomiaFinanceira ?? ''}
-                    onChange={(e) => handleChange('autonomiaFinanceira', e.target.value)}
+                  <InputValorBrl
+                    value={formData.autonomiaFinanceira ?? undefined}
+                    onValueChange={(v) => handleChange('autonomiaFinanceira', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1138,13 +1101,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Passivo / Ativo</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="100"
-                    value={formData.dependenciaFinanceira ?? ''}
-                    onChange={(e) => handleChange('dependenciaFinanceira', e.target.value)}
+                  <InputValorBrl
+                    value={formData.dependenciaFinanceira ?? undefined}
+                    onValueChange={(v) => handleChange('dependenciaFinanceira', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1159,12 +1118,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Passivo / PL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    value={formData.dividaEquity ?? ''}
-                    onChange={(e) => handleChange('dividaEquity', e.target.value)}
+                  <InputValorBrl
+                    value={formData.dividaEquity ?? undefined}
+                    onValueChange={(v) => handleChange('dividaEquity', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1182,11 +1138,9 @@ export function ModalEditarBenchmarks({
                     <Label className="text-xs font-bold text-slate-800">Margem EBITDA (%)</Label>
                     <span className="text-[10px] font-mono text-slate-400">EBITDA / RL</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.margemEbitda ?? ''}
-                    onChange={(e) => handleChange('margemEbitda', e.target.value)}
+                  <InputValorBrl
+                    value={formData.margemEbitda ?? undefined}
+                    onValueChange={(v) => handleChange('margemEbitda', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1203,12 +1157,9 @@ export function ModalEditarBenchmarks({
                       EBITDA / Desp. Fin.
                     </span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    value={formData.coberturaJuros ?? ''}
-                    onChange={(e) => handleChange('coberturaJuros', e.target.value)}
+                  <InputValorBrl
+                    value={formData.coberturaJuros ?? undefined}
+                    onValueChange={(v) => handleChange('coberturaJuros', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1228,12 +1179,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Clientes</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={formData.pmr ?? ''}
-                    onChange={(e) => handleChange('pmr', e.target.value)}
+                  <InputValorBrl
+                    value={formData.pmr ?? undefined}
+                    onValueChange={(v) => handleChange('pmr', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1248,12 +1196,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Estoques</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={formData.pme ?? ''}
-                    onChange={(e) => handleChange('pme', e.target.value)}
+                  <InputValorBrl
+                    value={formData.pme ?? undefined}
+                    onValueChange={(v) => handleChange('pme', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1268,12 +1213,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">Fornecedores</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={formData.pmp ?? ''}
-                    onChange={(e) => handleChange('pmp', e.target.value)}
+                  <InputValorBrl
+                    value={formData.pmp ?? undefined}
+                    onValueChange={(v) => handleChange('pmp', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1288,12 +1230,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">PME + PMR</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    min="0"
-                    value={formData.cicloOperacional ?? ''}
-                    onChange={(e) => handleChange('cicloOperacional', e.target.value)}
+                  <InputValorBrl
+                    value={formData.cicloOperacional ?? undefined}
+                    onValueChange={(v) => handleChange('cicloOperacional', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1308,11 +1247,9 @@ export function ModalEditarBenchmarks({
                     </Label>
                     <span className="text-[10px] font-mono text-slate-400">CO − PMP</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="1"
-                    value={formData.cicloFinanceiro ?? ''}
-                    onChange={(e) => handleChange('cicloFinanceiro', e.target.value)}
+                  <InputValorBrl
+                    value={formData.cicloFinanceiro ?? undefined}
+                    onValueChange={(v) => handleChange('cicloFinanceiro', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1332,11 +1269,9 @@ export function ModalEditarBenchmarks({
                       NOPAT / Cap. Investido
                     </span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.roic ?? ''}
-                    onChange={(e) => handleChange('roic', e.target.value)}
+                  <InputValorBrl
+                    value={formData.roic ?? undefined}
+                    onValueChange={(v) => handleChange('roic', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">
@@ -1349,11 +1284,9 @@ export function ModalEditarBenchmarks({
                     <Label className="text-xs font-bold text-slate-800">WACC (%)</Label>
                     <span className="text-[10px] font-mono text-slate-400">Custo Capital</span>
                   </div>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={formData.wacc ?? ''}
-                    onChange={(e) => handleChange('wacc', e.target.value)}
+                  <InputValorBrl
+                    value={formData.wacc ?? undefined}
+                    onValueChange={(v) => handleChange('wacc', v)}
                     className="h-9 text-xs font-mono font-bold"
                   />
                   <p className="text-[10px] text-slate-500">

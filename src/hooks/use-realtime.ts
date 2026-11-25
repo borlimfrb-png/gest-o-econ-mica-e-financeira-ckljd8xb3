@@ -66,6 +66,9 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   const eventoRef = useRef(evento)
   eventoRef.current = evento
 
+  const debouncedCallbackRef = useRef(callback)
+  debouncedCallbackRef.current = callback
+
   useRealtime<TRecord>(
     collectionName,
     (data) => {
@@ -77,7 +80,7 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   useEffect(() => {
     if (!evento) return
     const timer = setTimeout(() => {
-      callbackRef.current(eventoRef.current as RecordSubscription<TRecord>)
+      debouncedCallbackRef.current(eventoRef.current as RecordSubscription<TRecord>)
     }, delayMs)
     return () => clearTimeout(timer)
   }, [evento, delayMs])

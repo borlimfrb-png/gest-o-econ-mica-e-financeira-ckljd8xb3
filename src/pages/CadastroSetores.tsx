@@ -56,6 +56,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { toast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/contexts/AuthContext'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
 import { setoresService, type SalvarSetorInput } from '@/services/setoresService'
 import { empresasService } from '@/services/financeService'
 import type { SetorRecord, EmpresaRecord, FaixasIndicadoresSetor } from '@/types/finance'
@@ -799,11 +800,10 @@ export default function CadastroSetores() {
                     <Label htmlFor="setor-ordem" className="text-xs font-semibold text-slate-700">
                       Ordem de Exibição
                     </Label>
-                    <Input
+                    <InputValorBrl
                       id="setor-ordem"
-                      type="number"
                       value={formData.ordem}
-                      onChange={(e) => setFormData({ ...formData, ordem: Number(e.target.value) })}
+                      onValueChange={(v) => setFormData({ ...formData, ordem: v ?? 0 })}
                       className="h-9 text-xs"
                     />
                     <p className="text-[10px] text-slate-500">
@@ -839,13 +839,9 @@ export default function CadastroSetores() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">EV / EBITDA (x)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.ev_ebitda}
-                      onChange={(e) =>
-                        setFormData({ ...formData, ev_ebitda: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, ev_ebitda: v ?? 0 })}
                       className="h-9 text-xs font-mono"
                     />
                     <span className="text-[10px] text-slate-400">
@@ -857,13 +853,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       P / L (Preço / Lucro) (x)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.pl}
-                      onChange={(e) =>
-                        setFormData({ ...formData, pl: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, pl: v ?? 0 })}
                       className="h-9 text-xs font-mono"
                     />
                     <span className="text-[10px] text-slate-400">
@@ -875,13 +867,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       P / VP (Preço / Valor Patrimonial) (x)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.pvp}
-                      onChange={(e) =>
-                        setFormData({ ...formData, pvp: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, pvp: v ?? 0 })}
                       className="h-9 text-xs font-mono"
                     />
                     <span className="text-[10px] text-slate-400">
@@ -893,13 +881,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       EV / Receita Bruta (x)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.ev_receita}
-                      onChange={(e) =>
-                        setFormData({ ...formData, ev_receita: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, ev_receita: v ?? 0 })}
                       className="h-9 text-xs font-mono"
                     />
                     <span className="text-[10px] text-slate-400">
@@ -909,13 +893,9 @@ export default function CadastroSetores() {
 
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">EV / EBIT (x)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.ev_ebit}
-                      onChange={(e) =>
-                        setFormData({ ...formData, ev_ebit: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, ev_ebit: v ?? 0 })}
                       className="h-9 text-xs font-mono"
                     />
                     <span className="text-[10px] text-slate-400">
@@ -925,13 +905,9 @@ export default function CadastroSetores() {
 
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">P / EBITDA (x)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.p_ebitda}
-                      onChange={(e) =>
-                        setFormData({ ...formData, p_ebitda: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, p_ebitda: v ?? 0 })}
                       className="h-9 text-xs font-mono"
                     />
                     <span className="text-[10px] text-slate-400">Valor dos Sócios / EBITDA</span>
@@ -952,26 +928,18 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       Margem Líquida (%)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.margemLiquida}
-                      onChange={(e) =>
-                        setFormData({ ...formData, margemLiquida: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, margemLiquida: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">Margem Bruta (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.margemBruta}
-                      onChange={(e) =>
-                        setFormData({ ...formData, margemBruta: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, margemBruta: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -980,39 +948,27 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       Margem EBITDA (%)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.margemEbitda}
-                      onChange={(e) =>
-                        setFormData({ ...formData, margemEbitda: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, margemEbitda: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">ROE (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.roe}
-                      onChange={(e) =>
-                        setFormData({ ...formData, roe: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, roe: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">ROA (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.roa}
-                      onChange={(e) =>
-                        setFormData({ ...formData, roa: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, roa: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -1021,13 +977,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       Giro do Ativo (x)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.05"
+                    <InputValorBrl
                       value={formData.giroAtivo}
-                      onChange={(e) =>
-                        setFormData({ ...formData, giroAtivo: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, giroAtivo: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -1036,29 +988,18 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       Liquidez Corrente
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.05"
+                    <InputValorBrl
                       value={formData.liquidezCorrente}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          liquidezCorrente: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, liquidezCorrente: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
 
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold text-slate-700">Liquidez Seca</Label>
-                    <Input
-                      type="number"
-                      step="0.05"
+                    <InputValorBrl
                       value={formData.liquidezSeca}
-                      onChange={(e) =>
-                        setFormData({ ...formData, liquidezSeca: parseFloat(e.target.value) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, liquidezSeca: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -1067,15 +1008,10 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       Endividamento Geral (%)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.5"
+                    <InputValorBrl
                       value={formData.endividamentoGeral}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          endividamentoGeral: parseFloat(e.target.value) || 0,
-                        })
+                      onValueChange={(v) =>
+                        setFormData({ ...formData, endividamentoGeral: v ?? 0 })
                       }
                       className="h-8 text-xs font-mono"
                     />
@@ -1085,16 +1021,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       Cobertura Juros (x)
                     </Label>
-                    <Input
-                      type="number"
-                      step="0.1"
+                    <InputValorBrl
                       value={formData.coberturaJuros}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          coberturaJuros: parseFloat(e.target.value) || 0,
-                        })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, coberturaJuros: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -1103,12 +1032,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       PMR (Recebimento - dias)
                     </Label>
-                    <Input
-                      type="number"
+                    <InputValorBrl
                       value={formData.pmr}
-                      onChange={(e) =>
-                        setFormData({ ...formData, pmr: parseInt(e.target.value, 10) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, pmr: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>
@@ -1117,12 +1043,9 @@ export default function CadastroSetores() {
                     <Label className="text-xs font-semibold text-slate-700">
                       PMP (Pagamento - dias)
                     </Label>
-                    <Input
-                      type="number"
+                    <InputValorBrl
                       value={formData.pmp}
-                      onChange={(e) =>
-                        setFormData({ ...formData, pmp: parseInt(e.target.value, 10) || 0 })
-                      }
+                      onValueChange={(v) => setFormData({ ...formData, pmp: v ?? 0 })}
                       className="h-8 text-xs font-mono"
                     />
                   </div>

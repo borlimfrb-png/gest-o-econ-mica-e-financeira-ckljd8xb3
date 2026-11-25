@@ -82,6 +82,9 @@ import {
 } from 'recharts'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { calcularTributosMateriaPrima } from '@/lib/taxCalculations'
+import { InputValorBrl } from '@/components/ui/input-valor-brl'
+import { parseNumeroBrl } from '@/lib/inputValorBrl'
+import { formatarNumeroBrl } from '@/lib/inputValorBrl'
 
 export function formatBrl(val: number | null | undefined): string {
   if (val === null || val === undefined || isNaN(val)) return '—'
@@ -339,13 +342,13 @@ export default function CadastroMateriaPrima() {
 
   // Cálculo de tributos do formulário em tempo real
   const formCalculos = useMemo(() => {
-    const c = Number(formData.custo_unitario.replace(',', '.')) || 0
-    const icms = Number(formData.icms_percentual.replace(',', '.')) || 0
-    const pis = Number(formData.pis_percentual.replace(',', '.')) || 0
-    const cofins = Number(formData.cofins_percentual.replace(',', '.')) || 0
-    const ipi = Number(formData.ipi_percentual.replace(',', '.')) || 0
-    const frete = Number(formData.frete_percentual.replace(',', '.')) || 0
-    const perdas = Number(formData.perdas_percentual.replace(',', '.')) || 0
+    const c = parseNumeroBrl(formData.custo_unitario) ?? 0
+    const icms = parseNumeroBrl(formData.icms_percentual) ?? 0
+    const pis = parseNumeroBrl(formData.pis_percentual) ?? 0
+    const cofins = parseNumeroBrl(formData.cofins_percentual) ?? 0
+    const ipi = parseNumeroBrl(formData.ipi_percentual) ?? 0
+    const frete = parseNumeroBrl(formData.frete_percentual) ?? 0
+    const perdas = parseNumeroBrl(formData.perdas_percentual) ?? 0
     return calcularTributosMateriaPrima(
       c,
       icms,
@@ -833,46 +836,46 @@ export default function CadastroMateriaPrima() {
       errs.unidade = 'Informe a unidade de medida (ex: KG, UN, L)'
     }
     if (form.custo_unitario.trim() !== '') {
-      const c = Number(form.custo_unitario.replace(',', '.'))
-      if (isNaN(c) || c < 0) errs.custo_unitario = 'Informe um custo unitário válido'
+      const c = parseNumeroBrl(form.custo_unitario)
+      if (c === undefined || c < 0) errs.custo_unitario = 'Informe um custo unitário válido'
     }
     if (form.icms_percentual.trim() !== '') {
-      const icms = Number(form.icms_percentual.replace(',', '.'))
-      if (isNaN(icms) || icms < 0 || icms > 100)
+      const icms = parseNumeroBrl(form.icms_percentual)
+      if (icms === undefined || icms < 0 || icms > 100)
         errs.icms_percentual = 'Percentual de ICMS inválido (0 a 100)'
     }
     if (form.pis_percentual.trim() !== '') {
-      const pis = Number(form.pis_percentual.replace(',', '.'))
-      if (isNaN(pis) || pis < 0 || pis > 100)
+      const pis = parseNumeroBrl(form.pis_percentual)
+      if (pis === undefined || pis < 0 || pis > 100)
         errs.pis_percentual = 'Percentual de PIS inválido (0 a 100)'
     }
     if (form.cofins_percentual.trim() !== '') {
-      const cofins = Number(form.cofins_percentual.replace(',', '.'))
-      if (isNaN(cofins) || cofins < 0 || cofins > 100)
+      const cofins = parseNumeroBrl(form.cofins_percentual)
+      if (cofins === undefined || cofins < 0 || cofins > 100)
         errs.cofins_percentual = 'Percentual de COFINS inválido (0 a 100)'
     }
     if (form.ipi_percentual.trim() !== '') {
-      const ipi = Number(form.ipi_percentual.replace(',', '.'))
-      if (isNaN(ipi) || ipi < 0 || ipi > 100)
+      const ipi = parseNumeroBrl(form.ipi_percentual)
+      if (ipi === undefined || ipi < 0 || ipi > 100)
         errs.ipi_percentual = 'Percentual de IPI inválido (0 a 100)'
     }
     if (form.frete_percentual.trim() !== '') {
-      const frete = Number(form.frete_percentual.replace(',', '.'))
-      if (isNaN(frete) || frete < 0 || frete > 100)
+      const frete = parseNumeroBrl(form.frete_percentual)
+      if (frete === undefined || frete < 0 || frete > 100)
         errs.frete_percentual = 'Percentual de Frete inválido (0 a 100)'
     }
     if (form.perdas_percentual.trim() !== '') {
-      const perdas = Number(form.perdas_percentual.replace(',', '.'))
-      if (isNaN(perdas) || perdas < 0 || perdas > 100)
+      const perdas = parseNumeroBrl(form.perdas_percentual)
+      if (perdas === undefined || perdas < 0 || perdas > 100)
         errs.perdas_percentual = 'Percentual de Perdas inválido (0 a 100)'
     }
     if (form.estoque_atual.trim() !== '') {
-      const e = Number(form.estoque_atual.replace(',', '.'))
-      if (isNaN(e) || e < 0) errs.estoque_atual = 'Informe uma quantidade de estoque válida'
+      const e = parseNumeroBrl(form.estoque_atual)
+      if (e === undefined || e < 0) errs.estoque_atual = 'Informe uma quantidade de estoque válida'
     }
     if (form.estoque_minimo.trim() !== '') {
-      const min = Number(form.estoque_minimo.replace(',', '.'))
-      if (isNaN(min) || min < 0) errs.estoque_minimo = 'Informe um estoque mínimo válido'
+      const min = parseNumeroBrl(form.estoque_minimo)
+      if (min === undefined || min < 0) errs.estoque_minimo = 'Informe um estoque mínimo válido'
     }
 
     setErrors(errs)
@@ -943,41 +946,29 @@ export default function CadastroMateriaPrima() {
     setSaving(true)
     try {
       const custoNum =
-        formData.custo_unitario.trim() !== ''
-          ? Number(formData.custo_unitario.replace(',', '.'))
-          : undefined
+        formData.custo_unitario.trim() !== '' ? parseNumeroBrl(formData.custo_unitario) : undefined
       const icmsNum =
-        formData.icms_percentual.trim() !== ''
-          ? Number(formData.icms_percentual.replace(',', '.'))
-          : 0
+        formData.icms_percentual.trim() !== '' ? (parseNumeroBrl(formData.icms_percentual) ?? 0) : 0
       const pisNum =
-        formData.pis_percentual.trim() !== ''
-          ? Number(formData.pis_percentual.replace(',', '.'))
-          : 0
+        formData.pis_percentual.trim() !== '' ? (parseNumeroBrl(formData.pis_percentual) ?? 0) : 0
       const cofinsNum =
         formData.cofins_percentual.trim() !== ''
-          ? Number(formData.cofins_percentual.replace(',', '.'))
+          ? (parseNumeroBrl(formData.cofins_percentual) ?? 0)
           : 0
       const ipiNum =
-        formData.ipi_percentual.trim() !== ''
-          ? Number(formData.ipi_percentual.replace(',', '.'))
-          : 0
+        formData.ipi_percentual.trim() !== '' ? (parseNumeroBrl(formData.ipi_percentual) ?? 0) : 0
       const freteNum =
         formData.frete_percentual.trim() !== ''
-          ? Number(formData.frete_percentual.replace(',', '.'))
+          ? (parseNumeroBrl(formData.frete_percentual) ?? 0)
           : 0
       const perdasNum =
         formData.perdas_percentual.trim() !== ''
-          ? Number(formData.perdas_percentual.replace(',', '.'))
+          ? (parseNumeroBrl(formData.perdas_percentual) ?? 0)
           : 0
       const estoqueNum =
-        formData.estoque_atual.trim() !== ''
-          ? Number(formData.estoque_atual.replace(',', '.'))
-          : undefined
+        formData.estoque_atual.trim() !== '' ? parseNumeroBrl(formData.estoque_atual) : undefined
       const estoqueMinNum =
-        formData.estoque_minimo.trim() !== ''
-          ? Number(formData.estoque_minimo.replace(',', '.'))
-          : undefined
+        formData.estoque_minimo.trim() !== '' ? parseNumeroBrl(formData.estoque_minimo) : undefined
 
       const isIsentaFinal = Boolean(
         formData.isenta_st ||
@@ -2475,15 +2466,17 @@ export default function CadastroMateriaPrima() {
                       >
                         Custo Unitário Bruto (R$) *
                       </Label>
-                      <Input
+                      <InputValorBrl
                         id="mp-custo"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
                         placeholder="0,00"
-                        value={formData.custo_unitario}
-                        onChange={(e) => setField('custo_unitario', e.target.value)}
+                        value={
+                          formData.custo_unitario === ''
+                            ? null
+                            : parseNumeroBrl(formData.custo_unitario)
+                        }
+                        onValueChange={(v) =>
+                          setField('custo_unitario', v === undefined ? '' : String(v))
+                        }
                         className={`h-9 text-xs font-mono bg-white font-semibold mt-1 ${errors.custo_unitario ? 'border-red-500' : ''}`}
                       />
                       {errors.custo_unitario && (
@@ -2590,17 +2583,16 @@ export default function CadastroMateriaPrima() {
                           >
                             ICMS (%) {formData.isenta_st && '(Zerado)'}
                           </Label>
-                          <Input
+                          <InputValorBrl
                             id="mp-icms"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="Ex: 18.00"
+                            placeholder="Ex: 18,00"
                             disabled={formData.isenta_st}
-                            value={formData.isenta_st ? '0' : formData.icms_percentual}
-                            onChange={(e) => setField('icms_percentual', e.target.value)}
+                            value={
+                              formData.isenta_st ? 0 : parseNumeroBrl(formData.icms_percentual)
+                            }
+                            onValueChange={(v) =>
+                              setField('icms_percentual', v === undefined ? '' : String(v))
+                            }
                             className={`h-8 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.icms_percentual ? 'border-red-500' : ''}`}
                           />
                           {errors.icms_percentual && (
@@ -2617,17 +2609,14 @@ export default function CadastroMateriaPrima() {
                           >
                             PIS (%) {formData.isenta_st && '(Zerado)'}
                           </Label>
-                          <Input
+                          <InputValorBrl
                             id="mp-pis"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="Ex: 1.65"
+                            placeholder="Ex: 1,65"
                             disabled={formData.isenta_st}
-                            value={formData.isenta_st ? '0' : formData.pis_percentual}
-                            onChange={(e) => setField('pis_percentual', e.target.value)}
+                            value={formData.isenta_st ? 0 : parseNumeroBrl(formData.pis_percentual)}
+                            onValueChange={(v) =>
+                              setField('pis_percentual', v === undefined ? '' : String(v))
+                            }
                             className={`h-8 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.pis_percentual ? 'border-red-500' : ''}`}
                           />
                           {errors.pis_percentual && (
@@ -2644,17 +2633,16 @@ export default function CadastroMateriaPrima() {
                           >
                             COFINS (%) {formData.isenta_st && '(Zerado)'}
                           </Label>
-                          <Input
+                          <InputValorBrl
                             id="mp-cofins"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="Ex: 7.60"
+                            placeholder="Ex: 7,60"
                             disabled={formData.isenta_st}
-                            value={formData.isenta_st ? '0' : formData.cofins_percentual}
-                            onChange={(e) => setField('cofins_percentual', e.target.value)}
+                            value={
+                              formData.isenta_st ? 0 : parseNumeroBrl(formData.cofins_percentual)
+                            }
+                            onValueChange={(v) =>
+                              setField('cofins_percentual', v === undefined ? '' : String(v))
+                            }
                             className={`h-8 text-xs font-mono ${formData.isenta_st ? 'bg-slate-100 text-slate-400' : 'bg-white'} ${errors.cofins_percentual ? 'border-red-500' : ''}`}
                           />
                           {errors.cofins_percentual && (
@@ -2685,16 +2673,13 @@ export default function CadastroMateriaPrima() {
                           >
                             IPI (%)
                           </Label>
-                          <Input
+                          <InputValorBrl
                             id="mp-ipi"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="Ex: 5.00"
-                            value={formData.ipi_percentual}
-                            onChange={(e) => setField('ipi_percentual', e.target.value)}
+                            placeholder="Ex: 5,00"
+                            value={parseNumeroBrl(formData.ipi_percentual)}
+                            onValueChange={(v) =>
+                              setField('ipi_percentual', v === undefined ? '' : String(v))
+                            }
                             className={`h-8 text-xs font-mono bg-white ${errors.ipi_percentual ? 'border-red-500' : ''}`}
                           />
                           {errors.ipi_percentual && (
@@ -2711,16 +2696,13 @@ export default function CadastroMateriaPrima() {
                           >
                             Frete (%)
                           </Label>
-                          <Input
+                          <InputValorBrl
                             id="mp-frete"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="Ex: 3.50"
-                            value={formData.frete_percentual}
-                            onChange={(e) => setField('frete_percentual', e.target.value)}
+                            placeholder="Ex: 3,50"
+                            value={parseNumeroBrl(formData.frete_percentual)}
+                            onValueChange={(v) =>
+                              setField('frete_percentual', v === undefined ? '' : String(v))
+                            }
                             className={`h-8 text-xs font-mono bg-white ${errors.frete_percentual ? 'border-red-500' : ''}`}
                           />
                           {errors.frete_percentual && (
@@ -2737,16 +2719,13 @@ export default function CadastroMateriaPrima() {
                           >
                             Perdas (%)
                           </Label>
-                          <Input
+                          <InputValorBrl
                             id="mp-perdas"
-                            type="number"
-                            inputMode="decimal"
-                            min="0"
-                            max="100"
-                            step="0.01"
-                            placeholder="Ex: 2.00"
-                            value={formData.perdas_percentual}
-                            onChange={(e) => setField('perdas_percentual', e.target.value)}
+                            placeholder="Ex: 2,00"
+                            value={parseNumeroBrl(formData.perdas_percentual)}
+                            onValueChange={(v) =>
+                              setField('perdas_percentual', v === undefined ? '' : String(v))
+                            }
                             className={`h-8 text-xs font-mono bg-white ${errors.perdas_percentual ? 'border-red-500' : ''}`}
                           />
                           {errors.perdas_percentual && (
@@ -2870,15 +2849,17 @@ export default function CadastroMateriaPrima() {
                       <Label htmlFor="mp-estoque" className="text-xs font-semibold text-slate-700">
                         Estoque Atual (Qtd)
                       </Label>
-                      <Input
+                      <InputValorBrl
                         id="mp-estoque"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
                         placeholder="0"
-                        value={formData.estoque_atual}
-                        onChange={(e) => setField('estoque_atual', e.target.value)}
+                        value={
+                          formData.estoque_atual === ''
+                            ? null
+                            : parseNumeroBrl(formData.estoque_atual)
+                        }
+                        onValueChange={(v) =>
+                          setField('estoque_atual', v === undefined ? '' : String(v))
+                        }
                         className={`h-9 text-xs font-mono ${errors.estoque_atual ? 'border-red-500' : ''}`}
                       />
                       {errors.estoque_atual && (
@@ -2895,15 +2876,17 @@ export default function CadastroMateriaPrima() {
                       >
                         Estoque Mínimo (Qtd)
                       </Label>
-                      <Input
+                      <InputValorBrl
                         id="mp-estoque-min"
-                        type="number"
-                        inputMode="decimal"
-                        min="0"
-                        step="0.01"
                         placeholder="0"
-                        value={formData.estoque_minimo}
-                        onChange={(e) => setField('estoque_minimo', e.target.value)}
+                        value={
+                          formData.estoque_minimo === ''
+                            ? null
+                            : parseNumeroBrl(formData.estoque_minimo)
+                        }
+                        onValueChange={(v) =>
+                          setField('estoque_minimo', v === undefined ? '' : String(v))
+                        }
                         className={`h-9 text-xs font-mono ${errors.estoque_minimo ? 'border-red-500' : ''}`}
                       />
                       {errors.estoque_minimo && (
