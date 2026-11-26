@@ -114,37 +114,53 @@ export function ImportarExcel12MesesColunas({
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Bloqueio: lançamentos já existentes na DRE Gerencial para a empresa/ano selecionados
-  const [bloqueioInfo, setBloqueioInfo] = useState<{ dre: number; lancamentos: number } | null>(
-    null,
-  )
+  // Bloqueio POR MÊS: meses que já possuem lançamentos na DRE Gerencial
+  // (empresa + ano + mês de competência). Apenas esses meses ficam bloqueados;
+  // os demais importam normalmente — inclusive um mês sozinho.
+  const [mesesComLancamentos, setMesesComLancamentos] = useState<Set<number>>(new Set())
   const [verificandoBloqueio, setVerificandoBloqueio] = useState(false)
 
   const empresaSelecionada = empresas.find((e) => e.id === empresaId)
   const nomeEmpresaSelecionada =
     empresaSelecionada?.razao_social || empresaSelecionada?.nome_fantasia || 'empresa selecionada'
-  const bloqueioExistente = !!bloqueioInfo && (bloqueioInfo.dre > 0 || bloqueioInfo.lancamentos > 0)
 
+  // Consulta a DRE (fechamentos) e os lançamentos por mês de competência do
+  // exercício selecionado, marcando individualmente cada mês ocupado.
   const verificarLancamentosExistentes = async () => {
     if (!empresaId) {
-      setBloqueioInfo(null)
+      setMesesComLancamentos(new Set())
       return
     }
     setVerificandoBloqueio(true)
     try {
       const [dreRes, lancRes] = await Promise.all([
-        pb.collection('dre').getList(1, 1, {
+        pb.collection('dre').getFullList({
           filter: `empresa = "${empresaId}" && ano = ${anoExercicio}`,
-          fields: 'id',
+          fields: 'id,mes',
+          sort: 'mes',
         }),
-        pb.collection('lancamentos').getList(1, 1, {
+        pb.collection('lancamentos').getFullList({
           filter: `empresa = "${empresaId}" && data >= "${anoExercicio}-01-01 00:00:00" && data <= "${anoExercicio}-12-31 23:59:59"`,
-          fields: 'id',
+          fields: 'id,data',
         }),
       ])
-      setBloqueioInfo({ dre: dreRes.totalItems, lancamentos: lancRes.totalItems })
+
+      // Meses com fechamento mensal gravado na DRE Gerencial
+      const ocupados = new Set<number>()
+      dreRes.forEach((d: { mes?: number }) => {
+        const mes = Number(d.mes)
+        if (mes >= 1 && mes <= 12) ocupados.add(mes)
+      })
+
+      // Meses com lançamentos (competência pelo mês da data)
+      lancRes.forEach((l: { data?: string }) => {
+        const mes = parseInt(String(l.data || '').slice(5, 7), 10)
+        if (mes >= 1 && mes <= 12) ocupados.add(mes)
+      })
+
+      setMesesComLancamentos(ocupados)
     } catch {
-      setBloqueioInfo(null)
+      setMesesComLancamentos(new Set())
     } finally {
       setVerificandoBloqueio(false)
     }
@@ -224,12 +240,20 @@ export function ImportarExcel12MesesColunas({
 
   // Trava sequencial: Mês N é liberado quando todos os meses anteriores COM valores
   // já estão com 'sucesso'. Meses com coluna vazia são pulados automaticamente.
+  // Meses bloqueados por já terem lançamentos NÃO travam a sequência: são pulados
+  // como se já estivessem concluídos (afinal, os dados deles já estão na DRE).
   const isMesLiberado = (mes: number) => {
     if (!mesesComDados) {
-      if (mes === 1) return true
+      if (mes === 1 || isMesBloqueado(mes - 1)) return true
       return mesesStatus[mes - 1]?.status === 'sucesso'
     }
-    return mesesComDados.every((m) => m >= mes || mesesStatus[m]?.status === 'sucesso')
+    return mesesComDados.every(
+      (m) =>
+        m >= mes ||
+        mesesStatus[m]?.status === 'sucesso' ||
+        isMesBloqueado(m) ||
+        mesesStatus[m]?.status === 'ignorado',
+    )
   }
 
   const mesesImportadosResumo = useMemo(
@@ -244,6 +268,18 @@ export function ImportarExcel12MesesColunas({
     if (!mesesComDados) return []
     return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => !mesesComDados.includes(m))
   }, [mesesComDados])
+
+  // Meses bloqueados por já possuírem lançamentos na DRE Gerencial
+  // (empresa + ano + mês de competência) — verificação por mês individual.
+  const bloqueioExistente = mesesComLancamentos.size > 0
+  const isMesBloqueado = (mes: number) => mesesComLancamentos.has(mes)
+  const mesesBloqueadosResumo = useMemo(
+    () =>
+      [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        .filter((m) => mesesComLancamentos.has(m))
+        .sort((a, b) => a - b),
+    [mesesComLancamentos],
+  )
 
   // Contadores e métricas de progresso
   const totalMesesSucesso = useMemo(() => {
@@ -432,10 +468,12 @@ export function ImportarExcel12MesesColunas({
       return
     }
 
-    if (bloqueioExistente) {
+    // Bloqueio POR MÊS: apenas o mês ativo que já possui lançamentos é barrado;
+    // os demais meses continuam importando normalmente (inclusive mês sozinho).
+    if (isMesBloqueado(mesAtivo)) {
       toast({
-        title: 'Importação bloqueada',
-        description: `A empresa ${nomeEmpresaSelecionada} já possui lançamentos na DRE Gerencial do exercício ${anoExercicio}. Nada será importado por cima. Apague os lançamentos existentes pelo fluxo "Limpar Período" da DRE Gerencial antes de reimportar.`,
+        title: `Importação de ${COLUNAS_MESES_12[mesAtivo - 1]} bloqueada`,
+        description: `${nomeEmpresaSelecionada} já possui lançamentos na DRE Gerencial em ${COLUNAS_MESES_12[mesAtivo - 1]}/${anoExercicio}. Nada será importado por cima. Apague os lançamentos deste mês pelo fluxo "Limpar Período" da DRE Gerencial antes de reimportar.`,
         variant: 'destructive',
       })
       return
@@ -495,7 +533,8 @@ export function ImportarExcel12MesesColunas({
         bloquearSeExistente: true,
       })
 
-      // Atualiza status do mês ativo para 'sucesso'
+      // Atualiza status do mês ativo para 'sucesso' (meses bloqueados pelo
+      // servidor, quando houver, entram no resumo de 'bloqueado')
       const novosMeses: Record<number, MesGravacaoStatus> = {
         ...mesesStatus,
         [mesAtivo]: {
@@ -516,14 +555,31 @@ export function ImportarExcel12MesesColunas({
       setMesesStatus(novosMeses)
       salvarProgresso(novosMeses, proximoMes)
 
-      toast({
-        title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com sucesso! 🎉`,
-        description: `${resLote.totalItens} lançamentos gravados com sucesso.${
-          proximoMesComDados
-            ? ` O mês de ${COLUNAS_MESES_12[proximoMes - 1]} agora foi liberado para importação!`
-            : ' Todos os meses com valores do exercício foram concluídos com sucesso!'
-        }`,
-      })
+      // O mês recém-gravado agora possui lançamentos: reflete na verificação local
+      setMesesComLancamentos((prev) => new Set([...prev, mesAtivo]))
+
+      const mesesBloqueadosServidor = resLote.meses_bloqueados || []
+      if (resLote.parcial && mesesBloqueadosServidor.length > 0) {
+        const listaBloqueados = mesesBloqueadosServidor
+          .slice()
+          .sort((a, b) => a - b)
+          .map((m) => `${COLUNAS_MESES_12[m - 1]} (${m}/${anoExercicio})`)
+          .join(', ')
+        toast({
+          title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com meses ignorados ⚠️`,
+          description: `${resLote.totalItens} lançamentos gravados. Mês(es) bloqueado(s) por já existirem lançamentos na DRE Gerencial: ${listaBloqueados}. Nada duplicado foi gravado.`,
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com sucesso! 🎉`,
+          description: `${resLote.totalItens} lançamentos gravados com sucesso.${
+            proximoMesComDados
+              ? ` O mês de ${COLUNAS_MESES_12[proximoMes - 1]} agora foi liberado para importação!`
+              : ' Todos os meses com valores do exercício foram concluídos com sucesso!'
+          }`,
+        })
+      }
 
       // Avança para o próximo mês com dados liberado
       if (proximoMesComDados) {
@@ -624,41 +680,38 @@ export function ImportarExcel12MesesColunas({
         </div>
       </div>
 
-      {/* Banner de Bloqueio: DRE Gerencial já possui lançamentos */}
+      {/* Banner informativo: meses que já possuem lançamentos (bloqueio POR MÊS) */}
       {bloqueioExistente && (
         <div
-          className="bg-rose-50 border border-rose-300 rounded-xl p-5 flex items-start gap-4"
+          className="bg-amber-50 border border-amber-300 rounded-xl p-5 flex items-start gap-4"
           role="alert"
         >
-          <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+          <ShieldAlert className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1 space-y-1.5">
-            <p className="font-semibold text-rose-950 text-sm">
-              Importação bloqueada: já existem lançamentos na DRE Gerencial
+            <p className="font-semibold text-amber-950 text-sm">
+              Importação por mês individual: alguns meses já possuem lançamentos
             </p>
-            <p className="text-xs text-rose-800 leading-relaxed">
-              A empresa <strong>{nomeEmpresaSelecionada}</strong> já possui{' '}
-              {bloqueioInfo && bloqueioInfo.lancamentos > 0 && (
-                <>
-                  <strong>{bloqueioInfo.lancamentos} lançamento(s)</strong> registrado(s) em{' '}
-                  {bloqueioInfo.dre > 0
-                    ? `${bloqueioInfo.dre} fechamento(s) mensal(is) da DRE e `
-                    : ''}
-                </>
-              )}
-              no exercício de <strong>{anoExercicio}</strong>. Nada será importado por cima — os
-              dados existentes foram preservados.
+            <p className="text-xs text-amber-800 leading-relaxed">
+              A empresa <strong>{nomeEmpresaSelecionada}</strong> já possui lançamentos na DRE
+              Gerencial nos mês(es):{' '}
+              <strong>
+                {mesesBloqueadosResumo.map((m) => `${COLUNAS_MESES_12[m - 1]} (${m})`).join(', ')}
+              </strong>{' '}
+              do exercício de <strong>{anoExercicio}</strong>.{' '}
+              {verificandoBloqueio ? 'Atualizando verificação…' : ''}
             </p>
-            <p className="text-xs text-rose-700">
-              Para reimportar por cima, apague primeiro os lançamentos do período pelo fluxo "Limpar
-              Período" da DRE Gerencial (Menu Gerencial → DRE Gerencial → Limpar Período) e volte a
-              esta tela.
+            <p className="text-xs text-amber-700">
+              Apenas esses meses estão bloqueados — nada é importado por cima deles. Todos os outros
+              meses continuam importando normalmente. Para reimportar um mês bloqueado, apague
+              primeiro os lançamentos dele pelo fluxo "Limpar Período" da DRE Gerencial (Menu
+              Gerencial → DRE Gerencial → Limpar Período) e volte a esta tela.
             </p>
             {onIrParaLancamentos && (
               <Button
                 size="sm"
                 variant="outline"
                 onClick={onIrParaLancamentos}
-                className="mt-1 bg-white border-rose-300 text-rose-800 hover:bg-rose-100 text-xs font-semibold gap-1.5"
+                className="mt-1 bg-white border-amber-300 text-amber-800 hover:bg-amber-100 text-xs font-semibold gap-1.5"
               >
                 <FileText className="w-3.5 h-3.5" />
                 Abrir Lançamentos da DRE Gerencial
@@ -882,7 +935,9 @@ export function ImportarExcel12MesesColunas({
         {/* Grid dos 12 Meses */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 pt-2">
           {/* Resumo de meses importados e ignorados */}
-          {(mesesImportadosResumo.length > 0 || mesesIgnoradosResumo.length > 0) && (
+          {(mesesImportadosResumo.length > 0 ||
+            mesesIgnoradosResumo.length > 0 ||
+            mesesBloqueadosResumo.length > 0) && (
             <div className="col-span-full flex flex-col sm:flex-row gap-2.5 mb-1">
               {mesesImportadosResumo.length > 0 && (
                 <div className="flex-1 min-w-0 bg-emerald-50/70 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-900">
@@ -902,6 +957,14 @@ export function ImportarExcel12MesesColunas({
                   {mesesIgnoradosResumo.map((m) => COLUNAS_MESES_12[m - 1]).join(', ')}
                 </div>
               )}
+              {mesesBloqueadosResumo.length > 0 && (
+                <div className="flex-1 min-w-0 bg-amber-50 border border-amber-300 rounded-lg px-3 py-2 text-xs text-amber-900">
+                  <span className="font-semibold">
+                    {mesesBloqueadosResumo.length} mês(es) bloqueado(s) por já terem lançamentos:
+                  </span>{' '}
+                  {mesesBloqueadosResumo.map((m) => COLUNAS_MESES_12[m - 1]).join(', ')}
+                </div>
+              )}
             </div>
           )}
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
@@ -910,6 +973,7 @@ export function ImportarExcel12MesesColunas({
             const mesLib = isMesLiberado(m)
             const countGravados = mesesStatus[m]?.importadosCount || 0
             const lancsPlanilha = parsedResult?.porMes[m]?.totalLancamentos || 0
+            const mesBloqueado = isMesBloqueado(m) && st !== 'sucesso'
 
             let borderClass = 'border-slate-200 bg-slate-50 text-slate-600'
             let iconBadge = <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -917,6 +981,9 @@ export function ImportarExcel12MesesColunas({
             if (st === 'sucesso') {
               borderClass = 'border-emerald-300 bg-emerald-50/70 text-emerald-950 font-medium'
               iconBadge = <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            } else if (mesBloqueado) {
+              borderClass = 'border-amber-300 bg-amber-50/80 text-amber-950'
+              iconBadge = <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
             } else if (st === 'ignorado') {
               borderClass = 'border-slate-200 bg-slate-100/80 text-slate-500'
               iconBadge = <CalendarX className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -959,18 +1026,24 @@ export function ImportarExcel12MesesColunas({
                   <span className="text-xs font-semibold block truncate">
                     {COLUNAS_MESES_12[m - 1]}
                   </span>
-                  <span className="text-[10px] text-slate-500 block mt-0.5 truncate">
+                  <span
+                    className={`text-[10px] block mt-0.5 truncate ${
+                      mesBloqueado ? 'text-amber-700' : 'text-slate-500'
+                    }`}
+                  >
                     {st === 'sucesso'
                       ? `${countGravados} gravados`
-                      : st === 'ignorado'
-                        ? 'Ignorado (vazio)'
-                        : st === 'erro'
-                          ? 'Falha na gravação'
-                          : parsedResult
-                            ? `${lancsPlanilha} na coluna`
-                            : mesLib
-                              ? 'Liberado'
-                              : 'Aguardando anterior'}
+                      : mesBloqueado
+                        ? 'Bloqueado (já tem lanç.)'
+                        : st === 'ignorado'
+                          ? 'Ignorado (vazio)'
+                          : st === 'erro'
+                            ? 'Falha na gravação'
+                            : parsedResult
+                              ? `${lancsPlanilha} na coluna`
+                              : mesLib
+                                ? 'Liberado'
+                                : 'Aguardando anterior'}
                   </span>
                 </div>
               </button>
@@ -1003,24 +1076,36 @@ export function ImportarExcel12MesesColunas({
           </div>
 
           <div className="flex items-center gap-2">
-            {parsedResult && lancamentosValidosMesAtivo.length > 0 && liberado && (
-              <Button
-                onClick={handleImportarMesAtivo}
-                disabled={gravandoMes || !empresaId}
-                className="bg-teal-700 hover:bg-teal-800 text-white font-medium text-xs h-9 px-4 gap-1.5 shadow-sm"
+            {parsedResult &&
+              lancamentosValidosMesAtivo.length > 0 &&
+              liberado &&
+              !isMesBloqueado(mesAtivo) && (
+                <Button
+                  onClick={handleImportarMesAtivo}
+                  disabled={gravandoMes || !empresaId}
+                  className="bg-teal-700 hover:bg-teal-800 text-white font-medium text-xs h-9 px-4 gap-1.5 shadow-sm"
+                >
+                  {gravandoMes ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Gravando {mesAtivoNome}...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      Gravar {mesAtivoNome} e Liberar Próximo ({lancamentosValidosMesAtivo.length})
+                    </>
+                  )}
+                </Button>
+              )}
+            {parsedResult && isMesBloqueado(mesAtivo) && mesAtivoObj?.status !== 'sucesso' && (
+              <span
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-100 border border-amber-300 text-amber-900 text-xs font-semibold"
+                role="status"
               >
-                {gravandoMes ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    Gravando {mesAtivoNome}...
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    Gravar {mesAtivoNome} e Liberar Próximo ({lancamentosValidosMesAtivo.length})
-                  </>
-                )}
-              </Button>
+                <ShieldAlert className="w-4 h-4 text-amber-600" />
+                {mesAtivoNome} já possui lançamentos — importação bloqueada
+              </span>
             )}
           </div>
         </div>

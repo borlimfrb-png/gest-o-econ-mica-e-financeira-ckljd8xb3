@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
@@ -49,10 +49,12 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
   }, [collectionName, enabled])
 }
 
+export default useRealtime
+
 /**
- * Wrapper com debounce (trailing 1,5s) sobre useRealtime: útil quando uma
- * coleção recebe muitas escritas seguidas e o consumidor deve reagir uma
- * única vez após o "silêncio". NUNCA remover — telas do app dependem dele.
+ * Wrapper com debounce (trailing 1,5s) sobre useRealtime.
+ * Agrupa rajadas de eventos de realtime em uma única recarga de dados,
+ * evitando recarregamentos em cascata quando vários registros mudam juntos.
  */
 export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   collectionName: string,
@@ -60,27 +62,30 @@ export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
   enabled: boolean = true,
   delayMs: number = 1500,
 ) {
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendingRef = useRef<RecordSubscription<TRecord> | null>(null)
+  const trailingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestRef = useRef<RecordSubscription<TRecord> | null>(null)
+
+  const flush = useCallback(() => {
+    trailingRef.current = null
+    const data = latestRef.current
+    latestRef.current = null
+    if (data) callback(data)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   useRealtime<TRecord>(
     collectionName,
     (data) => {
-      pendingRef.current = data
-      if (timerRef.current) {
-        clearTimeout(timerRef.current)
-      }
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null
-        const pending = pendingRef.current
-        pendingRef.current = null
-        if (pending) {
-          callback(pending)
-        }
-      }, delayMs)
+      latestRef.current = data
+      if (trailingRef.current) clearTimeout(trailingRef.current)
+      trailingRef.current = setTimeout(flush, delayMs)
     },
     enabled,
   )
-}
 
-export default useRealtime
+  useEffect(() => {
+    return () => {
+      if (trailingRef.current) clearTimeout(trailingRef.current)
+    }
+  }, [])
+}

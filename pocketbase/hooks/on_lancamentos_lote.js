@@ -16,7 +16,8 @@
  *   arquivoNome?: string,
  *   periodoInicio?: string,
  *   periodoFim?: string,
- *   contaPrincipal?: string
+ *   contaPrincipal?: string,
+ *   bloquearSeExistente?: boolean  // ativa o bloqueio POR MÊS DE COMPETÊNCIA
  * }
  *
  * Comportamento:
@@ -49,13 +50,15 @@ routerAdd(
 
       const body = e.requestInfo().body || {}
       const empresaId = body.empresaId || body.empresa
-      const itens = body.lancamentos || body.itens || []
+      let itens = body.lancamentos || body.itens || []
       const origem = body.origem || 'importacao_lote'
       const arquivoNome = body.arquivoNome || ''
       const periodoInicio = body.periodoInicio || ''
       const periodoFim = body.periodoFim || periodoInicio
       const contaPrincipal = body.contaPrincipal || ''
       const bloquearSeExistente = body.bloquearSeExistente === true
+      let mesesIgnorados = [] // meses descartados por já terem lançamentos
+      let anoLote = 0 // ano de competência do lote (p/ mensagens)
 
       if (!empresaId) {
         return e.badRequestError('Empresa de destino é obrigatória.')
@@ -138,32 +141,96 @@ routerAdd(
         })
       }
 
-      // BLOQUEIO OPCIONAL: se já existem lançamentos na DRE Gerencial (coleção lancamentos)
-      // da empresa para o mesmo período, NÃO importar nada (preserva os dados existentes).
+      // BLOQUEIO POR MÊS DE COMPETÊNCIA: verifica NO SERVIDOR, mês a mês, quais
+      // meses do lote já possuem lançamentos na DRE Gerencial (empresa + ano +
+      // mês de competência da data). Meses já ocupados são descartados do lote —
+      // nada deles é persistido (proteção anti-duplicação). Se TODOS os meses
+      // pedidos estiverem bloqueados, nada é gravado e a rota responde 409.
+      // Meses livres continuam sendo gravados normalmente.
       if (bloquearSeExistente) {
-        const filtroMes = 'empresa = {:empresaId} && data >= {:inicio} && data <= {:fim}'
-        const paramsMes = {
-          empresaId: empresaId,
-          inicio: `${periodoInicio.slice(0, 10)} 00:00:00.000Z`,
-          fim: `${(periodoFim || periodoInicio).slice(0, 10)} 23:59:59.999Z`,
+        // Meses distintos presentes no lote (a partir das datas já validadas)
+        const mesesDoLote = []
+        for (let i = 0; i < itensValidados.length; i++) {
+          const mesItem = parseInt(String(itensValidados[i].data).slice(5, 7), 10)
+          if (
+            !isNaN(mesItem) &&
+            mesItem >= 1 &&
+            mesItem <= 12 &&
+            mesesDoLote.indexOf(mesItem) === -1
+          ) {
+            mesesDoLote.push(mesItem)
+          }
         }
-        const existentes = $app.findRecordsByFilter(
-          'lancamentos',
-          filtroMes,
-          '-data',
-          0,
-          0,
-          paramsMes,
-        )
-        if (existentes && existentes.length > 0) {
-          return e.json(409, {
-            sucesso: false,
-            bloqueado: true,
-            error: `A empresa ${empresaNome} já possui ${existentes.length} lançamento(s) na DRE Gerencial para o período de ${periodoInicio.slice(0, 10)} a ${(periodoFim || periodoInicio).slice(0, 10)}. Importação cancelada — nenhum dado foi alterado. Para reimportar por cima, apague primeiro os lançamentos existentes pelo fluxo "Limpar Período" da DRE Gerencial.`,
-          })
+
+        // Ano do lote: derivado da primeira data validada (fallback: periodoInicio)
+        anoLote =
+          parseInt(String(itensValidados[0]?.data || '').slice(0, 4), 10) ||
+          parseInt(String(periodoInicio).slice(0, 4), 10) ||
+          0
+
+        // Verificação server-side por mês: cada mês é consultado individualmente
+        // na coleção lancamentos (empresa + intervalo de datas da competência).
+        const mesesBloqueados = []
+        for (let mi = 0; mi < mesesDoLote.length; mi++) {
+          const mes = mesesDoLote[mi]
+          const mesStr = mes < 10 ? '0' + mes : String(mes)
+          const ultimoDia = new Date(Date.UTC(anoLote, mes, 0)).getUTCDate()
+          const inicioMes = `${anoLote}-${mesStr}-01 00:00:00.000Z`
+          const fimMes = `${anoLote}-${mesStr}-${ultimoDia < 10 ? '0' + ultimoDia : ultimoDia} 23:59:59.999Z`
+          const existentes = $app.countRecords(
+            'lancamentos',
+            'empresa = {:empresaId} && data >= {:inicio} && data <= {:fim}',
+            {
+              empresaId: empresaId,
+              inicio: inicioMes,
+              fim: fimMes,
+            },
+          )
+          if (existentes > 0) {
+            mesesBloqueados.push(mes)
+          }
+        }
+
+        // Descarta do lote os itens pertencentes a meses já ocupados
+        let itensFiltrados = []
+        if (mesesBloqueados.length > 0) {
+          for (let i = 0; i < itensValidados.length; i++) {
+            const item = itensValidados[i]
+            const mesItem = parseInt(String(item.data).slice(5, 7), 10)
+            if (mesesBloqueados.indexOf(mesItem) === -1) {
+              itensFiltrados.push(item)
+            }
+          }
+        } else {
+          itensFiltrados = itensValidados
+        }
+
+        if (mesesBloqueados.length > 0) {
+          const nomes = mesesBloqueados
+            .map((m) => (m < 10 ? '0' + m : String(m)) + (anoLote ? '/' + anoLote : ''))
+            .join(', ')
+
+          // Todos os meses pedidos já existem: 409, nada é gravado.
+          if (itensFiltrados.length === 0) {
+            return e.json(409, {
+              sucesso: false,
+              bloqueado: true,
+              meses_bloqueados: mesesBloqueados,
+              error: `O(s) mês(es) ${nomes} já possuem lançamentos na DRE Gerencial desta empresa. Nada foi importado — nenhum dado foi alterado. Para reimportar por cima, apague primeiro os lançamentos pelo fluxo "Limpar Período" da DRE Gerencial.`,
+            })
+          }
+
+          // Alguns meses bloqueados, outros livres: grava APENAS os meses livres
+          // (substitui a lista que a transação vai persistir) e devolve os meses
+          // ignorados na resposta final, para o resumo da tela.
+          itensValidados.length = 0
+          for (let i = 0; i < itensFiltrados.length; i++) {
+            itensValidados.push(itensFiltrados[i])
+          }
+          valorTotalCalculado = itensValidados.reduce((acc, it) => acc + (it.valor || 0), 0)
+          mesesIgnorados = mesesBloqueados
         }
       }
-
       // Localiza as collections necessárias
       const colLancamentos = $app.findCollectionByNameOrId('lancamentos')
       const colAuditoria = $app.findCollectionByNameOrId('auditoria_lancamentos')
@@ -237,7 +304,17 @@ routerAdd(
 
       return e.json(200, {
         sucesso: true,
-        message: `${itensValidados.length} lançamentos importados com sucesso em lote atômico único.`,
+        parcial: mesesIgnorados.length > 0,
+        meses_bloqueados: mesesIgnorados,
+        message: `${itensValidados.length} lançamentos importados com sucesso em lote atômico único.${
+          mesesIgnorados.length > 0
+            ? ' Mês(es) ignorado(s) por já existirem lançamentos na DRE Gerencial: ' +
+              mesesIgnorados
+                .map((m) => (m < 10 ? '0' + m : String(m)) + (anoLote ? '/' + anoLote : ''))
+                .join(', ') +
+              '. Nada duplicado foi gravado.'
+            : ''
+        }`,
         empresaId,
         empresaNome,
         totalItens: itensValidados.length,

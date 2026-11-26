@@ -1409,6 +1409,10 @@ export const lancamentosService = {
     totalItens: number
     valorTotal: number
     idsCriados: string[]
+    /** true quando parte dos meses foi ignorada por já existirem lançamentos */
+    parcial?: boolean
+    /** meses (1-12) ignorados por já terem lançamentos na DRE Gerencial */
+    meses_bloqueados?: number[]
   }> {
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL
     const token = pb.authStore.token
