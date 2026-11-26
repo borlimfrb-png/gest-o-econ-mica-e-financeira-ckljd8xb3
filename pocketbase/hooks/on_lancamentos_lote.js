@@ -55,6 +55,7 @@ routerAdd(
       const periodoInicio = body.periodoInicio || ''
       const periodoFim = body.periodoFim || periodoInicio
       const contaPrincipal = body.contaPrincipal || ''
+      const bloquearSeExistente = body.bloquearSeExistente === true
 
       if (!empresaId) {
         return e.badRequestError('Empresa de destino é obrigatória.')
@@ -135,6 +136,32 @@ routerAdd(
           historico: historicoTexto,
           notaFiscalRef: item.nota_fiscal_ref || null,
         })
+      }
+
+      // BLOQUEIO OPCIONAL: se já existem lançamentos na DRE Gerencial (coleção lancamentos)
+      // da empresa para o mesmo período, NÃO importar nada (preserva os dados existentes).
+      if (bloquearSeExistente) {
+        const filtroMes = 'empresa = {:empresaId} && data >= {:inicio} && data <= {:fim}'
+        const paramsMes = {
+          empresaId: empresaId,
+          inicio: `${periodoInicio.slice(0, 10)} 00:00:00.000Z`,
+          fim: `${(periodoFim || periodoInicio).slice(0, 10)} 23:59:59.999Z`,
+        }
+        const existentes = $app.findRecordsByFilter(
+          'lancamentos',
+          filtroMes,
+          '-data',
+          0,
+          0,
+          paramsMes,
+        )
+        if (existentes && existentes.length > 0) {
+          return e.json(409, {
+            sucesso: false,
+            bloqueado: true,
+            error: `A empresa ${empresaNome} já possui ${existentes.length} lançamento(s) na DRE Gerencial para o período de ${periodoInicio.slice(0, 10)} a ${(periodoFim || periodoInicio).slice(0, 10)}. Importação cancelada — nenhum dado foi alterado. Para reimportar por cima, apague primeiro os lançamentos existentes pelo fluxo "Limpar Período" da DRE Gerencial.`,
+          })
+        }
       }
 
       // Localiza as collections necessárias

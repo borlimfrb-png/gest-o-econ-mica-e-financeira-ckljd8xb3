@@ -1400,6 +1400,7 @@ export const lancamentosService = {
     periodoInicio?: string
     periodoFim?: string
     contaPrincipal?: string
+    bloquearSeExistente?: boolean
   }): Promise<{
     sucesso: boolean
     message: string

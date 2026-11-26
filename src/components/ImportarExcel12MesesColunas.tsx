@@ -21,6 +21,8 @@ import {
   Layers,
   Sparkles,
   HelpCircle,
+  CalendarX,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -33,6 +35,7 @@ import {
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { financeService } from '@/services/financeService'
+import pb from '@/lib/pocketbase/client'
 import {
   gerarPlanilhaModelo12MesesColunas,
   parsePlanilha12MesesColunas,
@@ -52,7 +55,7 @@ export interface ImportarExcel12MesesColunasProps {
 
 export interface MesGravacaoStatus {
   mes: number // 1 a 12
-  status: 'pendente' | 'em_andamento' | 'sucesso' | 'erro'
+  status: 'pendente' | 'em_andamento' | 'sucesso' | 'erro' | 'ignorado'
   importadosCount?: number
   valorTotal?: number
   arquivoNome?: string
@@ -110,6 +113,47 @@ export function ImportarExcel12MesesColunas({
   const [mostrarTabela, setMostrarTabela] = useState(true)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Bloqueio: lançamentos já existentes na DRE Gerencial para a empresa/ano selecionados
+  const [bloqueioInfo, setBloqueioInfo] = useState<{ dre: number; lancamentos: number } | null>(
+    null,
+  )
+  const [verificandoBloqueio, setVerificandoBloqueio] = useState(false)
+
+  const empresaSelecionada = empresas.find((e) => e.id === empresaId)
+  const nomeEmpresaSelecionada =
+    empresaSelecionada?.razao_social || empresaSelecionada?.nome_fantasia || 'empresa selecionada'
+  const bloqueioExistente = !!bloqueioInfo && (bloqueioInfo.dre > 0 || bloqueioInfo.lancamentos > 0)
+
+  const verificarLancamentosExistentes = async () => {
+    if (!empresaId) {
+      setBloqueioInfo(null)
+      return
+    }
+    setVerificandoBloqueio(true)
+    try {
+      const [dreRes, lancRes] = await Promise.all([
+        pb.collection('dre').getList(1, 1, {
+          filter: `empresa = "${empresaId}" && ano = ${anoExercicio}`,
+          fields: 'id',
+        }),
+        pb.collection('lancamentos').getList(1, 1, {
+          filter: `empresa = "${empresaId}" && data >= "${anoExercicio}-01-01 00:00:00" && data <= "${anoExercicio}-12-31 23:59:59"`,
+          fields: 'id',
+        }),
+      ])
+      setBloqueioInfo({ dre: dreRes.totalItems, lancamentos: lancRes.totalItems })
+    } catch {
+      setBloqueioInfo(null)
+    } finally {
+      setVerificandoBloqueio(false)
+    }
+  }
+
+  useEffect(() => {
+    verificarLancamentosExistentes()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaId, anoExercicio])
 
   function criarEstadoInicialMeses(): Record<number, MesGravacaoStatus> {
     const mapa: Record<number, MesGravacaoStatus> = {}
@@ -170,12 +214,36 @@ export function ImportarExcel12MesesColunas({
     }
   }
 
-  // Trava sequencial rigorosa: Mês 1 sempre liberado.
-  // Mês N SÓ é liberado se Mês N-1 estiver com 'sucesso'.
+  // Meses com pelo menos um valor válido na coluna da planilha (os demais são ignorados)
+  const mesesComDados = useMemo(() => {
+    if (!parsedResult) return null
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(
+      (m) => (parsedResult.porMes[m]?.lancamentosValidos?.length || 0) > 0,
+    )
+  }, [parsedResult])
+
+  // Trava sequencial: Mês N é liberado quando todos os meses anteriores COM valores
+  // já estão com 'sucesso'. Meses com coluna vazia são pulados automaticamente.
   const isMesLiberado = (mes: number) => {
-    if (mes === 1) return true
-    return mesesStatus[mes - 1]?.status === 'sucesso'
+    if (!mesesComDados) {
+      if (mes === 1) return true
+      return mesesStatus[mes - 1]?.status === 'sucesso'
+    }
+    return mesesComDados.every((m) => m >= mes || mesesStatus[m]?.status === 'sucesso')
   }
+
+  const mesesImportadosResumo = useMemo(
+    () =>
+      Object.values(mesesStatus)
+        .filter((m) => m.status === 'sucesso')
+        .sort((a, b) => a.mes - b.mes),
+    [mesesStatus],
+  )
+
+  const mesesIgnoradosResumo = useMemo(() => {
+    if (!mesesComDados) return []
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter((m) => !mesesComDados.includes(m))
+  }, [mesesComDados])
 
   // Contadores e métricas de progresso
   const totalMesesSucesso = useMemo(() => {
@@ -280,7 +348,42 @@ export function ImportarExcel12MesesColunas({
         }
 
         const parsed = parsePlanilha12MesesColunas(rawData, planoAtualizado, anoExercicio)
+
+        // Meses com pelo menos um valor válido na coluna
+        const mesesComDadosParsed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(
+          (m) => (parsed.porMes[m]?.lancamentosValidos?.length || 0) > 0,
+        )
+        const mesesVaziosParsed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(
+          (m) => !mesesComDadosParsed.includes(m),
+        )
+
+        if (mesesComDadosParsed.length === 0) {
+          setParsedResult(null)
+          toast({
+            title: 'Nenhum mês com valores na planilha',
+            description: `Todas as colunas de meses (Janeiro a Dezembro) estão vazias para o exercício ${anoExercicio}. Preencha ao menos um mês antes de importar.`,
+            variant: 'destructive',
+          })
+          return
+        }
+
         setParsedResult(parsed)
+
+        // Marca meses vazios como 'ignorado' (sem criar lançamentos zerados)
+        const novosMeses: Record<number, MesGravacaoStatus> = { ...mesesStatus }
+        mesesVaziosParsed.forEach((m) => {
+          if (novosMeses[m]?.status !== 'sucesso') {
+            novosMeses[m] = { mes: m, status: 'ignorado' }
+          }
+        })
+
+        // Define o mês ativo como o primeiro mês com dados ainda não gravado
+        const alvoMes =
+          mesesComDadosParsed.find((m) => novosMeses[m]?.status !== 'sucesso') ||
+          mesesComDadosParsed[0]
+        setMesesStatus(novosMeses)
+        setMesAtivo(alvoMes)
+        salvarProgresso(novosMeses, alvoMes)
 
         if (parsed.inconsistenciasGerais.length > 0) {
           toast({
@@ -289,16 +392,18 @@ export function ImportarExcel12MesesColunas({
             variant: 'destructive',
           })
         } else {
-          // Determina o primeiro mês que ainda não foi concluído
-          const primeiroPendente = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find(
-            (m) => mesesStatus[m]?.status !== 'sucesso',
-          )
-          const alvoMes = primeiroPendente || 1
-          setMesAtivo(alvoMes)
+          const listaMesesComDados = mesesComDadosParsed
+            .map((m) => COLUNAS_MESES_12[m - 1])
+            .join(', ')
+          const listaMesesVazios = mesesVaziosParsed.map((m) => COLUNAS_MESES_12[m - 1]).join(', ')
 
           toast({
             title: 'Planilha anual lida com sucesso! 📄',
-            description: `${parsed.totalLinhasLidas} contas lidas com ${parsed.totalLancamentosValidos} lançamentos detectados ao longo dos 12 meses de ${anoExercicio}. Agora confirme a importação mês a mês.`,
+            description: `${parsed.totalLinhasLidas} contas lidas com ${parsed.totalLancamentosValidos} lançamentos em ${mesesComDadosParsed.length} mês(es) com valores (${listaMesesComDados}).${
+              mesesVaziosParsed.length > 0
+                ? ` Meses ignorados por estarem vazios: ${listaMesesVazios}.`
+                : ''
+            } Agora confirme a importação mês a mês.`,
           })
         }
       } catch (err: unknown) {
@@ -322,6 +427,15 @@ export function ImportarExcel12MesesColunas({
       toast({
         title: 'Empresa obrigatória',
         description: 'Selecione a empresa de destino antes de gravar.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    if (bloqueioExistente) {
+      toast({
+        title: 'Importação bloqueada',
+        description: `A empresa ${nomeEmpresaSelecionada} já possui lançamentos na DRE Gerencial do exercício ${anoExercicio}. Nada será importado por cima. Apague os lançamentos existentes pelo fluxo "Limpar Período" da DRE Gerencial antes de reimportar.`,
         variant: 'destructive',
       })
       return
@@ -378,6 +492,7 @@ export function ImportarExcel12MesesColunas({
         arquivoNome: arquivoUpload?.name || `anual_12m_${anoExercicio}.xlsx`,
         periodoInicio: `${anoExercicio}-${mesStr}-01`,
         periodoFim: `${anoExercicio}-${mesStr}-28`,
+        bloquearSeExistente: true,
       })
 
       // Atualiza status do mês ativo para 'sucesso'
@@ -393,17 +508,25 @@ export function ImportarExcel12MesesColunas({
         },
       }
 
-      const proximoMes = mesAtivo < 12 ? mesAtivo + 1 : mesAtivo
+      // Pula meses com coluna vazia: avança direto para o próximo mês com valores
+      const proximoMesComDados = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find(
+        (m) => m > mesAtivo && (parsedResult?.porMes[m]?.lancamentosValidos?.length || 0) > 0,
+      )
+      const proximoMes = proximoMesComDados || mesAtivo
       setMesesStatus(novosMeses)
       salvarProgresso(novosMeses, proximoMes)
 
       toast({
         title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com sucesso! 🎉`,
-        description: `${resLote.totalItens} lançamentos gravados com sucesso.${mesAtivo < 12 ? ` O mês de ${COLUNAS_MESES_12[proximoMes - 1]} agora foi liberado para importação!` : ' Todos os 12 meses do exercício foram concluídos com sucesso!'}`,
+        description: `${resLote.totalItens} lançamentos gravados com sucesso.${
+          proximoMesComDados
+            ? ` O mês de ${COLUNAS_MESES_12[proximoMes - 1]} agora foi liberado para importação!`
+            : ' Todos os meses com valores do exercício foram concluídos com sucesso!'
+        }`,
       })
 
-      // Avança para o próximo mês liberado
-      if (mesAtivo < 12) {
+      // Avança para o próximo mês com dados liberado
+      if (proximoMesComDados) {
         setMesAtivo(proximoMes)
       }
     } catch (err: unknown) {
@@ -500,6 +623,50 @@ export function ImportarExcel12MesesColunas({
           </div>
         </div>
       </div>
+
+      {/* Banner de Bloqueio: DRE Gerencial já possui lançamentos */}
+      {bloqueioExistente && (
+        <div
+          className="bg-rose-50 border border-rose-300 rounded-xl p-5 flex items-start gap-4"
+          role="alert"
+        >
+          <ShieldAlert className="w-6 h-6 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1 space-y-1.5">
+            <p className="font-semibold text-rose-950 text-sm">
+              Importação bloqueada: já existem lançamentos na DRE Gerencial
+            </p>
+            <p className="text-xs text-rose-800 leading-relaxed">
+              A empresa <strong>{nomeEmpresaSelecionada}</strong> já possui{' '}
+              {bloqueioInfo && bloqueioInfo.lancamentos > 0 && (
+                <>
+                  <strong>{bloqueioInfo.lancamentos} lançamento(s)</strong> registrado(s) em{' '}
+                  {bloqueioInfo.dre > 0
+                    ? `${bloqueioInfo.dre} fechamento(s) mensal(is) da DRE e `
+                    : ''}
+                </>
+              )}
+              no exercício de <strong>{anoExercicio}</strong>. Nada será importado por cima — os
+              dados existentes foram preservados.
+            </p>
+            <p className="text-xs text-rose-700">
+              Para reimportar por cima, apague primeiro os lançamentos do período pelo fluxo "Limpar
+              Período" da DRE Gerencial (Menu Gerencial → DRE Gerencial → Limpar Período) e volte a
+              esta tela.
+            </p>
+            {onIrParaLancamentos && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onIrParaLancamentos}
+                className="mt-1 bg-white border-rose-300 text-rose-800 hover:bg-rose-100 text-xs font-semibold gap-1.5"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Abrir Lançamentos da DRE Gerencial
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Controles de Configuração: Empresa e Ano */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
@@ -695,7 +862,8 @@ export function ImportarExcel12MesesColunas({
               </span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              O sistema só libera o mês seguinte após a confirmação com sucesso do mês anterior.
+              O sistema libera o próximo mês com valores após a confirmação do mês anterior; colunas
+              de mês vazias são ignoradas automaticamente, sem criar lançamentos zerados.
             </p>
           </div>
 
@@ -713,6 +881,29 @@ export function ImportarExcel12MesesColunas({
 
         {/* Grid dos 12 Meses */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 pt-2">
+          {/* Resumo de meses importados e ignorados */}
+          {(mesesImportadosResumo.length > 0 || mesesIgnoradosResumo.length > 0) && (
+            <div className="col-span-full flex flex-col sm:flex-row gap-2.5 mb-1">
+              {mesesImportadosResumo.length > 0 && (
+                <div className="flex-1 min-w-0 bg-emerald-50/70 border border-emerald-200 rounded-lg px-3 py-2 text-xs text-emerald-900">
+                  <span className="font-semibold">
+                    {mesesImportadosResumo.length} mês(es) importado(s):
+                  </span>{' '}
+                  {mesesImportadosResumo
+                    .map((m) => `${COLUNAS_MESES_12[m.mes - 1]} (${m.importadosCount ?? 0} lanç.)`)
+                    .join(', ')}
+                </div>
+              )}
+              {mesesIgnoradosResumo.length > 0 && (
+                <div className="flex-1 min-w-0 bg-slate-100/80 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-600">
+                  <span className="font-semibold">
+                    {mesesIgnoradosResumo.length} mês(es) ignorado(s) por estarem vazios:
+                  </span>{' '}
+                  {mesesIgnoradosResumo.map((m) => COLUNAS_MESES_12[m - 1]).join(', ')}
+                </div>
+              )}
+            </div>
+          )}
           {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => {
             const st = mesesStatus[m]?.status || 'pendente'
             const isAtivo = mesAtivo === m
@@ -726,6 +917,9 @@ export function ImportarExcel12MesesColunas({
             if (st === 'sucesso') {
               borderClass = 'border-emerald-300 bg-emerald-50/70 text-emerald-950 font-medium'
               iconBadge = <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+            } else if (st === 'ignorado') {
+              borderClass = 'border-slate-200 bg-slate-100/80 text-slate-500'
+              iconBadge = <CalendarX className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             } else if (st === 'erro') {
               borderClass = 'border-rose-300 bg-rose-50/70 text-rose-950'
               iconBadge = <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
@@ -744,7 +938,7 @@ export function ImportarExcel12MesesColunas({
                 key={m}
                 type="button"
                 onClick={() => {
-                  if (mesLib || st === 'sucesso') {
+                  if (mesLib || st === 'sucesso' || st === 'ignorado') {
                     setMesAtivo(m)
                   } else {
                     toast({
@@ -768,13 +962,15 @@ export function ImportarExcel12MesesColunas({
                   <span className="text-[10px] text-slate-500 block mt-0.5 truncate">
                     {st === 'sucesso'
                       ? `${countGravados} gravados`
-                      : st === 'erro'
-                        ? 'Falha na gravação'
-                        : parsedResult
-                          ? `${lancsPlanilha} na coluna`
-                          : mesLib
-                            ? 'Liberado'
-                            : 'Aguardando anterior'}
+                      : st === 'ignorado'
+                        ? 'Ignorado (vazio)'
+                        : st === 'erro'
+                          ? 'Falha na gravação'
+                          : parsedResult
+                            ? `${lancsPlanilha} na coluna`
+                            : mesLib
+                              ? 'Liberado'
+                              : 'Aguardando anterior'}
                   </span>
                 </div>
               </button>
