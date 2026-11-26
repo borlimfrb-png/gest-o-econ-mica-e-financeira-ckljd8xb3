@@ -1,7 +1,58 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import type { RecordModel, RecordSubscription } from 'pocketbase'
 
 import pb from '@/lib/pocketbase/client'
+
+/**
+ * Wrapper de useRealtime com debounce trailing (1,5s): várias notificações
+ * seguidas na mesma coleção disparam o callback uma única vez, 1,5s após a
+ * última. Use este hook nas telas que recarregam dados em massa.
+ */
+export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
+  collectionName: string,
+  callback: (data: RecordSubscription<TRecord>) => void,
+  enabled: boolean = true,
+  delayMs: number = 1500,
+) {
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    if (!enabled) return
+
+    const agenda = () => {
+      if (timerRef.current) clearTimeout(timerRef.current)
+      timerRef.current = setTimeout(() => {
+        callbackRef.current({ action: '', record: {} as TRecord })
+      }, delayMs)
+    }
+
+    let unsubscribeFn: (() => Promise<void>) | undefined
+    let cancelled = false
+
+    pb.collection<TRecord>(collectionName)
+      .subscribe('*', () => {
+        agenda()
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn().catch(() => {})
+        } else {
+          unsubscribeFn = fn
+        }
+      })
+      .catch(() => {})
+
+    return () => {
+      cancelled = true
+      if (timerRef.current) clearTimeout(timerRef.current)
+      if (unsubscribeFn) {
+        unsubscribeFn().catch(() => {})
+      }
+    }
+  }, [collectionName, enabled, delayMs])
+}
 
 /**
  * Hook for real-time subscriptions to a PocketBase collection.
@@ -50,42 +101,3 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
 }
 
 export default useRealtime
-
-/**
- * Wrapper com debounce (trailing 1,5s) sobre useRealtime.
- * Agrupa rajadas de eventos de realtime em uma única recarga de dados,
- * evitando recarregamentos em cascata quando vários registros mudam juntos.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-  delayMs: number = 1500,
-) {
-  const trailingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const latestRef = useRef<RecordSubscription<TRecord> | null>(null)
-
-  const flush = useCallback(() => {
-    trailingRef.current = null
-    const data = latestRef.current
-    latestRef.current = null
-    if (data) callback(data)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useRealtime<TRecord>(
-    collectionName,
-    (data) => {
-      latestRef.current = data
-      if (trailingRef.current) clearTimeout(trailingRef.current)
-      trailingRef.current = setTimeout(flush, delayMs)
-    },
-    enabled,
-  )
-
-  useEffect(() => {
-    return () => {
-      if (trailingRef.current) clearTimeout(trailingRef.current)
-    }
-  }, [])
-}

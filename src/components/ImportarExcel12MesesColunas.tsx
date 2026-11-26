@@ -34,7 +34,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { financeService } from '@/services/financeService'
+import { financeService, LancamentosLoteBloqueadoError } from '@/services/financeService'
 import pb from '@/lib/pocketbase/client'
 import {
   gerarPlanilhaModelo12MesesColunas,
@@ -119,6 +119,15 @@ export function ImportarExcel12MesesColunas({
   // os demais importam normalmente — inclusive um mês sozinho.
   const [mesesComLancamentos, setMesesComLancamentos] = useState<Set<number>>(new Set())
   const [verificandoBloqueio, setVerificandoBloqueio] = useState(false)
+  const [importandoTudo, setImportandoTudo] = useState(false)
+
+  // Espelho síncrono de mesesStatus: dentro de um loop de importação em série
+  // (importar todos os meses livres), o estado React ainda não reflui entre uma
+  // iteração e a próxima — o ref garante leitura atualizada do status de cada mês.
+  const mesesStatusRef = useRef(mesesStatus)
+  useEffect(() => {
+    mesesStatusRef.current = mesesStatus
+  }, [mesesStatus])
 
   const empresaSelecionada = empresas.find((e) => e.id === empresaId)
   const nomeEmpresaSelecionada =
@@ -133,7 +142,7 @@ export function ImportarExcel12MesesColunas({
     }
     setVerificandoBloqueio(true)
     try {
-      const [dreRes, lancRes] = await Promise.all([
+      const [dreRes, lancRes] = (await Promise.all([
         pb.collection('dre').getFullList({
           filter: `empresa = "${empresaId}" && ano = ${anoExercicio}`,
           fields: 'id,mes',
@@ -143,7 +152,7 @@ export function ImportarExcel12MesesColunas({
           filter: `empresa = "${empresaId}" && data >= "${anoExercicio}-01-01 00:00:00" && data <= "${anoExercicio}-12-31 23:59:59"`,
           fields: 'id,data',
         }),
-      ])
+      ])) as [Array<{ id: string; mes?: number }>, Array<{ id: string; data?: string }>]
 
       // Meses com fechamento mensal gravado na DRE Gerencial
       const ocupados = new Set<number>()
@@ -457,7 +466,92 @@ export function ImportarExcel12MesesColunas({
     reader.readAsBinaryString(file)
   }
 
-  // 6. Confirmação e Gravação Atômica do Mês Selecionado
+  // 6. Núcleo de gravação de UM mês — usado tanto pela importação individual
+  // (botão "Gravar {mês}") quanto pelo fluxo "Importar todos os meses livres".
+  // Gravação 100% atômica no backend (POST /backend/v1/lancamentos/lote) com
+  // bloqueio POR MÊS DE COMPETÊNCIA: se o servidor responder 409, o mês é
+  // marcado como bloqueado localmente e NADA é gravado.
+  const gravarMesCore = async (
+    mes: number,
+  ): Promise<{
+    ok: boolean
+    vazios?: boolean
+    bloqueado?: boolean
+    totalItens?: number
+    valorTotal?: number
+    erroMsg?: string
+  }> => {
+    if (!parsedResult) {
+      return { ok: false, erroMsg: 'Faça o upload da planilha anual antes de gravar.' }
+    }
+
+    const dados = parsedResult.porMes[mes]
+    const validRows = (dados?.lancamentosValidos || []).filter((r) => r.plano_conta_id)
+
+    // Mês com coluna vazia: nada a gravar (nunca cria lançamentos zerados)
+    if (validRows.length === 0) {
+      return { ok: true, vazios: true }
+    }
+
+    const loteParaGravar = validRows.map((row) => ({
+      plano_conta: row.plano_conta_id!,
+      data: row.data,
+      valor: row.valor,
+      historico:
+        row.historico ||
+        `Importação 12 Meses Colunas (${COLUNAS_MESES_12[mes - 1]}/${anoExercicio}) - ${arquivoUpload?.name || 'planilha.xlsx'}`,
+    }))
+
+    const valorTotalMes = validRows.reduce((acc, r) => acc + r.valor, 0)
+    const mesStr = String(mes).padStart(2, '0')
+    const ultimoDia = new Date(anoExercicio, mes, 0).getDate()
+
+    try {
+      const resLote = await financeService.importarLancamentosLote({
+        empresaId,
+        lancamentos: loteParaGravar,
+        origem: 'importacao_excel_12_meses_colunas',
+        arquivoNome: arquivoUpload?.name || `anual_12m_${anoExercicio}.xlsx`,
+        periodoInicio: `${anoExercicio}-${mesStr}-01`,
+        periodoFim: `${anoExercicio}-${mesStr}-${ultimoDia}`,
+        bloquearSeExistente: true,
+      })
+
+      // Atualiza status do mês para 'sucesso' (via ref, para o loop em série)
+      const proximoMapa: Record<number, MesGravacaoStatus> = {
+        ...mesesStatusRef.current,
+        [mes]: {
+          mes,
+          status: 'sucesso',
+          importadosCount: resLote.totalItens,
+          valorTotal: valorTotalMes,
+          arquivoNome: arquivoUpload?.name,
+          dataExecucao: new Date().toISOString(),
+        },
+      }
+      mesesStatusRef.current = proximoMapa
+      setMesesStatus(proximoMapa)
+
+      // O mês recém-gravado agora possui lançamentos: reflete no bloqueio local
+      setMesesComLancamentos((prev) => new Set([...prev, mes]))
+
+      return { ok: true, totalItens: resLote.totalItens, valorTotal: valorTotalMes }
+    } catch (err: unknown) {
+      // 409 do servidor: a competência já possui lançamentos e NADA foi gravado
+      if (err instanceof LancamentosLoteBloqueadoError) {
+        setMesesComLancamentos((prev) => new Set([...prev, ...err.mesesBloqueados]))
+        return { ok: true, bloqueado: true }
+      }
+      return {
+        ok: false,
+        erroMsg:
+          (err as Error)?.message ||
+          'Ocorreu um erro no processamento do lote. Nenhum lançamento foi gravado no banco de dados.',
+      }
+    }
+  }
+
+  // 6a. Confirmação e Gravação Atômica do Mês Selecionado (mês individual)
   const handleImportarMesAtivo = async () => {
     if (!empresaId) {
       toast({
@@ -510,96 +604,60 @@ export function ImportarExcel12MesesColunas({
     setGravandoMes(true)
 
     try {
-      const loteParaGravar = validRows.map((row) => ({
-        plano_conta: row.plano_conta_id!,
-        data: row.data,
-        valor: row.valor,
-        historico:
-          row.historico ||
-          `Importação 12 Meses Colunas (${COLUNAS_MESES_12[mesAtivo - 1]}/${anoExercicio}) - ${arquivoUpload?.name || 'planilha.xlsx'}`,
-      }))
+      const res = await gravarMesCore(mesAtivo)
 
-      const valorTotalMes = validRows.reduce((acc, r) => acc + r.valor, 0)
-      const mesStr = String(mesAtivo).padStart(2, '0')
+      if (res.bloqueado) {
+        toast({
+          title: `${COLUNAS_MESES_12[mesAtivo - 1]} bloqueado`,
+          description: `${nomeEmpresaSelecionada} já possui lançamentos na DRE Gerencial em ${COLUNAS_MESES_12[mesAtivo - 1]}/${anoExercicio}. Nada foi importado — nenhum dado foi alterado.`,
+          variant: 'destructive',
+        })
+        return
+      }
 
-      // Gravação 100% atômica no backend (POST /backend/v1/lancamentos/lote)
-      const resLote = await financeService.importarLancamentosLote({
-        empresaId,
-        lancamentos: loteParaGravar,
-        origem: 'importacao_excel_12_meses_colunas',
-        arquivoNome: arquivoUpload?.name || `anual_12m_${anoExercicio}.xlsx`,
-        periodoInicio: `${anoExercicio}-${mesStr}-01`,
-        periodoFim: `${anoExercicio}-${mesStr}-28`,
-        bloquearSeExistente: true,
-      })
-
-      // Atualiza status do mês ativo para 'sucesso' (meses bloqueados pelo
-      // servidor, quando houver, entram no resumo de 'bloqueado')
-      const novosMeses: Record<number, MesGravacaoStatus> = {
-        ...mesesStatus,
-        [mesAtivo]: {
-          mes: mesAtivo,
-          status: 'sucesso',
-          importadosCount: resLote.totalItens,
-          valorTotal: valorTotalMes,
-          arquivoNome: arquivoUpload?.name,
-          dataExecucao: new Date().toISOString(),
-        },
+      if (res.vazios) {
+        toast({
+          title: `Nada a gravar em ${COLUNAS_MESES_12[mesAtivo - 1]}`,
+          description: `A coluna de ${COLUNAS_MESES_12[mesAtivo - 1]} está vazia — nenhum lançamento foi criado.`,
+        })
+        return
       }
 
       // Pula meses com coluna vazia: avança direto para o próximo mês com valores
       const proximoMesComDados = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find(
         (m) => m > mesAtivo && (parsedResult?.porMes[m]?.lancamentosValidos?.length || 0) > 0,
       )
-      const proximoMes = proximoMesComDados || mesAtivo
-      setMesesStatus(novosMeses)
-      salvarProgresso(novosMeses, proximoMes)
+      salvarProgresso(mesesStatusRef.current, proximoMesComDados || mesAtivo)
 
-      // O mês recém-gravado agora possui lançamentos: reflete na verificação local
-      setMesesComLancamentos((prev) => new Set([...prev, mesAtivo]))
-
-      const mesesBloqueadosServidor = resLote.meses_bloqueados || []
-      if (resLote.parcial && mesesBloqueadosServidor.length > 0) {
-        const listaBloqueados = mesesBloqueadosServidor
-          .slice()
-          .sort((a, b) => a - b)
-          .map((m) => `${COLUNAS_MESES_12[m - 1]} (${m}/${anoExercicio})`)
-          .join(', ')
-        toast({
-          title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com meses ignorados ⚠️`,
-          description: `${resLote.totalItens} lançamentos gravados. Mês(es) bloqueado(s) por já existirem lançamentos na DRE Gerencial: ${listaBloqueados}. Nada duplicado foi gravado.`,
-          variant: 'destructive',
-        })
-      } else {
-        toast({
-          title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com sucesso! 🎉`,
-          description: `${resLote.totalItens} lançamentos gravados com sucesso.${
-            proximoMesComDados
-              ? ` O mês de ${COLUNAS_MESES_12[proximoMes - 1]} agora foi liberado para importação!`
-              : ' Todos os meses com valores do exercício foram concluídos com sucesso!'
-          }`,
-        })
-      }
+      toast({
+        title: `${COLUNAS_MESES_12[mesAtivo - 1]} gravado com sucesso! 🎉`,
+        description: `${res.totalItens} lançamentos gravados com sucesso.${
+          proximoMesComDados
+            ? ` O mês de ${COLUNAS_MESES_12[proximoMesComDados - 1]} agora foi liberado para importação!`
+            : ' Todos os meses com valores do exercício foram concluídos com sucesso!'
+        }`,
+      })
 
       // Avança para o próximo mês com dados liberado
       if (proximoMesComDados) {
-        setMesAtivo(proximoMes)
+        setMesAtivo(proximoMesComDados)
       }
     } catch (err: unknown) {
-      const error = err as Error
       const erroMsg =
-        error.message ||
+        (err as Error)?.message ||
         'Ocorreu um erro no processamento do lote. Nenhum lançamento foi gravado no banco de dados.'
 
       // Registra falha e mantém avanço bloqueado
       const novosMeses: Record<number, MesGravacaoStatus> = {
-        ...mesesStatus,
+        ...mesesStatusRef.current,
         [mesAtivo]: {
-          ...mesesStatus[mesAtivo],
+          ...mesesStatusRef.current[mesAtivo],
+          mes: mesAtivo,
           status: 'erro',
           erroMsg,
         },
       }
+      mesesStatusRef.current = novosMeses
       setMesesStatus(novosMeses)
       salvarProgresso(novosMeses, mesAtivo)
 
@@ -610,6 +668,114 @@ export function ImportarExcel12MesesColunas({
       })
     } finally {
       setGravandoMes(false)
+    }
+  }
+
+  // 6b. Fluxo "Importar tudo": percorre em ordem todos os meses com valores na
+  // planilha que estão LIVRES (sem lançamentos na competência e ainda não
+  // gravados), importando mês a mês. Meses bloqueados são pulados e entram no
+  // resumo final; meses vazios ficam como ignorados — nunca geram lançamentos.
+  const handleImportarTodosMesesLivres = async () => {
+    if (!empresaId) {
+      toast({
+        title: 'Empresa obrigatória',
+        description: 'Selecione a empresa de destino antes de gravar.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!parsedResult) {
+      toast({
+        title: 'Faça upload da planilha',
+        description:
+          'Faça o upload da planilha anual com as colunas dos 12 meses antes de importar.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    const alvos = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(
+      (m) =>
+        (parsedResult.porMes[m]?.lancamentosValidos?.length || 0) > 0 &&
+        !isMesBloqueado(m) &&
+        mesesStatusRef.current[m]?.status !== 'sucesso',
+    )
+
+    if (alvos.length === 0) {
+      toast({
+        title: 'Nenhum mês livre para importar',
+        description: bloqueioExistente
+          ? `Todos os meses com valores já estão gravados ou bloqueados por já terem lançamentos (${mesesBloqueadosResumo
+              .map((m) => COLUNAS_MESES_12[m - 1])
+              .join(', ')}).`
+          : 'Todos os meses com valores da planilha já foram gravados.',
+      })
+      return
+    }
+
+    setImportandoTudo(true)
+
+    try {
+      let importados = 0
+      let lancamentosGravados = 0
+      const vazios: number[] = []
+      const bloqueados: number[] = []
+
+      for (const m of alvos) {
+        // Reavalia a cada iteração: o ref está sempre atualizado em série
+        if (isMesBloqueado(m) || mesesStatusRef.current[m]?.status === 'sucesso') continue
+
+        const res = await gravarMesCore(m)
+        if (res.bloqueado) {
+          bloqueados.push(m)
+        } else if (res.vazios) {
+          vazios.push(m)
+        } else if (res.ok) {
+          importados++
+          lancamentosGravados += res.totalItens || 0
+        } else {
+          // Falhou: interrompe a rodada e mantém o resumo do que deu certo
+          toast({
+            title: `Falha na gravação de ${COLUNAS_MESES_12[m - 1]}`,
+            description: res.erroMsg || 'Nenhum lançamento foi gravado para este mês.',
+            variant: 'destructive',
+          })
+          break
+        }
+      }
+
+      salvarProgresso(mesesStatusRef.current, mesAtivo)
+
+      const partes: string[] = []
+      if (importados > 0) {
+        partes.push(
+          `${importados} mês(es) importado(s) com ${lancamentosGravados} lançamentos gravados`,
+        )
+      }
+      if (vazios.length > 0) {
+        partes.push(
+          `${vazios.length} ignorado(s) por estarem vazios (${vazios
+            .map((m) => COLUNAS_MESES_12[m - 1])
+            .join(', ')})`,
+        )
+      }
+      if (bloqueados.length > 0) {
+        partes.push(
+          `${bloqueados.length} bloqueado(s) por já terem lançamentos (${bloqueados
+            .map((m) => COLUNAS_MESES_12[m - 1])
+            .join(', ')})`,
+        )
+      }
+
+      toast({
+        title:
+          importados > 0
+            ? `Importação concluída: ${importados} mês(es) importado(s)`
+            : 'Importação concluída',
+        description: partes.length > 0 ? `${partes.join('. ')}.` : 'Nenhum mês foi importado.',
+      })
+    } finally {
+      setImportandoTudo(false)
     }
   }
 
@@ -920,16 +1086,37 @@ export function ImportarExcel12MesesColunas({
             </p>
           </div>
 
-          {valorTotalAcumuladoAnoGravado > 0 && (
-            <div className="text-left sm:text-right">
-              <span className="text-xs text-slate-500 block">Total já gravado no exercício:</span>
-              <span className="text-sm font-bold text-emerald-700 font-mono">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
-                  valorTotalAcumuladoAnoGravado,
-                )}
-              </span>
-            </div>
-          )}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleImportarTodosMesesLivres}
+              disabled={importandoTudo || gravandoMes || !parsedResult || !empresaId}
+              className="bg-teal-50 border-teal-300 text-teal-800 hover:bg-teal-100 text-xs font-semibold gap-1.5 h-9 shrink-0"
+            >
+              {importandoTudo ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Importando meses livres...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-3.5 h-3.5 text-teal-700" />
+                  Importar todos os meses livres
+                </>
+              )}
+            </Button>
+            {valorTotalAcumuladoAnoGravado > 0 && (
+              <div className="text-left sm:text-right">
+                <span className="text-xs text-slate-500 block">Total já gravado no exercício:</span>
+                <span className="text-sm font-bold text-emerald-700 font-mono">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                    valorTotalAcumuladoAnoGravado,
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Grid dos 12 Meses */}
@@ -1066,7 +1253,7 @@ export function ImportarExcel12MesesColunas({
             </div>
             <p className="text-xs text-slate-500 mt-1">
               {mesAtivoObj?.status === 'sucesso'
-                ? `Este mês já foi gravado com sucesso (${mesAtivoObj.importadosCount} lançamentos). Você pode conferir os dados ou reimportar se necessário.`
+                ? `Este mês já foi gravado com sucesso (${mesAtivoObj.importadosCount} lançamentos) e agora está bloqueado para reimportação.`
                 : liberado
                   ? parsedResult
                     ? `A coluna de ${mesAtivoNome} contém ${lancamentosValidosMesAtivo.length} lançamentos válidos prontos para serem gravados atômica e permanentemente.`
@@ -1079,7 +1266,8 @@ export function ImportarExcel12MesesColunas({
             {parsedResult &&
               lancamentosValidosMesAtivo.length > 0 &&
               liberado &&
-              !isMesBloqueado(mesAtivo) && (
+              !isMesBloqueado(mesAtivo) &&
+              mesAtivoObj?.status !== 'sucesso' && (
                 <Button
                   onClick={handleImportarMesAtivo}
                   disabled={gravandoMes || !empresaId}

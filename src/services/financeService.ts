@@ -1401,19 +1401,7 @@ export const lancamentosService = {
     periodoFim?: string
     contaPrincipal?: string
     bloquearSeExistente?: boolean
-  }): Promise<{
-    sucesso: boolean
-    message: string
-    empresaId: string
-    empresaNome: string
-    totalItens: number
-    valorTotal: number
-    idsCriados: string[]
-    /** true quando parte dos meses foi ignorada por já existirem lançamentos */
-    parcial?: boolean
-    /** meses (1-12) ignorados por já terem lançamentos na DRE Gerencial */
-    meses_bloqueados?: number[]
-  }> {
+  }): Promise<LancamentosLoteResponse> {
     const backendUrl = import.meta.env.VITE_POCKETBASE_URL
     const token = pb.authStore.token
 
@@ -1439,6 +1427,12 @@ export const lancamentosService = {
     const data = await response.json().catch(() => ({}))
 
     if (!response.ok || !data.sucesso) {
+      // 409 = bloqueio por competência: algum mês do lote já possui lançamentos
+      // na DRE Gerencial e NADA foi gravado. Propagado como erro tipado para a
+      // tela montar o resumo de meses bloqueados.
+      if (response.status === 409 && data?.bloqueado) {
+        throw new LancamentosLoteBloqueadoError(data as LancamentosLoteBloqueadoResponse)
+      }
       const errMsg =
         data.error ||
         data.message ||
@@ -1789,6 +1783,46 @@ export const lancamentosRecorrentesService = {
   async delete(id: string): Promise<boolean> {
     return await pb.collection('lancamentos_recorrentes').delete(id)
   },
+}
+
+/** Resposta do endpoint POST /backend/v1/lancamentos/lote */
+export interface LancamentosLoteResponse {
+  sucesso: boolean
+  message: string
+  empresaId: string
+  empresaNome: string
+  totalItens: number
+  valorTotal: number
+  idsCriados: string[]
+  /** true quando parte dos meses foi ignorada por já existirem lançamentos */
+  parcial?: boolean
+  /** meses (1-12) ignorados por já terem lançamentos na DRE Gerencial */
+  meses_bloqueados?: number[]
+}
+
+/** Resposta 409 do bloqueio por competência: nenhum lançamento foi gravado */
+export interface LancamentosLoteBloqueadoResponse {
+  sucesso: false
+  bloqueado: true
+  /** meses (1-12) do lote que já possuem lançamentos */
+  meses_bloqueados: number[]
+  error: string
+}
+
+/**
+ * Erro tipado do bloqueio POR MÊS DE COMPETÊNCIA (409 do endpoint de lote).
+ * Carrega a lista de meses bloqueados para o resumo da tela — nada foi gravado.
+ */
+export class LancamentosLoteBloqueadoError extends Error {
+  readonly mesesBloqueados: number[]
+  readonly response: LancamentosLoteBloqueadoResponse
+
+  constructor(response: LancamentosLoteBloqueadoResponse) {
+    super(response.error || 'Importação bloqueada por já existirem lançamentos na DRE Gerencial.')
+    this.name = 'LancamentosLoteBloqueadoError'
+    this.mesesBloqueados = response.meses_bloqueados || []
+    this.response = response
+  }
 }
 
 export const financeService = {
