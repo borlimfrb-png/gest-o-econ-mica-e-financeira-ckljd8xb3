@@ -55,6 +55,11 @@ export interface RadarRentabilidade {
   temDados: boolean
 }
 
+export interface PercentualFaturamentoAno {
+  atual: number | null
+  anterior: number | null
+}
+
 export interface AnaliseAnual360Resultado {
   tipo: TipoTelaAnalise
   meses: MesItem[]

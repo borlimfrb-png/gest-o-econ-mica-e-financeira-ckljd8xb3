@@ -4,57 +4,6 @@ import type { RecordModel, RecordSubscription } from 'pocketbase'
 import pb from '@/lib/pocketbase/client'
 
 /**
- * Wrapper de useRealtime com debounce trailing (1,5s): várias notificações
- * seguidas na mesma coleção disparam o callback uma única vez, 1,5s após a
- * última. Use este hook nas telas que recarregam dados em massa.
- */
-export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
-  collectionName: string,
-  callback: (data: RecordSubscription<TRecord>) => void,
-  enabled: boolean = true,
-  delayMs: number = 1500,
-) {
-  const callbackRef = useRef(callback)
-  callbackRef.current = callback
-  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-
-  useEffect(() => {
-    if (!enabled) return
-
-    const agenda = () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-      timerRef.current = setTimeout(() => {
-        callbackRef.current({ action: '', record: {} as TRecord })
-      }, delayMs)
-    }
-
-    let unsubscribeFn: (() => Promise<void>) | undefined
-    let cancelled = false
-
-    pb.collection<TRecord>(collectionName)
-      .subscribe('*', () => {
-        agenda()
-      })
-      .then((fn) => {
-        if (cancelled) {
-          fn().catch(() => {})
-        } else {
-          unsubscribeFn = fn
-        }
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-      if (timerRef.current) clearTimeout(timerRef.current)
-      if (unsubscribeFn) {
-        unsubscribeFn().catch(() => {})
-      }
-    }
-  }, [collectionName, enabled, delayMs])
-}
-
-/**
  * Hook for real-time subscriptions to a PocketBase collection.
  * ALWAYS use this hook instead of subscribing inline.
  * Uses the per-listener UnsubscribeFunc so multiple components
@@ -98,6 +47,59 @@ export function useRealtime<TRecord extends RecordModel = RecordModel>(
       }
     }
   }, [collectionName, enabled])
+}
+
+/**
+ * Versão com debounce (trailing 1,5s) para telas que recebem rajadas de
+ * eventos realtime — evita recálculo a cada evento individual.
+ */
+export function useRealtimeDebounced<TRecord extends RecordModel = RecordModel>(
+  collectionName: string,
+  callback: (data: RecordSubscription<TRecord>) => void,
+  enabled: boolean = true,
+  delayMs: number = 1500,
+) {
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestRef = useRef<RecordSubscription<TRecord> | null>(null)
+  const callbackRef = useRef(callback)
+  callbackRef.current = callback
+
+  useEffect(() => {
+    if (!enabled) return
+    let cancelled = false
+
+    const flush = () => {
+      timeoutRef.current = null
+      if (!cancelled && latestRef.current && callbackRef.current) {
+        callbackRef.current(latestRef.current)
+      }
+    }
+
+    const unsubscribePromise = pb
+      .collection<TRecord>(collectionName)
+      .subscribe('*', (e) => {
+        latestRef.current = e
+        if (timeoutRef.current === null) {
+          timeoutRef.current = setTimeout(flush, delayMs)
+        }
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn().catch(() => {})
+        }
+        return fn
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+      if (timeoutRef.current !== null) {
+        clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+      unsubscribePromise.then((fn) => fn?.()).catch(() => {})
+    }
+  }, [collectionName, enabled, delayMs])
 }
 
 export default useRealtime

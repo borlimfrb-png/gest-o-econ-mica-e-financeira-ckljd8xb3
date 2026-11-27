@@ -12,6 +12,7 @@ import {
   Legend,
   LineChart,
   Line,
+  ComposedChart,
 } from 'recharts'
 import {
   AreaChart as AreaIcon,
@@ -26,6 +27,7 @@ import {
   type AnaliseAnual360Resultado,
   type TipoTelaAnalise,
 } from '@/lib/analiseAnual360'
+import { calcularRegressaoLinear } from '@/lib/regressaoLinearTendencia'
 
 function formatBrl(val: number | undefined | null): string {
   if (val === undefined || val === null || !Number.isFinite(val)) return 'R$ 0,00'
@@ -89,8 +91,13 @@ function CardResumo({
 
 /**
  * Seção "Análise Anual": cards de resumo (total, média, maior/menor mês,
- * variação % vs ano anterior), evolução mensal (área/linha) e comparativo
- * entre os últimos 3 exercícios (barras agrupadas). Somente leitura.
+ * variação % vs ano anterior), evolução mensal e comparativo entre os últimos
+ * exercícios (barras agrupadas). Somente leitura.
+ *
+ * Despesas (fixas/variáveis): gráfico de BARRAS mensais com linha de TENDÊNCIA
+ * (regressão linear) sobreposta.
+ * Rentabilidade: mantém o gráfico de linha da margem e o de barras receita vs
+ * resultado (intocado, atende outras telas).
  */
 export function SecaoAnaliseAnual({ tipo, resultado }: SecaoAnaliseAnualProps) {
   const eRentabilidade = tipo === 'rentabilidade'
@@ -107,6 +114,18 @@ export function SecaoAnaliseAnual({ tipo, resultado }: SecaoAnaliseAnualProps) {
       margem: i.margemSobreFaturamento ?? 0,
     }))
   }, [eRentabilidade, resultado])
+
+  // Linha de tendência (regressão linear) sobre a série mensal de despesas
+  const serieComTendencia = useMemo(() => {
+    if (eRentabilidade) return serieMensal
+    const regressao = calcularRegressaoLinear(
+      serieMensal.map((p, i) => ({ ano: i, valor: p.valor })),
+    )
+    return serieMensal.map((p, i) => ({
+      ...p,
+      tendencia: regressao.pontosRegressao[i]?.valorAjustado ?? p.valor,
+    }))
+  }, [eRentabilidade, serieMensal])
 
   const dadosAnos = useMemo(
     () => resultado.anosComparados.filter((a) => a.temDados),
@@ -234,7 +253,9 @@ export function SecaoAnaliseAnual({ tipo, resultado }: SecaoAnaliseAnualProps) {
         {/* Evolução mensal */}
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
-            {eRentabilidade ? 'Evolução mensal da margem (%)' : 'Evolução mensal (R$)'}
+            {eRentabilidade
+              ? 'Evolução mensal da margem (%)'
+              : 'Evolução mensal (R$) com linha de tendência'}
           </h4>
           <div className="h-[260px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -271,13 +292,10 @@ export function SecaoAnaliseAnual({ tipo, resultado }: SecaoAnaliseAnualProps) {
                   />
                 </LineChart>
               ) : (
-                <AreaChart data={serieMensal} margin={{ top: 8, right: 16, bottom: 0, left: 8 }}>
-                  <defs>
-                    <linearGradient id="gradAnaliseAnual" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#144272" stopOpacity={0.35} />
-                      <stop offset="100%" stopColor="#144272" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
+                <ComposedChart
+                  data={serieComTendencia}
+                  margin={{ top: 8, right: 16, bottom: 0, left: 8 }}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                   <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                   <YAxis
@@ -286,21 +304,37 @@ export function SecaoAnaliseAnual({ tipo, resultado }: SecaoAnaliseAnualProps) {
                     tickFormatter={(v: number) => formatBrlCompacto(v)}
                   />
                   <RechartsTooltip
-                    formatter={(value: number | string) => [formatBrl(Number(value)), 'Total']}
+                    formatter={(value: number | string, name: string) => [
+                      formatBrl(Number(value)),
+                      name === 'tendencia' ? 'Tendência' : name,
+                    ]}
                     labelFormatter={(label: string, payload) =>
                       payload?.[0]?.payload?.mesCompleto || label
                     }
                     contentStyle={tooltipStyle}
                   />
-                  <Area
-                    type="monotone"
+                  <Legend
+                    wrapperStyle={{ fontSize: 12 }}
+                    formatter={(value: string) => (value === 'tendencia' ? 'Tendência' : value)}
+                  />
+                  <Bar
                     dataKey="valor"
                     name="Total do Mês"
-                    stroke="#144272"
-                    strokeWidth={2}
-                    fill="url(#gradAnaliseAnual)"
+                    fill="#144272"
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={48}
                   />
-                </AreaChart>
+                  <Line
+                    type="linear"
+                    dataKey="tendencia"
+                    name="Tendência"
+                    stroke="#F59E0B"
+                    strokeWidth={2.5}
+                    strokeDasharray="6 3"
+                    dot={false}
+                    activeDot={{ r: 4 }}
+                  />
+                </ComposedChart>
               )}
             </ResponsiveContainer>
           </div>

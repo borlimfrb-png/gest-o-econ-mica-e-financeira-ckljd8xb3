@@ -22,7 +22,7 @@ import {
 import { DocumentPrintFooter } from '@/components/DocumentPrintFooter'
 import { DoubleHorizontalScroll } from '@/components/DoubleHorizontalScroll'
 import { ModalClassificacaoDreLote } from '@/components/ModalClassificacaoDreLote'
-import { SecaoRadar360 } from '@/components/analises/SecaoRadar360'
+import { SecaoHidrometrosDespesas } from '@/components/analises/SecaoHidrometrosDespesas'
 import { SecaoAnaliseAnual } from '@/components/analises/SecaoAnaliseAnual'
 import { calcularAnaliseAnual360 } from '@/lib/analiseAnual360'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -591,7 +591,12 @@ export default function DespesasFixasAnalise() {
 
       {/* ================= RADAR 360 E ANÁLISE ANUAL ================= */}
       <div className="space-y-6 mb-6">
-        <SecaoRadar360 tipo="fixas" resultado={resultado360} />
+        <SecaoHidrometrosDespesas
+          tipo="fixas"
+          resultado={resultado360}
+          percentualFaturamento={percentualConsolidado}
+          semaforo={semaforoConsolidado}
+        />
         <SecaoAnaliseAnual tipo="fixas" resultado={resultado360} />
       </div>
 
